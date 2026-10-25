@@ -321,7 +321,11 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 				cancel = "channel disabled by recipient"
 				break
 			}
-			active, identity, err := activeHuman(ctx, tx, d.PrincipalID)
+			// Credential-only routing is the channel's existing service
+			// authority check; unrelated private profile metadata must not
+			// mask active human identity. No business metadata is returned.
+			// Contributor reads below bind the recipient independently.
+			active, identity, err := activeHuman(resourceaccess.WithoutPolicy(ctx), tx, d.PrincipalID)
 			if err != nil {
 				return nil, err
 			}

@@ -1815,7 +1815,7 @@
     "../delivery/readability.go:queryStrings": "90afb7f56c2264ad3babe0a7075981eef3117c497ff75c7e112da3dc3e222e68",
     "../delivery/store.go:EnqueueTx": "4a7c24166b6872b7756314ef3e9aac3d85bd98c0e44e264ce51ae53db94783ea",
     "../delivery/store.go:Store:ChannelsForAgent": "80b25eb67b1087fafa0b0a826bd6771c4493d33aadcce438f438b43b42f584fa",
-    "../delivery/store.go:Store:Claim": "981664d26814ac1278901161a72bb9d2068771cc72fd88792c81d56e0c40d4ad",
+    "../delivery/store.go:Store:Claim": "38520e1e08c2f7d6b53cb34d92f9868e876293e6b944bcba1592ddc2efebeb9a",
     "../delivery/store.go:Store:DeclaredChannels": "c0a7be6e70d9c56c69a34d1ecb2f1e7fd0911a6c4549213a657532e9adb1d8e4",
     "../delivery/store.go:Store:Enqueue": "8088d7c623ec03e50d5743a78b9bb7d1926f7cd7c8b6b8c5edaa82d894c2fa85",
     "../delivery/store.go:Store:Get": "eccf30f59d44e36d12244f972316a6f1fb04683964ddde5be80450438a997295",

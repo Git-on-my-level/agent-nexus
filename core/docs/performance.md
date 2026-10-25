@@ -8,7 +8,9 @@ lookup, with primary-key card/tracking seeks and the partial unique handle index
 for older queued snapshots. The handle predicate includes the index's exact
 nonempty condition. Claim hydration uses the same statement-validated recipient
 policy within the claim transaction; it does not rebuild workspace ownership.
-List cursors close before hydration; denied contributors never trigger a refill.
+The credential-only active-human routing check retains its existing service
+boundary, independently of private business profile metadata. List cursors close
+before hydration; denied contributors never trigger a refill.
 New tracking queues retain canonical refs only; serialization resolves fresh
 titles. Receipt acknowledgements strip content without another query.
 `TestPerformanceDigestSerializationBudget` enforces the new checked-in
