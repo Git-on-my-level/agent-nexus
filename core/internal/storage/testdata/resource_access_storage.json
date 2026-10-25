@@ -3494,7 +3494,7 @@
     "../storage/access_admission_updates.go:admissionUpdateOf": "a88d127b4a626daa27afb9129444584c332bc7cfcda2e394c6a940a6b9c6c300",
     "../storage/access_admission_updates.go:restrictAdmissionEvidenceWrites": "ab12fb83fdca0b9f20f72b01ab2e1c052b9afc5815dcbc73f6b01be935d3d939",
     "../storage/access_admission_updates.go:restrictAdmissionUpdates": "80f4ada0c6290ed024e62721a396f36f68ccc6e19ada983b3db319981e3cb6c7",
-    "../storage/access_admission_vertices.go:installAdmissionCanonicalVertices": "b6f84a6b2108b2e1116c5b5938c2d58914b7257a0eb3d19c7d059828b1cc2756",
+    "../storage/access_admission_vertices.go:installAdmissionCanonicalVertices": "0f9efae8f8e58438e0710652aae87d32c898699d9123a2a3227142e27e241dfc",
     "../storage/access_admission_wakeups.go:installHistoricalWakeupAdmission": "5f5655ab5a44e2717bb4522dea37170ffeb99eaa65aeffc56eb237d2ae00e88c",
     "../storage/access_mentions.go:installResourceAccessEpochTriggers": "53b0d7bb0a166d97a798350b8ba03aefc195661b13da7d35ba216b5305cee768",
     "../storage/access_mentions.go:installResourceAccessMentions": "e47ef6daf4c71afba8045a4ddbb6a5f47bc0304de1ca010fd556cda77d1c8650",

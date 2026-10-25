@@ -75,16 +75,22 @@ func installAdmissionCanonicalVertices(ctx context.Context, tx *sql.Tx) error {
 	for _, s := range sources {
 		var insert string
 		var changed []string
+		var supported []string
 		for _, f := range s.fields {
 			insert += add(expr(f[0], "NEW."), expr(f[1], "NEW."), "(SELECT 1)")
+			// Filter/evidence-only vertices have no canonical ID spellings in
+			// the forward policy. Skip their entire trigger, rather than six
+			// no-op INSERTs for every profile/series atom.
+			kind := expr(f[0], "NEW.")
+			supported = append(supported, `(`+kind+` NOT LIKE 'filter/%' AND `+kind+` NOT IN ('work_evidence_record','work_evidence_alias'))`)
 			changed = append(changed, expr(f[0], "OLD.")+" IS NOT "+expr(f[0], "NEW."), expr(f[1], "OLD.")+" IS NOT "+expr(f[1], "NEW."))
 			if s.table != "agent_wakeups" {
 				backfill = append(backfill, `SELECT `+expr(f[0], "")+` kind,`+expr(f[1], "")+` id FROM `+s.table+` WHERE `+expr(f[1], "")+` IS NOT NULL`)
 			}
 		}
 		for _, q := range []string{
-			`CREATE TRIGGER admission_vertex_` + s.table + `_insert AFTER INSERT ON ` + s.table + ` BEGIN ` + insert + ` END`,
-			`CREATE TRIGGER admission_vertex_` + s.table + `_update AFTER UPDATE ON ` + s.table + ` WHEN ` + strings.Join(changed, " OR ") + ` BEGIN ` + insert + ` END`,
+			`CREATE TRIGGER admission_vertex_` + s.table + `_insert AFTER INSERT ON ` + s.table + ` WHEN ` + strings.Join(supported, " OR ") + ` BEGIN ` + insert + ` END`,
+			`CREATE TRIGGER admission_vertex_` + s.table + `_update AFTER UPDATE ON ` + s.table + ` WHEN (` + strings.Join(changed, " OR ") + `) AND (` + strings.Join(supported, " OR ") + `) BEGIN ` + insert + ` END`,
 		} {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
 				return fmt.Errorf("canonical admission vertices: %w", err)

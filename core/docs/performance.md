@@ -108,14 +108,14 @@ another pool and retains its 4,563-VM result in every phase.
 | Canonical SQL write and triggers | Main VM | #469 VM |
 | -------------------------------- | ------: | ------: |
 | Attribution                      |     434 |     189 |
-| Public title                     |     837 |   1,778 |
-| Public event append              |   1,603 |   7,588 |
+| Public title                     |     837 |   1,802 |
+| Public event append              |   1,603 |   7,648 |
 
 The write probe exposed an admission teardown defect: TEXT contribution IDs
 compared directly with INTEGER edge IDs scanned the entire `exact` origin range.
 A title edit initially cost 564,443 VM. Matching the stored TEXT affinity restores
 the composite-key seek. The independent 10,000-unrelated-origin regression fails
-at 51,551 VM before that fix and passes at 1,866, preserving all contributions.
+at 51,551 VM before that fix and passes at 1,890, preserving all contributions.
 The interleaved test also enforces 50,000 VM for these unrelated write controls.
 Affected ownership/topology changes can still visit their actual descendants;
 write-audit tests continue to reject unrelated index rewrites.
@@ -161,7 +161,7 @@ advisory inventory overruns. Both original tests and limits remain unchanged:
   parents in their existing thread/event indexes. Reachability follows those
   indexed relations; reached wakeups receive keys and spellings as needed, and
   structural edits materialize the old contribution before normal teardown.
-  Both 1k and 100k now perform **68 writes and allocate 422 pages**, including
+  Both 1k and 100k now perform **68 writes and allocate 424 pages**, including
   the durable migration cursor introduced below. Historical
   parity covers private threads/events, explicit references and referring cards,
   a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
@@ -278,18 +278,26 @@ replaying that root.
 
 Fresh native verification reproduces **all 54 route VM measurements below**.
 Partial grouping remains 48,169 VM in every phase; the combined native run took
-225.33 s and retains only the six documented legacy inventory assertions. The
+209.84 s and retains only the six documented legacy inventory assertions. The
 interleaved controls remain 4,563 VM idle / 4,572 after writes, with zero closure
-captures across all 24 writes. Write controls now use **189 / 1,778 / 7,588 VM**
+captures across all 24 writes. Write controls now use **189 / 1,802 / 7,648 VM**
 for attribution/title/event writes; the latter two include canonical-ID maintenance.
 The unchanged-index/unrelated-component write audits pass. No net production CPU
 reduction is asserted from VM counts alone; the read/write mix still matters.
 
+The first full fast-suite run exposed a required write regression:
+`TestRevokedSeriesCapacityScaleAndPlan` measured 5,074 VM over 100k retired
+series definitions, above its unchanged 5,000 ceiling. Filter/evidence-only
+vertices have no ID spellings under the forward policy; their canonical-key
+trigger now exits before six no-op INSERTs. The same unmodified regression
+passes at **2,434 VM / zero scan steps**. The all-kind pinned differential and
+write-index audits pass with that guard; no excluded identity gained propagation.
+
 The 512-root/4,096-card migration profile remains **514 transactions**, with
-31,750 setup row changes, at most **1,546 per root**, a longest chunk of 51.25 ms
-and 9.63 s backfill time on this run. The unchanged 1k/100k receipt guard passes
-with **68 writes / 422 allocated pages** at both sizes; the 100k startup took
-339 ms. Additional trigger/schema pages are constant, not history-sized. These
+31,750 setup row changes, at most **1,546 per root**, a longest chunk of 67.72 ms
+and 7.96 s backfill time on this run. The unchanged 1k/100k receipt guard passes
+with **68 writes / 424 allocated pages** at both sizes; the 100k startup took
+358 ms. Additional trigger/schema pages are constant, not history-sized. These
 replace earlier implementation measurements; no budget, baseline, allowance or
 timeout changed. The separate #472 inventory gap remains unchanged.
 
@@ -321,7 +329,7 @@ The retained-wakeup backfill also now pins the existing origin-leading identity
 uniqueness index. EXPLAIN previously selected the kind index and scanned every
 historical wakeup for the retained-origin arm; the regression requires origin
 seeks instead. The unchanged 1k/100k receipt startup guard passes with identical
-68 writes and 422 allocated pages; the latest 100k startup took 339 ms. This does
+68 writes and 424 allocated pages; the latest 100k startup took 358 ms. This does
 not copy untouched wakeup history or add an index over that history.
 
 `hiddenWorkPage` now rejects a missing request access scope before reading any
