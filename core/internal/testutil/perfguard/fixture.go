@@ -24,6 +24,20 @@ const Timestamp = "2026-01-01T00:00:00Z"
 // the migrated database across route samples. Canonical triggers stay enabled:
 // the fixture must exercise the real ownership graph and reference indexes.
 func Seed(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAnchor time.Time) error {
+	return seedRows(ctx, db, contentDir, owner, seriesAnchor, Rows, PMRows)
+}
+
+// SeedRows retains the same canonical shapes and cardinality assertions for
+// bounded correctness fixtures. Route and performance budgets continue to use
+// Seed's fixed 4096/1024 corpus; this helper cannot increase that scale ceiling.
+func SeedRows(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAnchor time.Time, rows int) error {
+	if rows < 16 || rows > Rows || rows%16 != 0 {
+		return fmt.Errorf("bounded fixture rows must be a multiple of 16 between 16 and %d: %d", Rows, rows)
+	}
+	return seedRows(ctx, db, contentDir, owner, seriesAnchor, rows, rows/4)
+}
+
+func seedRows(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAnchor time.Time, rows, pmRows int) error {
 	var current bool
 	if err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='resource_access_epoch')").Scan(&current); err != nil {
 		return err
@@ -65,7 +79,7 @@ func Seed(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAncho
 	}{
 		{`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES(?,'Scale owner','["human"]',?,'{}') ON CONFLICT(id) DO NOTHING`, []any{owner, Timestamp}},
 		{`CREATE TEMP TABLE scale_seq(n INTEGER PRIMARY KEY)`, nil},
-		{`INSERT INTO scale_seq WITH RECURSIVE s(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM s WHERE n+1 < ?) SELECT n FROM s`, []any{Rows}},
+		{`INSERT INTO scale_seq WITH RECURSIVE s(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM s WHERE n+1 < ?) SELECT n FROM s`, []any{rows}},
 		{`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) SELECT 'scale-principal-'||n,'Scale principal '||n,'["agent"]',?,'{}' FROM scale_seq`, []any{Timestamp}},
 		{`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) SELECT 'scale-agent-'||n,'scale.agent.'||n,'scale-principal-'||n,?,?,'{}' FROM scale_seq`, []any{Timestamp, Timestamp}},
 		{`INSERT INTO threads(id,updated_at,updated_by,body_json) SELECT 'scale-board-thread-'||n,?,?,CASE WHEN n=0 THEN '{}' ELSE json_object('pm_actor_id',?) END FROM scale_seq WHERE n<9`, []any{Timestamp, owner, owner}},
@@ -87,7 +101,7 @@ func Seed(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAncho
 		{`INSERT INTO series_definitions(name,adapter,unit,kind) VALUES('scale.series','scale-adapter','count','gauge')`, nil},
 		{`INSERT INTO series_labels(series,labels) VALUES('scale.series','{}')`, nil},
 		{`INSERT INTO series_points(series,labels,ts,value,received_day) SELECT 'scale.series','{}',?+n*1000000000,n,? FROM scale_seq`, []any{seriesAnchor.Add(-2 * time.Hour).UnixNano(), seriesAnchor.Unix() / 86400}},
-		{`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) SELECT kinds.kind,'scale-pm-'||kinds.kind||'-'||n,'ws_main',?, 'scale-pm-conversation-'||n,1,json_object('id','scale-pm-'||kinds.kind||'-'||n,'workspace_id','ws_main','actor_id',?,'conversation_id','scale-pm-conversation-'||n,'decision_id','scale-pm-decision-'||n,'work_ref','card:scale-card-'||n,'title','Scale PM record','text','Synthetic PM context','status','pending','revision',1,'created_at',?) FROM scale_seq CROSS JOIN (SELECT 'conversation' kind UNION ALL SELECT 'decision' UNION ALL SELECT 'action' UNION ALL SELECT 'turn') kinds WHERE n < ?`, []any{owner, owner, Timestamp, PMRows}},
+		{`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) SELECT kinds.kind,'scale-pm-'||kinds.kind||'-'||n,'ws_main',?, 'scale-pm-conversation-'||n,1,json_object('id','scale-pm-'||kinds.kind||'-'||n,'workspace_id','ws_main','actor_id',?,'conversation_id','scale-pm-conversation-'||n,'decision_id','scale-pm-decision-'||n,'work_ref','card:scale-card-'||n,'title','Scale PM record','text','Synthetic PM context','status','pending','revision',1,'created_at',?) FROM scale_seq CROSS JOIN (SELECT 'conversation' kind UNION ALL SELECT 'decision' UNION ALL SELECT 'action' UNION ALL SELECT 'turn') kinds WHERE n < ?`, []any{owner, owner, Timestamp, pmRows}},
 		{`INSERT INTO runs(id,handle,launcher,external_id,host_id,agent_id,adapter,state,liveness,result_collected,labels_json,card_ref,last_observed_at) SELECT 'scale-run-'||n,'scale-run-'||n,'test','synthetic-'||n,'scale-host','scale-agent-'||n,'test','running','alive',0,'[]','card:scale-card-'||n,? FROM scale_seq`, []any{Timestamp}},
 		{`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) SELECT 'scale-host','principal-'||n,'scale-agent-'||n,'agent' FROM scale_seq`, nil},
 		{`DROP TABLE scale_seq`, nil},
@@ -104,7 +118,7 @@ func Seed(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAncho
 	if _, err = db.ExecContext(ctx, "ANALYZE"); err != nil {
 		return err
 	}
-	return Validate(ctx, db)
+	return validateRows(ctx, db, rows, pmRows)
 
 }
 
@@ -112,6 +126,10 @@ func Seed(ctx context.Context, db *sql.DB, contentDir, owner string, seriesAncho
 // Every consumer runs this after construction, avoiding another expensive copy
 // solely for an integrity test in the performance job.
 func Validate(ctx context.Context, db *sql.DB) error {
+	return validateRows(ctx, db, Rows, PMRows)
+}
+
+func validateRows(ctx context.Context, db *sql.DB, rows, pmRows int) error {
 	for _, spec := range []struct{ table, key, prefix string }{
 		{"cards", "id", "scale-card-"}, {"documents", "id", "scale-doc-"},
 		{"artifacts", "id", "scale-artifact-"}, {"events", "id", "scale-event-"},
@@ -122,8 +140,8 @@ func Validate(ctx context.Context, db *sql.DB) error {
 		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+spec.table+" WHERE "+spec.key+" LIKE ?", spec.prefix+"%").Scan(&count); err != nil {
 			return err
 		}
-		if count != Rows {
-			return fmt.Errorf("%s fixture cardinality=%d, want %d", spec.table, count, Rows)
+		if count != rows {
+			return fmt.Errorf("%s fixture cardinality=%d, want %d", spec.table, count, rows)
 		}
 	}
 	for _, kind := range []string{"conversation", "decision", "action", "turn"} {
@@ -131,8 +149,8 @@ func Validate(ctx context.Context, db *sql.DB) error {
 		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pm_records WHERE kind=? AND id LIKE 'scale-pm-%'", kind).Scan(&n); err != nil {
 			return err
 		}
-		if n != PMRows {
-			return fmt.Errorf("PM %s cardinality=%d, want %d", kind, n, PMRows)
+		if n != pmRows {
+			return fmt.Errorf("PM %s cardinality=%d, want %d", kind, n, pmRows)
 		}
 	}
 
@@ -140,10 +158,10 @@ func Validate(ctx context.Context, db *sql.DB) error {
 		query string
 		want  int
 	}{
-		{"SELECT COUNT(*) FROM series_points WHERE series='scale.series'", Rows},
+		{"SELECT COUNT(*) FROM series_points WHERE series='scale.series'", rows},
 		{"SELECT COUNT(*) FROM boards WHERE id LIKE 'scale-board-%'", 9},
-		{"SELECT COUNT(*) FROM cards WHERE id LIKE 'scale-card-%' AND board_id<>'scale-board-0'", Rows / 16},
-		{"SELECT COUNT(*) FROM document_fts WHERE document_id LIKE 'scale-doc-%'", Rows},
+		{"SELECT COUNT(*) FROM cards WHERE id LIKE 'scale-card-%' AND board_id<>'scale-board-0'", rows / 16},
+		{"SELECT COUNT(*) FROM document_fts WHERE document_id LIKE 'scale-doc-%'", rows},
 	} {
 		var n int
 		if err := db.QueryRowContext(ctx, spec.query).Scan(&n); err != nil {

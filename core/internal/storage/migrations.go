@@ -1174,6 +1174,7 @@ var migrations = []migration{
 		`INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives WHERE true ON CONFLICT DO NOTHING;`,
 	}},
 	{Version: 116, ApplyChunk: accessAdmissionMigrationChunk, Verify: verifyAdmissionMigration},
+	{Version: 117, AfterApply: restrictAdmissionUpdatePrograms, Verify: verifyAdmissionUpdatePrograms},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

@@ -45,9 +45,9 @@ func TestEventLifecycleBoundedCascadePlanAndCost(t *testing.T) {
 	scope := func() context.Context {
 		return primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
 	}
-	for _, corpus := range []int{0, 4096} {
+	for _, corpus := range []int{0, primitivesCorrectnessCorpusRows()} {
 		if corpus != 0 {
-			if err = perfguard.Seed(ctx, ws.DB(), ws.Layout().ArtifactContentDir, "owner", time.Now().UTC()); err != nil {
+			if err = perfguard.SeedRows(ctx, ws.DB(), ws.Layout().ArtifactContentDir, "owner", time.Now().UTC(), corpus); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -127,19 +127,24 @@ func TestEventLifecycleBoundedCascadePlanAndCost(t *testing.T) {
 		t.Fatal(err)
 	}
 	var previous uint64
-	for _, fanout := range []int{3000, 30000} {
+	for _, fanout := range []int{3000, primitivesFixtureRows(6000, 30000)} {
 		tx, e := ws.DB().BeginTx(ctx, nil)
 		if e != nil {
 			t.Fatal(e)
 		}
-		for i := 0; i < fanout; i++ {
-			id := fmt.Sprintf("fanout-%d-%d", fanout, i)
-			if _, e = tx.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,'message_posted','2026-01-01T00:00:00Z','stranger',?,'[]','{}')`, id, privateThread); e != nil {
-				t.Fatal(e)
-			}
-			if _, e = tx.Exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at) VALUES(?,'event',?,'event','cascade-root','ref','now')`, id, id); e != nil {
-				t.Fatal(e)
-			}
+		// Retain every source/edge and its canonical trigger work. Both tiers
+		// exceed the 2,001-candidate limit at each phase; performance uses 33k.
+		// Two fixture statements avoid recompiling the trigger programs for
+		// each imported row; this test measures the bounded consuming read.
+		if _, e = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?)
+		 INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json)
+		 SELECT 'fanout-'||?||'-'||n,'message_posted','2026-01-01T00:00:00Z','stranger',?,'[]','{}' FROM fixture`, fanout, fanout, privateThread); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = tx.Exec(`WITH RECURSIVE fixture(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM fixture WHERE n+1<?)
+		 INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at)
+		 SELECT 'fanout-'||?||'-'||n,'event','fanout-'||?||'-'||n,'event','cascade-root','ref','now' FROM fixture`, fanout, fanout, fanout); e != nil {
+			t.Fatal(e)
 		}
 		if e = tx.Commit(); e != nil {
 			t.Fatal(e)

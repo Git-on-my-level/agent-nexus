@@ -244,7 +244,12 @@ func TestMigrationRunnersRejectSkippedSteps(t *testing.T) {
 					m.ApplyChunk = admission.ApplyChunk
 					m.Statements = []string{`CREATE TABLE skipped_step(id)`}
 				}
-				migrations = append(append([]migration(nil), original[:len(original)-1]...), m)
+				migrations = append([]migration(nil), original...)
+				for i := range migrations {
+					if migrations[i].Version == m.Version {
+						migrations[i] = m
+					}
+				}
 				if opened, err := InitializeWorkspace(context.Background(), root); err == nil {
 					opened.Close()
 					t.Fatal("unexecuted116 recorded")

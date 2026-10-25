@@ -1786,3 +1786,115 @@ is unchanged. Run it with the established ask poll/read gate:
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/primitives \
   -run '^TestPerformance(InboxItemResolutionRead|AskDeliveryReadBudgets)$' -count=1 -v
 ```
+
+## Primitives test time after canonical admission
+
+The first main CI run after #469 hit the unchanged 25-minute primitives
+package timeout: [run 40160966779, job 121072289854](https://github.com/Git-on-my-level/agent-nexus/actions/runs/40160966779/job/121072289854).
+The preceding PR job passed but took
+[18m36s](https://github.com/Git-on-my-level/agent-nexus/actions/runs/40159110376/job/121066742216).
+This was a real regression, including a production write-preparation cost.
+Rerunning the failed job is not the repair.
+
+Uncached `go test -json` runs compared main `9d0fe66` with its parent `74aba48f`
+using the exact correctness selection from `scripts/ci-core.py primitives`,
+`-parallel=2`, `-count=1`, and the unchanged `-timeout=25m`. The local host was
+an M5 Max, Go 1.27.0, `GOMAXPROCS=2`; CI uses its configured Linux Go toolchain.
+These are package elapsed times, excluding compilation and slot wait:
+
+| Test                             | Before #469 | Main after #469 |   Repair |
+| -------------------------------- | ----------: | --------------: | -------: |
+| complete primitives package      |    144.85 s |        549.27 s | 233.02 s |
+| lifecycle cascade/fanout         |     36.37 s |        199.09 s |   9.55 s |
+| frozen home membership           |      8.51 s |         45.79 s |   3.78 s |
+| 10,000-document posting plan     |      5.71 s |         39.52 s |   4.32 s |
+| snapshot randomized differential |      5.96 s |         11.97 s |  11.38 s |
+| document handle history          |      8.32 s |          6.17 s |  10.04 s |
+
+Main was 3.79 times its parent. The repair reduces it by 57.6%. The new small
+admission randomized test itself took 1.14 seconds on main and 1.03 second after
+repair; it was not the dominant cost. Its seeds, operations and assertions are
+unchanged, as are the storage upgrade-shaped differential and all P0 regressions.
+Fixtures already copied one immutable, fully migrated template, so migration
+116 did not run for every test. The 20-second injected document-write failure
+test also took 20 seconds on the parent and remains unchanged.
+
+### Preparation is part of write cost
+
+The admission update guards prevented unnecessary execution, but `WHEN` does
+not prevent SQLite from preparing a trigger body and its nested trigger
+programs. Modernc prepares a native VM for each execution, including Go
+prepared-statement executions. A CPU sample of the synthetic write benchmark
+placed 56.8% of samples under SQLite preparation. Executed-VM ceilings alone
+missed this regression: an attribution update executed fewer VM steps while
+compiling about 29 times as many instructions as its parent.
+
+Migration 117 adds explicit `UPDATE OF` columns to guarded generic admission,
+identity and source triggers. It uses the existing schema-owned OLD/NEW input
+inventory, retains each existing `WHEN` and explicit column list, and preserves
+the artifact/revision refresh exceptions. Integer primary-key inputs retain
+`rowid`, `_rowid_`, `oid` and declared-key update spellings; a regression checks
+real contribution moves as well as the reverse `NEW.rowid` spelling. A
+contributions-only counter update
+no longer compiles root ownership cascades. Trigger bodies, ownership policy,
+read predicates and canonical epoch invalidation are unchanged. The migration
+changes only a bounded schema inventory, with no canonical-row backfill. Both
+ordinary and fenced upgrades verify completion before recording 117 and on
+reopen. A no-op migration callback fails without advancing either ledger.
+
+`BenchmarkCanonicalAdmissionWrite` makes the preparation cost reproducible.
+The following synthetic public-write means use 50 executions in a transaction;
+the separate driver capture includes executed trigger VM steps. Each sample
+submits one SQL statement. These are local diagnostic means, not production
+latency promises:
+
+| Write              | VM: parent / main / repair | Compiled instructions: parent / main / repair | Local time: parent / main / repair |
+| ------------------ | -------------------------- | --------------------------------------------- | ---------------------------------- |
+| thread attribution | 433 / 189 / 107            | 688 / 20,246 / 108                            | 0.22 / 2.58 / 0.32 ms              |
+| card title         | 531 / 1,715 / 1,664        | 1,131 / 16,001 / 8,516                        | 0.28 / 2.12 / 1.48 ms              |
+| event append       | 1,171 / 4,145 / 4,145      | 4,472 / 17,469 / 14,249                       | 0.79 / 2.75 / 2.56 ms              |
+
+Private event appends use 4,720 VM after repair versus 1,171 before #469;
+attribution uses 107 and title uses 1,665. Admission still maintains the exact
+and compact ownership indexes on relevant writes, so those writes retain a
+measured cost above the old design. Unchanged-index and unrelated-component
+write audits remain required. The new regression also inspects actual EXPLAIN
+programs on fresh, released-116 and fenced released-116 databases, rejecting
+unrelated ownership programs while checking a real ownership transfer across
+all three ledgers.
+
+```sh
+go test -C core ./internal/primitives -run '^$' \
+  -bench '^BenchmarkCanonicalAdmissionWrite$' -benchtime=50x -count=1
+```
+
+### Bounded correctness fixtures, retained full-scale assertions
+
+The posting fixture now inserts all 10,000 unrelated documents and updates
+their heads with two set statements. The lifecycle fixture similarly inserts
+its imported events and edges with two statements per phase. Every canonical
+trigger stays enabled. With the original full corpora and only these batching
+and production changes, the complete package fell to 346.25 seconds; lifecycle
+took 71.95 seconds and posting took 4.30 seconds.
+
+Ordinary correctness CI then uses 256 canonical rows / 64 per PM kind for the
+two repeated unrelated-workspace fixtures, 3,000 plus 6,000 fanout rows, and 512
+unrelated project metadata rows. Both fanout phases exceed the unchanged
+2,001-candidate cap. All assertions, VM ceilings and index-plan checks remain.
+`perfguard.SeedRows` validates the exact requested cardinalities and preserves
+the same ownership shapes. The default `Seed`, `Validate`, `Rows=4096` and
+`PMRows=1024` used by route performance gates are unchanged.
+
+`TestPerformancePrimitivesLifecycleMembershipAndWrites` calls these same tests
+with their original 4,096-row / 1,024-PM corpus, 33,000 fanout edges, and 10,000
+project metadata rows. Its name is discovered by the existing advisory workflow,
+which sets `ANX_PERFORMANCE_TEST=1`; no workflow selection or timeout changed.
+Run the complete preserved scale assertions locally with:
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/primitives -count=1 -v \
+  -run '^TestPerformancePrimitivesLifecycleMembershipAndWrites$' -timeout=10m
+```
+
+No budget, baseline or allowance was widened. The six legacy inventory gaps
+remain the separate pre-existing issue #472 described above.

@@ -52,9 +52,9 @@ func TestFrozenHomeReadMembershipPlanAndCost(t *testing.T) {
 	scope := func() context.Context {
 		return primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
 	}
-	for _, corpus := range []int{0, 4096} {
+	for _, corpus := range []int{0, primitivesCorrectnessCorpusRows()} {
 		if corpus != 0 {
-			if err = perfguard.Seed(ctx, ws.DB(), ws.Layout().ArtifactContentDir, "owner", time.Now().UTC()); err != nil {
+			if err = perfguard.SeedRows(ctx, ws.DB(), ws.Layout().ArtifactContentDir, "owner", time.Now().UTC(), corpus); err != nil {
 				t.Fatal(err)
 			}
 		}

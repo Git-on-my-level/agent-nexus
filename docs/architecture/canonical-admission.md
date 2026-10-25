@@ -151,3 +151,21 @@ whose ownership actually changes; that is the deliberate write-side cost.
 
 No model, external authority, provider-specific adapter, deployment rule or flag
 participates in admission. See [measurements and remaining inventory gaps](../../core/docs/performance.md#canonical-admission-main-reproduction-and-candidate-index).
+
+## Trigger preparation
+
+Migration 117 narrows guarded generic update triggers with explicit `UPDATE OF`
+inputs. An unchanged-input `WHEN` saves execution but still makes SQLite prepare
+the complete nested ownership program. This mattered for production attribution
+writes as well as large test fixtures: fewer executed VM steps did not imply a
+cheap write. Retain both kinds of guard and inspect compiled programs alongside
+executed VM in write-cost regressions. Artifact and revision membership refresh
+signals retain their existing exceptions.
+
+This is a schema-only repair over the fixed trigger inventory. It preserves
+every trigger body and canonical input, performs no data backfill, and verifies
+the installed programs on both migration ledgers. Required correctness tests
+use bounded unrelated corpora; the existing advisory performance lane runs the
+same assertions at their original full scale. P0 and randomized parity tests
+retain their complete assertions and fixed seeds. See the
+[primitives timing and write measurements](../../core/docs/performance.md#primitives-test-time-after-canonical-admission).
