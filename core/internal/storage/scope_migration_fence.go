@@ -136,43 +136,27 @@ func applyWorkspaceMigrations(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("unsupported scope migration version %d", version)
 		}
 	}
-	// New compatible migrations and their ledger digest commit atomically. This
-	// is bounded by the migration registry, never historical workspace content.
+	// Validate the fence and all recorded postconditions before starting any
+	// chunks. Every chunk commits independently; only a complete migration may
+	// record its version and new ledger digest in the same transaction.
 	for _, m := range migrations {
-		if applied[m.Version] {
-			continue
-		}
-		if err := func() error {
-			finish := reportMigrationProgress(ctx, m.Version)
-			defer finish()
-			for _, statement := range m.Statements {
-				if _, err := tx.ExecContext(ctx, statement); err != nil {
-					return fmt.Errorf("scope migration %d: %w", m.Version, err)
-				}
+		if applied[m.Version] && m.Verify != nil {
+			if err := m.Verify(ctx, tx); err != nil {
+				return fmt.Errorf("recorded scope migration %d: %w", m.Version, err)
 			}
-			if m.AfterApply != nil {
-				if err := m.AfterApply(ctx, tx); err != nil {
-					return fmt.Errorf("scope migration %d hook: %w", m.Version, err)
-				}
-			}
-			_, err := tx.ExecContext(ctx, `INSERT INTO scope_schema_migrations VALUES(?,CURRENT_TIMESTAMP)`, m.Version)
-			return err
-		}(); err != nil {
-			return err
 		}
 	}
-	digest, err = scopeLedgerDigest(ctx, tx, "scope_schema_migrations")
-	if err != nil {
+	if err := tx.Commit(); err != nil {
 		return err
 	}
-	// An unchanged fenced reopen must not fire the authority-capture UPDATE
-	// trigger and invalidate an otherwise resumable staged generation.
-	if digest != storedDigest {
-		if _, err := tx.ExecContext(ctx, `UPDATE scope_format_state SET ledger_digest=? WHERE singleton=1`, digest); err != nil {
-			return err
+	for _, m := range migrations {
+		if !applied[m.Version] {
+			if err := applyMigrationToLedger(ctx, db, m, "scope_schema_migrations"); err != nil {
+				return err
+			}
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // This digest protects recorded ledger evidence, NOT historical migration

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -28,9 +27,10 @@ type migration struct {
 	Statements []string
 	// AfterApply runs in the same transaction after Statements (optional).
 	AfterApply func(ctx context.Context, tx *sql.Tx) error
-	// ApplyInChunks owns its transactions and records Version only on completion.
-	// It must resume durable progress after cancellation; startup waits for it.
-	ApplyInChunks func(ctx context.Context, db *sql.DB) error
+	// ApplyChunk executes one resumable chunk in the runner's transaction.
+	// The runner alone verifies completion, records Version and updates its ledger.
+	ApplyChunk func(ctx context.Context, tx *sql.Tx) (done bool, err error)
+	Verify     func(ctx context.Context, tx *sql.Tx) error
 }
 
 var migrations = []migration{
@@ -1173,7 +1173,7 @@ var migrations = []migration{
 		`CREATE INDEX IF NOT EXISTS idx_events_promise_facts ON events(thread_id,ts DESC) WHERE type='message_posted' AND (json_extract(payload_json,'$.payload.next.at') IS NOT NULL OR json_array_length(json_extract(payload_json,'$.payload.evidence_refs'))>0);`,
 		`INSERT INTO brief_dirty(card_id) SELECT card_id FROM brief_initiatives WHERE true ON CONFLICT DO NOTHING;`,
 	}},
-	{Version: 116, ApplyInChunks: applyAccessAdmissionMigration},
+	{Version: 116, ApplyChunk: accessAdmissionMigrationChunk, Verify: verifyAdmissionMigration},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {
@@ -2905,6 +2905,9 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 
 	for _, m := range migrations {
 		if appliedVersions[m.Version] {
+			if err := verifyRecordedMigration(ctx, db, m); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -2917,49 +2920,7 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 }
 
 func applyMigration(ctx context.Context, db *sql.DB, m migration) error {
-	finish := reportMigrationProgress(ctx, m.Version)
-	defer finish()
-	if m.ApplyInChunks != nil {
-		return m.ApplyInChunks(ctx, db)
-	}
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin migration %d: %w", m.Version, err)
-	}
-
-	for _, statement := range m.Statements {
-		if _, err := tx.ExecContext(ctx, statement); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("migration rollback failed: %v", rbErr)
-			}
-			return fmt.Errorf("apply migration %d: %w", m.Version, err)
-		}
-	}
-	if m.AfterApply != nil {
-		if err := m.AfterApply(ctx, tx); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("migration rollback failed: %v", rbErr)
-			}
-			return fmt.Errorf("apply migration %d after hook: %w", m.Version, err)
-		}
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO schema_migrations(version, applied_at) VALUES (?, CURRENT_TIMESTAMP)`,
-		m.Version,
-	); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("migration rollback failed: %v", rbErr)
-		}
-		return fmt.Errorf("record migration %d: %w", m.Version, err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit migration %d: %w", m.Version, err)
-	}
-	return nil
+	return applyMigrationToLedger(ctx, db, m, "schema_migrations")
 }
 
 func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) {

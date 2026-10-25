@@ -70,6 +70,25 @@ Retained wakeup aliases and tombstones are backfilled through explicitly pinned
 origin-leading uniqueness-index seeks;
 only untouched canonical wakeup history is omitted.
 
+Canonical ID mappings also come from every canonical structural declaration,
+indexed source vertex and root, even when the resource row is absent. The input
+inventory shares the forward policy's structural definitions. Typed IDs support
+navigation; bare IDs keep the original exclusions. Resolve from canonical inputs,
+not from key-generated graph rows, so key creation cannot recursively suppress
+its own resolver trigger. One ID mapping is shared across declarations and kept
+after deletion: it carries no authority, and current root/reachability counts
+alone decide denial. This adds storage proportional to distinct observed IDs;
+ID-unchanged writes do not change the dictionary. Existing alias/publication
+contributions retain their separate lifetime semantics.
+
+Both migration loaders and the history fixture use one runner. Chunk callbacks
+execute inside its transaction and cannot record versions. Completion verifies
+the required admission schema before recording 116; a fenced ledger and its new
+digest commit together. Empty or mixed execution plans fail. Reopens verify an
+already-recorded 116 and refuse incomplete schema before serving any request.
+Both fenced and ordinary upgrades support one-root checkpoints and resumption;
+the downgrade fence remains intact.
+
 Retained aliases and tombstones contribute canonical typed/bare ID keys directly
 from their resource tuple, independently of the retained spelling. This includes
 empty spellings, virtual document-history identities and external-key IDs, with

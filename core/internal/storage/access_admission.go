@@ -204,27 +204,6 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	if err := install("identity", "resource_access_identities", "identity_id", identityKeys, `DELETE FROM resource_access_admission_keys WHERE origin='identity' AND origin_id=CAST(OLD.identity_id AS TEXT);`); err != nil {
 		return err
 	}
-	// Every graph vertex has raw/typed ID spellings even when it is synthetic
-	// (series streams, PM envelopes, retained brief folds) or has no handle row.
-	// Keep one contribution per source vertex, independently of atom count.
-	for _, spec := range []struct{ table, kind, id string }{{"resource_access_edges", "source_kind", "source_id"}, {"ref_edges", "source_type", "source_id"}} {
-		vertexID := func(p string) string { return `json_array(` + p + spec.kind + `,` + p + spec.id + `)` }
-		insert := func(p, f string) string {
-			return keys + `SELECT 'vertex',` + vertexID(p) + `,` + p + spec.kind + `,` + p + spec.id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(p+spec.kind+`||':'||`+p+spec.id) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+spec.kind) + `; ` +
-				keys + `SELECT 'vertex',` + vertexID(p) + `,` + p + spec.kind + `,` + p + spec.id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(p+spec.id) + `),0 FROM ` + f + `(SELECT 1) WHERE ` + valid(p+spec.kind) + ` AND ` + p + spec.kind + `<>'plan';` + virtualHistoryKeys("vertex", vertexID(p), p+spec.kind, p+spec.id, f, "1")
-		}
-		clear := `DELETE FROM resource_access_admission_keys WHERE origin='vertex' AND origin_id=` + vertexID("OLD.") + ` AND NOT EXISTS(SELECT 1 FROM resource_access_edges WHERE source_kind=OLD.` + spec.kind + ` AND source_id=OLD.` + spec.id + `) AND NOT EXISTS(SELECT 1 FROM ref_edges WHERE source_type=OLD.` + spec.kind + ` AND source_id=OLD.` + spec.id + `);`
-		for _, q := range []string{
-			`CREATE TRIGGER admission_vertex_` + spec.table + `_insert AFTER INSERT ON ` + spec.table + ` BEGIN ` + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER admission_vertex_` + spec.table + `_update AFTER UPDATE ON ` + spec.table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`,
-			`CREATE TRIGGER admission_vertex_` + spec.table + `_delete AFTER DELETE ON ` + spec.table + ` BEGIN ` + clear + ` END`,
-			insert("r.", `(SELECT DISTINCT `+spec.kind+`,`+spec.id+` FROM `+spec.table+`) r, `),
-		} {
-			if err := exec(q); err != nil {
-				return err
-			}
-		}
-	}
 	// Empty legacy handles are omitted from the mention identity table but are
 	// still navigable by the canonical conservative empty-reference rule.
 	for _, kind := range []string{"thread", "board", "card", "topic", "document", "event", "artifact"} {
@@ -344,7 +323,7 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installHistoricalWakeupAdmission, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
+	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAdmissionCanonicalVertices, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installHistoricalWakeupAdmission, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
 		if err := install(ctx, tx); err != nil {
 			return err
 		}

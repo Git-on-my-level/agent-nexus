@@ -108,14 +108,14 @@ another pool and retains its 4,563-VM result in every phase.
 | Canonical SQL write and triggers | Main VM | #469 VM |
 | -------------------------------- | ------: | ------: |
 | Attribution                      |     434 |     189 |
-| Public title                     |     837 |   1,252 |
-| Public event append              |   1,603 |   5,640 |
+| Public title                     |     837 |   1,778 |
+| Public event append              |   1,603 |   7,588 |
 
 The write probe exposed an admission teardown defect: TEXT contribution IDs
 compared directly with INTEGER edge IDs scanned the entire `exact` origin range.
 A title edit initially cost 564,443 VM. Matching the stored TEXT affinity restores
 the composite-key seek. The independent 10,000-unrelated-origin regression fails
-at 51,551 VM before that fix and passes at 1,340, preserving all contributions.
+at 51,551 VM before that fix and passes at 1,866, preserving all contributions.
 The interleaved test also enforces 50,000 VM for these unrelated write controls.
 Affected ownership/topology changes can still visit their actual descendants;
 write-audit tests continue to reject unrelated index rewrites.
@@ -161,7 +161,7 @@ advisory inventory overruns. Both original tests and limits remain unchanged:
   parents in their existing thread/event indexes. Reachability follows those
   indexed relations; reached wakeups receive keys and spellings as needed, and
   structural edits materialize the old contribution before normal teardown.
-  Both 1k and 100k now perform **68 writes and allocate 356 pages**, including
+  Both 1k and 100k now perform **68 writes and allocate 422 pages**, including
   the durable migration cursor introduced below. Historical
   parity covers private threads/events, explicit references and referring cards,
   a 128-wakeup reference cycle, empty legacy parents, moves, revocation/transfer,
@@ -192,7 +192,7 @@ The Sol review reproduced two authorization leaks in the previous #469 head
 
 `TestAdmissionUpgradeRandomizedScaleParity` seeds 4,096 cards into the released
 schema, with public historical wakeups, alias-only tombstones and retained
-aliases before migration 116. Two fixed seeds each exercise 32 post-migration
+aliases before migration 116. Two fixed seeds in each fence mode exercise 48 post-migration
 operations: access revocation/transfer, wakeup parent/reference changes, alias
 renames, tombstone spelling/owner changes and ledger cutover. After each operation,
 the old canonical closure and maintained admission must agree for nine principal
@@ -220,6 +220,79 @@ Legacy schema-reconstruction fixtures remove post-116 admission triggers before
 dropping older indexes. Their canonical legacy triggers and all retained-privacy
 assertions remain active; migration 116 must rebuild the new derived state.
 
+### Second security review: structural identity and fenced upgrades
+
+The second Sol review reproduced two additional defects against published
+`a82c1cea`: a private `work_metadata` row for an absent card did not propagate
+canonical typed-ID or navigational inheritance to its dependents, and a fenced
+schema-115 upgrade recorded migration 116 while ignoring its chunk callback.
+Both reproductions became failing regressions before their fixes. The former
+returned `typed-dependent` and `nav-dependent` to a pinned unrelated reader; the
+latter recorded 116 without `resource_access_admission_root_owners`.
+
+Canonical ID keys now derive from canonical declarations: the shared structural
+ownership inventory's endpoints, raw/exact/external indexed source vertices,
+navigational source vertices and roots. This includes absent resources represented
+only by metadata, observations, participants or plan steps. Typed IDs are also
+navigational keys; bare-ID exclusions, external publication policy and virtual
+document history retain the forward oracle's rules. Deriving keys from the
+key-generated graph itself is unsafe: recursive key creation can suppress the
+resolver trigger and leave one spelling unresolved. Canonical input triggers and
+migration backfill use the same declaration inventory instead.
+
+One immutable canonical ID mapping is shared across declarations and retained
+when rows disappear. These keys carry no authority: only current roots and
+reachability can deny a resource. Retention preserves the forward policy's
+existence-independent ID resolution, including deletion and later reuse, without
+scanning all declarations on an access write. Storage adds O(distinct observed
+canonical identities) to the existing graph/reachability terms. Alias and
+publication contributions still follow their own live/retained source policy;
+this dictionary stores only ID mappings. ID-unchanged updates do no dictionary
+writes. Untouched historical wakeups keep their existing lazy path, so startup
+does not copy or index that history.
+
+The deterministic sweep covers every ownership/structural kind through typed,
+bare and navigational references, including policy-excluded kinds. Concrete
+missing-card metadata, empty/nested plan steps, observations, participants and
+ref-edge fixtures supplement existing live/alias/tombstone tests. Creation order,
+live arrival/rename/deletion, moved and deleted metadata, owner transfer,
+source removal and retained-ID reuse all compare old and new authority. The
+4,096-card randomized differential now runs two seeds through both fenced and
+unfenced upgrades (four runs), with 48 post-migration operations each, including
+structural-only identity creation, updates, deletion and live-row transitions.
+All nine principal scopes compare complete denial/projection-spelling sets and
+actual pinned candidate rows, pages, counts and lookahead. Historical structural
+cycles and the earlier exact Sol regressions also pass.
+
+Fenced and ordinary loaders, plus the history fixture, now share one transaction
+runner. A chunk executes inside a runner-owned transaction; it cannot write its
+own version. Empty plans and mixed chunk/transactional plans are rejected. On
+completion the runner verifies every required admission table and absence of an
+unfinished cursor before atomically recording 116; fenced completion also updates
+the ledger digest in that same commit. Already-recorded 116 is verified on every
+open, so a malformed preview fails during initialization. No legacy fence is
+removed or its missing function registered. Tests cover both loaders, unchanged
+reopens, missing recorded tables, no-op callbacks, skipped steps, digest/progress
+behavior and cancellation after one durable root followed by resume without
+replaying that root.
+
+Fresh native verification reproduces **all 54 route VM measurements below**.
+Partial grouping remains 48,169 VM in every phase; the combined native run took
+225.33 s and retains only the six documented legacy inventory assertions. The
+interleaved controls remain 4,563 VM idle / 4,572 after writes, with zero closure
+captures across all 24 writes. Write controls now use **189 / 1,778 / 7,588 VM**
+for attribution/title/event writes; the latter two include canonical-ID maintenance.
+The unchanged-index/unrelated-component write audits pass. No net production CPU
+reduction is asserted from VM counts alone; the read/write mix still matters.
+
+The 512-root/4,096-card migration profile remains **514 transactions**, with
+31,750 setup row changes, at most **1,546 per root**, a longest chunk of 51.25 ms
+and 9.63 s backfill time on this run. The unchanged 1k/100k receipt guard passes
+with **68 writes / 422 allocated pages** at both sizes; the 100k startup took
+339 ms. Additional trigger/schema pages are constant, not history-sized. These
+replace earlier implementation measurements; no budget, baseline, allowance or
+timeout changed. The separate #472 inventory gap remains unchanged.
+
 ### GLM follow-up: resumable migration and explicit scope
 
 Migration 116 separates schema/direct-index setup from transitive reachability.
@@ -236,7 +309,7 @@ workspace. Runtime grant/revoke component work remains the accepted write-side
 tradeoff (GLM #2).
 
 The released-schema synthetic profile has 4,096 cards, 512 private roots and a
-512-dependent shared hub. It completed in **514 transactions**, with 30,726 row
+512-dependent shared hub. It completed in **514 transactions**, with 31,750 row
 changes in setup and at most 1,546 per root chunk. The longest root chunk was
 62.93 ms; backfill elapsed time was 12.43 s on this local run. A separate fast
 regression interrupts after one independently visible root commit, reopens the
@@ -248,7 +321,7 @@ The retained-wakeup backfill also now pins the existing origin-leading identity
 uniqueness index. EXPLAIN previously selected the kind index and scanned every
 historical wakeup for the retained-origin arm; the regression requires origin
 seeks instead. The unchanged 1k/100k receipt startup guard passes with identical
-68 writes and 356 allocated pages; the latest 100k startup took 503 ms. This does
+68 writes and 422 allocated pages; the latest 100k startup took 339 ms. This does
 not copy untouched wakeup history or add an index over that history.
 
 `hiddenWorkPage` now rejects a missing request access scope before reading any

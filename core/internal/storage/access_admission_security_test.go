@@ -19,8 +19,17 @@ func checkAdmissionSecurityParity(t *testing.T, db *sql.DB, stage string) {
 	t.Helper()
 	ctx := context.Background()
 	for _, scope := range []primitives.AccessScope{{ActorID: "owner"}, {ActorID: "second-owner"}, {ActorID: "human"}, {ActorID: "agent"}, {ActorID: "human", PMActorID: "owner"}, {ActorID: "owner", PMActorID: "owner"}, {ActorID: "human", AuthAdmin: true}, {ActorID: "17"}, {}} {
-		read := func(c context.Context, q string) []string {
+		read := func(c context.Context, q string, pinned bool) []string {
 			t.Helper()
+			if pinned {
+				var closeRead func()
+				var err error
+				c, closeRead, err = primitives.NewTestStore(db, "").BeginResourceRead(c)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer closeRead()
+			}
 			rows, err := resourceaccess.NewDB(db).QueryContext(c, q)
 			if err != nil {
 				t.Fatal(err)
@@ -48,7 +57,7 @@ func checkAdmissionSecurityParity(t *testing.T, db *sql.DB, stage string) {
 			`SELECT id FROM cards ORDER BY id LIMIT 2 OFFSET 1`,
 			`SELECT json_array(count(*),EXISTS(SELECT 1 FROM cards ORDER BY id LIMIT 1 OFFSET 2)) FROM cards`,
 		} {
-			want := read(old, query)
+			want := read(old, query, false)
 			var got []string
 			if query == `SELECT json_array(kind,CAST(id AS TEXT)) FROM _anx_denied ORDER BY kind,CAST(id AS TEXT)` || query == `SELECT DISTINCT json_array(ref,CAST(typed AS TEXT)) FROM _anx_denied_atoms ORDER BY 1` {
 				constraint := "o.unconditional=1"
@@ -79,7 +88,7 @@ func checkAdmissionSecurityParity(t *testing.T, db *sql.DB, stage string) {
 				}
 				rows.Close()
 			} else {
-				got = read(fresh, query)
+				got = read(fresh, query, true)
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("%s scope=%+v query=%s canonical=%v candidate=%v", stage, scope, query, want, got)
@@ -229,12 +238,14 @@ func TestAdmissionUpgradeRandomizedScaleParity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("released-schema 4096-row differential fixture")
 	}
-	for _, seed := range []int64{46920261025, 46920261026} {
-		t.Run(fmt.Sprint(seed), func(t *testing.T) { admissionUpgradeRandomizedScaleParity(t, seed) })
+	for _, fenced := range []bool{false, true} {
+		for _, seed := range []int64{46920261025, 46920261026} {
+			t.Run(fmt.Sprintf("%d/fenced=%v", seed, fenced), func(t *testing.T) { admissionUpgradeRandomizedScaleParity(t, seed, fenced) })
+		}
 	}
 }
 
-func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64) {
+func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64, fenced bool) {
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 115)
 	exec := func(q string, args ...any) {
@@ -247,8 +258,15 @@ func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64) {
 	exec(`INSERT INTO agent_wakeups(wakeup_id,status,notification_status,target_handle,target_actor_id,thread_id,refs_json,created_at,updated_at) WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<7) SELECT 'old-'||i,'requested','unread','agent','agent','parent','[]','now','now' FROM n`)
 	exec(`INSERT INTO resource_access_tombstones VALUES('document','retired','alias','owner')`)
 	exec(`INSERT INTO resource_handle_aliases(resource_type,alias_handle,resource_id,canonical_handle,created_at,reason) VALUES('document','second-alias','retired','former','now','retained')`)
-	exec(`INSERT INTO cards(id,handle,title,summary,column_key,refs_json,created_at,created_by,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<4095) SELECT printf('scale-%04d',i),printf('scale-%04d',i),'Public','','ready',CASE WHEN i<8 THEN json_array('wakeup:old-'||i) WHEN i=8 THEN '["document:retired"]' WHEN i=9 THEN '["retired"]' WHEN i=10 THEN '["document:second-alias"]' ELSE '[]' END,'now','owner','now','owner' FROM n`)
-	db.Close()
+	exec(`INSERT INTO cards(id,handle,title,summary,column_key,refs_json,created_at,created_by,updated_at,updated_by) WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<4095) SELECT printf('scale-%04d',i),printf('scale-%04d',i),'Public','','ready',CASE WHEN i<8 THEN json_array('wakeup:old-'||i) WHEN i=8 THEN '["document:retired"]' WHEN i=9 THEN '["retired"]' WHEN i=10 THEN '["document:second-alias"]' WHEN i=11 THEN '["card:absent-0"]' WHEN i=12 THEN '["plan:absent-0"]' WHEN i=13 THEN '["card:absent-edge"]' ELSE '[]' END,'now','owner','now','owner' FROM n`)
+	exec(`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('absent-0','{"refs":["thread:parent"]}','now','owner')`)
+	exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES('absent-0','{"steps":[]}','now')`)
+	exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES('absent-edge','card','absent-edge','thread','other-parent','ref','now','{}'),('absent-navigation','card','scale-0014','card','absent-0','ref','now','{}')`)
+	if fenced {
+		fenceAdmissionHistory(t, root, db)
+	} else {
+		db.Close()
+	}
 	ws, err := InitializeWorkspace(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -299,9 +317,9 @@ func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64) {
 	exec(`UPDATE threads SET body_json='{"pm_actor_id":"owner"}' WHERE id='parent'`)
 	checkAdmissionSecurityParity(t, db, "first private transition")
 	rng := rand.New(rand.NewSource(seed))
-	for step := 0; step < 32; step++ {
+	for step := 0; step < 48; step++ {
 		id := fmt.Sprintf("old-%d", rng.Intn(8))
-		switch step % 8 {
+		switch step % 12 {
 		case 0:
 			exec(`UPDATE threads SET body_json=json_object('pm_actor_id',?) WHERE id='parent'`, []any{"", "owner", "second-owner", 17}[rng.Intn(4)])
 		case 1:
@@ -319,6 +337,26 @@ func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64) {
 			exec(`UPDATE resource_access_compact_control SET reader=1,force_legacy=?`, rng.Intn(2))
 		case 7:
 			exec(`UPDATE threads SET body_json=json_object('pm_actor_id',?) WHERE id='other-parent'`, []string{"", "owner", "second-owner"}[rng.Intn(3)])
+		case 8:
+			if rng.Intn(3) == 0 {
+				exec(`DELETE FROM work_metadata WHERE card_id='absent-0'`)
+			} else {
+				exec(`INSERT INTO work_metadata(card_id,metadata_json,updated_at,updated_by) VALUES('absent-0',json_object('ref',?),'now','owner') ON CONFLICT(card_id) DO UPDATE SET metadata_json=excluded.metadata_json`, "thread:"+[]string{"parent", "other-parent"}[rng.Intn(2)])
+			}
+		case 9:
+			if rng.Intn(3) == 0 {
+				exec(`DELETE FROM ref_edges WHERE id='absent-edge'`)
+			} else {
+				exec(`INSERT INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at,metadata_json) VALUES('absent-edge','card','absent-edge','thread',?,'ref','now','{}') ON CONFLICT(id) DO UPDATE SET target_id=excluded.target_id`, []string{"parent", "other-parent"}[rng.Intn(2)])
+			}
+		case 10:
+			exec(`UPDATE card_plans SET body_json=json_object('steps',json_array(json_object('ref',?))) WHERE card_id='absent-0'`, []string{"thread:parent", "thread:other-parent", "card:absent-edge"}[rng.Intn(3)])
+		case 11:
+			if rng.Intn(2) == 0 {
+				exec(`DELETE FROM cards WHERE id='absent-0'`)
+			} else {
+				exec(`INSERT INTO cards(id,handle,title,summary,column_key,created_at,created_by,updated_at,updated_by) VALUES('absent-0','temporary-live','Public','','ready','now','owner','now','owner') ON CONFLICT(id) DO UPDATE SET handle='temporary-renamed'`)
+			}
 		}
 		checkAdmissionSecurityParity(t, db, fmt.Sprintf("step-%d", step))
 	}

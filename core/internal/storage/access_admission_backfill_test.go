@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,6 +14,12 @@ import (
 )
 
 func TestAdmissionMigrationCommitsAndResumesRootChunks(t *testing.T) {
+	for _, fenced := range []bool{false, true} {
+		t.Run(fmt.Sprint("fenced=", fenced), func(t *testing.T) { admissionMigrationCommitsAndResumesRootChunks(t, fenced) })
+	}
+}
+
+func admissionMigrationCommitsAndResumesRootChunks(t *testing.T, fenced bool) {
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 115)
 	for _, q := range []string{
@@ -24,7 +31,13 @@ func TestAdmissionMigrationCommitsAndResumesRootChunks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	db.Close()
+	ledger := "schema_migrations"
+	if fenced {
+		ledger = "scope_schema_migrations"
+		fenceAdmissionHistory(t, root, db)
+	} else {
+		db.Close()
+	}
 	read, err := sql.Open("sqlite", sqliteDSN(NewLayout(root).DatabasePath))
 	if err != nil {
 		t.Fatal(err)
@@ -56,13 +69,17 @@ func TestAdmissionMigrationCommitsAndResumesRootChunks(t *testing.T) {
 			admission = m
 		}
 	}
-	err = applyMigration(ctx, write, admission)
+	if fenced {
+		err = applyWorkspaceMigrations(ctx, write)
+	} else {
+		err = applyMigration(ctx, write, admission)
+	}
 	write.Close()
 	if !errors.Is(err, context.Canceled) || !interrupted || inspectErr != nil || durableRoots != 1 {
 		t.Fatalf("interrupted=%v durable roots=%d inspection=%v migration=%v; want one committed root before cancellation", interrupted, durableRoots, inspectErr, err)
 	}
 	var recorded int
-	if err := read.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version=116`).Scan(&recorded); err != nil || recorded != 0 {
+	if err := read.QueryRow(`SELECT count(*) FROM ` + ledger + ` WHERE version=116`).Scan(&recorded); err != nil || recorded != 0 {
 		t.Fatalf("incomplete migration recorded: count=%d err=%v", recorded, err)
 	}
 	if _, err := read.Exec(`CREATE TRIGGER test_completed_root_not_replayed BEFORE INSERT ON resource_access_admission_reach WHEN NEW.root_id='root-0' BEGIN SELECT RAISE(ABORT,'completed root replayed'); END`); err != nil {
@@ -78,7 +95,7 @@ func TestAdmissionMigrationCommitsAndResumesRootChunks(t *testing.T) {
 	if err := ws.DB().QueryRow(`SELECT count(*) FROM sqlite_schema WHERE name='test_completed_root_not_replayed'`).Scan(&recorded); err != nil || recorded != 1 {
 		t.Fatalf("resumption rebuilt committed state: count=%d err=%v", recorded, err)
 	}
-	if err := ws.DB().QueryRow(`SELECT count(*) FROM schema_migrations WHERE version=116`).Scan(&recorded); err != nil || recorded != 1 {
+	if err := ws.DB().QueryRow(`SELECT count(*) FROM ` + ledger + ` WHERE version=116`).Scan(&recorded); err != nil || recorded != 1 {
 		t.Fatalf("completed migration not recorded: count=%d err=%v", recorded, err)
 	}
 }
