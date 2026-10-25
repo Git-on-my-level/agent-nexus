@@ -17,6 +17,13 @@ maintenance. It enforces the existing summary ceilings (100 queries, 1,024
 rows, 50,000 VM steps). Uncached 50-card reads use six queries, 150 returned rows
 and 30,345 VM steps on the local fixture. No budget is widened.
 
+The broader `TestPerformanceWorkSummaryBudgetAndPlans` remains red on this
+checkout and on `origin/main` (`23bda1e1`) through a source overlay of the changed
+read files. Its non-cadence 50-card stranger sample is identical: five queries,
+200 rows and 58,310 VM steps against the unchanged 50,000 ceiling, with the same
+unreviewed authorization/summary query plans. This is baseline evidence, not a
+passing full summary gate. Cadence-specific acceptance above does not waive it.
+
 ```sh
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- \
   go test -C core ./internal/primitives -run '^TestPerformanceCadenceTrackingBudget$' -count=1 -v -timeout=5m

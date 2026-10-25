@@ -62,6 +62,9 @@ func TestCadenceCardsAreTrackedOnReadsAndBrief(t *testing.T) {
 		if loops[0]["state"] != want || workMap(loops[0]["promise"])["source"] != "cadence" {
 			t.Errorf("brief=%v want=%s", loops[0], want)
 		}
+		if awaiting && workMap(loops[0]["promise"])["what"] != "awaiting first run" {
+			t.Errorf("brief lost first-run explanation: %v", loops[0])
+		}
 		if want == plans.PromisePast && workMap(loops[0]["loop"])["health"] != "overdue" {
 			t.Errorf("loop=%v", loops[0])
 		}

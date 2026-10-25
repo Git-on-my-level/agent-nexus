@@ -2276,7 +2276,7 @@
     "../primitives/brief_series.go:*briefBuild:seriesFlatSignals": "3d298f79f64453cb610223f4eb9090d5a4713ecc002c0dee27819fdd0ab5d315",
     "../primitives/brief_series.go:type:briefMetricFlat": "39981a148bda8532191345501ed5fa3768df0f9ddccd0bd033b5a2a686b6edd6",
     "../primitives/brief_series.go:type:briefSeries": "bac8b04d582e4afacafbf486e39a173d7f904a6f3255af2f26d68ee6ac9c7e3a",
-    "../primitives/cadence_tracking.go:cadenceTrackingHealth": "37aa4b4a97d09a58a3907fa235ebd7ba7616417d27612188274e5529e07b0e8b",
+    "../primitives/cadence_tracking.go:cadenceTrackingHealth": "e34d15a25044ea39fdcee08f267a23b7aa27d78838d9644c7b8e001c92747883",
     "../primitives/card_access.go:*Store:FilterCardAccess": "7c5d3106a222f7c506961ec4ad4c8c4244fd69684affc9e5032bc2c4ceb5acaf",
     "../primitives/card_health_inputs.go:*Store:promiseNotesBatch": "48d4c92d5509f64a574b3cc06e8a6243c5443c5e421a2a6de14fef830f923b07",
     "../primitives/card_health_inputs.go:cardHealthInput:health": "a00314ef683ee6a950403c2c14e467fddf47b66393071e00070fee59c4e8efe7",

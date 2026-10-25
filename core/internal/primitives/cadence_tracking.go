@@ -23,6 +23,7 @@ func cadenceTrackingHealth(loop map[string]any, phase, ref string, now time.Time
 		h.Reason = workString(loop["health_reason"])
 		if last == "" && h.State == plans.PromiseMoving {
 			h.Reason = "Awaiting first run."
+			h.Promise.What = "awaiting first run"
 		}
 	}
 	return h, true
