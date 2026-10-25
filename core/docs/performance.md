@@ -1,5 +1,34 @@
 # Performance guardrails
 
+## Cadence tracking on card summaries
+
+Cadence tracking reuses the scoped loop-facts reader for only the cadence cards
+already admitted to a plan/summary read. Batches contain at most 50 cards; an
+ordinary batch adds no SQL. Brief reuses the loop state it already reads. There
+is no new route, workspace inventory, authorization bypass or plan allowance.
+The existing subject/time receipt indexes and epoch-checked loop projection
+bound history hydration to 12 receipts and 60 goal points per card; existing
+14-day outcome aggregates and series-goal buckets retain their documented cost.
+Legacy unpaged inventories keep their existing size and enrich in 50-card batches.
+
+`TestPerformanceCadenceTrackingBudget` measures one and 50 cadence cards with
+4,096 unrelated cards, for owner and stranger, before and after projection
+maintenance. It enforces the existing summary ceilings (100 queries, 1,024
+rows, 50,000 VM steps). Uncached 50-card reads use six queries, 150 returned rows
+and 30,345 VM steps on the local fixture. No budget is widened.
+
+The broader `TestPerformanceWorkSummaryBudgetAndPlans` remains red on this
+checkout and on `origin/main` (`23bda1e1`) through a source overlay of the changed
+read files. Its non-cadence 50-card stranger sample is identical: five queries,
+200 rows and 58,310 VM steps against the unchanged 50,000 ceiling, with the same
+unreviewed authorization/summary query plans. This is baseline evidence, not a
+passing full summary gate. Cadence-specific acceptance above does not waive it.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- \
+  go test -C core ./internal/primitives -run '^TestPerformanceCadenceTrackingBudget$' -count=1 -v -timeout=5m
+```
+
 ## SQLite temp space and migration 116
 
 Core uses `modernc.org/sqlite v1.38.2` (SQLite 3.50.3), with disk-backed temporary

@@ -12895,7 +12895,7 @@ components:
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "Computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
+      description: "Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
         state: {type: string, enum: [past_promise, moving, no_promise, done]}
         reason: {type: string}
@@ -15065,7 +15065,7 @@ components:
       properties:
         at: { type: string, format: date-time }
         what: { type: string, maxLength: 160 }
-        source: { type: string, enum: [note, plan_step, due_at, wake_condition] }
+        source: { type: string, enum: [note, plan_step, due_at, wake_condition, cadence] }
         source_ref: { type: string }
         author: { $ref: '#/components/schemas/BriefPrincipal' }
     BriefNote:

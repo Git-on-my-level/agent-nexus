@@ -1017,6 +1017,16 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 	}
 	for i, id := range ids {
 		out[i]["loop"] = loops[id]
+		if h, ok := cadenceTrackingHealth(loops[id], rows[i].phase, workString(out[i]["ref"]), b.now); ok {
+			out[i]["state"] = h.State
+			out[i]["promise"] = nil
+			if h.Promise != nil {
+				out[i]["promise"] = map[string]any{"at": h.Promise.At, "what": h.Promise.What, "source": h.Promise.Source, "source_ref": h.Promise.SourceRef}
+			}
+			out[i]["past_promise_for_seconds"] = h.PastPromiseForSeconds
+			out[i]["promise_moves"] = 0
+			out[i]["last_evidence_at"] = h.LastEvidenceAt
+		}
 	}
 	if err := b.initiativeSeries(ids, out); err != nil {
 		return nil, false, err

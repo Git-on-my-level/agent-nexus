@@ -27,6 +27,10 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	if !strings.Contains(plan.Stdout, "Verify regression") {
 		t.Fatal("plan not installed", plan.Stdout)
 	}
+	// Notes exercise ordinary work; a cadence card keeps its receipt promise.
+	loopRef := ref
+	ordinary := h.runCLIExpectOK(t, "worker", map[string]any{"title": "Verification checkpoint", "handle": "verify-checkpoint"}, "work", "create", "--from-file", "-")
+	ref = mustStringPath(t, ordinary.Payload, "result.work.ref")
 	note := h.runCLIExpectOK(t, "worker", nil, "note", ref, "Next checkpoint", "--next", "1d", "Verify result")
 	if !strings.Contains(note.Stdout, "note_promise_unowned") {
 		t.Fatal("missing unowned warning", note.Stdout)
@@ -41,8 +45,17 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		oriented := h.runCLIExpectOK(t, "worker", nil, "orient")
-		ready := false
+		ready, loopTracked := false, false
 		if raw, ok := getPathValue(oriented.Payload, "result.loops"); ok {
+			for _, value := range raw.([]any) {
+				row := value.(map[string]any)
+				promise, _ := row["promise"].(map[string]any)
+				if row["ref"] == loopRef && row["state"] == "moving" && promise["source"] == "cadence" && promise["what"] == "awaiting first run" {
+					loopTracked = true
+				}
+			}
+		}
+		if raw, ok := getPathValue(oriented.Payload, "result.initiatives"); ok {
 			for _, value := range raw.([]any) {
 				row := value.(map[string]any)
 				promise, _ := row["promise"].(map[string]any)
@@ -52,11 +65,11 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 				}
 			}
 		}
-		if ready {
+		if ready && loopTracked {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("brief did not fold the note", oriented.Stdout)
+			t.Fatal("brief did not separate cadence tracking and the note promise", oriented.Stdout)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}

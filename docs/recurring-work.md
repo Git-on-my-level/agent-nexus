@@ -37,6 +37,20 @@ Core computes health in this order:
 4. An effect occurred within that budget: **healthy**.
 5. Otherwise: **unknown**.
 
+Cadence counts as tracking even before the first receipt. `plan_health`, card
+summaries, ref previews and brief never label a cadence card `no_promise`.
+They use a computed `promise.source=cadence`: `moving` through exactly twice
+the cadence from the last receipt (cadence assignment before the first run,
+creation time for legacy annotations), then `past_promise`. The health reason
+says **Awaiting first run** before the first receipt within that window; `loop`
+retains the full failing/overdue/stalled/healthy/unknown health. Notes, ordinary
+evidence and milestone edits cannot postpone the receipt deadline. Done and
+cancelled cards still read `done`.
+
+The [2026-10-25 tracking decisions](decisions/sane-tracking-defaults.md) also
+define default promises, fallback ownership, digest routing and receipt-based
+cadence migration for the follow-up implementation.
+
 An effect is an `acted` outcome or a `kept` experiment. Each loop exposes
 `effects_7d`, the number of such runs in the last seven days; a run satisfying
 both conditions counts once. Overview `stats.effects_7d` sums these same counts. The default progress
