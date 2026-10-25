@@ -60,11 +60,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 93 |
-| exposed_write | 77 |
+| exposed_write | 78 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
-| unsupported_interactive | 14 |
+| unsupported_interactive | 13 |
 | unsupported_other | 9 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
@@ -73,11 +73,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 170 | exposed_read + exposed_write + adapted |
+| standalone default | 171 | exposed_read + exposed_write + adapted |
 | hosted default | 68 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 66 | not represented as direct MCP tools in v1 |
+| unsupported | 65 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -185,9 +185,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | cards.trash | cards | POST | /cards/{card_id}/trash | exposed_write | ordinary reversible card lifecycle write |
 | curation.candidates | curation | GET | /curation/candidates | exposed_read | Bounded curation candidates a PM reviews before proposing; read only. |
 | curation.metrics | curation | GET | /curation/metrics | exposed_read | Counts only; no titles or refs. |
-| curation.propose | curation | POST | /curation/proposals | exposed_write | PM files a curation proposal; nothing changes until a human accepts it. |
+| curation.propose | curation | POST | /curation/proposals | exposed_write | Agent-only curation resolution applies or dismisses quiet suggestions and records a receipt; never creates human attention. |
 | curation.run | curation | POST | /curation/run | gated_admin | Workspace-wide formula pass that core also runs on its own schedule. |
-| curation.ungroup | curation | POST | /curation/ungroup | unsupported_interactive | human-only undo of an accepted batch requires human judgment |
+| curation.ungroup | curation | POST | /curation/ungroup | exposed_write | Authenticated agent or human reverses delivery grouping without answering or withdrawing asks. |
 | deliveries.claim | deliveries | POST | /deliveries/claim | unsupported_other | Delivery claims belong to the owning adapter's runtime, not an MCP tool call |
 | deliveries.list | deliveries | GET | /deliveries | exposed_read | The caller's own queued notifications and wake deliveries, bounded by limit. |
 | deliveries.receipt | deliveries | POST | /deliveries/{delivery_id}/receipt | unsupported_other | Delivery receipts belong to the owning adapter's runtime, not an MCP tool call |

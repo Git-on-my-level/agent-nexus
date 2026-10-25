@@ -7078,7 +7078,7 @@ paths:
       x-anx-why: Let a PM review the same candidates the formula would propose, with judgment.
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
-      x-anx-agent-notes: Read only. Post the ones worth a human decision with `curation propose`.
+      x-anx-agent-notes: Read only. Review suggestions; use `curation propose` with resolution apply or dismiss and a rationale.
       x-anx-concepts: [inbox]
       x-anx-stability: beta
       x-anx-output-envelope: "Returns `{ candidates, limitations }`."
@@ -7097,14 +7097,14 @@ paths:
   /curation/proposals:
     post:
       operationId: createCurationProposal
-      summary: Propose a curation action as a decision
+      summary: Record or resolve an agent curation suggestion
       description: >
-        Files one curation proposal (withdraw an ask as moot, merge a duplicate initiative into
-        another, or batch related asks) as a human decision. The proposal is an ask addressed to
-        a human whose first response proposal accepts it; answering with it performs the action
-        as the answering human, through normal authority, and records an undo trail in the
-        proposal thread. Any other answer dismisses it. The same action over the same targets is
-        proposed at most once while open, and not again after a dismissal.
+        Records a quiet agent suggestion, never a human ask, inbox item or notification.
+        Agents review current formula candidates and use resolution apply or dismiss to act
+        with their own authority and record a receipt. Merge folds the duplicate into the kept
+        card; batch groups delivery without a human decision. Default resolution is suggest.
+        Repeated requests reuse the same action/targets key. Humans can read suggestions
+        through GET /curation/candidates; a separate Watch/board affordance may show them.
       tags: [inbox]
       x-anx-surface: canonical
       x-anx-command-id: curation.propose
@@ -7112,10 +7112,10 @@ paths:
       x-anx-why: Let a PM post a curation proposal with its rationale.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
-      x-anx-agent-notes: Withdrawing another principal's ask is only ever proposed; a requester withdraws its own ask directly.
+      x-anx-agent-notes: Only authenticated agents may apply or dismiss suggestions. Formula passes only suggest.
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
-      x-anx-output-envelope: "Returns `{ proposal }` with `status` created, existing or dismissed."
+      x-anx-output-envelope: "Returns `{ proposal, can_apply }` with `status` created, existing, accepted or dismissed."
       x-anx-error-codes: [auth_required, invalid_request, invalid_token, forbidden, not_found, conflict]
       requestBody:
         required: true
@@ -7150,10 +7150,10 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: curation.ungroup
       x-anx-cli-path: curation ungroup
-      x-anx-why: Undo a batch a human accepted.
+      x-anx-why: Undo a delivery grouping.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
-      x-anx-agent-notes: Human principals only. Returns whether any grouping was removed.
+      x-anx-agent-notes: Authenticated humans or agents. Returns whether any grouping was removed.
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: "Returns `{ ungrouped }`."
@@ -7198,7 +7198,7 @@ paths:
       x-anx-why: Run the no-PM formula fallback now.
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
-      x-anx-agent-notes: Proposals only; nothing is withdrawn or merged until a human accepts.
+      x-anx-agent-notes: Quiet suggestions only; an agent must explicitly apply or dismiss them.
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: "Returns `{ proposals, skipped }`."
@@ -14121,7 +14121,7 @@ components:
         response_proposals:
           type: array
           items: {type: string}
-          description: Index 0 accepts the proposal.
+          description: Legacy response labels; curation never requests a human answer.
     CurationCandidatesResponse:
       type: object
       required: [candidates]
@@ -14129,6 +14129,11 @@ components:
         candidates:
           type: array
           items: {$ref: '#/components/schemas/CurationCandidate'}
+        suggestions:
+          type: array
+          description: Quiet open agent suggestions, at most 50, with runnable apply/dismiss argv. Suitable for a passive Watch or board affordance.
+          items: {type: object, additionalProperties: true}
+        suggestions_truncated: {type: boolean, description: Always true for scoped readers; the suggestion window may omit hidden or older work.}
         limitations:
           type: array
           items: {type: string}
@@ -14136,30 +14141,32 @@ components:
       type: object
       required: [action, targets, rationale]
       properties:
+        resolution: {type: string, enum: [suggest, apply, dismiss], default: suggest, description: Agent judgment; apply or dismiss records a receipt without asking a human.}
         action: {type: string, enum: [withdraw, merge, batch]}
         targets:
           type: array
           minItems: 1
           maxItems: 10
           items: {type: string}
-        rationale: {type: string, maxLength: 2000, description: Why a human should accept; shown in the decision body.}
-        title: {type: string, maxLength: 160, description: Optional one-line decision; defaults to the formula title.}
+        rationale: {type: string, maxLength: 2000, description: Agent rationale, recorded with the suggestion or receipt.}
+        title: {type: string, maxLength: 160, description: Optional suggestion title; defaults to the formula title.}
     CurationProposal:
       type: object
       required: [key, status, action, targets]
       properties:
         key: {type: string}
-        status: {type: string, enum: [created, existing, dismissed]}
+        status: {type: string, enum: [created, existing, accepted, dismissed]}
         action: {type: string, enum: [withdraw, merge, batch]}
         targets:
           type: array
           items: {type: string}
-        event_id: {type: string, description: The proposal ask event id.}
+        event_id: {type: string, description: The quiet curation_suggested event id.}
         source: {type: string, enum: [formula, pm]}
     CurationProposalResponse:
       type: object
       required: [proposal]
       properties:
+        can_apply: {type: boolean, description: True only for an authenticated agent principal. Other callers file quiet suggestions and skip automatic application.}
         proposal: {$ref: '#/components/schemas/CurationProposal'}
     CurationRunResponse:
       type: object
@@ -14952,6 +14959,7 @@ components:
       required: [schema, generated_at, principal, decisions, initiatives, your_asks, answered_for_you, truncated]
       description: brief.v1. See anx-schema.yaml `brief` and `promises` for ordering and derivation rules.
       properties:
+        curation_suggestions: {type: array, maxItems: 50, description: "Quiet agent work with apply_argv and dismiss_argv. Empty for human briefs; passive human suggestions live in GET /curation/candidates.", items: {type: object, additionalProperties: true}}
         loops: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/BriefInitiative'}}
         initiative_budget:
           type: object
@@ -14977,6 +14985,7 @@ components:
           type: object
           required: [decisions, initiatives, your_asks, answered_for_you]
           properties:
+            curation_suggestions: {type: boolean}
             decisions: { type: boolean }
             initiatives: { type: boolean }
             your_asks: { type: boolean }
@@ -15037,10 +15046,10 @@ components:
           properties:
             id: { type: string }
             revision: { type: integer }
-        curation: { type: object, additionalProperties: true, description: "Present on a curation proposal ask (kind pm_proposal): {action, targets, source}. proposals[0] accepts. Omitted entirely, with the decision, when the reader cannot read every target." }
+        curation: { type: object, additionalProperties: true, description: "Legacy curation metadata on historical records only; new suggestions are never decisions." }
         batch:
           type: object
-          description: "Present when these asks were filed together through POST /asks/batch (key filed:<batch_id>) or a human accepted a curation batch proposal over them. The decision's inbox_item_id answers every open member in one request (flat response_text, outcome and notify_mode). Members the reader cannot see are not listed or counted, and a hidden open member makes the batch unanswerable."
+          description: "Present when these asks were filed together through POST /asks/batch (key filed:<batch_id>) or an agent grouped related asks for delivery. The decision's inbox_item_id answers every open member in one request (flat response_text, outcome and notify_mode). Members the reader cannot see are not listed or counted, and a hidden open member makes the batch unanswerable."
           required: [key, count, members]
           properties:
             key: { type: string }

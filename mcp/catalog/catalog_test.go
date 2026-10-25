@@ -331,3 +331,44 @@ func TestUnifiedWorkPolicyPreservesApprovalBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestCurationToolsAreAgentWork(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Dir(filepath.Dir(file))
+	registryFile, err := os.Open(filepath.Join(root, "..", "contracts", "gen", "meta", "commands.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registryFile.Close()
+	registry, err := LoadCommandRegistry(registryFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyFile, err := os.Open(filepath.Join(root, "policy", "default_tool_policy.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer policyFile.Close()
+	policy, err := LoadPolicy(policyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := Build(registry, policy, BuildOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal, ok := cat.Lookup("anx_curation_propose")
+	if !ok {
+		t.Fatal("missing curation tool")
+	}
+	if proposal.Metadata.Path != "/curation/proposals" || strings.Contains(proposal.Description, "until a human") {
+		t.Fatal(proposal)
+	}
+	body := proposal.InputSchema["properties"].(map[string]any)["body"].(map[string]any)
+	if _, ok := body["properties"].(map[string]any)["resolution"]; !ok {
+		t.Fatal("agent resolution missing from tool input")
+	}
+	if _, ok := cat.Lookup("anx_curation_ungroup"); !ok {
+		t.Fatal("agents must be able to undo delivery grouping")
+	}
+}

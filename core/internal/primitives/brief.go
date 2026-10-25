@@ -93,19 +93,28 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 			b.fillPrincipals([]map[string]any{n}, "author")
 		}
 	}
+	curationSuggestions := []map[string]any{}
+	curationTruncated := false
+	if !reader.human() {
+		curationSuggestions, curationTruncated, err = s.CurationSuggestions(ctx, reader.Visible)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return map[string]any{
-		"schema":            "brief.v1",
-		"generated_at":      now.Format(time.RFC3339),
-		"principal":         map[string]any{"id": reader.ActorID, "display": firstNonEmptyString(reader.Display, reader.ActorID), "kind": firstNonEmptyString(reader.Kind, "human")},
-		"decisions":         nonNilMaps(decisions),
-		"initiatives":       nonNilMaps(initiatives),
-		"daily_digest":      digest,
-		"loops":             nonNilMaps(loops),
-		"initiative_budget": budget,
-		"next_actions":      suggestions,
-		"your_asks":         nonNilMaps(yourAsks),
-		"answered_for_you":  nonNilMaps(answered),
-		"truncated":         map[string]bool{"decisions": decisionsTruncated, "initiatives": initiativesTruncated, "loops": loopsTruncated, "your_asks": yourTruncated, "answered_for_you": answeredTruncated},
+		"schema":               "brief.v1",
+		"curation_suggestions": curationSuggestions,
+		"generated_at":         now.Format(time.RFC3339),
+		"principal":            map[string]any{"id": reader.ActorID, "display": firstNonEmptyString(reader.Display, reader.ActorID), "kind": firstNonEmptyString(reader.Kind, "human")},
+		"decisions":            nonNilMaps(decisions),
+		"initiatives":          nonNilMaps(initiatives),
+		"daily_digest":         digest,
+		"loops":                nonNilMaps(loops),
+		"initiative_budget":    budget,
+		"next_actions":         suggestions,
+		"your_asks":            nonNilMaps(yourAsks),
+		"answered_for_you":     nonNilMaps(answered),
+		"truncated":            map[string]bool{"curation_suggestions": curationTruncated, "decisions": decisionsTruncated, "initiatives": initiativesTruncated, "loops": loopsTruncated, "your_asks": yourTruncated, "answered_for_you": answeredTruncated},
 	}, nil
 }
 

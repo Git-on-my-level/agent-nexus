@@ -2134,6 +2134,9 @@ func reverseEvents(events []map[string]any) []map[string]any {
 }
 
 func prepareEventForInsert(actorID string, event map[string]any) (preparedEvent, error) {
+	if anyStringValue(event["type"]) == "human_attention_requested" && asMapValue(event["payload"])["curation"] != nil {
+		return preparedEvent{}, workInvalid("curation suggestions are agent work; use /curation/proposals")
+	}
 	body := cloneMap(event)
 	eventID, _ := body["id"].(string)
 	eventID = strings.TrimSpace(eventID)

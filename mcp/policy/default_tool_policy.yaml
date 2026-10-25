@@ -829,13 +829,13 @@ commands:
     reason: "Counts only; no titles or refs."
   "curation.propose":
     classification: exposed_write
-    reason: "PM files a curation proposal; nothing changes until a human accepts it."
+    reason: "Agent-only curation resolution applies or dismisses quiet suggestions and records a receipt; never creates human attention."
   "curation.run":
     classification: gated_admin
     reason: "Workspace-wide formula pass that core also runs on its own schedule."
   "curation.ungroup":
-    classification: unsupported_interactive
-    reason: "human-only undo of an accepted batch requires human judgment"
+    classification: exposed_write
+    reason: "Authenticated agent or human reverses delivery grouping without answering or withdrawing asks."
   "lease.show":
     classification: exposed_read
     reason: "Point read of one card's work lease state, owner, epoch and expiry."

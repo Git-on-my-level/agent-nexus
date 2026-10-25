@@ -159,6 +159,14 @@ func candidatesByAction(list []map[string]any, action string) []map[string]any {
 
 // respond answers the open inbox item whose source is eventID as the human.
 func (f *curationFixture) respond(thread, eventID, text, outcome string) {
+	if rec, err := f.store.CurationProposalByEvent(f.ctx, eventID); err == nil {
+		resolution := "apply"
+		if text == "Keep" {
+			resolution = "dismiss"
+		}
+		f.call(http.MethodPost, "/curation/proposals", f.agent.AccessToken, map[string]any{"action": rec.Action, "targets": rec.Targets, "resolution": resolution, "rationale": "Agent reviewed the current evidence."}, http.StatusCreated)
+		return
+	}
 	f.respondOnce(thread, eventID, text, outcome, "")
 }
 
@@ -201,7 +209,7 @@ func (f *curationFixture) proposalStatus(key string) string {
 
 func (f *curationFixture) trail(thread string) []map[string]any {
 	f.t.Helper()
-	rows, err := f.env.workspace.DB().QueryContext(f.ctx, `SELECT json_extract(payload_json,'$.payload.curation_applied') FROM events WHERE type='message_posted' AND thread_id=? AND json_extract(payload_json,'$.payload.curation_applied') IS NOT NULL`, thread)
+	rows, err := f.env.workspace.DB().QueryContext(f.ctx, `SELECT json_extract(payload_json,'$.payload.curation_applied') FROM events WHERE type='curation_receipt' AND thread_id=? AND json_extract(payload_json,'$.payload.curation_applied') IS NOT NULL`, thread)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -265,14 +273,21 @@ func TestCurationMootWithdrawEndToEnd(t *testing.T) {
 	}
 
 	f.respond(f.thread, anyString(proposal["event_id"]), "Withdraw", "answered")
+	var summary string
+	if err := f.env.workspace.DB().QueryRow(`SELECT json_extract(e.payload_json,'$.summary') FROM events e JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id WHERE r.request_event_id=?`, askID).Scan(&summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary != "Ask withdrawn after agent curation review" {
+		t.Fatalf("stale withdrawal summary: %q", summary)
+	}
 
 	outcome := f.call(http.MethodGet, "/asks/"+askID, f.agent.AccessToken, nil, http.StatusOK)
 	text := fmt.Sprint(outcome)
-	if !strings.Contains(text, "withdrawn") || !strings.Contains(text, "moot") || !strings.Contains(text, f.human.ActorID) {
-		t.Fatalf("target ask not withdrawn by the human as moot: %#v", outcome)
+	if !strings.Contains(text, "withdrawn") || !strings.Contains(text, "moot") || !strings.Contains(text, f.agent.ActorID) {
+		t.Fatalf("target ask not withdrawn by the agent as moot: %#v", outcome)
 	}
 	trail := f.trail(f.thread)
-	if len(trail) != 1 || trail[0]["result"] != "applied" || trail[0]["applied_by"] != f.human.ActorID {
+	if len(trail) != 1 || trail[0]["result"] != "applied" || trail[0]["applied_by"] != f.agent.ActorID {
 		t.Fatalf("missing applied trail: %#v", trail)
 	}
 	if f.proposalStatus(proposal["key"].(string)) != "accepted" {
@@ -280,45 +295,19 @@ func TestCurationMootWithdrawEndToEnd(t *testing.T) {
 	}
 }
 
-func TestCurationAcceptReplaysWhenTrailIsMissing(t *testing.T) {
+func TestCurationAgentResolutionReplays(t *testing.T) {
 	t.Parallel()
 	requireIntegrationTest(t)
 	f := newCurationFixture(t, "replay")
-	doneRef, doneID := f.trackerCard("Landed work", "done-1")
-	prURL := f.mergedPR("123")
-	askID := f.fileAsk(f.thread, "Authorize the merge?", f.openCard("Decision subject replay"), []string{doneRef, prURL}, []string{"Yes", "No"})
-	f.observeDone(doneID, "done-1")
-	run := f.call(http.MethodPost, "/curation/run", f.human.AccessToken, map[string]any{}, http.StatusOK)
-	var proposalID string
-	for _, raw := range run["proposals"].([]any) {
-		if p := raw.(map[string]any); p["action"] == "withdraw" {
-			proposalID = anyString(p["event_id"])
-		}
-	}
-	if proposalID == "" {
-		t.Fatalf("no withdraw proposal: %#v", run)
-	}
-	f.respondOnce(f.thread, proposalID, "Withdraw", "answered", "curation-replay")
-	if _, err := f.env.workspace.DB().ExecContext(f.ctx, `DELETE FROM events WHERE type='message_posted' AND thread_id=? AND json_extract(payload_json,'$.payload.curation_applied.proposal_event_id')=?`, f.thread, proposalID); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.trail(f.thread)) != 0 {
-		t.Fatal("trail delete did not land")
-	}
-	var inboxID string
-	if err := f.env.workspace.DB().QueryRowContext(f.ctx, `SELECT inbox_item_id FROM human_attention_response_claims WHERE request_key='curation-replay'`).Scan(&inboxID); err != nil {
-		t.Fatal(err)
-	}
-	// The open inbox row is gone. The same key must replay the answer and
-	// restore the missing trail.
-	f.call(http.MethodPost, "/inbox/"+url.PathEscape(inboxID)+"/respond", f.human.AccessToken, map[string]any{"idempotency_key": "curation-replay", "response_text": "Withdraw", "outcome": "answered", "notify_mode": "none"}, http.StatusCreated)
-	trail := f.trail(f.thread)
-	if len(trail) != 1 || trail[0]["result"] != "applied" {
-		t.Fatalf("replay did not restore the trail: %#v", trail)
-	}
-	outcome := f.call(http.MethodGet, "/asks/"+askID, f.agent.AccessToken, nil, http.StatusOK)
-	if !strings.Contains(fmt.Sprint(outcome), "withdrawn") {
-		t.Fatalf("replay changed the withdrawal: %#v", outcome)
+	subject := f.openCard("Shared delivery subject")
+	f.fileAsk(f.thread, "First", subject, nil, []string{"Yes", "No"})
+	f.fileAsk(f.thread, "Second", subject, nil, []string{"Yes", "No"})
+	run := f.call(http.MethodPost, "/curation/run", f.agent.AccessToken, map[string]any{}, http.StatusOK)
+	p := run["proposals"].([]any)[0].(map[string]any)
+	f.respond(f.thread, anyString(p["event_id"]), "Batch", "answered")
+	f.respond(f.thread, anyString(p["event_id"]), "Batch", "answered")
+	if got := f.trail(f.thread); len(got) != 1 {
+		t.Fatalf("replay wrote multiple receipts: %#v", got)
 	}
 }
 
@@ -400,8 +389,8 @@ func TestCurationDismissKeepsAskAndNeverRefiles(t *testing.T) {
 			t.Fatalf("dismissed key re-proposed: %#v", again)
 		}
 	}
-	if len(f.trail(f.thread)) != 0 {
-		t.Fatal("a dismissal must not post an applied trail")
+	if got := f.trail(f.thread); len(got) != 1 || got[0]["result"] != "dismissed" {
+		t.Fatalf("missing dismissal receipt: %#v", got)
 	}
 }
 
@@ -446,7 +435,7 @@ func TestCurationMergeProposalAndAccept(t *testing.T) {
 	}
 	undo, _ := trail[0]["undo"].(map[string]any)
 	dup := anyString(targets[0])
-	if undo == nil || undo["restore_card"] != dup {
+	if undo == nil || undo["unfold"] != dup {
 		t.Fatalf("undo must restore the duplicate %s: %#v", dup, undo)
 	}
 	if dup != older && dup != newer {
@@ -565,18 +554,10 @@ func TestCurationBatchAcceptCollapsesBriefDecisions(t *testing.T) {
 	created := f.call(http.MethodPost, "/curation/proposals", f.agent.AccessToken, map[string]any{"action": "batch", "targets": batches[0]["targets"], "rationale": "Same subject; decide together."}, http.StatusCreated)
 	p := created["proposal"].(map[string]any)
 	decisions := f.briefDecisions(f.human.AccessToken)
-	if len(decisions) != 3 {
-		t.Fatalf("open proposal plus two asks: %#v", decisions)
+	if len(decisions) != 2 {
+		t.Fatalf("suggestions must not become decisions: %#v", decisions)
 	}
-	var proposal map[string]any
-	for _, d := range decisions {
-		if d["kind"] == "pm_proposal" {
-			proposal = d
-		}
-	}
-	if proposal == nil || proposal["curation"].(map[string]any)["action"] != "batch" {
-		t.Fatalf("pm_proposal missing from brief: %#v", decisions)
-	}
+
 	f.respond(f.thread, anyString(p["event_id"]), "Batch", "answered")
 	decisions = f.briefDecisions(f.human.AccessToken)
 	if len(decisions) != 1 {
@@ -594,7 +575,6 @@ func TestCurationBatchAcceptCollapsesBriefDecisions(t *testing.T) {
 	if len(trail) != 1 || trail[0]["result"] != "applied" || trail[0]["undo"].(map[string]any)["ungroup"] != p["key"] {
 		t.Fatalf("batch trail: %#v", trail)
 	}
-	f.call(http.MethodPost, "/curation/ungroup", f.agent.AccessToken, map[string]any{"key": p["key"]}, http.StatusForbidden)
 	if out := f.call(http.MethodPost, "/curation/ungroup", f.human.AccessToken, map[string]any{"key": p["key"]}, http.StatusOK); out["ungrouped"] != true {
 		t.Fatalf("ungroup: %#v", out)
 	}
@@ -629,13 +609,15 @@ func TestCurationProposalHiddenFromReaderOfUnreadableTarget(t *testing.T) {
 			t.Fatalf("proposal naming an unreadable card reached the reader: %#v", d)
 		}
 	}
-	found := false
-	for _, d := range f.briefDecisions(owner.AccessToken) {
-		if d["kind"] == "pm_proposal" {
-			found = true
+	for _, token := range []string{f.human.AccessToken, f.agent.AccessToken} {
+		quiet := f.call(http.MethodGet, "/curation/candidates", token, nil, http.StatusOK)
+		if len(quiet["suggestions"].([]any)) != 0 {
+			t.Fatalf("unreadable target leaked through quiet API: %#v", quiet)
 		}
 	}
-	if !found {
-		t.Fatal("control: the owner can read both cards and must see the proposal")
+	f.call(http.MethodPost, "/curation/proposals", f.agent.AccessToken, map[string]any{"action": "merge", "targets": c.Targets, "resolution": "apply", "rationale": "Cannot act on hidden targets."}, http.StatusNotFound)
+	out := f.call(http.MethodGet, "/curation/candidates", owner.AccessToken, nil, http.StatusOK)
+	if len(out["suggestions"].([]any)) != 1 {
+		t.Fatalf("owner must see quiet suggestion: %#v", out)
 	}
 }

@@ -6,6 +6,7 @@
     "display": "Operator",
     "kind": "human"
   },
+  "curation_suggestions": [],
   "decisions": [
     {
       "ref": "inbox:ask-91",
@@ -413,6 +414,7 @@
     }
   ],
   "truncated": {
+    "curation_suggestions": false,
     "decisions": false,
     "initiatives": false,
     "your_asks": false,

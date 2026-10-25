@@ -14,9 +14,9 @@ export const CARD_RESOLUTION_VALUES = Object.freeze(["done"]);
 /** derived_agent_state values (strict), in contract order. */
 export const DERIVED_AGENT_STATE_VALUES = Object.freeze(["waiting_on_human", "working", "idle", "stale"]);
 /** event_group values (strict), in contract order. */
-export const EVENT_GROUP_VALUES = Object.freeze(["messages", "topics", "documents", "boards", "cards", "attention", "notifications", "runs", "reviews", "exceptions"]);
+export const EVENT_GROUP_VALUES = Object.freeze(["messages", "topics", "documents", "boards", "cards", "curation", "attention", "notifications", "runs", "reviews", "exceptions"]);
 /** event_type values (strict), in contract order. */
-export const EVENT_TYPE_VALUES = Object.freeze(["topic_created", "topic_updated", "topic_archived", "topic_restored", "topic_trashed", "message_posted", "document_created", "document_revised", "document_trashed", "document_restored", "board_created", "board_updated", "card_created", "card_updated", "card_moved", "card_archived", "card_trashed", "card_resolved", "card_lease_acquired", "card_lease_renewed", "card_lease_released", "card_lease_expired", "run_recorded", "receipt_added", "review_completed", "exception_raised", "human_attention_requested", "human_attention_responded", "human_attention_withdrawn", "attention_feedback", "agent_notification_read", "agent_notification_dismissed"]);
+export const EVENT_TYPE_VALUES = Object.freeze(["topic_created", "topic_updated", "topic_archived", "topic_restored", "topic_trashed", "curation_suggested", "curation_receipt", "message_posted", "document_created", "document_revised", "document_trashed", "document_restored", "board_created", "board_updated", "card_created", "card_updated", "card_moved", "card_archived", "card_trashed", "card_resolved", "card_lease_acquired", "card_lease_renewed", "card_lease_released", "card_lease_expired", "run_recorded", "receipt_added", "review_completed", "exception_raised", "human_attention_requested", "human_attention_responded", "human_attention_withdrawn", "attention_feedback", "agent_notification_read", "agent_notification_dismissed"]);
 /** host_bridge_job values (strict), in contract order. */
 export const HOST_BRIDGE_JOB_VALUES = Object.freeze(["answers", "wake", "git", "files", "spool"]);
 /** human_attention_response_outcome values (strict), in contract order. */

@@ -131,6 +131,7 @@ const (
 	EventGroupDocuments     = "documents"
 	EventGroupBoards        = "boards"
 	EventGroupCards         = "cards"
+	EventGroupCuration      = "curation"
 	EventGroupAttention     = "attention"
 	EventGroupNotifications = "notifications"
 	EventGroupRuns          = "runs"
@@ -139,12 +140,12 @@ const (
 )
 
 // EventGroupValues lists every event_group value in contract order. Do not modify it.
-var EventGroupValues = []string{EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions}
+var EventGroupValues = []string{EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupCuration, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions}
 
 // IsEventGroup reports whether value is exactly a canonical event_group value.
 func IsEventGroup(value string) bool {
 	switch value {
-	case EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions:
+	case EventGroupMessages, EventGroupTopics, EventGroupDocuments, EventGroupBoards, EventGroupCards, EventGroupCuration, EventGroupAttention, EventGroupNotifications, EventGroupRuns, EventGroupReviews, EventGroupExceptions:
 		return true
 	}
 	return false
@@ -157,6 +158,8 @@ const (
 	EventTypeTopicArchived              = "topic_archived"
 	EventTypeTopicRestored              = "topic_restored"
 	EventTypeTopicTrashed               = "topic_trashed"
+	EventTypeCurationSuggested          = "curation_suggested"
+	EventTypeCurationReceipt            = "curation_receipt"
 	EventTypeMessagePosted              = "message_posted"
 	EventTypeDocumentCreated            = "document_created"
 	EventTypeDocumentRevised            = "document_revised"
@@ -187,12 +190,12 @@ const (
 )
 
 // EventTypeValues lists every event_type value in contract order. Do not modify it.
-var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
+var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
 
 // IsEventType reports whether value is exactly a canonical event_type value.
 func IsEventType(value string) bool {
 	switch value {
-	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
+	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
 		return true
 	}
 	return false

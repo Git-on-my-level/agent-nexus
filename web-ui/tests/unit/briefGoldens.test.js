@@ -32,7 +32,11 @@ import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
 import WatchRow from "../../src/lib/components/watch/WatchRow.svelte";
 import WatchList from "../../src/lib/components/watch/WatchList.svelte";
 import WatchBoard from "../../src/lib/components/watch/WatchBoard.svelte";
-import { normalizeBrief, sortDecisions } from "../../src/lib/brief.js";
+import {
+  BRIEF_COMPUTED_FIELDS,
+  normalizeBrief,
+  sortDecisions,
+} from "../../src/lib/brief.js";
 import { lintComputed } from "./briefLint.js";
 import fixture from "../../../contracts/fixtures/brief/brief.v1.json";
 
@@ -58,6 +62,13 @@ function textOf(root) {
 afterEach(cleanup);
 
 describe("brief.v1 fixture renders Decide and Watch (I7)", () => {
+  it("keeps agent suggestions empty in the shared human brief", () => {
+    expect(fixture.principal.kind).toBe("human");
+    expect(fixture.curation_suggestions).toEqual([]);
+    expect(fixture.truncated.curation_suggestions).toBe(false);
+    expect(BRIEF_COMPUTED_FIELDS.has("curation_suggestions")).toBe(true);
+  });
+
   it("Decide golden", async () => {
     const lines = [];
     for (const decision of sortDecisions(brief.decisions)) {

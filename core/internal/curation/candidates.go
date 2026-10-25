@@ -1,5 +1,5 @@
-// Package curation generates "formula" curation proposals: suggestions a human
-// accepts or dismisses. The generators are pure functions over caller-supplied
+// Package curation generates formula fallback suggestions for agent review.
+// Agents decide whether to apply or dismiss them. The generators use caller-supplied
 // snapshots so they never touch storage and cannot act on anything themselves.
 package curation
 
@@ -89,7 +89,8 @@ type Candidate struct {
 	// Rationale is the formula's one-sentence reason.
 	Rationale string
 	Score     float64
-	// ResponseProposals index 0 is the accept option.
+	// ResponseProposals retains legacy labels for older candidate readers.
+	// Suggestions never use these labels to ask a human.
 	ResponseProposals []string
 	ThreadID          string
 	SubjectRef        string
