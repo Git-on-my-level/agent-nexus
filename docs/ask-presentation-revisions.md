@@ -123,17 +123,27 @@ fresh key for a later intentional retirement. Undo reads the current retirement
 when its token is omitted. For a reviewable retry after an uncertain result,
 retain both the exact `--if-retirement` token and `--request-key`.
 
-Retirement appends `human_attention_retired`, naming the actor, timestamp,
-original requester, reason and evidence. The canonical resolution is a withdrawal;
-ask outcomes expose `withdrawn_as_stale` and `retirement_event_ref`. It never
-records a human answer, changes work phase, or enters answer counts. Decide
-hides the ask immediately. Cached inbox reads and answer submissions fail
-closed with “no longer open”; external adapters must treat 404/409 as closure.
+Retirement writes two records. The public `human_attention_retired` event is
+the requester-facing record: it names the retiring actor, timestamp, original
+requester and reason, uses the ask and card's own visibility, carries no
+evidence refs and no run attribution. Where the requester could not read the
+curator's reason context, it says "reason not visible to you". A private
+`human_attention_retirement_audited` event holds the reason, evidence refs and
+run attribution for the curator; it may be private and is never read by
+requester-facing paths. The canonical resolution is a withdrawal; ask outcomes
+expose `withdrawn_as_stale` and `retirement_event_ref`, derived only from the
+public record, so private evidence cannot hide status or break `anx await`.
+Retirement never records a human answer, changes work phase, or enters answer
+counts. Decide hides the ask immediately. Cached inbox reads and answer
+submissions fail closed with "no longer open"; external adapters must treat
+404/409 as closure.
 A durable `message_posted` event on the card thread addresses the original
-requester, includes the reason and links the audit event. Its ref is returned as
-`notification_event_ref`; undo posts a reopening message as well. Messages
-inherit the audit's resource visibility rules. These are conversation events,
-not continuation or runtime wakes.
+requester. It is a projection of the public record only: it includes the public
+reason and says either "Evidence recorded in curator audit." or "Evidence not
+visible to you." Its ref is returned as `notification_event_ref`; undo posts a
+reopening message the same way. These are conversation events, not
+continuation or runtime wakes, so a later real answer still resumes the
+requester exactly once.
 
 Undo appends `human_attention_reopened` and releases only the exact current
 retirement claim. It cannot undo a human answer, ordinary withdrawal, later
