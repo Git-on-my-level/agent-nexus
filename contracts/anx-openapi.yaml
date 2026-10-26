@@ -7336,6 +7336,13 @@ paths:
         Same authorization and visibility as ask revise. Retiring atomically closes
         an open ask as withdrawn_as_stale, records who, why and evidence, and posts
         a card-thread notification message addressed to its original requester.
+        The resolution points to an ask-visible status record containing no evidence
+        or curator audit refs, with run attribution stripped. A separate curator audit
+        retains evidence, unredacted reason and run attribution and may be private.
+        Status, await and notice use only the ask-visible record. Persisted public
+        records are checked for requester visibility inside the write transaction.
+        Undo links the original pair by retirement_event_ref and audit_key, without
+        requiring the requester to read private evidence or attribution.
         Retirement and undo never enqueue answer deliveries, bridge/runtime wakes,
         webhooks or continuation callbacks. Registrations remain armed for a real
         answer after reopening. It is never a human answer.
@@ -13371,8 +13378,9 @@ components:
         ask_id: {type: string}
         status: {type: string, enum: [open, withdrawn_as_stale]}
         event: {$ref: '#/components/schemas/Event'}
-        retirement_event_ref: {type: string}
-        notification_event_ref: {type: string, description: Durable card-thread message addressed to the original requester; not a continuation wake.}
+        retirement_event_ref: {type: string, description: Ask-visible retirement status record, without evidence or run attribution.}
+        audit_event_ref: {type: string, description: Curator audit for this operation; may inherit private evidence or run attribution. Never required by requester status or await.}
+        notification_event_ref: {type: string, description: Durable card-thread message addressed to the original requester; derived solely from the ask-visible lifecycle record with run attribution stripped. Not a continuation wake.}
         notified_actor_id: {type: string, description: Original requester addressed by the notification event.}
     AskPresentationRevision:
       type: object

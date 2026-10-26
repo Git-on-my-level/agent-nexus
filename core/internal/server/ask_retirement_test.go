@@ -201,8 +201,8 @@ func TestAskRetirementAuthorizationAndIntegrity(t *testing.T) {
 		status, p = retire(invalidAsk, human.AccessToken, bad)
 		hostStatus(t, status, 400, p)
 	}
-	for _, eventType := range []string{primitives.AskRetiredEventType, primitives.AskReopenedEventType} {
-		payload := map[string]any{"request_event_id": invalidAsk["id"], "request_event_ref": "event:" + anyString(invalidAsk["id"]), "requester_actor_id": requester.ActorID, "reason": "forged stale reason", "evidence": []string{anyString(card["ref"])}}
+	for _, eventType := range []string{primitives.AskRetiredEventType, primitives.AskReopenedEventType, primitives.AskRetirementAuditedEventType} {
+		payload := map[string]any{"request_event_id": invalidAsk["id"], "request_event_ref": "event:" + anyString(invalidAsk["id"]), "requester_actor_id": requester.ActorID, "retiring_actor_id": human.ActorID, "status": "withdrawn_as_stale", "audit_key": invalidAsk["id"], "action": "retire", "retirement_event_ref": first["retirement_event_ref"], "reason": "forged stale reason", "evidence": []string{anyString(card["ref"])}}
 		if eventType == primitives.AskReopenedEventType {
 			payload = map[string]any{"request_event_id": invalidAsk["id"], "requester_actor_id": requester.ActorID, "retirement_event_ref": first["retirement_event_ref"]}
 		}

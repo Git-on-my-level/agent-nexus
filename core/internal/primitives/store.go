@@ -142,6 +142,7 @@ var HomeFeedEventTypes = []string{
 	"human_attention_withdrawn",
 	"human_attention_retired",
 	"human_attention_reopened",
+	"human_attention_retirement_audited",
 	"document_created",
 	"document_revision_created",
 	"document_revised",

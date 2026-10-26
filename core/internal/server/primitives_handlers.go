@@ -128,7 +128,7 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
-	if typeValue == primitives.AskRevisedEventType || typeValue == primitives.AskRetiredEventType || typeValue == primitives.AskReopenedEventType {
+	if typeValue == primitives.AskRevisedEventType || typeValue == primitives.AskRetiredEventType || typeValue == primitives.AskReopenedEventType || typeValue == primitives.AskRetirementAuditedEventType {
 		writeError(w, 400, "invalid_request", "ask curation events must use POST /asks/{ask_id}/revise or /retire")
 		return
 	}

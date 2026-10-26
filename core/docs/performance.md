@@ -2279,16 +2279,28 @@ resolves one ask and subject by the existing ID/handle indexes, checks current
 authority by principal primary key, and seeks the canonical resolution and
 actor/key replay receipt by their unique indexes. Evidence admission performs
 at most 32 indexed point checks (HTTP(S) evidence is validated without fetching).
-Requester notification admission additionally checks at most 32 evidence refs,
-the reason and the final notice under the recipient policy in the same transaction.
-It uses the existing exact/prose reference indexes; private evidence and audit refs
-are omitted from the notice. Work is bounded by those inputs and their ancestry.
-It appends one audit event and notification and inserts/deletes one resolution.
+Public-record preparation checks at most 32 evidence refs and the reason under
+recipient scope using the existing exact/prose reference indexes. No evidence or
+private audit ref is copied into the status record or notice. Both public events
+strip run attribution and each performs one final persisted-event visibility
+admission by the persisted event ref inside the write transaction, after
+insertion-time decoration and ownership triggers. It follows the complete current
+ancestry through indexed reference keys, avoiding a workspace ownership rebuild. Work is bounded by input bytes and their
+ancestry. It appends a public lifecycle event, a curator audit and a notice, and
+inserts/deletes one resolution. Undo identifies the original public event and
+private audit by the public retirement key; the audit ID is derived as UUIDv5.
+It requires no audit/history lookup and does not expose private audit content.
+`TestPerformanceAskRetirementVisibilityBudget` enforces the new
+`ask_retirement_visibility_budget.json`: one query, one row, 3,000 VM steps and
+zero full scans per final check. The actual persisted notice ancestry uses
+111 VM with no unrelated private roots and 359 VM with 4,096, with zero full scans.
+The outcome and presentation budgets remain unchanged.
 Undo updates only that ask's `ask_subjects`, `brief_asks` and `ask_deadlines`
 primary-key rows. It never loads ask history or workspace rosters.
 
-`GET /asks/{ask_id}` adds only the audit event type to its existing primary-key
-projection, exposing the current retirement token with no additional query.
+`GET /asks/{ask_id}` loads the ask-visible lifecycle record through its existing
+primary-key projection, exposing the current retirement token with no additional
+query. It never reads the curator audit, evidence or run attribution.
 Inbox point/list/stream admission already excludes canonical resolutions, so
 retirement adds no reads to those paths. Brief already selects only open
 indexed `brief_asks` rows. Roster admission adds a primary-key resolution

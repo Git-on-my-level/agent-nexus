@@ -99,6 +99,7 @@
         "human_attention_requested",
         "human_attention_responded",
         "human_attention_retired",
+        "human_attention_retirement_audited",
         "human_attention_revised",
         "human_attention_withdrawn",
         "message_posted",
@@ -190,6 +191,7 @@
       "human_attention_requested",
       "human_attention_responded",
       "human_attention_retired",
+      "human_attention_retirement_audited",
       "human_attention_revised",
       "human_attention_withdrawn"
     ],
@@ -321,6 +323,9 @@
       "attention"
     ],
     "human_attention_retired": [
+      "attention"
+    ],
+    "human_attention_retirement_audited": [
       "attention"
     ],
     "human_attention_revised": [

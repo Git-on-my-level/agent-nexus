@@ -3,8 +3,11 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,9 +122,67 @@ mv %q %q
 	}
 
 	if retireBeforeAnswer {
-		retired := h.runCLIExpectOK(t, "worker", nil, "ask", "retire", askID, "--reason", "The original request is stale", "--evidence", ref)
-		noticeRef := mustStringPath(t, retired.Payload, "result.notification_event_ref")
-		retirementRef := mustStringPath(t, retired.Payload, "result.retirement_event_ref")
+		// Retire under a different principal, with both evidence and an actual
+		// X-ANX-Run-Id tied to that curator's private board/card.
+		h.runCLIExpectOK(t, "worker", nil, "host", "include", "curator")
+		curator := h.runCLIExpectOK(t, "curator", nil, "auth", "whoami")
+		curatorID := mustStringPath(t, curator.Payload, "result.agent.id")
+		curatorActor := h.actorID(t, "curator")
+		if out, err := runLegacySQLFixture(t, h, fmt.Sprintf(`UPDATE agents SET metadata_json=json_set(metadata_json,'$.auth_admin',json('true')) WHERE id='%s';`, curatorID)); err != nil {
+			t.Fatal(err, out)
+		}
+		privateBoard := h.runCLIExpectOK(t, "curator", map[string]any{"board": map[string]any{"title": "Private retirement evidence"}}, "boards", "create")
+		privateBoardRef := mustStringPath(t, privateBoard.Payload, "result.board.ref")
+		privateBoardThread := mustStringPath(t, privateBoard.Payload, "result.board.thread_id")
+		if out, err := runLegacySQLFixture(t, h, fmt.Sprintf(`UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id','%s') WHERE id='%s';`, curatorActor, privateBoardThread)); err != nil {
+			t.Fatal(err, out)
+		}
+		privateCard := h.runCLIExpectOK(t, "curator", map[string]any{"board_ref": privateBoardRef, "title": "Private curator run"}, "work", "create", "--from-file", "-")
+		privateCardRef := mustStringPath(t, privateCard.Payload, "result.work.ref")
+		run := h.runCLIExpectOK(t, "curator", map[string]any{"schema_version": 1, "id": "exec-private-retirement", "origin_host_id": "host-private-retirement", "adapter": "codex", "observation": map[string]any{"observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, "state": "running", "liveness": "alive", "labels": []string{"anx.card." + strings.TrimPrefix(privateCardRef, "card:")}}, "runs", "ingest")
+		runID := mustStringPath(t, run.Payload, "result.run.id")
+		if got := h.runCLI(t, "worker", nil, "runs", "get", runID); got.ExitCode != 3 {
+			t.Fatalf("requester could read private run fixture: %s", got.Stdout)
+		}
+		token := mustStringPath(t, h.runCLIExpectOK(t, "curator", nil, "host", "token", "--as", "curator").Payload, "result.token")
+		raw, _ := json.Marshal(map[string]any{"request_key": "private-retirement", "reason": "The original request is stale", "evidence": []string{privateCardRef}})
+		req, err := http.NewRequest("POST", h.baseURL+"/asks/"+url.PathEscape(askID)+"/retire", bytes.NewReader(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-ANX-Run-Id", "agentctl/exec-private-retirement")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var retired map[string]any
+		err = json.NewDecoder(resp.Body).Decode(&retired)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK {
+			t.Fatalf("retire with private attribution: %d %#v %v", resp.StatusCode, retired, err)
+		}
+		noticeRef := mustStringPath(t, retired, "notification_event_ref")
+		retirementRef := mustStringPath(t, retired, "retirement_event_ref")
+		auditRef := mustStringPath(t, retired, "audit_event_ref")
+		for _, publicRef := range []string{noticeRef, retirementRef} {
+			got := h.runCLIExpectOK(t, "worker", nil, "debug", "events", "get", "--event-id", publicRef)
+			if strings.Contains(got.Stdout, runID) || strings.Contains(got.Stdout, privateCardRef) || strings.Contains(got.Stdout, "run_attribution") {
+				t.Fatalf("private provenance leaked into public record: %s", got.Stdout)
+			}
+		}
+		if got := h.runCLI(t, "worker", nil, "debug", "events", "get", "--event-id", auditRef); got.ExitCode != 3 {
+			t.Fatalf("private curator audit readable: %s", got.Stdout)
+		}
+		audit := h.runCLIExpectOK(t, "curator", nil, "debug", "events", "get", "--event-id", auditRef)
+		if !strings.Contains(audit.Stdout, runID) || !strings.Contains(audit.Stdout, privateCardRef) {
+			t.Fatalf("curator audit lost attribution/evidence: %s", audit.Stdout)
+		}
+		await := h.runCLI(t, "worker", nil, "await", askID, "--timeout", "2s")
+		if await.ExitCode != 11 || mustStringPath(t, await.Payload, "error.details.status") != "withdrawn_as_stale" {
+			t.Fatalf("private audit broke requester await: %s", await.Stdout)
+		}
 		assertArmed := func() {
 			t.Helper()
 			files, err := filepath.Glob(filepath.Join(h.homeDir, ".config", "anx", "answer-resumes", "*", "*.json"))

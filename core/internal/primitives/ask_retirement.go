@@ -10,11 +10,14 @@ import (
 	"unicode/utf8"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/workprojection"
+	"github.com/google/uuid"
 )
 
 const AskRetiredEventType = "human_attention_retired"
 const AskReopenedEventType = "human_attention_reopened"
+const AskRetirementAuditedEventType = "human_attention_retirement_audited"
 
 // RetireAsk competes with answers for the same unique resolution claim. Undo
 // can release only the exact retirement named by its caller, never an answer.
@@ -150,18 +153,38 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 				}
 			}
 		}
-		eventType, summary, status := AskRetiredEventType, "Ask retired as stale: "+reason, "withdrawn_as_stale"
-		eventPayload := map[string]any{"request_event_id": resolved.ID, "request_event_ref": "event:" + resolved.ID, "requester_actor_id": requester, "reason": reason, "evidence": evidence, "status": status}
+		// The canonical lifecycle record is deliberately independent of the
+		// curator's evidence and run. Status/await never need the private audit.
+		recipientCtx := WithRequestAccessScope(ctx, AccessScope{ActorID: requester})
+		publicReason := reason
+		readable, err := tx.ReadableValues(recipientCtx, reason)
+		if err != nil {
+			return err
+		}
+		if !readable {
+			publicReason = "reason not visible to you"
+		}
+		evidenceNote := "Evidence recorded in curator audit."
+		for _, ref := range evidence {
+			readable, err := tx.ReadableValues(recipientCtx, ref)
+			if err != nil {
+				return err
+			}
+			if !readable {
+				evidenceNote = "Evidence not visible to you."
+				break
+			}
+		}
+		eventType, summary, status := AskRetiredEventType, "Ask retired as stale: "+publicReason, "withdrawn_as_stale"
+		eventPayload := map[string]any{"request_event_id": resolved.ID, "request_event_ref": "event:" + resolved.ID, "requester_actor_id": requester, "retiring_actor_id": principal.ActorID, "reason": publicReason, "status": status, "evidence_note": evidenceNote}
 		refs := []string{"event:" + resolved.ID, subject}
 		if thread != "" {
 			refs = append(refs, "thread:"+thread)
 		}
 		if undo {
 			eventType, summary, status = AskReopenedEventType, "Ask reopened after retirement", "open"
-			eventPayload = map[string]any{"request_event_id": resolved.ID, "requester_actor_id": requester, "retirement_event_ref": "event:" + current}
+			eventPayload = map[string]any{"request_event_id": resolved.ID, "requester_actor_id": requester, "retirement_event_ref": "event:" + current, "status": status}
 			refs = append(refs, "event:"+current)
-		} else {
-			refs = append(refs, evidence...)
 		}
 		event, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": eventType, "thread_id": thread, "summary": summary, "refs": refs, "payload": eventPayload})
 		if err != nil {
@@ -170,56 +193,42 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		if !undo {
 			retirementID = anyStringValue(event.Body["id"])
 		}
-		// A durable message informs the requester without scheduling execution.
-		// In particular, this must not acknowledge a per-ask resume registration.
-		// The audit may inherit curator-only evidence. The notice must inherit
-		// the ask/card instead, without linking back to that private audit.
-		recipientCtx := WithRequestAccessScope(ctx, AccessScope{ActorID: requester})
-		noticeRefs := []string{"event:" + resolved.ID, subject}
-		noticeSummary := summary
-		readable, err := tx.ReadableValues(recipientCtx, summary)
+		// Both members of the original pair are identified by this public key.
+		// Undo must not copy a hidden audit ref/evidence into public history or
+		// require the requester to read that audit in order to reopen their ask.
+		auditPayload := map[string]any{"request_event_id": resolved.ID, "retirement_event_ref": "event:" + retirementID, "audit_key": retirementID, "action": "retire", "reason": reason, "evidence": evidence}
+		auditID := askRetirementAuditID(retirementID)
+		auditRefs := append(append([]string{}, refs...), evidence...)
+		if undo {
+			auditID = uuid.NewString()
+			auditPayload = map[string]any{"request_event_id": resolved.ID, "retirement_event_ref": "event:" + retirementID, "audit_key": retirementID, "action": "undo", "reopened_event_ref": "event:" + anyStringValue(event.Body["id"])}
+		}
+		auditRefs = append(auditRefs, "event:"+anyStringValue(event.Body["id"]))
+		audit, err := prepareEventForInsert(principal.ActorID, map[string]any{"id": auditID, "type": AskRetirementAuditedEventType, "thread_id": thread, "summary": "Ask retirement curator audit", "refs": auditRefs, "payload": auditPayload})
 		if err != nil {
 			return err
 		}
-		if !readable {
-			noticeSummary = "Ask retired as stale (reason not visible to you)"
+		// The notice is a projection of the public record alone, not the audit.
+		text := "For " + requester + ": " + summary
+		if !undo {
+			text += "\n" + anyStringValue(eventPayload["evidence_note"])
 		}
-		visibleEvidence := []string{}
-		hiddenEvidence := false
-		for _, ref := range evidence {
-			readable, err := tx.ReadableValues(recipientCtx, ref)
-			if err != nil {
-				return err
-			}
-			if readable {
-				visibleEvidence = append(visibleEvidence, ref)
-				noticeRefs = append(noticeRefs, ref)
-			} else {
-				hiddenEvidence = true
-			}
-		}
-		text := "For " + requester + ": " + noticeSummary
-		if hiddenEvidence {
-			text += "\nEvidence not visible to you."
-		}
-		notification, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": "message_posted", "thread_id": thread, "summary": noticeSummary, "refs": noticeRefs, "payload": map[string]any{"text": text, "recipient_actor_id": requester, "request_event_ref": "event:" + resolved.ID, "status": status, "evidence": visibleEvidence}})
+		notification, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": "message_posted", "thread_id": thread, "summary": summary, "refs": append(append([]string{}, refs...), "event:"+anyStringValue(event.Body["id"])), "payload": map[string]any{"text": text, "recipient_actor_id": requester, "request_event_ref": "event:" + resolved.ID, "retirement_event_ref": "event:" + retirementID, "status": status}})
 		if err != nil {
 			return err
 		}
-		if readable, err := tx.ReadableValues(recipientCtx, notification.Body); err != nil {
-			return err
-		} else if !readable {
-			return ErrNotFound
-		}
-		result = map[string]any{"ask_id": "event:" + resolved.ID, "status": status, "event": event.Body, "retirement_event_ref": "event:" + retirementID, "notified_actor_id": requester, "notification_event_ref": "event:" + anyStringValue(notification.Body["id"])}
+		result = map[string]any{"ask_id": "event:" + resolved.ID, "status": status, "event": event.Body, "retirement_event_ref": "event:" + retirementID, "audit_event_ref": "event:" + auditID, "notified_actor_id": requester, "notification_event_ref": "event:" + anyStringValue(notification.Body["id"])}
 		encoded, _ := json.Marshal(result)
-		if err = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(event.PayloadJSON) + len(event.RefsJSON) + len(notification.PayloadJSON) + len(notification.RefsJSON) + len(encoded) + 8192)}, blobLedgerWritePlan{}); err != nil {
+		if err = s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(len(event.PayloadJSON) + len(event.RefsJSON) + len(audit.PayloadJSON) + len(audit.RefsJSON) + len(notification.PayloadJSON) + len(notification.RefsJSON) + len(encoded) + 12288)}, blobLedgerWritePlan{}); err != nil {
 			return err
 		}
-		if err = insertPreparedEvent(ctx, tx, event); err != nil {
+		if err = insertAskVisibleEvent(ctx, tx, requester, event); err != nil {
 			return err
 		}
-		if err = insertPreparedEvent(ctx, tx, notification); err != nil {
+		if err = insertPreparedEvent(ctx, tx, audit); err != nil {
+			return err
+		}
+		if err = insertAskVisibleEvent(ctx, tx, requester, notification); err != nil {
 			return err
 		}
 		// Event insertion assigns its public handle; persist exactly what is returned.
@@ -256,4 +265,41 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		return askRevisionConflict(err)
 	})
 	return result, err
+}
+
+// The public pair key identifies the curator audit without exposing its private
+// event ref or requiring an authorization bypass to undo another curator's ask.
+func askRetirementAuditID(key string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("ask-retirement-audit:"+key)).String()
+}
+
+// insertAskVisibleEvent enforces the visibility boundary on the final stored
+// event, after all insertion-time decoration and ownership triggers. It keeps
+// the writer's authorization and strips attribution explicitly, rather than
+// trusting a visibility check of an incomplete prepared event.
+func insertAskVisibleEvent(ctx context.Context, tx *accessTx, requester string, event preparedEvent) error {
+	ctx = commandcenter.WithoutAttribution(ctx)
+	delete(event.Body, "run_attribution")
+	raw, err := json.Marshal(EventPayloadWrapperFromBodyMap(event.Body))
+	if err != nil {
+		return err
+	}
+	event.PayloadJSON = string(raw)
+	if err = insertPreparedEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	return requireAskVisibleEvent(ctx, tx, requester, anyStringValue(event.Body["id"]))
+}
+
+func requireAskVisibleEvent(ctx context.Context, tx *accessTx, requester, eventID string) error {
+	// Follow the persisted event's complete ancestry through the exact/prose
+	// admission indexes, including any attribution added during insertion.
+	readable, err := tx.ReadableValues(WithRequestAccessScope(ctx, AccessScope{ActorID: requester}), "event:"+eventID)
+	if err != nil {
+		return err
+	}
+	if !readable {
+		return ErrNotFound
+	}
+	return nil
 }

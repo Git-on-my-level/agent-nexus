@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 32,
+  "rule_count": 33,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -182,8 +182,20 @@
       "payload_must_include": [
         "request_event_id",
         "requester_actor_id",
+        "retiring_actor_id",
         "reason",
-        "evidence"
+        "status"
+      ]
+    },
+    "human_attention_retirement_audited": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "retirement_event_ref",
+        "audit_key",
+        "action"
       ]
     },
     "human_attention_revised": {

@@ -153,52 +153,53 @@ func IsEventGroup(value string) bool {
 
 // event_type values (strict), in contract order.
 const (
-	EventTypeTopicCreated               = "topic_created"
-	EventTypeTopicUpdated               = "topic_updated"
-	EventTypeTopicArchived              = "topic_archived"
-	EventTypeTopicRestored              = "topic_restored"
-	EventTypeTopicTrashed               = "topic_trashed"
-	EventTypeCurationSuggested          = "curation_suggested"
-	EventTypeCurationReceipt            = "curation_receipt"
-	EventTypeMessagePosted              = "message_posted"
-	EventTypeDocumentCreated            = "document_created"
-	EventTypeDocumentRevised            = "document_revised"
-	EventTypeDocumentTrashed            = "document_trashed"
-	EventTypeDocumentRestored           = "document_restored"
-	EventTypeBoardCreated               = "board_created"
-	EventTypeBoardUpdated               = "board_updated"
-	EventTypeCardCreated                = "card_created"
-	EventTypeCardUpdated                = "card_updated"
-	EventTypeCardMoved                  = "card_moved"
-	EventTypeCardArchived               = "card_archived"
-	EventTypeCardTrashed                = "card_trashed"
-	EventTypeCardResolved               = "card_resolved"
-	EventTypeCardLeaseAcquired          = "card_lease_acquired"
-	EventTypeCardLeaseRenewed           = "card_lease_renewed"
-	EventTypeCardLeaseReleased          = "card_lease_released"
-	EventTypeCardLeaseExpired           = "card_lease_expired"
-	EventTypeRunRecorded                = "run_recorded"
-	EventTypeReceiptAdded               = "receipt_added"
-	EventTypeReviewCompleted            = "review_completed"
-	EventTypeExceptionRaised            = "exception_raised"
-	EventTypeHumanAttentionRequested    = "human_attention_requested"
-	EventTypeHumanAttentionResponded    = "human_attention_responded"
-	EventTypeHumanAttentionWithdrawn    = "human_attention_withdrawn"
-	EventTypeHumanAttentionRevised      = "human_attention_revised"
-	EventTypeHumanAttentionRetired      = "human_attention_retired"
-	EventTypeHumanAttentionReopened     = "human_attention_reopened"
-	EventTypeAttentionFeedback          = "attention_feedback"
-	EventTypeAgentNotificationRead      = "agent_notification_read"
-	EventTypeAgentNotificationDismissed = "agent_notification_dismissed"
+	EventTypeTopicCreated                    = "topic_created"
+	EventTypeTopicUpdated                    = "topic_updated"
+	EventTypeTopicArchived                   = "topic_archived"
+	EventTypeTopicRestored                   = "topic_restored"
+	EventTypeTopicTrashed                    = "topic_trashed"
+	EventTypeCurationSuggested               = "curation_suggested"
+	EventTypeCurationReceipt                 = "curation_receipt"
+	EventTypeMessagePosted                   = "message_posted"
+	EventTypeDocumentCreated                 = "document_created"
+	EventTypeDocumentRevised                 = "document_revised"
+	EventTypeDocumentTrashed                 = "document_trashed"
+	EventTypeDocumentRestored                = "document_restored"
+	EventTypeBoardCreated                    = "board_created"
+	EventTypeBoardUpdated                    = "board_updated"
+	EventTypeCardCreated                     = "card_created"
+	EventTypeCardUpdated                     = "card_updated"
+	EventTypeCardMoved                       = "card_moved"
+	EventTypeCardArchived                    = "card_archived"
+	EventTypeCardTrashed                     = "card_trashed"
+	EventTypeCardResolved                    = "card_resolved"
+	EventTypeCardLeaseAcquired               = "card_lease_acquired"
+	EventTypeCardLeaseRenewed                = "card_lease_renewed"
+	EventTypeCardLeaseReleased               = "card_lease_released"
+	EventTypeCardLeaseExpired                = "card_lease_expired"
+	EventTypeRunRecorded                     = "run_recorded"
+	EventTypeReceiptAdded                    = "receipt_added"
+	EventTypeReviewCompleted                 = "review_completed"
+	EventTypeExceptionRaised                 = "exception_raised"
+	EventTypeHumanAttentionRequested         = "human_attention_requested"
+	EventTypeHumanAttentionResponded         = "human_attention_responded"
+	EventTypeHumanAttentionWithdrawn         = "human_attention_withdrawn"
+	EventTypeHumanAttentionRevised           = "human_attention_revised"
+	EventTypeHumanAttentionRetired           = "human_attention_retired"
+	EventTypeHumanAttentionReopened          = "human_attention_reopened"
+	EventTypeHumanAttentionRetirementAudited = "human_attention_retirement_audited"
+	EventTypeAttentionFeedback               = "attention_feedback"
+	EventTypeAgentNotificationRead           = "agent_notification_read"
+	EventTypeAgentNotificationDismissed      = "agent_notification_dismissed"
 )
 
 // EventTypeValues lists every event_type value in contract order. Do not modify it.
-var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeHumanAttentionRevised, EventTypeHumanAttentionRetired, EventTypeHumanAttentionReopened, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
+var EventTypeValues = []string{EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeHumanAttentionRevised, EventTypeHumanAttentionRetired, EventTypeHumanAttentionReopened, EventTypeHumanAttentionRetirementAudited, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed}
 
 // IsEventType reports whether value is exactly a canonical event_type value.
 func IsEventType(value string) bool {
 	switch value {
-	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeHumanAttentionRevised, EventTypeHumanAttentionRetired, EventTypeHumanAttentionReopened, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
+	case EventTypeTopicCreated, EventTypeTopicUpdated, EventTypeTopicArchived, EventTypeTopicRestored, EventTypeTopicTrashed, EventTypeCurationSuggested, EventTypeCurationReceipt, EventTypeMessagePosted, EventTypeDocumentCreated, EventTypeDocumentRevised, EventTypeDocumentTrashed, EventTypeDocumentRestored, EventTypeBoardCreated, EventTypeBoardUpdated, EventTypeCardCreated, EventTypeCardUpdated, EventTypeCardMoved, EventTypeCardArchived, EventTypeCardTrashed, EventTypeCardResolved, EventTypeCardLeaseAcquired, EventTypeCardLeaseRenewed, EventTypeCardLeaseReleased, EventTypeCardLeaseExpired, EventTypeRunRecorded, EventTypeReceiptAdded, EventTypeReviewCompleted, EventTypeExceptionRaised, EventTypeHumanAttentionRequested, EventTypeHumanAttentionResponded, EventTypeHumanAttentionWithdrawn, EventTypeHumanAttentionRevised, EventTypeHumanAttentionRetired, EventTypeHumanAttentionReopened, EventTypeHumanAttentionRetirementAudited, EventTypeAttentionFeedback, EventTypeAgentNotificationRead, EventTypeAgentNotificationDismissed:
 		return true
 	}
 	return false

@@ -3,6 +3,8 @@ package primitives
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/commandcenter"
 	"agent-nexus-core/internal/storage"
 )
 
@@ -196,8 +199,19 @@ func TestAskRetirementNoticeDoesNotInheritPrivateEvidence(t *testing.T) {
 	if s.CanAccessResource(requesterCtx, "board", privateRef) {
 		t.Fatal("evidence fixture must be private to curator")
 	}
-	curatorCtx := WithAccessScope(ctx, AccessScope{ActorID: curator.ActorID})
-	for _, reason := range []string{"Old rollout is no longer relevant", "See " + privateRef} {
+	privateCard, err := s.CreateBoardCard(ctx, curator.ActorID, anyStringValue(board["id"]), AddBoardCardInput{Title: "Private run card", ColumnKey: "ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ws.DB().Exec(`INSERT INTO runs(id,handle,launcher,external_id,host_id,agent_id,adapter,state,liveness,result_collected,labels_json,card_ref,last_observed_at) VALUES('private-curator-run','private-curator-run','test','private-curator-run','host','curator','test','running','alive',0,'[]',?,'now')`, privateCard.Card["ref"]); err != nil {
+		t.Fatal(err)
+	}
+	if s.CanAccessResource(requesterCtx, "run", "run:private-curator-run") {
+		t.Fatal("run fixture must be private to curator")
+	}
+	requester := seedAskReviewRequester(t, ws)
+	curatorCtx := commandcenter.WithAttribution(WithAccessScope(ctx, AccessScope{ActorID: curator.ActorID}), commandcenter.Attribution{RunID: "private-curator-run", AgentID: curator.AgentID})
+	for i, reason := range []string{"Old rollout is no longer relevant", "See " + privateRef} {
 		retired, err := s.RetireAsk(curatorCtx, curator, anyStringValue(ask["ref"]), "retire-"+reason, "retire-"+reason, reason, []string{privateRef, anyStringValue(card["ref"])}, false, "")
 		if err != nil {
 			t.Fatal(err)
@@ -214,16 +228,56 @@ func TestAskRetirementNoticeDoesNotInheritPrivateEvidence(t *testing.T) {
 		if reason == "Old rollout is no longer relevant" && !strings.Contains(anyStringValue(p["text"]), reason) {
 			t.Fatal("notification lost retirement reason")
 		}
-		if s.CanAccessResource(requesterCtx, "event", anyStringValue(retired["retirement_event_ref"])) {
+		if s.CanAccessResource(requesterCtx, "event", anyStringValue(retired["audit_event_ref"])) {
 			t.Fatal("private audit evidence became public")
 		}
-		reopened, err := s.RetireAsk(curatorCtx, curator, anyStringValue(ask["ref"]), "undo-"+reason, "undo-"+reason, "", nil, true, anyStringValue(retired["retirement_event_ref"]))
+		public, err := s.GetEvent(requesterCtx, strings.TrimPrefix(anyStringValue(retired["retirement_event_ref"]), "event:"))
+		if err != nil {
+			t.Fatalf("requester cannot read status record: %v", err)
+		}
+		for _, body := range []map[string]any{public, notice} {
+			encoded, _ := json.Marshal(body)
+			if body["run_attribution"] != nil || strings.Contains(string(encoded), "private-curator-run") || strings.Contains(string(encoded), privateRef) || asMapValue(body["payload"])["evidence"] != nil {
+				t.Fatalf("private audit leaked into public record: %s", encoded)
+			}
+		}
+		out, err := s.AskOutcome(requesterCtx, anyStringValue(ask["ref"]))
+		if err != nil || out["status"] != "withdrawn_as_stale" || asMapValue(out["response"])["retiring_actor_id"] != curator.ActorID {
+			t.Fatalf("private evidence/run broke requester outcome: %#v %v", out, err)
+		}
+		audit, err := s.GetEvent(curatorCtx, strings.TrimPrefix(anyStringValue(retired["audit_event_ref"]), "event:"))
+		if err != nil || asMapValue(audit["run_attribution"])["run_id"] != "private-curator-run" || len(anyStringSlice(asMapValue(audit["payload"])["evidence"])) != 2 {
+			t.Fatalf("private audit lost evidence/attribution: %#v %v", audit, err)
+		}
+		// A requester can undo without permission to read the curator audit.
+		reopened, err := s.RetireAsk(requesterCtx, requester, anyStringValue(ask["ref"]), fmt.Sprint("undo-private-", i), fmt.Sprint("undo-private-", i), "", nil, true, anyStringValue(retired["retirement_event_ref"]))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err = s.GetEvent(requesterCtx, strings.TrimPrefix(anyStringValue(reopened["notification_event_ref"]), "event:")); err != nil {
 			t.Fatalf("requester cannot read undo notification: %v", err)
 		}
+		undoAudit, err := s.GetEvent(requesterCtx, strings.TrimPrefix(anyStringValue(reopened["audit_event_ref"]), "event:"))
+		key := anyStringValue(asMapValue(undoAudit["payload"])["audit_key"])
+		original, resolveErr := s.ResolveResourceRef(requesterCtx, ResourceRefInput{Type: "event", Ref: anyStringValue(asMapValue(undoAudit["payload"])["retirement_event_ref"])})
+		if err != nil || resolveErr != nil || askRetirementAuditID(key) != audit["id"] || original.ID != key {
+			t.Fatalf("undo did not identify both records: %#v %v", undoAudit, err)
+		}
+		if out, err = s.AskOutcome(requesterCtx, anyStringValue(ask["ref"])); err != nil || out["status"] != "open" {
+			t.Fatal(out, err)
+		}
+	}
+	// Future insertion-time decoration must fail atomically, even if it is
+	// added after the caller's prepared-record checks and attribution stripping.
+	if _, err = ws.DB().Exec(`CREATE TRIGGER hide_retirement_after_insert AFTER INSERT ON events WHEN NEW.type='human_attention_retired' BEGIN UPDATE events SET payload_json=json_set(payload_json,'$.run_attribution',json_object('run_id','private-curator-run')) WHERE id=NEW.id; END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.RetireAsk(curatorCtx, curator, anyStringValue(ask["ref"]), "late-decoration", "late-decoration", "Blocked decoration", []string{privateRef}, false, ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("late privacy decoration was not rejected: %v", err)
+	}
+	var partial int
+	if err = ws.DB().QueryRow(`SELECT count(*) FROM events WHERE json_extract(payload_json,'$.payload.reason')='Blocked decoration'`).Scan(&partial); err != nil || partial != 0 {
+		t.Fatalf("failed visibility admission left partial events: %d %v", partial, err)
 	}
 }
 
