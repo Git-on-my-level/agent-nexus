@@ -324,5 +324,5 @@ func (a *App) runHostWhoAmI(ctx context.Context, cfg config.Resolved) (*commandR
 		return nil, err
 	}
 	body := commandResultBody(result)
-	return &commandResult{Data: map[string]any{"host": map[string]any{"id": auth.HostID}, "agent": body["agent"], "resolution": auth.IdentitySource}}, nil
+	return &commandResult{Data: map[string]any{"host": map[string]any{"id": auth.HostID}, "agent": body["agent"], "resolution": auth.IdentitySource, "workspace": a.orientWorkspace(auth)}}, nil
 }

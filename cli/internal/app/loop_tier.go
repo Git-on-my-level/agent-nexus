@@ -441,7 +441,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	workspace := a.orientWorkspace(cfg)
 	if !cfg.JSON {
 		markOrientAgentInitiatives(brief, agent, detail)
-		text := fmt.Sprintf("workspace: %s source=%s other_aliases=%s\n", anyString(workspace["alias"]), anyString(workspace["source"]), strings.Join(stringList(workspace["other_aliases"]), ",")) + renderOrientText(brief, a.orientIdentityLine(cfg))
+		text := workspaceText(workspace) + renderOrientText(brief, a.orientIdentityLine(cfg))
 		if bridgeRecommended {
 			text += "recommended next: anx bridge install; then register each intended agent/workspace with anx bridge add. Without answer delivery, unattended resumes wait; Git/drain remain manual. Await/batch work without a bridge.\n"
 		}

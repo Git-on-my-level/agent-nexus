@@ -4811,7 +4811,7 @@ func TestThreadsContextCommandEndpointNotFoundDoesNotAttemptIDResolution(t *test
 	if errObj == nil || anyStringValue(errObj["code"]) != "not_found" {
 		t.Fatalf("unexpected error payload: %#v", payload)
 	}
-	if got := anyStringValue(errObj["message"]); got != "endpoint not found" {
+	if got := anyStringValue(errObj["message"]); !strings.HasPrefix(got, "endpoint not found;") || !strings.Contains(got, "selected by flag:--base-url") {
 		t.Fatalf("expected endpoint-not-found passthrough, got %q payload=%#v", got, payload)
 	}
 }

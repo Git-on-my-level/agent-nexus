@@ -85,6 +85,13 @@ func (a *App) workspaceForges(cfg config.Resolved) []workspaceconfig.Forge {
 }
 
 func (a *App) resolveWorkspace(cfg config.Resolved, alias *string) (config.Resolved, error) {
+	source := "flag:--workspace"
+	if alias == nil && cfg.Sources["base_url"] != "flag:--base-url" {
+		if envAlias := strings.TrimSpace(a.Getenv("ANX_WORKSPACE")); envAlias != "" {
+			alias = &envAlias
+			source = "env:ANX_WORKSPACE"
+		}
+	}
 	if alias == nil && cfg.Sources["base_url"] != "default" {
 		return cfg, nil
 	}
@@ -98,7 +105,7 @@ func (a *App) resolveWorkspace(cfg config.Resolved, alias *string) (config.Resol
 			return cfg, errnorm.Usage("workspace_unknown", "unknown workspace alias "+*alias+"; run anx config workspaces")
 		}
 		cfg.BaseURL = base
-		cfg.Sources["base_url"] = "flag:--workspace"
+		cfg.Sources["base_url"] = source
 		cfg.Sources["workspace_alias"] = *alias
 		return cfg, nil
 	}

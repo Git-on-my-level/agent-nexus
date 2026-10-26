@@ -2,7 +2,6 @@ package app
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -147,90 +145,6 @@ func missingCard() error {
 	return e
 }
 
-func TestWorkspaceHintsUseOnlyTargetCredentialsAndReturnAction(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer workspace-b-token" || r.Method != "GET" || r.URL.Path != "/cards/card:ship" {
-			t.Errorf("unsafe probe %s %s auth=%q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
-		}
-		fmt.Fprint(w, `{"card":{"ref":"card:ship"}}`)
-	}))
-	defer server.Close()
-	a, cfg := hintFixture(t, server.URL, nil)
-	e := errnorm.Normalize(a.withWorkspaceHint(context.Background(), cfg, []string{"note", "card:ship", "Progress"}, missingCard()))
-	if !strings.Contains(e.Message, `exists in workspace "b"`) || !strings.Contains(e.Message, "--workspace b") || errnorm.ExitCode(e) != 3 {
-		t.Fatalf("%#v", e)
-	}
-	actions := deriveErrorActions("note", e)
-	if len(actions) != 1 || strings.Join(actions[0].Argv, " ") != "anx --config-dir "+cfg.ConfigDir+" --workspace b --as worker note card:ship Progress" {
-		t.Fatalf("%#v", actions)
-	}
-	if asMap(e.Details)["workspace_hint"] == nil || calls.Load() != 1 {
-		t.Fatalf("%#v calls=%d", e, calls.Load())
-	}
-	a.Getenv = func(key string) string {
-		if key == "ANX_WORKSPACE_HINTS" {
-			return "0"
-		}
-		return ""
-	}
-	if got := a.withWorkspaceHint(context.Background(), cfg, nil, missingCard()); strings.Contains(got.Error(), "exists") || calls.Load() != 1 {
-		t.Fatal(got)
-	}
-}
-
-func TestWorkspaceHintsSkipUnauthenticatedAndExpiredAndRedirects(t *testing.T) {
-	var leaked atomic.Int32
-	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked.Add(1); fmt.Fprint(w, `{}`) }))
-	defer sink.Close()
-	var calls atomic.Int32
-	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		http.Redirect(w, r, sink.URL, http.StatusFound)
-	}))
-	defer redirect.Close()
-	a, cfg := hintFixture(t, redirect.URL, nil)
-	a.withWorkspaceHint(context.Background(), cfg, nil, missingCard())
-	if leaked.Load() != 0 || calls.Load() != 1 {
-		t.Fatalf("redirect followed: %d %d", leaked.Load(), calls.Load())
-	}
-	cache := filepath.Join(hostidentity.DirAt(cfg.ConfigDir, "b", redirect.URL), "token-worker.json")
-	for _, mode := range []string{"expired", "unsafe", "missing"} {
-		switch mode {
-		case "expired":
-			raw, _ := json.Marshal(tokenCache{Token: "old", ExpiresAt: time.Now().Add(-time.Hour)})
-			os.WriteFile(cache, raw, 0600)
-		case "unsafe":
-			os.Chmod(cache, 0644)
-		case "missing":
-			os.Remove(cache)
-		}
-		a.withWorkspaceHint(context.Background(), cfg, nil, missingCard())
-	}
-	if calls.Load() != 1 {
-		t.Fatal("unauthenticated probe")
-	}
-}
-
-func TestWorkspaceHintTimeoutAndBound(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); <-r.Context().Done() }))
-	defer server.Close()
-	a, cfg := hintFixture(t, server.URL, nil)
-	for i := 0; i < 8; i++ {
-		base := fmt.Sprintf("%s/workspace-%d", server.URL, i)
-		writeWorkspaceHost(t, cfg.ConfigDir, fmt.Sprintf("ws-%d", i), base)
-		raw, _ := json.Marshal(tokenCache{Token: "token", ExpiresAt: time.Now().Add(time.Hour)})
-		os.WriteFile(filepath.Join(hostidentity.DirAt(cfg.ConfigDir, fmt.Sprintf("ws-%d", i), base), "token-worker.json"), raw, 0600)
-	}
-	start := time.Now()
-	got := a.withWorkspaceHint(context.Background(), cfg, nil, missingCard())
-	if time.Since(start) > 2*time.Second || calls.Load() > workspaceHintLimit || strings.Contains(got.Error(), "exists") {
-		t.Fatalf("elapsed=%s calls=%d err=%v", time.Since(start), calls.Load(), got)
-	}
-}
-
 func TestOrientWorkspaceSelectionDetails(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".config", "anx")
@@ -297,10 +211,7 @@ func TestCardAndWorkCreateTextIsConcise(t *testing.T) {
 
 func TestMissingTypedRefHintsAcrossCardCommands(t *testing.T) {
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer workspace-b-token" {
-			t.Error("wrong workspace credentials")
-		}
-		fmt.Fprint(w, `{"card":{"ref":"card:ship"}}`)
+		t.Error("must not probe another workspace")
 	}))
 	defer other.Close()
 	selected := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -308,10 +219,11 @@ func TestMissingTypedRefHintsAcrossCardCommands(t *testing.T) {
 		fmt.Fprint(w, `{"error":{"code":"not_found","message":"card not found"}}`)
 	}))
 	defer selected.Close()
-	for _, args := range [][]string{{"context", "card:ship"}, {"note", "card:ship", "Progress"}, {"done", "card:ship", "--evidence", "event:proof"}, {"plan", "show", "card:ship"}, {"url", "card:ship"}, {"work", "get", "card:ship"}, {"cards", "get", "card:ship"}, {"read", "card:ship"}} {
+	for _, args := range [][]string{{"context", "card:ship"}, {"note", "card:ship", "Progress"}, {"done", "card:ship", "--evidence", "event:proof"}, {"plan", "show", "card:ship"}, {"url", "card:ship"}, {"work", "get", "card:ship"}, {"cards", "get", "card:ship"}, {"cards", "get", "ship"}, {"cards", "message", "card:ship", "--body", "Progress"}, {"work", "patch", "card:ship", "--from-file", "-"}, {"ask", "Ship?", "--situation", "Ready", "--impact", "Blocks shipping", "--why", "Checks passed", "--recommend", "Ship", "--subject-ref", "card:ship"}, {"read", "card:ship"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			a, cfg := hintFixture(t, other.URL, map[string]string{"ANX_ACCESS_TOKEN": "workspace-a-token"})
 			workspaceconfig.Update(cfg.ConfigDir, func(c *workspaceconfig.Catalog) error { c.File.Aliases["a"] = selected.URL; return nil })
+			a.Stdin = strings.NewReader(`{"priority":"high"}`)
 			out := a.Stdout.(*bytes.Buffer)
 			full := append([]string{"--json", "--as", "worker", "--base-url", selected.URL}, args...)
 			if exit := a.Run(full); exit != 3 {
@@ -320,22 +232,10 @@ func TestMissingTypedRefHintsAcrossCardCommands(t *testing.T) {
 			var doc map[string]any
 			json.Unmarshal(out.Bytes(), &doc)
 			e := asMap(doc["error"])
-			if !strings.Contains(anyString(e["message"]), `exists in workspace "b"`) || len(asSlice(e["next_actions"])) == 0 {
+			if !strings.Contains(anyString(e["message"]), `searched workspace "a"`) || len(asSlice(e["next_actions"])) == 0 {
 				t.Fatalf("%s", out)
 			}
 		})
-	}
-}
-
-func TestWorkspaceHintsIgnoreHTMLAndUnrelatedJSON(t *testing.T) {
-	for _, body := range []string{"<html>Sign in</html>", `{"ok":true}`, `{"card":{}}`} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
-		a, cfg := hintFixture(t, server.URL, nil)
-		got := a.withWorkspaceHint(context.Background(), cfg, nil, missingCard())
-		server.Close()
-		if strings.Contains(got.Error(), "exists") {
-			t.Fatalf("false match for %s", body)
-		}
 	}
 }
 

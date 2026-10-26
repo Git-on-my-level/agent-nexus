@@ -196,18 +196,23 @@ qualified.
 
 ### Workspace and resource ergonomics
 
-`anx orient` reports the resolved workspace alias, base URL, selection source
-(`--workspace`, `--base-url`, `ANX_BASE_URL`, directory rule, default or the sole
-enrollment), and other configured aliases. JSON adds these in the top-level `workspace` field, separate from `result`, which retains the verbatim `brief.v1` object.
+`anx orient` and `anx auth whoami` report the routed workspace alias, base URL
+host and selection source (including the matching directory rule).
+Workspace selection uses `--workspace` or `--base-url` first, then
+`ANX_WORKSPACE`, `ANX_BASE_URL`, a directory mapping, the user default or the
+sole enrollment. JSON orientation adds workspace details in the top-level
+`workspace` field, separate from `result`, which retains the verbatim `brief.v1`
+object. `auth whoami` includes them in `result.workspace`.
 
-When a typed resource ref is missing, the CLI can suggest another configured,
-already authenticated workspace. This is best effort: at most four distinct other
-workspace URLs, a 350 ms timeout per lookup and a 1.5 s overall budget. Only that
-workspace's unexpired cached agent token is used; redirects and token grants are
-excluded. Expired or unavailable credentials and network errors leave the original
-not-found error unchanged. Set `ANX_WORKSPACE_HINTS=0` to disable these reads.
-JSON errors expose `error.details.workspace_hint` and an exact retry command in
-`error.next_actions`. No command is automatically retried in another workspace.
+When a resource read or write returns not found, the shared error normalizer
+names the searched workspace and routing source. JSON errors expose
+`error.details.workspace` (alias), `workspace_host` and `workspace_source`, plus
+a `next_action` hint to retry with `--workspace <alias>`. `error.next_actions`
+offers `anx config workspaces` to discover aliases. Diagnostics use local
+configuration only: the CLI never probes another workspace for a missing ref.
+URL credentials, query parameters and fragments are excluded from workspace
+diagnostics. `ANX_WORKSPACE_HINTS` is no longer used; routing diagnostics are
+always present on remote not-found errors.
 
 `anx url card:ship-fix` prints the resource's API locator, derived from the API
 base URL, suitable for shell substitution in scripts. Board, topic, document,
