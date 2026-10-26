@@ -7,14 +7,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 // Watch trends: whether the workspace is getting better or worse, computed at
-// read time from records core already keeps. Every family is one indexed,
-// newest-first seek with a fixed cap, read through the caller's scoped
-// relations and the brief's PM-private rule, so a hidden record never reaches a
-// count. A capped family reports where its history stops: buckets older than
-// the oldest admitted record are null rather than a guessed zero.
+// read time from records core already keeps. HTTP readers must first prove full
+// visibility in the calculation's read snapshot. Every family then uses one
+// indexed seek with a fixed cap across all partitions. A capped family reports
+// where its history stops: older buckets are null rather than a guessed zero.
 const (
 	trendsAskCap      = 80
 	trendsAnswerCap   = 60
@@ -118,12 +119,36 @@ type trendsBuild struct {
 // WatchTrends returns one group of watch_trends.v1 for the reader over days
 // (7, 30 or 90).
 func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
-	// Scope identity, not workspace contents, determines eligibility. Neither an
-	// auth-admin nor the selected PM has an unrestricted resource capability.
-	// Do not query roots/epochs to infer eligibility: that itself leaks hidden
-	// records. Canonical projections can incorporate invisible contributors.
-	if _, scoped := accessScopeFrom(ctx); scoped || reader.Visible != nil {
+	// A separate callback could hide contributors beyond the canonical scope.
+	if reader.Visible != nil {
 		return nil, ErrForbidden
+	}
+	if scope, scoped := accessScopeFrom(ctx); scoped {
+		// Probe canonical roots, not descendants: without a denied root there
+		// cannot be a denied descendant. The root-owner primary key bounds all
+		// three EXISTS seeks independently of the number of hidden resources.
+		// Pin both proof and calculation to the same SQLite read snapshot so a
+		// concurrent transfer cannot invalidate admission midway through a read.
+		// Admission reads only the canonical root counters. Skip ordinary page
+		// policy preparation (and its optional caches) before opening the snapshot.
+		read, finish, err := s.db.PinReads(resourceaccess.WithoutPolicy(ctx), func(c context.Context, db resourceaccess.QueryRower) (context.Context, error) {
+			var active bool
+			var ledger int
+			if err := db.QueryRowContext(c, `WITH `+admissionLedgerCTE(scope)+` SELECT active,ledger FROM _anx_admission_ledger`).Scan(&active, &ledger); err != nil {
+				return c, err
+			}
+			if active || ledger < 1 {
+				return c, ErrForbidden
+			}
+			// This snapshot has no inaccessible resources. Only this admitted
+			// calculation may use unscoped relations; no capability escapes it.
+			return resourceaccess.WithoutPolicy(context.WithValue(c, accessScopeKey{}, struct{}{})), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer finish()
+		return s.buildWatchTrends(read, BriefReader{}, group, days, now)
 	}
 	return s.buildWatchTrends(ctx, reader, group, days, now)
 }
@@ -439,6 +464,13 @@ func (b *trendsBuild) trendDoneAt() string {
 func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, error) {
 	out := []trendPromise{}
 	var horizon, openCutoff time.Time
+	hasParent := workHasParentSQL("c")
+	if _, scoped := accessScopeFrom(b.ctx); !scoped && b.reader.Visible == nil {
+		// Conservatively omit any linked child, including one whose parents
+		// have closed. Walking arbitrarily many closed parents to prove absence
+		// would break the read budget. Each incoming-ref probe stops at one row.
+		hasParent = `(EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1))`
+	}
 	for _, open := range []bool{true, false} {
 		pred, predArgs := b.pmOwnerSQL("c.thread_id")
 		limit, kind, bound, order := trendsPromiseCap, "promise_closed", ` AND p.at_key>=anx_timestamp_key(?)`, `DESC`
@@ -447,8 +479,8 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 		}
 		rows, truncated, err := b.admitScoped(b.groupingContext(), `SELECT p.at_key,p.id,
 		 CASE WHEN COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
-		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))
-		  AND NOT `+workHasParentSQL("c")+` THEN 1 ELSE 0 END,
+		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1) OR EXISTS(SELECT 1 FROM boards WHERE id=c.board_id AND role='initiatives' LIMIT 1))
+		  AND NOT `+hasParent+` THEN 1 ELSE 0 END,
 		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+b.trendDoneAt()+`,'')
 		 FROM watch_trend_positions p CROSS JOIN brief_initiatives bi ON bi.card_id=p.id CROSS JOIN cards c ON c.id=p.id
 		 WHERE p.kind=? AND p.scope=?`+bound+` AND `+pred+` ORDER BY p.at_key `+order+`,p.id `+order+` LIMIT ?`, limit, open,

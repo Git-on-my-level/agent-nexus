@@ -18,7 +18,7 @@ import (
 // A SCAN of a business table without an index is an O(workspace) read.
 var trendsFullScan = regexp.MustCompile(`^SCAN (events|cards|brief_asks|brief_initiatives|threads|watch_trend_positions|e|c|a|bi|p)$`)
 
-func TestWatchTrendsRouteRejectsScopedReaders(t *testing.T) {
+func TestWatchTrendsRouteRequiresFullVisibility(t *testing.T) {
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
@@ -53,13 +53,24 @@ func TestWatchTrendsRouteRejectsScopedReaders(t *testing.T) {
 	ask(privateBoard, "Private question")
 
 	status, body := hostHTTP(t, http.MethodGet, env.server.URL+"/watch/trends?group=decisions&range=7d", owner.AccessToken, nil)
-	if status != http.StatusForbidden || body["error"].(map[string]any)["code"] != "restricted_trends" {
+	if status != http.StatusOK || body["schema"] != "watch_trends.v1" {
 		t.Fatalf("owner %d %v", status, body)
 	}
-	ownerBody := trendsBody(t, env.server.URL+"/watch/trends?group=decisions&range=7d", owner.AccessToken)
-	if strangerBody := trendsBody(t, env.server.URL+"/watch/trends?group=decisions&range=7d", stranger.AccessToken); string(strangerBody) != string(ownerBody) {
-		t.Fatal("eligibility depends on resource ownership")
+	panel := body["panels"].([]any)[0].(map[string]any)
+	if got := panel["series"].([]any)[0].(map[string]any)["key"]; got != "opened" {
+		t.Fatalf("missing raised series: %v", panel)
 	}
+	var raised float64
+	for _, point := range panel["series"].([]any)[0].(map[string]any)["points"].([]any) {
+		if point != nil {
+			raised += point.(float64)
+		}
+	}
+	if raised != 2 {
+		t.Fatalf("owner raised=%v want=2", raised)
+	}
+
+	trendsBody(t, env.server.URL+"/watch/trends?group=decisions&range=7d", stranger.AccessToken)
 
 	if status, _ = hostHTTP(t, http.MethodGet, env.server.URL+"/watch/trends?group=decisions&range=1y", owner.AccessToken, nil); status != http.StatusBadRequest {
 		t.Fatalf("invalid range status = %d", status)
@@ -156,10 +167,63 @@ func testWatchTrendsMechanismBudget(t *testing.T, mechanism string) {
 			}
 		}
 	}
+	if mechanism == "blocks" {
+		// Admit the same over-cap corpus after all roots become readable. The
+		// successful HTTP budget includes the fresh proof and every aggregate.
+		for _, q := range []string{
+			`UPDATE artifacts SET content_refs_json='[]' WHERE content_refs_json IS NULL`,
+			`UPDATE threads SET body_json=json_set(body_json,'$.pm_actor_id','owner') WHERE COALESCE(json_extract(body_json,'$.pm_actor_id'),'')<>'' AND json_extract(body_json,'$.pm_actor_id')<>'owner'`,
+			`UPDATE resource_access_tombstones SET owner='owner' WHERE owner<>'owner'`,
+		} {
+			if _, err := db.Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Fanout adversaries for the enabled path: role-board enumeration and
+		// walking closed parents must not hide behind an otherwise small corpus.
+		if _, err := db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000)
+		 INSERT INTO boards(id,title,status,thread_id,column_schema_json,role,created_at,created_by,updated_at,updated_by)
+		 SELECT 'trends-role-'||i,'Role board',status,thread_id,column_schema_json,'initiatives',created_at,created_by,updated_at,updated_by FROM n CROSS JOIN boards b WHERE b.id=?`, anyString(board["id"])); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO card_plans(card_id,body_json,updated_at)
+		 SELECT id,json_object('steps',json_array(json_object('id','child','title','Child','ref','card:scale-blocks-0'))),updated_at FROM cards WHERE id GLOB 'scale-blocks-*' AND column_key='done'`); err != nil {
+			t.Fatal(err)
+		}
+		for _, group := range primitives.WatchTrendGroups {
+			capture.Start()
+			trendsResponseBody(t, server.URL+"/watch/trends?group="+group+"&range=90d", owner.AccessToken, http.StatusOK)
+			statements, queries, returned := capture.Stop()
+			work := capture.Work()
+			if err := capture.WorkError(); err != nil {
+				t.Fatal(err)
+			}
+			for _, st := range statements {
+				details, err := perfguard.Explain(ctx, db, st)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, line := range details {
+					if trendsFullScan.MatchString(strings.TrimSpace(line)) {
+						t.Fatalf("unbounded full-visibility read: %s", line)
+					}
+				}
+			}
+			t.Logf("trends HTTP full-visibility %s: queries=%d rows=%d vm=%d", group, queries, returned, work.VMSteps)
+			if queries > 100 || returned > 1024 || work.VMSteps >= 50000 {
+				t.Errorf("enabled trends exceeded budget: queries=%d rows=%d vm=%d", queries, returned, work.VMSteps)
+			}
+		}
+	}
 }
 
 // trendsBody reads one trends response's raw bytes.
 func trendsBody(t *testing.T, url, bearer string) []byte {
+	t.Helper()
+	return trendsResponseBody(t, url, bearer, http.StatusForbidden)
+}
+
+func trendsResponseBody(t *testing.T, url, bearer string, status int) []byte {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -172,7 +236,7 @@ func trendsBody(t *testing.T, url, bearer string) []byte {
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
-	if err != nil || resp.StatusCode != http.StatusForbidden || !strings.Contains(string(raw), `"restricted_trends"`) {
+	if err != nil || resp.StatusCode != status || (status == http.StatusForbidden && !strings.Contains(string(raw), `"restricted_trends"`)) {
 		t.Fatalf("%d %s %v", resp.StatusCode, raw, err)
 	}
 	return raw
@@ -203,6 +267,13 @@ func TestWatchTrendsRestrictionIgnoresHiddenWrites(t *testing.T) {
 		"payload": map[string]any{"kind": "ask", "title": "Visible", "requester_actor_id": "agent-1", "subject_ref": anyString(work["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
 		t.Fatal(err)
 	}
+	seedPrivate, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Existing private board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PatchThread(ctx, owner.ActorID, anyString(seedPrivate["thread_id"]), map[string]any{"pm_actor_id": owner.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
 	for _, group := range primitives.WatchTrendGroups {
 		url := env.server.URL + "/watch/trends?range=7d&group=" + group
 		before := trendsBody(t, url, stranger.AccessToken)
@@ -229,8 +300,7 @@ func TestWatchTrendsRestrictionIgnoresHiddenWrites(t *testing.T) {
 }
 
 // Resource ownership changes without changing either reader's AccessScope.
-// Every group remains unavailable: ownership transfers cannot grant the missing
-// unrestricted capability or replay a formerly served aggregate.
+// Full visibility is recomputed on the next request, without a cache window.
 func TestWatchTrendsHTTPTransfersTakeEffectWithinWindow(t *testing.T) {
 	requireIntegrationTest(t)
 	for _, container := range []string{"board", "pm-thread"} {
@@ -270,14 +340,11 @@ func TestWatchTrendsHTTPTransfersTakeEffectWithinWindow(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			beforeOld, beforeNew := map[string]string{}, map[string]string{}
+			beforeNew := map[string]string{}
 			for _, group := range primitives.WatchTrendGroups {
 				url := env.server.URL + "/watch/trends?range=7d&group=" + group
-				beforeOld[group] = string(trendsBody(t, url, owner.AccessToken))
+				trendsResponseBody(t, url, owner.AccessToken, http.StatusOK)
 				beforeNew[group] = string(trendsBody(t, url, successor.AccessToken))
-				if beforeOld[group] != beforeNew[group] {
-					t.Fatalf("%s restriction depends on ownership", group)
-				}
 			}
 			if _, err = store.PatchThread(ctx, owner.ActorID, privateThread, map[string]any{"pm_actor_id": successor.ActorID}, nil); err != nil {
 				t.Fatal(err)
@@ -287,9 +354,7 @@ func TestWatchTrendsHTTPTransfersTakeEffectWithinWindow(t *testing.T) {
 				if got := string(trendsBody(t, url, owner.AccessToken)); got != beforeNew[group] {
 					t.Fatalf("%s former owner retained data\nbefore %s\nafter %s", group, beforeNew[group], got)
 				}
-				if got := string(trendsBody(t, url, successor.AccessToken)); got != beforeOld[group] {
-					t.Fatalf("%s successor did not receive data\nbefore %s\nafter %s", group, beforeOld[group], got)
-				}
+				trendsResponseBody(t, url, successor.AccessToken, http.StatusOK)
 			}
 		})
 	}

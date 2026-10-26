@@ -2369,26 +2369,39 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 
 ## Watch trends
 
-`GET /watch/trends` returns a fixed `403 restricted_trends` to HTTP callers.
-There is no unrestricted HTTP resource capability today. The handler validates
-`group` and `range`, then rejects before aggregate queries, contributor reads,
-authorization epochs/roots or cached results. This choice depends only on the
-capability boundary, never on whether a workspace happens to contain hidden
-records. Authentication remains part of the ordinary request budget.
+`GET /watch/trends` serves unscoped aggregates only when the current viewer's
+effective access scope denies zero workspace resources. Every other viewer gets
+fixed `403 restricted_trends` with `Cache-Control: no-store`. No response or
+permission cache is used. A read-only SQLite snapshot covers both the fresh
+admission probe and calculation; the next request observes transfers and grants.
+Missing HTTP scope and unprovable visibility callbacks fail closed. Auth-admin
+is not an access grant; eligibility follows the canonical scope policy.
 
-The exported Store read also rejects any access scope or visibility callback
-before database work. Trusted internal callers with no scope may calculate the
-aggregate. Auth-admin, selected PM and resource ownership do not grant this
-unrestricted capability. The UI explains unavailability without a retry loop.
+The admission probe uses the primary key `(unconditional,owner)` of
+`resource_access_admission_root_owners`: at most three indexed EXISTS seeks,
+for unconditional denial and conditional owners below/above the viewer. These
+synchronous canonical root counters cover private backing threads, inherited
+references, retained tombstones and unknown artifacts. Zero denied roots implies
+zero denied descendants without enumerating roots or rebuilding their closure.
+An unavailable admission ledger fails closed. No auth epoch enters a cache key.
 
-Why the restriction is required: partitioned candidates alone cannot make the
-canonical brief projection viewer-specific. An invisible answer can resolve a
-public ask, and an invisible later promise note can replace a visible promise.
-Parent/board eligibility probes can also walk a large denied set after candidate
-admission. Serving scoped results needs a contributor-aware per-scope projection;
-filtering a canonical projection at read time is insufficient. Ownership transfers
-therefore do not enable Trends. Earlier claims of enabled per-reader trends and
-same-window aggregate grants are superseded.
+The eligibility status intentionally discloses an empty-versus-nonempty denial
+set. Existing `GET /boards/{ref}` returns different 404 messages for a guessed
+hidden board and a missing board; legacy series with unknown provenance also
+suppress streams/freshness whenever any denial exists. This is **not** a claim
+that ordinary lists disclose hidden totals: board/thread/work/doc/event/series
+lists remain identical when the first private board is added. Trends broadens
+the existing existence signal by requiring neither a guessed ref nor legacy data.
+The coordinator explicitly required this residual assessment before enabling it.
+
+No scoped aggregate is served: canonical promise/ask projections can incorporate
+invisible contributors. Once admission proves full visibility, every contributor
+is readable in that snapshot. The unscoped calculation uses one capped seek per
+family across all partitions. Role eligibility uses one indexed existence seek
+and a board primary-key lookup per candidate, without listing role boards.
+Promise panels conservatively omit any child with an incoming plan reference,
+including closed parents: two indexed one-row probes replace an unbounded walk
+of ineligible historical parents. This can undercount top-level promises.
 
 Migration 125 retains identity/time positions. Partitions now use the canonical
 inherited-owner index (exact/compact ledgers conservatively unioned), covering
@@ -2405,18 +2418,22 @@ admits a capped history of asks before resolving their visible responses; a capp
 history reports unknown backlog. Event timestamp updates atomically synchronize
 position keys. Fixture timestamps use their intended fixed clock, without a
 six-hour read offset. These mechanical repairs are not proof that the private
-calculation is safe to expose to scoped callers; the public guard is mandatory.
+calculation is safe to expose to scoped callers; the full-visibility admission guard is mandatory.
 
 `TestPerformanceWatchTrendsBudget` measures real authenticated HTTP requests,
 including authentication, after adding 2,000+ positions per trend family for
 16 isolated hiding-mechanism cases: board, PM thread, subject, blocks, other payload refs,
 refs_json, prose, metadata, evidence, card refs/prose, unknown artifact contents,
 retained tombstones, conflicting owners, parent threads and revision artifacts.
-Responses must remain byte-identical; queries stay <=100, rows <=1,024, VM steps
+Denied responses must remain byte-identical while a denial remains. The same
+over-cap blocks corpus is then granted full visibility and all three enabled
+HTTP calculations are measured, including authentication and the fresh probe.
+For both statuses, queries stay <=100, rows <=1,024, VM steps
 <50,000, with no business-table full scans. No budget or plan exception is widened.
 Focused HTTP tests compare complete responses across hidden writes and both
-sides of board/PM-thread ownership transfers. Scoped callers remain unavailable
-throughout; these tests do not claim that a new owner receives aggregate data.
+sides of board/PM-thread ownership transfers. The former owner immediately receives 403 and the successor receives 200 when
+the transfer also removes their last denial. Adding the first hidden resource
+returns 403 on the next request; removing its privacy restores 200.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v -parallel=2 -timeout=60m

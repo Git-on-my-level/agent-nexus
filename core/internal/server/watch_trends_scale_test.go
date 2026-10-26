@@ -29,6 +29,13 @@ func seedWatchTrendsInheritedScale(t *testing.T, db *sql.DB, board, privateBoard
 	stamp := time.Now().UTC().Format(time.RFC3339Nano)
 	exec(`INSERT INTO artifacts(id,kind,created_at,created_by,content_type,content_hash,content_refs_json) VALUES('scale-unknown','text',?,'owner','text/plain','unknown',NULL)`, stamp)
 	exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('scale-other-owner',?,'owner','{"pm_actor_id":"other-owner"}')`, stamp)
+	if len(mechanisms) == 1 && mechanisms[0] == "blocks" {
+		// Admission must also stay bounded when the owner index itself is large,
+		// rather than only when many records share the same private root.
+		exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000)
+		 INSERT INTO threads(id,updated_at,updated_by,body_json)
+		 SELECT 'trends-owner-root-'||i,?,'owner',json_object('pm_actor_id','denied-owner-'||i) FROM n`, stamp)
+	}
 	exec(`INSERT INTO resource_access_tombstones(kind,id,ref,owner) VALUES('card','scale-retained','card:scale-retained','owner')`)
 	exec(`INSERT INTO artifacts(id,kind,thread_id,created_at,created_by,content_type,content_hash,content_refs_json) SELECT 'scale-private-artifact','text',thread_id,?,'owner','text/plain','private','[]' FROM boards WHERE id=?`, stamp, privateBoard)
 	for _, mechanism := range mechanisms {

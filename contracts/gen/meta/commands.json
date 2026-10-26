@@ -15099,7 +15099,7 @@
       "path": "/watch/trends",
       "operation_id": "getWatchTrends",
       "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
-      "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Access-scoped HTTP readers receive a fixed 403 restricted_trends response. The canonical projections are not viewer-specific: hidden contributors can change visible derived state. No unrestricted HTTP capability currently exists; aggregates remain available only to trusted internal callers without an access scope. Ownership transfers do not enable this endpoint.",
+      "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Readers whose current access scope denies no workspace resource receive unscoped aggregates. Every other reader receives a fixed 403 restricted_trends response. Eligibility is checked fresh in the aggregate's read snapshot; there is no response or permission cache and no special role. Transfers, grants and revocations apply on the next request. The 200-versus-403 outcome reveals whether any inaccessible resource exists, without identifying it.",
       "why": "See trends over time that the current-state views cannot show.",
       "input_mode": "none",
       "streaming": {
@@ -15120,7 +15120,7 @@
       ],
       "stability": "beta",
       "surface": "projection",
-      "agent_notes": "Restricted viewers are rejected before aggregate reads, independent of workspace contents, owner counts, auth epochs or caches. This preserves byte invariance and constant read cost across every inherited privacy mechanism. Unrestricted internal reads use capped indexed positions. A per-scope projection is required before enabling restricted-viewer trends.",
+      "agent_notes": "Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed positions across all partitions. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.",
       "go_method": "WatchTrends",
       "ts_method": "watchTrends"
     },

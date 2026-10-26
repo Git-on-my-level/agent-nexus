@@ -190,30 +190,56 @@ func TestWatchTrendsHiddenPromiseDoesNotReplaceVisiblePromise(t *testing.T) {
 	read()
 }
 
-// Eligibility is a capability boundary, not a query about workspace privacy.
-// Any access scope, including an auth-admin or the selected PM, is restricted.
-func TestWatchTrendsRejectsEveryScopedCapability(t *testing.T) {
+// Resource visibility, rather than an auth-admin role or cached scope, admits
+// the full calculation. Callbacks still cannot establish workspace-wide access.
+func TestWatchTrendsRequiresEmptyDenialSet(t *testing.T) {
 	t.Parallel()
 	f := newTrendsFixture(t)
-	// An empty store has no database; denying here proves the guard does no reads.
 	denied := &Store{}
-	for _, scope := range []AccessScope{{}, {ActorID: "owner"}, {ActorID: "owner", AuthAdmin: true}, {ActorID: "pm", PMActorID: "pm"}} {
+	if _, err := denied.WatchTrends(f.ctx, BriefReader{Visible: func(string, string) bool { return true }}, "decisions", 30, f.now); err != ErrForbidden {
+		t.Fatal("visibility callback bypassed restriction", err)
+	}
+	f.ask(f.card("Other owner's work", "another-owner", nil), "agent-1", time.Hour, 0)
+	for _, scope := range []AccessScope{{}, {ActorID: "owner"}, {ActorID: "owner", AuthAdmin: true}} {
 		for _, group := range WatchTrendGroups {
-			if out, err := denied.WatchTrends(WithAccessScope(f.ctx, scope), BriefReader{}, group, 30, f.now); err != ErrForbidden || out != nil {
+			if out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, scope), BriefReader{}, group, 30, f.now); err != ErrForbidden || out != nil {
 				t.Fatalf("scope %+v %s: out=%v err=%v", scope, group, out, err)
 			}
 		}
 	}
-	if _, err := denied.WatchTrends(f.ctx, BriefReader{Visible: func(string, string) bool { return true }}, "decisions", 30, f.now); err != ErrForbidden {
-		t.Fatal("visibility callback bypassed restriction", err)
+	for _, ctx := range []context.Context{context.Background(), WithRequestAccessScope(f.ctx, AccessScope{ActorID: "another-owner"})} {
+		out, err := f.store.WatchTrends(ctx, BriefReader{}, "decisions", 30, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := trendValue(t, out["panels"].([]map[string]any)[0], "raised"); got != 1 {
+			t.Fatalf("full read omitted owned work: %v", got)
+		}
 	}
-	// An unrestricted internal read remains usable and includes every owner.
-	f.ask(f.card("Other owner's work", "another-owner", nil), "agent-1", time.Hour, 0)
-	out, err := f.store.WatchTrends(context.Background(), BriefReader{}, "decisions", 30, f.now)
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	child := f.card("Child promise", "", nil)
+	parent := f.card("Closed parent", "", nil)
+	f.group("owner", "initiatives", 30)
+	f.exec(`UPDATE cards SET column_key='done' WHERE id=?`, parent["id"])
+	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Hour)), child["id"])
+	f.exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, parent["id"], fmt.Sprintf(`{"steps":[{"id":"child","title":"Child","ref":%q}]}`, child["ref"]), loopTS(f.now))
+	read := func(want float64) {
+		t.Helper()
+		out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{}, "initiatives", 30, f.now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, panel := range out["panels"].([]map[string]any) {
+			if panel["id"] == "promises" && trendValue(t, panel, "due") != want {
+				t.Fatalf("linked-child promise: %v want=%v", panel, want)
+			}
+		}
 	}
-	if got := trendValue(t, out["panels"].([]map[string]any)[0], "raised"); got != 1 {
-		t.Fatalf("unrestricted read omitted another owner: %v", got)
-	}
+	read(0)
+	f.exec(`DELETE FROM card_plans WHERE card_id=?`, parent["id"])
+	read(1)
 }

@@ -3410,7 +3410,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `inbox`, `cards`
 - Error codes: `auth_required`, `invalid_token`, `invalid_request`, `restricted_trends`, `unavailable`
 - Output: Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.
-- Agent notes: Restricted viewers are rejected before aggregate reads, independent of workspace contents, owner counts, auth epochs or caches. This preserves byte invariance and constant read cost across every inherited privacy mechanism. Unrestricted internal reads use capped indexed positions. A per-scope projection is required before enabling restricted-viewer trends.
+- Agent notes: Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed positions across all partitions. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.
 
 ## `work.capabilities`
 

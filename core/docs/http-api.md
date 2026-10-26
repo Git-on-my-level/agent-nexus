@@ -395,13 +395,22 @@ one group of `watch_trends.v1`: `{schema,group,generated_at,range_days,bucket,
 buckets,panels}`. It reads the previous and current period (daily buckets for
 7d and 30d, 13 weekly buckets for 90d) from stored asks, cards, promises and
 run receipts; core runs no models and fetches nothing. Each record family is
-one indexed newest-first seek with a fixed cap, filtered by the caller's access
-before counting, so a hidden record never changes a number, and caps count only records the caller can see: the response is identical whether or not hidden records exist. A panel that hits a
+one indexed newest-first seek with a fixed cap. A fresh indexed access check in
+the same read snapshot admits the calculation only when the viewer's effective
+scope denies zero workspace resources. No role grants eligibility and nothing is
+cached; transfers/grants/revocations apply on the next request. Otherwise the
+route returns fixed `403 restricted_trends`. The 200/403 status reveals whether
+any inaccessible resource exists (without identifying it). This residual is
+explicit: board lookup error wording and legacy uncertain-series suppression
+already expose existence in narrower circumstances; Trends needs no guessed ref.
+Linked children are conservatively omitted from promise panels even after their
+parents close, bounding parent discovery at the cost of possible undercounting.
+A panel that hits a
 cap is `truncated` and its buckets older than the oldest admitted record are
 null, never zero. Answers are counted when they were given, including answers
-to asks raised before the window. Each response describes the end of a 60-second clock window and is cached per
-caller scope, group, range and window, never by the workspace authorization
-epoch, so writes the caller cannot see cannot change any byte of it. The three groups are separate requests so each
+to asks raised before the window. Each response uses a fresh read clock and is never cached. Restricted responses
+remain byte-identical across hidden writes while a denial remains; the first
+hidden resource changes the status from 200 to 403. The three groups are separate requests so each
 stays within the ordinary per-request read budget.
 
 `GET /overview/changes` returns `{since,generated_at,items,truncated}` for the
