@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -155,6 +156,16 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	hiddenThread, hiddenRef := anyString(hidden["thread_id"]), anyString(hidden["ref"])
+	// Records on a public thread about the private card are private by
+	// reference: 4,000 asks (2,000 answered, 2,000 open) and 2,000 runs.
+	refHost, err := s.CreateWork(ctx, "owner", anyString(board["id"]), map[string]any{"title": "Public host"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refThread := anyString(refHost["thread_id"])
+	const refN = `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<4000) `
+	// Milliseconds apart, so all of them are newer than every visible record.
+	const refTS = `strftime('%Y-%m-%dT%H:%M:%fZ','now','-'||(i/1000.0)||' seconds')`
 	const hiddenN = `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000) `
 	const hiddenTS = `strftime('%Y-%m-%dT%H:%M:%fZ','now','-'||i||' seconds')`
 	for _, q := range []struct {
@@ -166,6 +177,10 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('hidden-answer-%05d',i),'human_attention_responded',` + hiddenTS + `,'owner',?,json_array('thread:'||?),'{"payload":{"outcome":"answered"}}' FROM n WHERE i<1000`, []any{hiddenThread, hiddenThread}},
 		{hiddenN + `INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) SELECT printf('hidden-ask-%05d',i),printf('hidden-answer-%05d',i),'answered','owner',` + hiddenTS + ` FROM n WHERE i<1000`, nil},
 		{hiddenN + `INSERT INTO cards(id,board_id,title,summary,column_key,created_at,created_by,updated_at,updated_by) SELECT printf('hidden-card-%05d',i),?,'Hidden','',CASE WHEN i%2=0 THEN 'done' ELSE 'todo' END,` + hiddenTS + `,'owner',` + hiddenTS + `,'owner' FROM n`, []any{anyString(private["id"])}},
+		{refN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('ref-ask-%05d',i),'human_attention_requested',` + refTS + `,'agent-hidden',?,json_array('thread:'||?),json_object('payload',json_object('kind','ask','title','About a secret','requester_actor_id','agent-hidden','subject_ref',?,'response_proposals',json_array('Proceed'))) FROM n`, []any{refThread, refThread, hiddenRef}},
+		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('ref-answer-%05d',i),'human_attention_responded',` + refTS + `,'owner',?,json_array('thread:'||?),'{"payload":{"outcome":"answered"}}' FROM n`, []any{refThread, refThread}},
+		{hiddenN + `INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) SELECT printf('ref-ask-%05d',i),printf('ref-answer-%05d',i),'answered','owner',` + refTS + ` FROM n`, nil},
+		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('ref-run-%05d',i),'run_recorded',` + refTS + `,'agent-hidden',?,json_array('thread:'||?),json_object('subject_ref',?,'payload',json_object('run_id','ref-'||i,'outcome','acted')) FROM n`, []any{refThread, refThread, hiddenRef}},
 	} {
 		if _, err = db.Exec(q.sql, q.args...); err != nil {
 			t.Fatal(err)
@@ -225,6 +240,82 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 			if queries > 100 || returned > 1024 || work.VMSteps > 50000 {
 				t.Errorf("trends exceeded the ordinary read budget: queries=%d rows=%d vm=%d", queries, returned, work.VMSteps)
 			}
+		}
+	}
+}
+
+// trendsBody reads one trends response's raw bytes.
+func trendsBody(t *testing.T, url, bearer string) []byte {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s %v", resp.StatusCode, raw, err)
+	}
+	return raw
+}
+
+// A write the reader cannot see moves the workspace authorization epoch. If
+// the response cache were keyed on that epoch, the next read inside the window
+// would be recomputed with a new generated_at and the reader would learn that
+// a hidden write happened. Every byte must be the same either way.
+func TestWatchTrendsCacheIgnoresHiddenWrites(t *testing.T) {
+	requireIntegrationTest(t)
+	// Stay inside one response window for the whole test.
+	if left := watchTrendsTTL - time.Since(watchTrendsWindow(time.Now())); left < 20*time.Second {
+		time.Sleep(left + time.Second)
+	}
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	db := env.workspace.DB()
+	store := env.primitiveStore.(*primitives.Store)
+	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "cache-owner", "cache-owner-actor", "cache-owner", "cache-owner-token")
+	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "cache-stranger", "cache-stranger-actor", "cache-stranger", "cache-stranger-token")
+	public, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, err := store.CreateWork(ctx, owner.ActorID, anyString(public["id"]), map[string]any{"title": "Visible"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := anyString(work["thread_id"])
+	if _, err = store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "Visible", "refs": []string{"thread:" + thread},
+		"payload": map[string]any{"kind": "ask", "title": "Visible", "requester_actor_id": "agent-1", "subject_ref": anyString(work["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range primitives.WatchTrendGroups {
+		url := env.server.URL + "/watch/trends?range=7d&group=" + group
+		before := trendsBody(t, url, stranger.AccessToken)
+		// A recomputation now would carry a later generated_at.
+		time.Sleep(1100 * time.Millisecond)
+		private, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Private " + group})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.PatchThread(ctx, owner.ActorID, anyString(private["thread_id"]), map[string]any{"pm_actor_id": owner.ActorID}, nil); err != nil {
+			t.Fatal(err)
+		}
+		hidden, err := store.CreateWork(ctx, owner.ActorID, anyString(private["id"]), map[string]any{"title": "Hidden", "cadence": map[string]any{"every_seconds": 3600}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hiddenThread := anyString(hidden["thread_id"])
+		if _, err = store.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": hiddenThread, "summary": "Hidden", "refs": []string{"thread:" + hiddenThread},
+			"payload": map[string]any{"kind": "ask", "title": "Hidden", "requester_actor_id": "agent-1", "subject_ref": anyString(hidden["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
+			t.Fatal(err)
+		}
+		if after := trendsBody(t, url, stranger.AccessToken); string(after) != string(before) {
+			t.Fatalf("%s changed after a hidden write:\nbefore %s\nafter  %s", group, before, after)
 		}
 	}
 }

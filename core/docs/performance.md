@@ -2372,12 +2372,17 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 `GET /watch/trends` is three requests, one per group, so no single read admits
 every record family. Migration 125 adds `watch_trend_positions(kind, id,
 scope, at_key)` with `idx_watch_trend_positions(kind, scope, at_key, id)`.
-`scope` is the record's private owner: the PM owner of its backing thread, or
-of its card's board thread, else `''`. Triggers keep it current on event,
-ask, card and brief-initiative writes, and re-key a thread's contents (and a
-board thread's cards and their events) when its PM owner changes; that rare
-re-key is bounded by the container's size. Only identity, kind, scope and a
-time key are stored.
+`scope` is the record's private owner, inherited from its backing thread, its
+card's board thread, the card it is about (`subject_ref`) or, for an answer,
+the ask it resolves; `''` when none is private. Triggers keep it current on
+event, ask, resolution, card and brief-initiative writes, and re-key when
+privacy changes: a thread's PM owner change re-keys the cards it backs or
+whose board it is, events on those cards' threads, events about those cards
+and answers to those asks; a card moved between boards re-keys the same for
+that card. The re-key is rare and bounded by the container's size. Only
+identity, kind, scope and a time key are stored. Privacy inherited through
+other references (blocks, prose mentions, evidence) is still enforced by the
+scoped relation; such a record keeps a visible scope and costs one check.
 
 A reader admits each family with one seek per scope it belongs to (`''` and
 its own actor), newest or soonest first, with the canonical scoped relation
@@ -2398,16 +2403,26 @@ admitted visible rows.
 
 `TestPerformanceWatchTrendsBudget` fills every cap (240 asks, 80 answers, 240
 runs, 4,096 unrelated cards, every initiative promised) and adds, newest of
-all, 2,000 private runs, asks and cards plus 1,000 private answers. It measures
-the 90-day read for the owner and an unrelated reader against the ordinary
-budget and fails on any unindexed scan of events, cards, asks, initiatives,
-threads or positions. Local acceptance: owner 6-10 queries / 350-427 rows /
-11,206-24,665 VM steps (the owner's own scope holds the 2,000 private records,
-so its windows fill); unrelated reader decisions 33,801, initiatives 43,536,
-loops 23,573 VM steps. `TestWatchTrendsResponseIsInvariantToHiddenRecords`
-compares the restricted reader's JSON byte for byte, for every group and
-range, before and after adding hidden records newer and older than the
-visible ones in every family.
+all, 2,000 private runs, asks and cards plus 1,000 private answers on a private
+board, and on a public thread about a private card 4,000 asks (2,000 answered,
+2,000 open) and 2,000 runs. It measures the 90-day read for the owner and an
+unrelated reader against the ordinary budget and fails on any unindexed scan
+of events, cards, asks, initiatives, threads or positions. Local acceptance:
+unrelated reader decisions 33,801, initiatives 43,327-43,574 (varies by run), loops 23,573 VM steps.
+Keyed by thread and board only, the reference-private records cost the same
+reader 494,748 (decisions) and 225,573 (loops) VM steps.
+`TestWatchTrendsResponseIsInvariantToHiddenRecords` compares the restricted
+reader's JSON byte for byte, for every group and range, before and after adding
+hidden records; the `TestWatchTrendsRekeys*` tests populate a container while
+private, change its privacy and check restored counts, byte-identical hidden
+responses and that a key forced public cannot leak. Each re-key clause was
+removed in turn and fails at least one of them.
+
+Responses are computed as of the end of a 60-second clock window and cached by
+reader scope, group, range and window. The workspace authorization epoch is
+not in the key: writes a reader cannot see move it, and a recomputation it
+forced would show in `generated_at`. `TestWatchTrendsCacheIgnoresHiddenWrites`
+checks the bytes through HTTP.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v

@@ -1399,7 +1399,7 @@ watch_trends:
     - Caps count only records the reader can see. Each family is admitted per privacy scope (public, and the reader's own private scope) from a derived position index, with the canonical scoped relation applied inside the cap, so every field of the response is identical whether or not records the reader cannot see exist. Records in other owners' private scopes are never examined.
     - A period missing records has no summary: answer time, loop health, rankings and other shares are null or empty rather than computed from the part that was read.
     - Loop health applies the brief's rule (reported within two cadences) at each bucket end; a bucket whose lookback precedes the read is null.
-    - Results are cached per caller, authorization epoch, group and range for up to 60 seconds.
+    - Each response describes the end of a 60-second clock window and is cached per caller scope, group, range and window, never by the workspace authorization epoch, so writes the caller cannot see cannot change any byte of it (generated_at included); a change to the caller's own scope takes effect at once.
 overview_changes:
   route: GET /overview/changes
   max_items: 100

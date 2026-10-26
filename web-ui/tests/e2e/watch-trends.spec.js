@@ -300,6 +300,10 @@ test("the period toggle reads again for the chosen range", async ({
   const seen = await setup(context);
   await page.goto(`${WATCH}?tab=trends`);
   await expect(page.locator('[data-trend="asks_flow"]')).toBeVisible();
+  // The accessible name includes the visible label (WCAG 2.5.3).
+  await expect(
+    page.getByRole("button", { name: /^7d — last 7 days$/ }),
+  ).toBeVisible();
   await page.locator('[data-watch-trend-days="7"]').click();
   await expect(page).toHaveURL(/range=7d/);
   await expect(page.locator('[data-watch-trend-days="7"]')).toHaveAttribute(

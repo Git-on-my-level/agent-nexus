@@ -666,7 +666,7 @@
           ? 'bg-panel-hover text-fg shadow-sm'
           : 'text-fg-muted hover:text-fg'}"
         aria-pressed={trendDays === days}
-        aria-label="Last {days} days"
+        aria-label="{days}d — last {days} days"
         data-watch-trend-days={days}
         onclick={() => navigate({ range: days === 30 ? "" : `${days}d` })}
         >{days}d</button

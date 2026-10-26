@@ -135,6 +135,20 @@ describe("trendTakeaway", () => {
       ).not.toMatch(/Infinity|NaN/);
   });
 
+  it("never calls a truncated, empty ranking no activity", () => {
+    for (const id of ["ask_sources", "agent_runs"]) {
+      const said = trendTakeaway(
+        panel({ id, value: null, previous: null, truncated: true, rows: [] }),
+        30,
+      );
+      expect(said).not.toMatch(/^No /);
+      expect(said).toMatch(/Busy period/);
+    }
+    expect(
+      trendTakeaway(panel({ id: "ask_sources", value: null, rows: [] }), 30),
+    ).toBe("No asks raised in this period.");
+  });
+
   it("admits a capped read instead of guessing", () => {
     expect(
       trendTakeaway(

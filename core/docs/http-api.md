@@ -399,8 +399,9 @@ one indexed newest-first seek with a fixed cap, filtered by the caller's access
 before counting, so a hidden record never changes a number, and caps count only records the caller can see: the response is identical whether or not hidden records exist. A panel that hits a
 cap is `truncated` and its buckets older than the oldest admitted record are
 null, never zero. Answers are counted when they were given, including answers
-to asks raised before the window. Results are cached per caller, authorization epoch, group and
-range for up to 60 seconds. The three groups are separate requests so each
+to asks raised before the window. Each response describes the end of a 60-second clock window and is cached per
+caller scope, group, range and window, never by the workspace authorization
+epoch, so writes the caller cannot see cannot change any byte of it. The three groups are separate requests so each
 stays within the ordinary per-request read budget.
 
 `GET /overview/changes` returns `{since,generated_at,items,truncated}` for the

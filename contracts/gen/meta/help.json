@@ -15664,7 +15664,7 @@
       ],
       "stability": "beta",
       "surface": "projection",
-      "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.",
+      "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting; caps count only records the caller can see. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Each response describes the end of a 60-second clock window and is cached per caller scope, group, range and window, never by the workspace authorization epoch, so writes the caller cannot see cannot change any byte of it (generated_at included); a change to the caller's own scope takes effect at once.",
       "go_method": "WatchTrends",
       "ts_method": "watchTrends"
     },

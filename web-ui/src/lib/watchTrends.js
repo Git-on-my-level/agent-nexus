@@ -117,6 +117,10 @@ export function trendTakeaway(panel, days) {
 
   if (id === "ask_sources" || id === "agent_runs") {
     const top = rows[0];
+    // Core leaves a ranking empty when the period was not read in full; that
+    // is not the same as no activity.
+    if (!top && truncated)
+      return "Busy period: not every record was read, so there is no ranking.";
     if (!top)
       return id === "ask_sources"
         ? "No asks raised in this period."

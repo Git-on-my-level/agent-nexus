@@ -11,10 +11,22 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
-// watchTrendsTTL bounds how stale a trend may be. Trends move over days; a
-// permission change still invalidates at once, because the key carries the
-// authorization epoch and the reader's scope.
+// watchTrendsTTL is the response window. Every request inside one window is
+// computed as of the window's end and cached by it, so generated_at and the
+// bucket boundaries cannot move inside a window. The key carries the reader's
+// own scope (actor, PM actor, admin), so a change to its own permissions takes
+// effect at once, but never the workspace-wide authorization epoch: that epoch
+// moves on writes the reader cannot see, and a recomputation it forced would
+// tell the reader those writes happened. Visible changes appear within one
+// window. Trends move over days.
 const watchTrendsTTL = time.Minute
+
+// watchTrendsWindow is the start of the response window containing now.
+func watchTrendsWindow(now time.Time) time.Time { return now.UTC().Truncate(watchTrendsTTL) }
+
+// watchTrendsAsOf is the instant a window's response describes: its end, so a
+// record written earlier in the window is counted.
+func watchTrendsAsOf(now time.Time) time.Time { return watchTrendsWindow(now).Add(watchTrendsTTL) }
 
 type watchTrendsStore interface {
 	WatchTrends(ctx context.Context, reader primitives.BriefReader, group string, days int, now time.Time) (map[string]any, error)
@@ -63,12 +75,12 @@ func handleGetWatchTrends(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		defer closeRead()
 		ctx = readCtx
-		if token, err := canonical.ReportRenderToken(ctx); err == nil && token != "" {
-			raw, _ := json.Marshal([]any{"watch-trends", token, reader.ActorID, group, days})
-			key = string(raw)
-		}
 	}
-	now := time.Now().UTC()
+	now := watchTrendsAsOf(time.Now())
+	if scope, ok := primitives.StreamReaderScope(ctx); ok {
+		raw, _ := json.Marshal([]any{"watch-trends", scope, reader.ActorID, group, days, now.Unix()})
+		key = string(raw)
+	}
 	if key != "" {
 		if cached := opts.watchTrends.get(key, now); cached != nil {
 			w.Header().Set("Cache-Control", "no-store")

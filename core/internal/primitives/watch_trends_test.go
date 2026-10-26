@@ -580,3 +580,285 @@ func TestWatchTrendsRankingsNeedACompleteCurrentPeriod(t *testing.T) {
 		}
 	}
 }
+
+// --- re-keying: a container populated while private, then changed ---
+
+type trendCounts struct{ raised, answered, runs, started, done, due float64 }
+
+func (f *trendsFixture) counts(actor string) trendCounts {
+	f.t.Helper()
+	return f.countsFrom(f.trends(actor, 30))
+}
+
+// countsUnfolded reads without folding pending brief changes first, as a
+// reader does between a write and the next fold.
+func (f *trendsFixture) countsUnfolded(actor string) trendCounts {
+	f.t.Helper()
+	p := map[string]map[string]any{}
+	for _, group := range WatchTrendGroups {
+		out, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: actor}), BriefReader{ActorID: actor, Kind: "human"}, group, 30, f.now)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		for _, panel := range out["panels"].([]map[string]any) {
+			p[panel["id"].(string)] = panel
+		}
+	}
+	return f.countsFrom(p)
+}
+
+func (f *trendsFixture) countsFrom(p map[string]map[string]any) trendCounts {
+	f.t.Helper()
+	v := func(id, field string) float64 { return trendValue(f.t, p[id], field) }
+	return trendCounts{v("asks_flow", "raised"), v("asks_flow", "value"), v("loop_runs", "value"), v("work_flow", "started"), v("work_flow", "value"), v("promises", "due")}
+}
+
+// strangerBytes is every group's JSON for the stranger.
+func (f *trendsFixture) strangerBytes() string {
+	f.t.Helper()
+	f.trends("stranger", 30) // settle derived state
+	out := ""
+	for _, group := range WatchTrendGroups {
+		body, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, 30, f.now)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		raw, _ := json.Marshal(body)
+		out += string(raw)
+	}
+	return out
+}
+
+func (f *trendsFixture) setOwner(thread, owner string) {
+	f.t.Helper()
+	if _, err := f.store.PatchThread(f.ctx, "owner", thread, map[string]any{"pm_actor_id": owner}, nil); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// populate fills a container with one record of every family a re-key
+// touches: the cards (created; the first done when there are two), a missed
+// promise on the last, an ask and a run on a card's thread, and an ask on a
+// public thread about a card, answered there. The answer's privacy comes only
+// from its ask.
+func (f *trendsFixture) populate(cards []map[string]any, host map[string]any) {
+	f.t.Helper()
+	first, last := cards[0], cards[len(cards)-1]
+	if _, err := f.store.AppendEvent(f.ctx, "owner", map[string]any{"type": "message_posted", "thread_id": last["thread_id"], "summary": "Plan", "refs": []string{"thread:" + anyStringValue(last["thread_id"])},
+		"payload": map[string]any{"body": "Plan", "next": map[string]any{"at": loopTS(f.now.Add(-2 * 24 * time.Hour)), "what": "Ship"}}}); err != nil {
+		f.t.Fatal(err)
+	}
+	thread := anyStringValue(first["thread_id"])
+	if _, err := f.store.AppendEvent(f.ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "In container", "refs": []string{"thread:" + thread},
+		"payload": map[string]any{"kind": "ask", "title": "In container", "requester_actor_id": "agent-1", "subject_ref": anyStringValue(first["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
+		f.t.Fatal(err)
+	}
+	// On a container card's thread but about the public host: private only
+	// through its thread.
+	if _, err := f.store.AppendEvent(f.ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "About the host", "refs": []string{"thread:" + thread},
+		"payload": map[string]any{"kind": "ask", "title": "About the host", "requester_actor_id": "agent-1", "subject_ref": anyStringValue(host["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
+		f.t.Fatal(err)
+	}
+	f.run(last, time.Hour, "acted")
+	hostThread := anyStringValue(host["thread_id"])
+	about, err := f.store.AppendEvent(f.ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": hostThread, "summary": "About it", "refs": []string{"thread:" + hostThread},
+		"payload": map[string]any{"kind": "ask", "title": "About it", "requester_actor_id": "agent-1", "subject_ref": anyStringValue(first["ref"]), "response_proposals": []any{"Proceed"}}})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	id := anyStringValue(about["id"])
+	if _, _, err := f.store.AppendHumanAttentionResponse(f.ctx, "human", id, "inbox:"+id, "", "", map[string]any{
+		"type": "human_attention_responded", "thread_id": hostThread, "refs": []string{"event:" + id},
+		"payload": map[string]any{"outcome": "answered", "response_text": "Proceed", "request_event_ref": "event:" + id},
+	}, map[string]any{"requested": true, "target_actor_id": "agent-1", "thread_id": hostThread}); err != nil {
+		f.t.Fatal(err)
+	}
+	if len(cards) > 1 {
+		f.exec(`UPDATE cards SET column_key='done' WHERE id=?`, anyStringValue(first["id"]))
+	}
+}
+
+// assertVisibleDelta checks that once a container is visible to actor, every
+// family's count returns.
+func (f *trendsFixture) assertVisibleDelta(actor string, base trendCounts, want trendCounts) {
+	f.t.Helper()
+	f.assertDelta(actor, f.counts(actor), base, want)
+}
+
+func (f *trendsFixture) assertDelta(actor string, got, base, want trendCounts) {
+	f.t.Helper()
+	delta := trendCounts{got.raised - base.raised, got.answered - base.answered, got.runs - base.runs, got.started - base.started, got.done - base.done, got.due - base.due}
+	if delta != want {
+		f.t.Fatalf("%s after the container became visible: delta %+v, want %+v", actor, delta, want)
+	}
+}
+
+func (f *trendsFixture) assertStaleKeysCannotLeak(baseline string, ids func() []string) {
+	f.t.Helper()
+	for _, id := range ids() {
+		f.exec(`UPDATE watch_trend_positions SET scope='' WHERE id=?`, id)
+	}
+	if got := f.strangerBytes(); got != baseline {
+		f.t.Fatal("a record keyed public but hidden changed the stranger's response")
+	}
+}
+
+func (f *trendsFixture) containerIDs(board string) func() []string {
+	return func() []string {
+		ids := []string{}
+		rows, err := f.store.db.QueryContext(f.ctx, `SELECT id FROM cards WHERE board_id=? UNION SELECT e.id FROM events e JOIN cards c ON c.thread_id=e.thread_id WHERE c.board_id=?
+		 UNION SELECT e.id FROM events e JOIN cards c ON json_extract(e.payload_json,'$.payload.subject_ref')='card:'||c.id WHERE c.board_id=?
+		 UNION SELECT r.resolution_event_id FROM human_attention_request_resolutions r JOIN events e ON e.id=r.request_event_id JOIN cards c ON json_extract(e.payload_json,'$.payload.subject_ref')='card:'||c.id WHERE c.board_id=?`, board, board, board, board)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			_ = rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		return ids
+	}
+}
+
+var trendContainerDelta = trendCounts{raised: 3, answered: 1, runs: 1, started: 2, done: 1, due: 1}
+
+func TestWatchTrendsRekeysBoardPrivacyChanges(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	host := f.card("Public host", "", nil)
+	f.ask(host, "agent-2", 3*24*time.Hour, time.Hour)
+	baseline, base := f.strangerBytes(), f.counts("stranger")
+	board, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Container", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := anyStringValue(board["thread_id"])
+	f.setOwner(thread, "owner")
+	cards := []map[string]any{}
+	for _, title := range []string{"One", "Two"} {
+		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cards = append(cards, w)
+	}
+	f.populate(cards, host)
+	if f.strangerBytes() != baseline {
+		t.Fatal("a private board's records changed the stranger's response")
+	}
+	f.setOwner(thread, "") // private -> public
+	f.assertVisibleDelta("stranger", base, trendContainerDelta)
+	f.setOwner(thread, "owner") // public -> private
+	if f.strangerBytes() != baseline {
+		t.Fatal("records of a board made private again changed the stranger's response")
+	}
+	f.assertStaleKeysCannotLeak(baseline, f.containerIDs(anyStringValue(board["id"])))
+}
+
+func TestWatchTrendsRekeysPMThreadPrivacyChanges(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	host := f.card("Public host", "", nil)
+	f.ask(host, "agent-2", 3*24*time.Hour, time.Hour)
+	baseline, base := f.strangerBytes(), f.counts("stranger")
+	card := f.card("PM private", "owner", nil)
+	f.populate([]map[string]any{card}, host)
+	if f.strangerBytes() != baseline {
+		t.Fatal("a PM-private card's records changed the stranger's response")
+	}
+	f.setOwner(anyStringValue(card["thread_id"]), "")
+	f.assertVisibleDelta("stranger", base, trendCounts{raised: 3, answered: 1, runs: 1, started: 1, due: 1})
+	f.setOwner(anyStringValue(card["thread_id"]), "owner")
+	if f.strangerBytes() != baseline {
+		t.Fatal("records of a thread made private again changed the stranger's response")
+	}
+	f.assertStaleKeysCannotLeak(baseline, f.containerIDs(anyStringValue(f.board["id"])))
+}
+
+func TestWatchTrendsRekeysCardsMovedBetweenBoards(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	host := f.card("Public host", "", nil)
+	f.ask(host, "agent-2", 3*24*time.Hour, time.Hour)
+	baseline, base := f.strangerBytes(), f.counts("stranger")
+	private, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Private", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.setOwner(anyStringValue(private["thread_id"]), "owner")
+	card, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Mover"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.populate([]map[string]any{card}, host)
+	if f.strangerBytes() != baseline {
+		t.Fatal("a private card's records changed the stranger's response")
+	}
+	f.exec(`UPDATE cards SET board_id=? WHERE id=?`, anyStringValue(f.board["id"]), anyStringValue(card["id"])) // to a public board
+	// Read before the brief re-folds the moved card: its promise must already
+	// be keyed to its new board.
+	f.assertDelta("stranger", f.countsUnfolded("stranger"), base, trendCounts{raised: 3, answered: 1, runs: 1, started: 1, due: 1})
+	f.exec(`UPDATE cards SET board_id=? WHERE id=?`, anyStringValue(private["id"]), anyStringValue(card["id"])) // and back
+	if f.strangerBytes() != baseline {
+		t.Fatal("records of a card moved back to a private board changed the stranger's response")
+	}
+	f.assertStaleKeysCannotLeak(baseline, f.containerIDs(anyStringValue(private["id"])))
+}
+
+func TestWatchTrendsRekeysOwnerTransfers(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	host := f.card("Public host", "", nil)
+	f.ask(host, "agent-2", 3*24*time.Hour, time.Hour)
+	baseline, newBase := f.strangerBytes(), f.counts("successor")
+	board, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Container", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := anyStringValue(board["thread_id"])
+	f.setOwner(thread, "owner")
+	cards := []map[string]any{}
+	for _, title := range []string{"One", "Two"} {
+		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(board["id"]), map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cards = append(cards, w)
+	}
+	f.populate(cards, host)
+	f.setOwner(thread, "successor")
+	f.assertVisibleDelta("successor", newBase, trendContainerDelta)
+	if f.strangerBytes() != baseline {
+		t.Fatal("a transferred board's records changed the stranger's response")
+	}
+}
+
+// An answer recorded before the resolution that links it to a private ask
+// is re-keyed when the resolution lands.
+func TestWatchTrendsRekeysAnswersWhenResolved(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	host := f.card("Public host", "", nil)
+	private := f.card("Private", "owner", nil)
+	thread := anyStringValue(host["thread_id"])
+	f.rawEvents(host, "ask", "human_attention_requested", 1, time.Hour, func(int) string {
+		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Q","requester_actor_id":"agent-1","subject_ref":%q,"response_proposals":["Proceed"]}}`, anyStringValue(private["ref"]))
+	})
+	f.exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES('answer-0','human_attention_responded',?,'human',?,?,'{"payload":{"outcome":"answered"}}')`, loopTS(f.now.Add(-time.Minute)), thread, `["thread:`+thread+`"]`)
+	scope := func() string {
+		var s string
+		if err := f.store.db.QueryRowContext(f.ctx, `SELECT scope FROM watch_trend_positions WHERE kind='answer' AND id='answer-0'`).Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	if got := scope(); got != "" {
+		t.Fatalf("unlinked answer scope = %q", got)
+	}
+	f.exec(`INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES('ask-0000','answer-0','answered','human',?)`, loopTS(f.now.Add(-time.Minute)))
+	if got := scope(); got != "owner" {
+		t.Fatalf("answer to a private ask keyed %q, want owner", got)
+	}
+}

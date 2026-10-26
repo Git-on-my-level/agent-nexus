@@ -1227,7 +1227,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 decisions: each family seeks idx_watch_trend_positions once per visible privacy scope (public and the reader's own) with the scoped relation inside each LIMIT, so other owners' records are never examined and caps count visible rows only; newest-first idx_events_ask_order seeks over at most 81 raised asks and 61 answer events (primary-key brief_asks/thread joins, unique-key resolution join), one brief_asks state-index seek over at most 71 open asks, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps, not workspace size. Groups are separate requests; each is cached per caller, authorization epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 decisions. Each family seeks idx_watch_trend_positions(kind,scope,at_key) once per privacy scope the reader belongs to (public and its own), with the canonical scoped relation inside each LIMIT, so caps count visible rows only and records keyed to other owners (by thread, board or subject card) are never examined. Per scope: at most 81 raised asks and 61 answers (primary-key event, brief_asks and thread joins; unique-key resolution join) and 71 open asks; one actor batch of at most five ids. Examined rows are fixed by the caps per scope, not workspace size. Responses are computed as of a 60-second clock window and cached per reader scope, group, range and window.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "decisions"
@@ -1240,7 +1240,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 initiatives: each family seeks idx_watch_trend_positions once per visible privacy scope (public and the reader's own) with the scoped relation inside each LIMIT, so other owners' records are never examined and caps count visible rows only; two idx_brief_initiatives_page seeks (at most 56 open and 36 closed promised initiatives, counted before visibility) with primary-key card joins and one lifecycle-index done seek per admitted done card, two grouping-index seeks of at most 21 created cards each, and one idx_cards_closed_work_page seek of at most 41 done cards. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 initiatives. Each family seeks idx_watch_trend_positions(kind,scope,at_key) once per privacy scope the reader belongs to (public and its own), with the canonical scoped relation inside each LIMIT, so caps count visible rows only and records keyed to other owners (by thread, board or subject card) are never examined. Per scope: at most 56 open and 36 closed promised initiatives (primary-key brief_initiatives and card joins; one lifecycle-index done seek per admitted Done card; board role and top-level are flags on admitted visible rows), 41 created and 41 done cards. Examined rows are fixed by the caps per scope, not workspace size. Responses are computed as of a 60-second clock window and cached per reader scope, group, range and window.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "initiatives"
@@ -1253,7 +1253,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 loops: each family seeks idx_watch_trend_positions once per visible privacy scope (public and the reader's own) with the scoped relation inside each LIMIT, so other owners' records are never examined and caps count visible rows only; one newest-first idx_events_ask_order seek over at most 171 run receipts, one idx_brief_loop_annotated_recent seek of at most 26 loops with primary-key card and metadata joins, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 loops. Each family seeks idx_watch_trend_positions(kind,scope,at_key) once per privacy scope the reader belongs to (public and its own), with the canonical scoped relation inside each LIMIT, so caps count visible rows only and records keyed to other owners (by thread, board or subject card) are never examined. Per scope: at most 171 run receipts (primary-key event join) and 26 loops (primary-key card and metadata joins); one actor batch of at most five ids. Examined rows are fixed by the caps per scope, not workspace size. Responses are computed as of a 60-second clock window and cached per reader scope, group, range and window.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "loops"
