@@ -180,6 +180,7 @@ type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
 	reportPanels                   *reportPanelCache
+	watchTrends                    *reportPanelCache // watch_trends.v1 per reader and range, for watchTrendsTTL.
 	readAdmission                  *readAdmission
 	routeObserver                  func(string, routeAccessClassifier)
 	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
@@ -681,6 +682,7 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		reportPanels:                  &reportPanelCache{},
+		watchTrends:                   &reportPanelCache{ttl: watchTrendsTTL},
 		coreVersion:                   strings.TrimSpace(schemaVersion),
 		apiVersion:                    "v0",
 		minCLIVersion:                 buildinfo.MinCompatibleCLI,
@@ -2207,6 +2209,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	}, func(w http.ResponseWriter, r *http.Request) { handleAttentionFeedback(w, r, opts) })
 	registerRoute("/brief", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetBriefV1(w, r, opts) })
+	registerRoute("/watch/trends", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetWatchTrends(w, r, opts) })
 	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
 	registerRoute("/overview/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleOverviewChanges(w, r, opts) })
 	registerRoute("/workspace/dashboard/pins", func(r *http.Request) routeAccessRequirement {

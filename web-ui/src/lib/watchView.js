@@ -1,7 +1,7 @@
 /**
  * Which Watch tab and layout a URL asks for.
  *
- * `?tab=initiatives|loops|dashboard` picks the tab; `?view=` picks the
+ * `?tab=initiatives|loops|trends|dashboard` picks the tab; `?view=` picks the
  * layout inside it. Initiatives lay out as a list or as the swimlane board
  * (`?view=lanes`); Loops as a list or a board of state columns
  * (`?view=board`). Links already sent out still land:
@@ -12,7 +12,12 @@
  * - `/initiatives?view=lanes` redirects here as `?view=lanes`.
  */
 
-export const WATCH_TABS = Object.freeze(["initiatives", "loops", "dashboard"]);
+export const WATCH_TABS = Object.freeze([
+  "initiatives",
+  "loops",
+  "trends",
+  "dashboard",
+]);
 
 /** The non-list layout each tab offers. */
 export const WATCH_BOARD = Object.freeze({

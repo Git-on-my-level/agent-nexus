@@ -5940,6 +5940,58 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /watch/trends:
+    get:
+      operationId: getWatchTrends
+      summary: Read whether the workspace is getting better or worse over 7, 30 or 90 days
+      description: >
+        One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask
+        backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise
+        and work started vs finished. loops: loop runs, loops reporting on time and the most active agents.
+        Each panel compares the current period with the one before it. Watch's Trends tab renders all three.
+      tags: [home]
+      x-anx-surface: projection
+      x-anx-command-id: watch.trends
+      x-anx-agent-notes: >
+        Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models
+        and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered
+        by the caller's access and the PM-private rule before counting. truncated means a cap was reached;
+        buckets older than the oldest admitted record are null, never zero. Groups are separate requests so
+        each stays within the ordinary per-request read budget. Results are cached per caller, authorization
+        epoch, group and range for up to 60 seconds.
+      x-anx-cli-path: watch trends
+      x-anx-why: See trends over time that the current-state views cannot show.
+      x-anx-input-mode: none
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }."
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request, unavailable]
+      x-anx-concepts: [home, inbox, cards]
+      x-anx-stability: beta
+      parameters:
+        - name: group
+          in: query
+          required: true
+          schema: {type: string, enum: [decisions, initiatives, loops]}
+          description: Which panels to compute.
+        - name: range
+          in: query
+          required: false
+          schema: {type: string, enum: [7d, 30d, 90d], default: 30d}
+          description: Period length. 7d and 30d use daily buckets; 90d uses 13 weekly buckets.
+      responses:
+        '200':
+          description: The caller's trends.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchTrends'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
   /attention/placements:
     post:
       operationId: placeAttention
@@ -15807,6 +15859,66 @@ components:
               status: {type: string, enum: [done, active, blocked, not_started]}
               layer: {type: integer}
               after: {type: array, items: {type: string}}
+    WatchTrends:
+      type: object
+      required: [schema, group, generated_at, range_days, bucket, buckets, panels]
+      properties:
+        schema: {type: string, enum: [watch_trends.v1]}
+        group: {type: string, enum: [decisions, initiatives, loops]}
+        generated_at: {type: string, format: date-time}
+        range_days: {type: integer, enum: [7, 30, 90]}
+        bucket: {type: string, enum: [day, week]}
+        buckets:
+          type: array
+          description: Start of each bucket in the current period, oldest first. Every series has one point per bucket.
+          items: {type: string, format: date-time}
+        panels:
+          type: array
+          items: {$ref: '#/components/schemas/WatchTrendPanel'}
+    WatchTrendPanel:
+      type: object
+      required: [id, title, unit, direction, value, previous, truncated, series, rows]
+      additionalProperties: true
+      description: >
+        One trend. value summarizes the current period and previous the period before it (a total for counts,
+        a median for seconds, a share for percent); either is null when unknown. Panel-specific totals
+        (raised, started, failed, due, past, total and their _previous forms) may accompany them. Ranked
+        panels (ask_sources, agent_runs) carry rows and a null value.
+      properties:
+        id: {type: string, description: "asks_flow, answer_time, ask_backlog, ask_sources, promises, past_promise, work_flow, loop_runs, loop_health or agent_runs; clients must tolerate new ids."}
+        title: {type: string}
+        unit: {type: string, enum: [count, seconds, percent]}
+        direction: {type: string, enum: [up_good, down_good, neutral], description: Which way of moving is an improvement.}
+        value: {type: number, nullable: true}
+        previous: {type: number, nullable: true}
+        truncated: {type: boolean, description: A record cap was reached; null points mark history that was not read.}
+        series:
+          type: array
+          items:
+            type: object
+            required: [key, label, points]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              points:
+                type: array
+                items: {type: number, nullable: true}
+        rows:
+          type: array
+          description: Ranked principals (ask_sources, agent_runs), current period first; empty for other panels.
+          items:
+            type: object
+            required: [principal, value, previous]
+            properties:
+              principal:
+                type: object
+                required: [id, display]
+                properties:
+                  id: {type: string}
+                  display: {type: string}
+                  kind: {type: string}
+              value: {type: number}
+              previous: {type: number, nullable: true}
     OverviewChanges:
       type: object
       description: At most 200 accessible answer-event candidates and 4000 distinct subject refs, resolved in batches of at most 200. Access is applied before budgets. Truncated is true when any event, subject-ref or output budget is exceeded; answers with omitted subjects are excluded.

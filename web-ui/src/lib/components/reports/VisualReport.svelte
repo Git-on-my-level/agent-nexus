@@ -2,8 +2,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { onMount, untrack } from "svelte";
-  import { coreClient } from "$lib/coreClient";
-  import { isLivePanel, withLiveObservation } from "$lib/liveReports.js";
+  import { coreClient, createWorkspaceReadClient } from "$lib/coreClient";
+  import {
+    isLivePanel,
+    readWithDeadline,
+    withLiveObservation,
+  } from "$lib/liveReports.js";
   import {
     nextReviewDeadline,
     reviewReadPending,
@@ -226,6 +230,8 @@
     let disposed = false;
     let inFlight = false;
     let reviewTimer = 0;
+    // Cancels a read still in flight when this document closes.
+    const closing = new AbortController();
     // Reads that should have told core about a deadline and did not. Backed
     // off rather than repeated at a fixed minute: five minutes only covers
     // five minutes of clock disagreement, and a machine without NTP can be out
@@ -243,7 +249,13 @@
         if (!id) throw new Error("A saved document is required.");
         // `summary=1` opts the native card panels into the computed summary
         // the shared renderer draws.
-        const response = await coreClient.renderReport(id, { summary: 1 });
+        // Bounded: a read that never answers must not hold the panels on
+        // "Reading workspace…" or block the next poll behind `inFlight`.
+        const response = await readWithDeadline(
+          (signal) =>
+            createWorkspaceReadClient(signal).renderReport(id, { summary: 1 }),
+          { signal: closing.signal },
+        );
         if (
           !Array.isArray(response?.panels) ||
           (expectedRevision && response.revision_ref !== expectedRevision)
@@ -258,7 +270,8 @@
               data: {},
             });
         }
-      } catch {
+      } catch (error) {
+        const timedOut = error?.name === "TimeoutError";
         // Only live panels lose anything. An authored panel keeps whatever the
         // last good read resolved — the absolute deadline, whether it was
         // defaulted, the principal core corrected the author to — because a
@@ -270,8 +283,9 @@
         for (const panel of livePanels)
           results.set(panel.id, {
             status: "unavailable",
-            message:
-              "Live data unavailable. Reload the document or check your access.",
+            message: timedOut
+              ? "The workspace is taking too long to answer. Trying again shortly."
+              : "Live data unavailable. Reload the document or check your access.",
             data: {},
           });
       }
@@ -358,6 +372,7 @@
     if (!livePanels.length)
       return () => {
         disposed = true;
+        closing.abort();
         window.clearTimeout(reviewTimer);
       };
     const timer = window.setInterval(() => {
@@ -369,6 +384,7 @@
     document.addEventListener("visibilitychange", resume);
     return () => {
       disposed = true;
+      closing.abort();
       window.clearInterval(timer);
       window.clearTimeout(reviewTimer);
       document.removeEventListener("visibilitychange", resume);

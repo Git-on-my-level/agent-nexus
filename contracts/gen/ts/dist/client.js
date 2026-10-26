@@ -15086,6 +15086,38 @@ export const commandRegistry = [
         "ts_method": "usageSummaryV1"
     },
     {
+        "command_id": "watch.trends",
+        "cli_path": "watch trends",
+        "group": "watch",
+        "method": "GET",
+        "path": "/watch/trends",
+        "operation_id": "getWatchTrends",
+        "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
+        "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Watch's Trends tab renders all three.",
+        "why": "See trends over time that the current-state views cannot show.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "unavailable"
+        ],
+        "concepts": [
+            "home",
+            "inbox",
+            "cards"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.",
+        "go_method": "WatchTrends",
+        "ts_method": "watchTrends"
+    },
+    {
         "command_id": "work.capabilities",
         "cli_path": "work capabilities",
         "group": "work",
@@ -17250,6 +17282,9 @@ export class AnxClient {
     }
     usageSummaryV1(options = {}) {
         return this.invoke("usage.summary.v1", {}, options);
+    }
+    watchTrends(options = {}) {
+        return this.invoke("watch.trends", {}, options);
     }
     workCapabilities(options = {}) {
         return this.invoke("work.capabilities", {}, options);

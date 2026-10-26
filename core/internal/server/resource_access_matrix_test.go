@@ -256,6 +256,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if path == "/docs/search" {
 						path += "?q=Confidential"
 					}
+					if path == "/watch/trends" {
+						path += "?group=decisions"
+					}
 					if path == "/ref-edges" {
 						path += "?source_ref=board:" + anyString(public["id"])
 					}

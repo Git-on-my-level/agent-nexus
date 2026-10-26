@@ -42,6 +42,7 @@ hosted_default_commands:
   - "brief.get"
   - "overview.get"
   - "overview.changes"
+  - "watch.trends"
   - "workspace.dashboard.list"
   - "inbox.get"
   - "inbox.list"
@@ -824,6 +825,9 @@ commands:
   "attention.visits":
     classification: exposed_write
     reason: "Advance only the authenticated agent's own dashboard visit marker."
+  "watch.trends":
+    classification: exposed_read
+    reason: "Principal-scoped bounded trends over stored records; read only."
   "overview.changes":
     classification: exposed_read
     reason: "Principal-scoped bounded visit digest; reads without advancing the baseline."

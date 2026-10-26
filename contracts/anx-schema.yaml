@@ -1385,6 +1385,19 @@ overview_brief:
     - at_risk reports only past_promise rows with a computed reason, longest past first; a row without a computed reason is omitted.
     - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
     - initiatives orders by the shared promise order (past_promise, no_promise, moving, digest, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
+watch_trends:
+  route: GET /watch/trends
+  groups: [decisions, initiatives, loops]
+  ranges: [7d, 30d, 90d]
+  semantics:
+    - Computed at read time from stored asks, cards, promises and run receipts. Core runs no models and fetches nothing external.
+    - One group per request, so each request stays within the ordinary read budget. decisions covers asks; initiatives covers promises and work started vs finished; loops covers run receipts, loop reporting and the most active agents.
+    - The read covers two periods (previous and current). 7d and 30d use daily buckets; 90d uses 13 weekly buckets. value and previous summarize each period.
+    - Each record family is one indexed newest-first seek with a fixed cap (asks 110, open asks 90, open promises 55, closed promises 35, created cards 20 per lifecycle index, done cards 40, runs 170, loops 25). Visibility filters run before counting; a hidden record never changes a count.
+    - When a cap is reached the panel is truncated and buckets older than the oldest admitted record are null, never zero.
+    - Answer time and answered counts cover asks raised inside the read window. Promises are judged against each initiative's current promise.
+    - Loop health applies the brief's rule (reported within two cadences) at each bucket end; a bucket whose lookback precedes the read is null.
+    - Results are cached per caller, authorization epoch, group and range for up to 60 seconds.
 overview_changes:
   route: GET /overview/changes
   max_items: 100

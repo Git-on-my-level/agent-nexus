@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `43`
+- Groups: `44`
 
 ## `topics`
 
@@ -468,6 +468,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - Commands: `1`
 - Command IDs:
   - `usage.summary.v1` (`usage summary --api v1`)
+
+## `watch`
+
+- Commands: `1`
+- Command IDs:
+  - `watch.trends` (`watch trends`)
 
 ## `work`
 

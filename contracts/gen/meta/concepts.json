@@ -5433,7 +5433,7 @@
     },
     {
       "name": "cards",
-      "command_count": 81,
+      "command_count": 82,
       "command_ids": [
         "agents.get",
         "agents.me.presence",
@@ -5500,6 +5500,7 @@
         "runs.upsert",
         "sessions.get",
         "sessions.register",
+        "watch.trends",
         "work.capabilities",
         "work.create",
         "work.fold",
@@ -10118,6 +10119,38 @@
           ],
           "go_method": "SessionsRegister",
           "ts_method": "sessionsRegister"
+        },
+        {
+          "command_id": "watch.trends",
+          "cli_path": "watch trends",
+          "group": "watch",
+          "method": "GET",
+          "path": "/watch/trends",
+          "operation_id": "getWatchTrends",
+          "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
+          "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Watch's Trends tab renders all three.",
+          "why": "See trends over time that the current-state views cannot show.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "unavailable"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.",
+          "go_method": "WatchTrends",
+          "ts_method": "watchTrends"
         },
         {
           "command_id": "work.capabilities",
@@ -18927,13 +18960,14 @@
     },
     {
       "name": "home",
-      "command_count": 7,
+      "command_count": 8,
       "command_ids": [
         "brief.get",
         "home.read",
         "home.unread",
         "overview.changes",
         "overview.get",
+        "watch.trends",
         "workspace.dashboard.list",
         "workspace.dashboard.set"
       ],
@@ -19125,6 +19159,38 @@
           ],
           "go_method": "OverviewGet",
           "ts_method": "overviewGet"
+        },
+        {
+          "command_id": "watch.trends",
+          "cli_path": "watch trends",
+          "group": "watch",
+          "method": "GET",
+          "path": "/watch/trends",
+          "operation_id": "getWatchTrends",
+          "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
+          "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Watch's Trends tab renders all three.",
+          "why": "See trends over time that the current-state views cannot show.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "unavailable"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.",
+          "go_method": "WatchTrends",
+          "ts_method": "watchTrends"
         },
         {
           "command_id": "workspace.dashboard.list",
@@ -20551,7 +20617,7 @@
     },
     {
       "name": "inbox",
-      "command_count": 29,
+      "command_count": 30,
       "command_ids": [
         "agent.inbox.answers.read",
         "agent.inbox.asks.list",
@@ -20581,7 +20647,8 @@
         "inbox.stream",
         "inbox.summary",
         "notifications.settings.get",
-        "notifications.settings.set"
+        "notifications.settings.set",
+        "watch.trends"
       ],
       "commands": [
         {
@@ -22046,6 +22113,38 @@
           ],
           "go_method": "NotificationsSettingsSet",
           "ts_method": "notificationsSettingsSet"
+        },
+        {
+          "command_id": "watch.trends",
+          "cli_path": "watch trends",
+          "group": "watch",
+          "method": "GET",
+          "path": "/watch/trends",
+          "operation_id": "getWatchTrends",
+          "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
+          "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Watch's Trends tab renders all three.",
+          "why": "See trends over time that the current-state views cannot show.",
+          "input_mode": "none",
+          "streaming": {
+            "mode": "none"
+          },
+          "output_envelope": "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.",
+          "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "invalid_request",
+            "unavailable"
+          ],
+          "concepts": [
+            "home",
+            "inbox",
+            "cards"
+          ],
+          "stability": "beta",
+          "surface": "projection",
+          "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.",
+          "go_method": "WatchTrends",
+          "ts_method": "watchTrends"
         }
       ]
     },

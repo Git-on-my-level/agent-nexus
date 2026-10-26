@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `281`
+- Commands: `282`
 
 ## `actors.create`
 
@@ -3398,6 +3398,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `ops`, `quotas`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns v1 usage summary JSON.
+
+## `watch.trends`
+
+- CLI path: `watch trends`
+- HTTP: `GET /watch/trends`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: See trends over time that the current-state views cannot show.
+- Concepts: `home`, `inbox`, `cards`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `unavailable`
+- Output: Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.
+- Agent notes: Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Results are cached per caller, authorization epoch, group and range for up to 60 seconds.
 
 ## `work.capabilities`
 

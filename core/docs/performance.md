@@ -2366,3 +2366,41 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/se
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \
   -run '^TestPerformance(AskPresentationReadBudget|AskDeliveryReadBudgets|InboxItemResolutionRead)$' -count=1 -v -timeout=5m
 ```
+
+## Watch trends
+
+`GET /watch/trends` is three requests, one per group, so no single read admits
+every record family. Each family is one newest-first indexed seek with a fixed
+cap; visibility filters run inside the scoped relations before counting, and
+the cap bounds examined rows, not just returned rows:
+
+- decisions: `idx_events_ask_order` (type, time key) over at most 111 asks with
+  primary-key `brief_asks`/thread joins; the `brief_asks` state index over at
+  most 91 open asks; one actor batch of at most five ids.
+- initiatives: two `idx_brief_initiatives_page` seeks (56 open, 36 closed
+  promised initiatives) with primary-key card joins and one lifecycle-index
+  done seek per admitted Done card; two grouping-index seeks of 21 created
+  cards; one `idx_cards_closed_work_page` seek of 41 done cards.
+- loops: `idx_events_ask_order` over at most 171 run receipts;
+  `idx_brief_loop_annotated_recent` over 25 loops; one actor batch.
+
+Under a canonical access scope the PM-private rule is already a denial root,
+so the read skips the brief's per-row owner lookups, except for the PM actor
+reading as itself, whose scope is broader. Nothing grows with workspace size
+except through the caps; a capped family marks its panel truncated and leaves
+older buckets null. Each group is cached per caller, authorization epoch,
+group and range for 60 seconds.
+
+`TestPerformanceWatchTrendsBudget` fills every cap (240 asks, 240 runs, 4,096
+unrelated cards, every initiative promised, a private board) and measures the
+90-day read for the owner and an unrelated reader against the ordinary budget.
+Local acceptance: owner 5-7 queries / 86-204 rows / 5,658-9,047 VM steps;
+unrelated reader decisions 36,434, initiatives 41,016, loops 28,471 VM steps.
+The per-row cost of scoped reads for a reader who is denied part of the graph
+(about 140-380 VM steps) is why the caps are this size and why the groups are
+separate requests.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v
+go test -C core ./internal/primitives -run '^TestWatchTrends' -count=1
+```

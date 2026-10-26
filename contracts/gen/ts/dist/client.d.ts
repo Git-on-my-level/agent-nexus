@@ -293,6 +293,7 @@ export declare class AnxClient {
     topicsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     usageSummaryV1(options?: RequestOptions): Promise<InvokeResult>;
+    watchTrends(options?: RequestOptions): Promise<InvokeResult>;
     workCapabilities(options?: RequestOptions): Promise<InvokeResult>;
     workCreate(options?: RequestOptions): Promise<InvokeResult>;
     workFold(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

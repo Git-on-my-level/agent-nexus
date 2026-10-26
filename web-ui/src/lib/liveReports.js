@@ -265,3 +265,48 @@ export function withLiveObservation(panel, observation) {
 export function formatLiveAge(seconds, now = Date.now()) {
   return formatAgeSeconds(seconds, now);
 }
+
+/** How long a live report read may take before the panel says so. */
+export const LIVE_READ_TIMEOUT_MS = 20_000;
+
+/**
+ * Run `start(signal)` and settle within `ms`, whatever the transport does.
+ *
+ * A render read with no deadline that never answers left every live panel on
+ * "Reading workspace…" for good: the poll skips while a read is in flight, so
+ * one stalled request blocked every later one. This rejects with a
+ * `TimeoutError` at the deadline and aborts the request, and an abort of the
+ * outer `signal` (the report closing) cancels it too.
+ *
+ * @template T
+ * @param {(signal: AbortSignal) => Promise<T>} start
+ * @param {{ ms?: number, signal?: AbortSignal }} [options]
+ * @returns {Promise<T>}
+ */
+export function readWithDeadline(
+  start,
+  { ms = LIVE_READ_TIMEOUT_MS, signal } = {},
+) {
+  const controller = new AbortController();
+  const forward = () => controller.abort(signal?.reason);
+  if (signal?.aborted) forward();
+  else signal?.addEventListener("abort", forward, { once: true });
+  let timer = 0;
+  const deadline = new Promise((_, reject) => {
+    const fail = () => reject(controller.signal.reason);
+    if (controller.signal.aborted) fail();
+    else controller.signal.addEventListener("abort", fail, { once: true });
+    timer = setTimeout(() => {
+      const error = new Error("The live read timed out.");
+      error.name = "TimeoutError";
+      controller.abort(error);
+    }, ms);
+  });
+  return Promise.race([
+    Promise.resolve().then(() => start(controller.signal)),
+    deadline,
+  ]).finally(() => {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", forward);
+  });
+}

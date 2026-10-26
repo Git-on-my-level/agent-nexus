@@ -26,7 +26,10 @@ const coreClientMock = vi.hoisted(() => ({
   resolveRefs: vi.fn(),
   renderReport: vi.fn(),
 }));
-vi.mock("$lib/coreClient", () => ({ coreClient: coreClientMock }));
+vi.mock("$lib/coreClient", () => ({
+  coreClient: coreClientMock,
+  createWorkspaceReadClient: () => coreClientMock,
+}));
 
 const NOW = Date.parse("2026-10-06T12:00:00Z");
 const MINUTE = 60_000;

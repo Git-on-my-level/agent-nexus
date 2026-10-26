@@ -390,6 +390,18 @@ when work, inbox or its 100 actionable PM decision candidates exceed their
 windows. Agent presence samples at most 100 visible identities. Use the work,
 inbox and PM collection endpoints to continue through their pages.
 
+`GET /watch/trends?group=decisions|initiatives|loops&range=7d|30d|90d` returns
+one group of `watch_trends.v1`: `{schema,group,generated_at,range_days,bucket,
+buckets,panels}`. It reads the previous and current period (daily buckets for
+7d and 30d, 13 weekly buckets for 90d) from stored asks, cards, promises and
+run receipts; core runs no models and fetches nothing. Each record family is
+one indexed newest-first seek with a fixed cap, filtered by the caller's access
+before counting, so a hidden record never changes a number. A panel that hits a
+cap is `truncated` and its buckets older than the oldest admitted record are
+null, never zero. Results are cached per caller, authorization epoch, group and
+range for up to 60 seconds. The three groups are separate requests so each
+stays within the ordinary per-request read budget.
+
 `GET /overview/changes` returns `{since,generated_at,items,truncated}` for the
 last authenticated principal visit to Overview in this workspace database.
 `GET /overview` includes that digest as `since_you_last_looked`, then records

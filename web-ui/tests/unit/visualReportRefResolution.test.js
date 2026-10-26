@@ -19,7 +19,10 @@ const coreClientMock = vi.hoisted(() => ({
   resolveRefs: vi.fn(),
   renderReport: vi.fn(),
 }));
-vi.mock("$lib/coreClient", () => ({ coreClient: coreClientMock }));
+vi.mock("$lib/coreClient", () => ({
+  coreClient: coreClientMock,
+  createWorkspaceReadClient: () => coreClientMock,
+}));
 
 const CARD = "card:adapter-contract";
 const OTHER = "card:release-b";
