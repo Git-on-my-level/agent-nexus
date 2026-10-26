@@ -838,3 +838,79 @@ func TestGroupingMCPCreateCarriesUnderAndSurface(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAskPresentationToolsUseScopedHTTPAndPreserveRevision(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/asks/event:ask-1/presentation" && r.Method == "GET" {
+			fmt.Fprint(w, `{"ask_id":"event:ask-1","presentation_revision":2,"presentation":{"title":"Original?"}}`)
+			return
+		}
+		if r.URL.Path != "/asks/event:ask-1/revise" || r.Method != "POST" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if body["if_revision"] != float64(2) || body["request_key"] != "stable-key" {
+			t.Errorf("lost CAS/replay: %#v", body)
+		}
+		fmt.Fprint(w, `{"ask_id":"event:ask-1","presentation_revision":3,"presentation":{"title":"Clear?"}}`)
+	}))
+	defer server.Close()
+	exec := NewWorkspaceExecutor(server.URL, Options{})
+	for _, test := range []struct {
+		id   string
+		args map[string]any
+	}{
+		{"asks.presentation.get", map[string]any{"path": map[string]any{"ask_id": "event:ask-1"}}},
+		{"asks.revise", map[string]any{"path": map[string]any{"ask_id": "event:ask-1"}, "body": map[string]any{"if_revision": 2, "request_key": "stable-key", "presentation": map[string]any{"title": "Clear?"}}}},
+	} {
+		tool, ok := cat.Lookup(catalog.ToolName(test.id))
+		if !ok {
+			t.Fatalf("MCP tool missing: %s", test.id)
+		}
+		if _, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: test.args}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestAskRetirementToolPreservesAuditAndUndoFence(t *testing.T) {
+	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
+	bodies := []map[string]any{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/asks/event:ask-1/retire" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"withdrawn_as_stale","retirement_event_ref":"event:retired-1"}`)
+	}))
+	defer server.Close()
+	exec := NewWorkspaceExecutor(server.URL, Options{})
+	tool, ok := cat.Lookup(catalog.ToolName("asks.retire"))
+	if !ok {
+		t.Fatal("missing retirement tool")
+	}
+	for _, body := range []map[string]any{{"request_key": "retire-key", "reason": "No longer relevant", "evidence": []any{"card:subject"}}, {"request_key": "undo-key", "undo": true, "if_retirement": "event:retired-1"}} {
+		if _, err := exec.CallTool(context.Background(), protocol.ToolCallRequest{Tool: tool, Arguments: map[string]any{"path": map[string]any{"ask_id": "event:ask-1"}, "body": body}}); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(body)
+		got, _ := json.Marshal(bodies[len(bodies)-1])
+		if string(raw) != string(got) {
+			t.Fatalf("body changed %s -> %s", raw, got)
+		}
+	}
+}

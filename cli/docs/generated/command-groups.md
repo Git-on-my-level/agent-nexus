@@ -86,9 +86,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `ask`
 
-- Commands: `1`
+- Commands: `4`
 - Command IDs:
   - `asks.batch.create` (`ask batch`)
+  - `asks.presentation.get` (`ask presentation`)
+  - `asks.retire` (`ask retire`)
+  - `asks.revise` (`ask revise`)
 
 ## `asks`
 

@@ -102,7 +102,7 @@ ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- \
 
 ## Plain-language asks
 
-Ask presentation adds no SQL, query, poll tick or migration. Inbox list/get/SSE,
+The initial authored presentation fields add no SQL, query, poll tick or migration. Inbox list/get/SSE,
 completed history and `brief.v1` copy seven optional fields from the canonical
 ask payload already admitted by their existing scoped event/subject indexes.
 Work is O(admitted asks + their text bytes), independent of unrelated workspace
@@ -2241,3 +2241,91 @@ It retains the oldest-created/id-tie rule without rehydrating and sorting the
 same current parent per child. Workstream admission uses the same rule. The
 private-board fixture exercises the nonempty authorization path; no policy,
 budget or plan allowance is relaxed.
+
+## Ask presentation revisions
+
+`GET /asks/{ask_id}/presentation` resolves one scoped ask by its existing
+ID/handle indexes, loads that event by primary key, then seeks one
+`ask_presentation_heads(ask_id)` and its audit event primary key. Brief and inbox
+readers batch only their admitted asks in chunks of at most 200; each chunk
+adds one query and at most one row per ask. Batch asks remain capped at ten.
+There is no history scan, read-time rewrite, per-row query or new polling loop.
+Original event history remains immutable; Decide/inbox overlay only the seven
+allowed presentation fields and the audit metadata. Plain event GET/export
+continues to expose canonical original events and separate revision events.
+
+Cost grows with the admitted page and bounded presentation bytes, independent
+of unrelated workspace size or revision history. The scoped head and event
+relations apply current visibility before exposing copy or audit metadata.
+A head the reader cannot see contributes no copy. Writes serialize one ask,
+append one audit event and update one pointer plus one actor/key replay receipt;
+current permission, open-state, subject visibility and the presentation token
+are checked in that transaction. Migration 123 creates only an empty pointer
+relation, with no historical rewrite or backfill. It follows Watch migration 122;
+Work-tracking migration 121 is preserved from main. New route and point-read
+budgets are checked in; no existing budget or plan allowance is widened.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformance(AskPresentationReadBudget|AskDeliveryReadBudgets|InboxItemResolutionRead)$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=2 ./scripts/slot run tests -- go test -C core ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
+
+## Reversible stale ask retirement
+
+`POST /asks/{ask_id}/retire` is a mutation, not a new read/poll surface. It
+resolves one ask and subject by the existing ID/handle indexes, checks current
+authority by principal primary key, and seeks the canonical resolution and
+actor/key replay receipt by their unique indexes. Evidence admission performs
+at most 32 indexed point checks (HTTP(S) evidence is validated without fetching).
+Public-record preparation checks at most 32 evidence refs and the reason under
+recipient scope using the existing exact/prose reference indexes. No evidence or
+private audit ref is copied into the status record or notice. Both public events
+strip run attribution and each performs one final persisted-event visibility
+admission by the persisted event ref inside the write transaction, after
+insertion-time decoration and ownership triggers. It follows the complete current
+ancestry through indexed reference keys, avoiding a workspace ownership rebuild. Work is bounded by input bytes and their
+ancestry. It appends a public lifecycle event, a curator audit and a notice, and
+inserts/deletes one resolution. Undo identifies the original public event and
+private audit by the public retirement key; the audit ID is derived as UUIDv5.
+It requires no audit/history lookup and does not expose private audit content.
+`TestPerformanceAskRetirementVisibilityBudget` enforces the new
+`ask_retirement_visibility_budget.json`: one query, one row, 3,000 VM steps and
+zero full scans per final check. The actual persisted notice ancestry uses
+111 VM with no unrelated private roots and 359 VM with 4,096, with zero full scans.
+The outcome and presentation budgets remain unchanged.
+Undo updates only that ask's `ask_subjects`, `brief_asks` and `ask_deadlines`
+primary-key rows. It never loads ask history or workspace rosters.
+
+`GET /asks/{ask_id}` loads the ask-visible lifecycle record through its existing
+primary-key projection, exposing the current retirement token with no additional
+query. It never reads the curator audit, evidence or run attribution.
+Inbox point/list/stream admission already excludes canonical resolutions, so
+retirement adds no reads to those paths. Brief already selects only open
+indexed `brief_asks` rows. Roster admission adds a primary-key resolution
+exclusion per existing ask candidate, retaining its existing finite baseline;
+it does not introduce a history scan or new per-ask round trip. Ordinary
+background projection replay recognizes retire/reopen audit pairs during its
+existing thread pass, using linear maps and exact event identities.
+
+The existing ask outcome/delivery and presentation scale gates are unchanged;
+no read budget or query-plan allowance is increased. Retirement needs no new schema or backfill; migration 124 below only replaces
+an enqueue trigger.
+
+## Original presentation and outcome delivery corrections
+
+Presentation hydration adds the immutable original event to the existing head
+query through its primary key. This is still one query per admitted batch (at
+most 200), one row per ask, and bounded original/presentation text. It never
+scans revision history. The existing presentation read budget is unchanged.
+
+Migration 124 replaces only the subscription-enqueue trigger, excluding
+retirement with one primary-key lookup of the resolution event. It adds no
+column or index, scans no existing rows and backfills no content. Late
+subscription creation checks the current resolution event through the same
+primary key before enqueueing. Existing ask outcome/status, receipt and webhook
+read paths and their bounds/indexes are unchanged. Retirement/undo add one
+bounded notification message on the existing card thread in their mutation
+transaction and add no read path or poll loop. No budget or plan allowance is
+increased.

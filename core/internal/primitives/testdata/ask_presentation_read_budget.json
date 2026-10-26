@@ -1,0 +1,6 @@
+{
+  "max_queries": 1,
+  "max_rows": 1,
+  "max_vm_steps": 2048,
+  "max_full_scan_steps": 0
+}

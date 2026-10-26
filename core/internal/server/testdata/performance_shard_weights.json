@@ -514,5 +514,9 @@
   {
     "key": "GET /work/ungrouped",
     "milliseconds": 500
+  },
+  {
+    "key": "GET /asks/{ask_id}/presentation",
+    "milliseconds": 1000
   }
 ]

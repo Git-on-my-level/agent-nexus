@@ -110,6 +110,10 @@ enums:
       - human_attention_requested
       - human_attention_responded
       - human_attention_withdrawn
+      - human_attention_revised
+      - human_attention_retired
+      - human_attention_reopened
+      - human_attention_retirement_audited
       - attention_feedback
       - agent_notification_read
       - agent_notification_dismissed
@@ -120,7 +124,7 @@ enums:
       boards: [board_created, board_updated]
       cards: [card_created, card_updated, card_moved, card_archived, card_trashed, card_resolved, card_lease_acquired, card_lease_renewed, card_lease_released, card_lease_expired]
       curation: [curation_suggested, curation_receipt]
-      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, attention_feedback]
+      attention: [human_attention_requested, human_attention_responded, human_attention_withdrawn, human_attention_revised, human_attention_retired, human_attention_reopened, human_attention_retirement_audited, attention_feedback]
       notifications: [agent_notification_read, agent_notification_dismissed]
       runs: [run_recorded]
       reviews: [receipt_added, review_completed]
@@ -883,6 +887,26 @@ reference_conventions:
     human_attention_withdrawn:
       refs_must_include: ["event:<request_event_id>"]
       payload_must_include: ["request_event_id", "request_event_ref", "withdrawn_by_actor_id", "reason"]
+
+    human_attention_revised:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "presentation_revision", "previous", "presentation"]
+      description: Server-owned append-only presentation revision. Written only through POST /asks/{ask_id}/revise. Never changes the original ask or answer bindings.
+
+    human_attention_retired:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "requester_actor_id", "retiring_actor_id", "reason", "status"]
+      description: Ask-visible server-owned stale withdrawal, never a human answer. Contains no evidence or curator audit refs and no run attribution. Reason refs inaccessible to the requester are redacted. Written only through POST /asks/{ask_id}/retire; the resolution claim points to this record.
+
+    human_attention_reopened:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "requester_actor_id", "retirement_event_ref"]
+      description: Server-owned undo of one still-current retirement. Original ask and options remain immutable.
+
+    human_attention_retirement_audited:
+      refs_must_include: ["event:<request_event_id>"]
+      payload_must_include: ["request_event_id", "retirement_event_ref", "audit_key", "action"]
+      description: Server-owned curator audit for retire or undo. Retains evidence, unredacted reason and run attribution, and may be private. The retirement audit ID is UUIDv5 in the OID namespace of ask-retirement-audit:<audit_key>, where audit_key is the public retirement event ID. Undo references both records by retirement_event_ref and audit_key without copying an inaccessible audit ref into the public record.
 
     agent_notification_read:
       refs_must_include: ["artifact:<wakeup_id>"]

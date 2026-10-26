@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 260,
+  "route_count": 263,
   "routes": [
     {
       "method": "GET",
@@ -165,6 +165,21 @@
     {
       "method": "POST",
       "path": "/asks/{ask_id}/delivery",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/asks/{ask_id}/presentation",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/asks/{ask_id}/retire",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/asks/{ask_id}/revise",
       "access_class": "workspace_business_surface"
     },
     {

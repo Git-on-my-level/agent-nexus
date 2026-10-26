@@ -1558,5 +1558,16 @@
     "reason": "At most 200 visible recent candidates before hierarchy and deterministic scoring; explicit related refs seek primary-key/handle indexes.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/asks/{ask_id}/presentation",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Scoped primary-key ask and head/event point reads; bounded presentation bytes, independent of history.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

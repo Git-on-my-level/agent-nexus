@@ -465,3 +465,162 @@ it("keeps a legacy body visible when only evidence is present", () => {
   expect(details.textContent).not.toContain(decision.body);
   expect(presentation.textContent).toContain(decision.body);
 });
+
+it("shows original copy without changing the answer binding", async () => {
+  const raw = structuredClone(fixture);
+  const target = raw.decisions.find((d) => d.ref === merge.ref);
+  target.title = "Plain question?";
+  target.situation = "Clear situation.";
+  target.presentation_revision = 1;
+  target.presentation_rewrite = {
+    actor_id: "curator",
+    at: "2026-10-26T00:00:00Z",
+    original: {
+      title: "Original technical question?",
+      situation: "Original situation.",
+    },
+  };
+  const decision = normalizeBrief(raw).decisions.find(
+    (d) => d.ref === merge.ref,
+  );
+  const { container, getByRole, getByText } = render(DecisionCard, {
+    decision,
+    now: NOW,
+  });
+  expect(getByText(/Rewritten for clarity by curator/)).toBeTruthy();
+  expect(
+    container.querySelector("[data-decision-title]").textContent,
+  ).toContain("Plain question?");
+  const before = [
+    ...container.querySelectorAll("[data-decision-proposal]"),
+  ].map((v) => v.textContent);
+  await fireEvent.click(getByRole("button", { name: "Show original" }));
+  expect(
+    container.querySelector("[data-decision-title]").textContent,
+  ).toContain("Original technical question?");
+  expect(getByText("Original situation.")).toBeTruthy();
+  expect(
+    [...container.querySelectorAll("[data-decision-proposal]")].map(
+      (v) => v.textContent,
+    ),
+  ).toEqual(before);
+  await fireEvent.click(getByRole("button", { name: "Show current" }));
+  expect(getByText("Clear situation.")).toBeTruthy();
+  await fireEvent.click(container.querySelector("[data-decision-proposal]"));
+  expect(queue.queueInboxResponse.mock.calls[0][0].request.response_text).toBe(
+    "Merge",
+  );
+});
+
+it.each([
+  {
+    name: "A to B to C",
+    title: "C",
+    undo: false,
+    label: "Rewritten for clarity by curator",
+  },
+  {
+    name: "A to B then undo",
+    title: "A",
+    undo: true,
+    label: "Rewrite undone by curator",
+  },
+])(
+  "shows the requester original after $name",
+  async ({ title, undo, label }) => {
+    const raw = structuredClone(fixture);
+    const target = raw.decisions.find((d) => d.ref === merge.ref);
+    target.title = title;
+    target.situation = title + " situation.";
+    target.presentation_revision = 2;
+    target.presentation_rewrite = {
+      actor_id: "curator",
+      undo,
+      previous: { title: "B", situation: "B situation." },
+      original: {
+        title: "A",
+        situation: "A situation.\n\nA second paragraph.",
+      },
+    };
+    const decision = normalizeBrief(raw).decisions.find(
+      (d) => d.ref === merge.ref,
+    );
+    const { container, getByRole, getByText } = render(DecisionCard, {
+      decision,
+      now: NOW,
+    });
+    expect(getByText(new RegExp(label))).toBeTruthy();
+    await fireEvent.click(getByRole("button", { name: "Show original" }));
+    expect(
+      container.querySelector("[data-decision-title]").textContent,
+    ).toContain("A");
+    const copy = container.querySelector("[data-decision-presentation]");
+    expect(
+      [...copy.querySelectorAll("p")].map((p) => p.textContent.trim()),
+    ).toContain("A second paragraph.");
+    expect(copy.textContent).not.toContain("B situation.");
+    await fireEvent.click(getByRole("button", { name: "Show current" }));
+    expect(
+      container.querySelector("[data-decision-title]").textContent,
+    ).toContain(title);
+  },
+);
+
+it.each([false, true])(
+  "batch members show true original with undo=%s",
+  async (undo) => {
+    const current = undo ? "A" : "C";
+    const decision = normalizeBrief({
+      decisions: [
+        {
+          ref: "inbox:batch-original",
+          title: "Review together",
+          batch: {
+            key: "batch-original",
+            members: [
+              {
+                ref: "inbox:member-original",
+                title: current,
+                situation: current + " situation.",
+                presentation_revision: 2,
+                presentation_rewrite: {
+                  actor_id: "curator",
+                  undo,
+                  previous: { title: "B", situation: "B situation." },
+                  original: { title: "A", situation: "A situation." },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }).decisions[0];
+    const { container, getByRole } = render(DecisionCard, {
+      decision,
+      now: NOW,
+    });
+    const member = container.querySelector("[data-decision-batch-member]");
+    expect(member.textContent).toContain(
+      undo ? "Rewrite undone by curator" : "Rewritten for clarity by curator",
+    );
+    await fireEvent.click(getByRole("button", { name: "Show original" }));
+    expect(member.textContent).toContain("A situation.");
+    expect(member.textContent).not.toContain("B situation.");
+    await fireEvent.click(getByRole("button", { name: "Show current" }));
+    expect(member.textContent).toContain(current + " situation.");
+  },
+);
+
+it("never calls a previous snapshot original when immutable copy is missing", () => {
+  const decision = normalizeBrief({
+    decisions: [
+      {
+        ref: "inbox:old-cache",
+        title: "C",
+        presentation_rewrite: { actor_id: "curator", previous: { title: "B" } },
+      },
+    ],
+  }).decisions[0];
+  const { queryByRole } = render(DecisionCard, { decision, now: NOW });
+  expect(queryByRole("button", { name: "Show original" })).toBeNull();
+});

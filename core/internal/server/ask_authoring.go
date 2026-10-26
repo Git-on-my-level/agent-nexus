@@ -7,6 +7,12 @@ import (
 
 // validateAskText applies only on new HTTP attention requests, never historical reads.
 func validateAskText(payload map[string]any) (string, string) {
+	for _, key := range []string{"presentation_revision", "presentation_rewrite"} {
+		if _, ok := payload[key]; ok {
+			return "invalid_request", key + " is maintained by the ask revision endpoint"
+		}
+	}
+
 	title, ok := payload["title"].(string)
 	if !ok || strings.TrimSpace(title) == "" || strings.ContainsAny(title, "\r\n") {
 		return "ask_title_invalid", "event.payload.title must be a non-empty one-line decision; move detail into payload.body"

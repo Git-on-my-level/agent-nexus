@@ -706,5 +706,15 @@
     "method": "POST",
     "path": "/work/{card_ref}/unfold",
     "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/revise",
+    "reason": "Transactional presentation-only write: one ask, current authority/subject/head lookups, append-only audit, CAS pointer and replay receipt."
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/retire",
+    "reason": "Transactional stale withdrawal or exact-retirement undo: indexed ask, subject, authority and claim reads; bounded evidence, audit, requester notification and replay receipt."
   }
 ]

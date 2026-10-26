@@ -128,6 +128,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 
+	if typeValue == primitives.AskRevisedEventType || typeValue == primitives.AskRetiredEventType || typeValue == primitives.AskReopenedEventType || typeValue == primitives.AskRetirementAuditedEventType {
+		writeError(w, 400, "invalid_request", "ask curation events must use POST /asks/{ask_id}/revise or /retire")
+		return
+	}
 	if typeValue == "run_recorded" {
 		if err := primitives.ValidateRunRecorded(req.Event); err != nil {
 			writeError(w, 400, "invalid_request", err.Error())

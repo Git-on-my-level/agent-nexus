@@ -3,7 +3,7 @@
   "contract_version": "0.6.0",
   "generated_by": "core/cmd/contract-gen",
   "event_type_open_enum": false,
-  "rule_count": 29,
+  "rule_count": 33,
   "rules": {
     "agent_notification_dismissed": {
       "refs_must_include": [
@@ -141,6 +141,16 @@
         "subtype"
       ]
     },
+    "human_attention_reopened": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "requester_actor_id",
+        "retirement_event_ref"
+      ]
+    },
     "human_attention_requested": {
       "refs_must_include": [
         "thread:\u003cthread_id\u003e"
@@ -163,6 +173,40 @@
         "response_text",
         "outcome",
         "responding_actor_id"
+      ]
+    },
+    "human_attention_retired": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "requester_actor_id",
+        "retiring_actor_id",
+        "reason",
+        "status"
+      ]
+    },
+    "human_attention_retirement_audited": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "retirement_event_ref",
+        "audit_key",
+        "action"
+      ]
+    },
+    "human_attention_revised": {
+      "refs_must_include": [
+        "event:\u003crequest_event_id\u003e"
+      ],
+      "payload_must_include": [
+        "request_event_id",
+        "presentation_revision",
+        "previous",
+        "presentation"
       ]
     },
     "human_attention_withdrawn": {

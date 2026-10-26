@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 278
+- Command count: 281
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -15,7 +15,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | agent | 8 |
 | agents | 4 |
 | artifacts | 10 |
-| ask | 1 |
+| ask | 4 |
 | asks | 4 |
 | attention | 8 |
 | auth | 22 |
@@ -59,8 +59,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 93 |
-| exposed_write | 78 |
+| exposed_read | 94 |
+| exposed_write | 80 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
@@ -73,7 +73,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 171 | exposed_read + exposed_write + adapted |
+| standalone default | 174 | exposed_read + exposed_write + adapted |
 | hosted default | 68 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -116,6 +116,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | asks.batch.create | ask | POST | /asks/batch | unsupported_other | Ask batch filing is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.delivery | asks | POST | /asks/{ask_id}/delivery | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | asks.get | asks | GET | /asks/{ask_id} | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
+| asks.presentation.get | ask | GET | /asks/{ask_id}/presentation | exposed_read | Scoped point read of ask presentation and concurrency token. |
+| asks.retire | ask | POST | /asks/{ask_id}/retire | exposed_write | Current curator authorization, resource visibility, atomic withdrawal or fenced undo, and replay. |
+| asks.revise | ask | POST | /asks/{ask_id}/revise | exposed_write | Strict presentation allowlist, current curator authorization, concurrency and atomic replay. |
 | asks.stream | asks | GET | /stream/asks/{ask_id} | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | asks.subscribe | asks | POST | /asks/{ask_id}/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
 | attention.agent.get | attention | GET | /attention/agent | exposed_read | Read the workspace's human-designated attention agent. |

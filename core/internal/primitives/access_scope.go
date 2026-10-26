@@ -188,6 +188,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	add("work_participants", denied("card", "_row.card_id")+" AND "+denied("participant", "_row.id"))
 	add("card_plans", denied("plan", "_row.card_id"))
 	add("agent_wakeups", denied("wakeup", "_row.wakeup_id"))
+	add("ask_presentation_heads", denied("event", "_row.ask_id")+" AND "+denied("event", "_row.event_id"))
 	add("ask_subscriptions", "(_row.ask_id='' OR "+denied("event", "_row.ask_id")+") AND "+denied("filter/ask_subscriptions", "_row.id"))
 	add("ask_deliveries", denied("event", "_row.ask_id")+" AND "+denied("filter/ask_deliveries", "_row.id"))
 	add("ask_delivery_attempts", "EXISTS (SELECT 1 FROM ask_deliveries d WHERE d.id=_row.delivery_id)")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 )
 
 // WithAskDeliveryPolicy configures generic routing. Empty order uses owner,
@@ -47,8 +48,8 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		return nil, err
 	}
 	if err == nil {
-		var responseRaw, at string
-		if err = s.db.QueryRowContext(ctx, `SELECT payload_json,ts FROM events WHERE id=? AND COALESCE(trashed_at,'')=''`, resolutionID).Scan(&responseRaw, &at); errors.Is(err, sql.ErrNoRows) {
+		var responseRaw, at, eventType string
+		if err = s.db.QueryRowContext(ctx, `SELECT payload_json,ts,type FROM events WHERE id=? AND COALESCE(trashed_at,'')=''`, resolutionID).Scan(&responseRaw, &at, &eventType); errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		} else if err != nil {
 			return nil, err
@@ -62,11 +63,20 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		response["at"] = at
 		out["response"] = response
 		out["status"] = resolutionType
-		if response["outcome"] == "needs_context" {
+		if eventType == AskRetiredEventType {
+			out["status"] = "withdrawn_as_stale"
+			out["retirement_event_ref"] = "event:" + resolutionID
+		} else if response["outcome"] == "needs_context" {
 			out["status"] = "needs_context"
 		}
-		if response["reason"] == "expired" {
-			out["status"] = "expired"
+		// Expiry comes from the request's structured deadline at the time of
+		// withdrawal, never from a caller's free-text reason.
+		if eventType == "human_attention_withdrawn" && resolutionType == "withdrawn" {
+			expires, expiryErr := time.Parse(time.RFC3339Nano, anyStringValue(ask["expires_at"]))
+			resolvedAt, timeErr := time.Parse(time.RFC3339Nano, at)
+			if expiryErr == nil && timeErr == nil && !resolvedAt.Before(expires) {
+				out["status"] = "expired"
+			}
 		}
 		var resultRaw string
 		if e := s.db.QueryRowContext(ctx, `SELECT response_json FROM human_attention_response_claims WHERE request_event_id=?`, id).Scan(&resultRaw); e == nil {

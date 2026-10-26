@@ -7255,6 +7255,133 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  /asks/{ask_id}/presentation:
+    get:
+      operationId: getAskPresentation
+      summary: Read an ask's current presentation and concurrency token
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.presentation.get
+      x-anx-why: Improve clarity while preserving answer integrity.
+      x-anx-agent-notes: Read presentation_revision before revising. Preserve request_key across retries.
+      x-anx-output-envelope: Returns AskPresentationState.
+      x-anx-stability: beta
+      x-anx-error-codes: [auth_required, not_found]
+      x-anx-cli-path: ask presentation
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, read]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Authorized presentation. Original ask events remain immutable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskPresentationState'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+  /asks/{ask_id}/revise:
+    post:
+      operationId: reviseAskPresentation
+      summary: Rewrite only the presentation of an open ask, or undo its last rewrite
+      description: >
+        The requester, a human member, or an explicitly granted auth-admin agent may
+        revise a visible ask. The ask and subject card visibility rules still apply.
+        if_revision is the separate presentation_revision (initially zero), never a
+        card decision revision. request_key atomically replays the original result;
+        changing its body conflicts. Only title, situation, impact, recommendation,
+        alternatives, if_no_answer and details may be patched. Null clears an optional
+        field. Unknown fields at every level are rejected. All answer options,
+        proposals, recommended index, requester, subject, kind, routing, deadlines and
+        revision-guarded semantics remain unchanged. Undo appends a revision restoring
+        the previous presentation; it never erases audit history. Original always means the
+        requester's immutable first presentation, supplied separately from previous.
+        Closed asks conflict.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.revise
+      x-anx-why: Improve clarity while preserving answer integrity.
+      x-anx-agent-notes: Read presentation_revision before revising. Preserve request_key across retries.
+      x-anx-output-envelope: Returns AskPresentationState.
+      x-anx-stability: beta
+      x-anx-cli-path: ask revise
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-error-codes: [auth_required, forbidden, not_found, invalid_request, conflict]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviseAskPresentationRequest'}
+      responses:
+        '200':
+          description: Revision and replay result committed atomically.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskPresentationState'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
+  /asks/{ask_id}/retire:
+    post:
+      operationId: retireAsk
+      summary: Retire a stale open ask, or undo its retirement
+      description: >
+        Same authorization and visibility as ask revise. Retiring atomically closes
+        an open ask as withdrawn_as_stale, records who, why and evidence, and posts
+        a card-thread notification message addressed to its original requester.
+        The resolution points to an ask-visible status record containing no evidence
+        or curator audit refs, with run attribution stripped. A separate curator audit
+        retains evidence, unredacted reason and run attribution and may be private.
+        Status, await and notice use only the ask-visible record. Persisted public
+        records are checked for requester visibility inside the write transaction.
+        Undo links the original pair by retirement_event_ref and audit_key, without
+        requiring the requester to read private evidence or attribution.
+        Retirement and undo never enqueue answer deliveries, bridge/runtime wakes,
+        webhooks or continuation callbacks. Registrations remain armed for a real
+        answer after reopening. It is never a human answer.
+        Options, requester, presentation, routing and deadlines remain intact.
+        Undo requires if_retirement from the retirement result or ask outcome;
+        only that still-current retirement may be reopened. Expired asks and asks
+        whose subject is closed cannot be reopened. request_key replays atomically.
+        Retired inbox links and answer buttons fail closed as no longer open.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: asks.retire
+      x-anx-why: Remove stale asks reversibly without fabricating a human decision.
+      x-anx-agent-notes: Supply reason and evidence to retire. Undo uses if_retirement from anx await or the retirement result. Preserve request_key after an uncertain result.
+      x-anx-output-envelope: Returns AskRetirementResult.
+      x-anx-stability: beta
+      x-anx-cli-path: ask retire
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-error-codes: [auth_required, forbidden, not_found, invalid_request, conflict]
+      parameters:
+        - {name: ask_id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RetireAskRequest'}
+      responses:
+        '200':
+          description: Audited retirement or reopening, notification and replay committed atomically.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AskRetirementResult'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+
   /asks/batch:
     post:
       operationId: createAskBatch
@@ -13196,6 +13323,85 @@ components:
           enum: [backlog, ready, in_progress, blocked, review, done]
       required: [board_ref, board_title, column_key]
 
+    RevisableAskPresentation:
+      type: object
+      additionalProperties: false
+      properties:
+        title: {type: string, minLength: 1, maxLength: 160}
+        situation: {type: string, nullable: true, maxLength: 4000}
+        impact: {type: string, nullable: true, maxLength: 4000}
+        recommendation:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [action, why]
+          properties:
+            action: {type: string, minLength: 1, maxLength: 240}
+            why: {type: string, minLength: 1, maxLength: 4000}
+        alternatives:
+          type: array
+          nullable: true
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [action, consequence]
+            properties:
+              action: {type: string, minLength: 1, maxLength: 240}
+              consequence: {type: string, minLength: 1, maxLength: 4000}
+        if_no_answer: {type: string, nullable: true, maxLength: 4000}
+        details: {type: string, nullable: true, maxLength: 32000}
+    ReviseAskPresentationRequest:
+      type: object
+      additionalProperties: false
+      required: [if_revision, request_key]
+      properties:
+        if_revision: {type: integer, minimum: 0}
+        request_key: {type: string, minLength: 1, maxLength: 128}
+        presentation: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        undo: {type: boolean, default: false, description: Mutually exclusive with presentation.}
+    RetireAskRequest:
+      type: object
+      additionalProperties: false
+      required: [request_key]
+      properties:
+        request_key: {type: string, minLength: 1, maxLength: 128}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        evidence: {type: array, minItems: 1, maxItems: 32, items: {type: string, minLength: 1, maxLength: 2048}}
+        undo: {type: boolean, default: false}
+        if_retirement: {type: string, description: Required only for undo. Event ref of the current retirement.}
+      description: Retire requires reason and evidence. Undo requires if_retirement and forbids reason and evidence.
+    AskRetirementResult:
+      type: object
+      required: [ask_id, status, event, retirement_event_ref, notified_actor_id]
+      properties:
+        ask_id: {type: string}
+        status: {type: string, enum: [open, withdrawn_as_stale]}
+        event: {$ref: '#/components/schemas/Event'}
+        retirement_event_ref: {type: string, description: Ask-visible retirement status record, without evidence or run attribution.}
+        audit_event_ref: {type: string, description: Curator audit for this operation; may inherit private evidence or run attribution. Never required by requester status or await.}
+        notification_event_ref: {type: string, description: Durable card-thread message addressed to the original requester; derived solely from the ask-visible lifecycle record with run attribution stripped. Not a continuation wake.}
+        notified_actor_id: {type: string, description: Original requester addressed by the notification event.}
+    AskPresentationRevision:
+      type: object
+      required: [actor_id, at, event_ref, previous]
+      properties:
+        actor_id: {type: string}
+        actor: {$ref: '#/components/schemas/BriefPrincipal'}
+        at: {type: string, format: date-time}
+        event_ref: {type: string}
+        previous: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        original: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        undo: {type: boolean, default: false, description: True when this audit event undoes the preceding rewrite.}
+    AskPresentationState:
+      type: object
+      required: [ask_id, presentation_revision, presentation]
+      properties:
+        ask_id: {type: string}
+        presentation_revision: {type: integer, minimum: 0}
+        presentation: {$ref: '#/components/schemas/RevisableAskPresentation'}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
+
     AskRecommendation:
       type: object
       required: [action, why]
@@ -13276,6 +13482,8 @@ components:
         source_event_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -14025,7 +14233,7 @@ components:
       properties:
         ask_id: {type: string}
         card_ref: {type: string}
-        status: {type: string, enum: [answered, needs_context, withdrawn, expired]}
+        status: {type: string, enum: [answered, needs_context, withdrawn, withdrawn_as_stale, expired]}
         outcome: {type: string, nullable: true}
         response_event_id: {type: string}
         response_text: {type: string, nullable: true}
@@ -14069,7 +14277,8 @@ components:
       properties:
         ask_id: {type: string}
         access_request_ref: {type: string, description: Set when the ask is the caller's own access request, or a human is reading that request's event. Absent for ordinary asks.}
-        status: {type: string, enum: [open, answered, needs_context, withdrawn, expired]}
+        status: {type: string, enum: [open, answered, needs_context, withdrawn, withdrawn_as_stale, expired]}
+        retirement_event_ref: {type: string, description: Current retirement token required to undo.}
         subject_ref: {type: string}
         response: {type: object, additionalProperties: true, nullable: true}
         task_outcome:
@@ -15116,6 +15325,8 @@ components:
         kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -15159,6 +15370,8 @@ components:
                   inbox_item_id: { type: string }
                   event_ref: { type: string, description: "Authoritative ask event reference (event:<id>) for this member." }
                   title: { type: string }
+                  presentation_revision: {type: integer, minimum: 0}
+                  presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
                   situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
                   impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
                   recommendation: {$ref: '#/components/schemas/AskRecommendation'}
@@ -15730,6 +15943,8 @@ components:
         subject_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
         body: { type: string }
+        presentation_revision: {type: integer, minimum: 0}
+        presentation_rewrite: {$ref: '#/components/schemas/AskPresentationRevision'}
         situation: {$ref: '#/components/schemas/AskPresentation/properties/situation'}
         impact: {$ref: '#/components/schemas/AskPresentation/properties/impact'}
         recommendation: {$ref: '#/components/schemas/AskRecommendation'}

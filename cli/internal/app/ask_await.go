@@ -94,11 +94,15 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 					continue
 				}
 				resp.Body.Close()
-				_, ackErr := a.invokeRawJSON(awaitCtx, cfg, "await delivery", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/delivery", map[string]any{"subscription_id": subscription, "state": "delivered", "attempts": 1})
-				if ackErr != nil {
-					out["delivery_acknowledged"] = false
-				} else {
-					out["delivery_acknowledged"] = true
+				// Reversible curation is visible to status readers, but owns no
+				// answer delivery receipt or continuation acknowledgement.
+				if status != "withdrawn_as_stale" {
+					_, ackErr := a.invokeRawJSON(awaitCtx, cfg, "await delivery", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/delivery", map[string]any{"subscription_id": subscription, "state": "delivered", "attempts": 1})
+					if ackErr != nil {
+						out["delivery_acknowledged"] = false
+					} else {
+						out["delivery_acknowledged"] = true
+					}
 				}
 				return awaitAskOutcomeResult(target, out)
 			}
@@ -148,7 +152,7 @@ func awaitAskOutcomeResult(target string, out map[string]any) (*commandResult, e
 			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, "rejected", message), out)
 		}
 		return &commandResult{Data: out}, nil
-	case "needs_context", "withdrawn", "expired":
+	case "needs_context", "withdrawn", "withdrawn_as_stale", "expired":
 		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, anyString(out["status"]), "ask ended: "+anyString(out["status"])), out)
 	default:
 		return nil, errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "unknown ask state")

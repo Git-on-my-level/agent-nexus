@@ -85,6 +85,25 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	}
 	b.fillPrincipals(decisions, "requested_by")
 	b.fillPrincipals(yourAsks, "requested_by")
+	var fillRewrites func([]map[string]any)
+	fillRewrites = func(items []map[string]any) {
+		for _, item := range items {
+			if rewrite, ok := item["presentation_rewrite"].(map[string]any); ok {
+				id := anyStringValue(rewrite["actor_id"])
+				if p, ok := b.display[id]; ok {
+					rewrite["actor"] = p
+				}
+			}
+			if batch, ok := item["batch"].(map[string]any); ok {
+				if members, ok := batch["members"].([]map[string]any); ok {
+					fillRewrites(members)
+				}
+			}
+		}
+	}
+	fillRewrites(decisions)
+	fillRewrites(yourAsks)
+
 	b.fillPrincipals(answered, "answered_by")
 	for _, initiative := range append(append([]map[string]any{}, initiatives...), loops...) {
 		if p, ok := initiative["promise"].(map[string]any); ok {
@@ -278,6 +297,27 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 	if err != nil {
 		return nil, nil, false, err
 	}
+	presentationAsks := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		var event map[string]any
+		if err := json.Unmarshal([]byte(row.payload), &event); err != nil {
+			return nil, nil, false, err
+		}
+		presentationAsks = append(presentationAsks, map[string]any{"id": row.AskID, "payload": event["payload"]})
+	}
+	states, err := b.s.AskPresentationStates(b.ctx, presentationAsks)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	for i := range rows {
+		var event map[string]any
+		_ = json.Unmarshal([]byte(rows[i].payload), &event)
+		payload := asMapValue(event["payload"])
+		ApplyAskPresentationState(payload, states[rows[i].AskID])
+		rows[i].Title = anyStringValue(payload["title"])
+		encoded, _ := json.Marshal(event)
+		rows[i].payload = string(encoded)
+	}
 	asks := make([]BriefAsk, len(rows))
 	index := map[string]briefAskRow{}
 	for i, r := range rows {
@@ -327,6 +367,10 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			"blocks": a.blocksJSON(subjects), "blocks_count": a.BlocksCount, "proposals": briefProposals(payload),
 		}
 		askpresentation.Copy(item, payload)
+		if rewrite, ok := item["presentation_rewrite"].(map[string]any); ok {
+			b.actors[anyStringValue(rewrite["actor_id"])] = true
+		}
+
 		if a.AskID != "" {
 			item["event_ref"] = "event:" + a.AskID
 		}

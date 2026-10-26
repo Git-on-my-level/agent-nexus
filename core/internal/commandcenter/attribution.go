@@ -17,3 +17,9 @@ func AttributionFrom(ctx context.Context) (Attribution, bool) {
 	a, ok := ctx.Value(attributionKey{}).(Attribution)
 	return a, ok
 }
+
+// WithoutAttribution keeps a derived recipient-facing record independent of
+// the run that authored its private audit.
+func WithoutAttribution(ctx context.Context) context.Context {
+	return context.WithValue(ctx, attributionKey{}, struct{}{})
+}

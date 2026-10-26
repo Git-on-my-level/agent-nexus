@@ -172,6 +172,16 @@
     "policy": "record"
   },
   {
+    "method": "GET",
+    "path": "/asks/{ask_id}/presentation",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/revise",
+    "policy": "reference-write"
+  },
+  {
     "method": "POST",
     "path": "/asks/{ask_id}/subscriptions",
     "policy": "record"
@@ -1368,5 +1378,10 @@
     "method": "GET",
     "path": "/workspace/dashboard/reports",
     "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/asks/{ask_id}/retire",
+    "policy": "reference-write"
   }
 ]

@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-var keys = []string{"situation", "impact", "recommendation", "alternatives", "if_no_answer", "details", "evidence"}
+var keys = []string{"situation", "impact", "recommendation", "alternatives", "if_no_answer", "details", "evidence", "presentation_revision", "presentation_rewrite"}
 
 // Copy projects only presentation fields from an already-authorized event.
 func Copy(dst, src map[string]any) {

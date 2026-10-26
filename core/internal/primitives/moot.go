@@ -226,7 +226,7 @@ func (a citedAsk) askCitedDecided(now time.Time) (bool, string) {
 		}
 	}
 	switch a.State {
-	case "withdrawn", "expired", "resolved":
+	case "withdrawn", "withdrawn_as_stale", "expired", "resolved":
 		return true, mootStamp(a.AnsweredAt)
 	case "answered":
 		if a.Outcome == "needs_context" {

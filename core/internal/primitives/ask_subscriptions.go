@@ -102,7 +102,7 @@ func (s *Store) CreateAskSubscription(ctx context.Context, actor, askRef string,
 		return nil, err
 	}
 	if askID != "" {
-		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO ask_deliveries(id,subscription_id,ask_id,kind,next_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM human_attention_request_resolutions WHERE request_event_id=?)`, id+"."+askID, id, askID, in.Kind, at, askID); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO ask_deliveries(id,subscription_id,ask_id,kind,next_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM human_attention_request_resolutions r JOIN events outcome ON outcome.id=r.resolution_event_id WHERE r.request_event_id=? AND outcome.type<>'human_attention_retired')`, id+"."+askID, id, askID, in.Kind, at, askID); err != nil {
 			return nil, err
 		}
 	}

@@ -13,6 +13,12 @@ import (
 // be added here before they are published in help or meta commands.
 func commandSideEffectClass(command string) string {
 
+	if command == "ask presentation" {
+		return "read_only"
+	}
+	if command == "ask revise" || command == "ask retire" {
+		return "remote_coordination_write"
+	}
 	if command == "git sync" || command == "hook" {
 		return "remote_coordination_write"
 	}

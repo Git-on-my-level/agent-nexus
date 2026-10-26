@@ -560,6 +560,9 @@ func loadVisibleInboxItemsFiltered(r *http.Request, opts handlerOptions, notific
 	if err := enrichInboxCardSummaries(r, opts, payloadItems); err != nil {
 		return nil, err
 	}
+	if err := enrichAskPresentations(r, opts, payloadItems); err != nil {
+		return nil, err
+	}
 	return payloadItems, nil
 }
 
@@ -602,7 +605,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 	}
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "inbox item not found")
+		writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
 		return
 	}
 	payload := payloadFromDerivedInboxItem(item)
@@ -617,6 +620,10 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 
+	if err := enrichAskPresentations(r, opts, []map[string]any{payload}); err != nil {
+		writeReadInternalError(w, r, err, "cannot read ask presentation")
+		return
+	}
 	enrichHumanAttentionNotificationStatus(r.Context(), opts, payload)
 	enrichAccessRequestInboxItem(r.Context(), opts, payload)
 	if err := enrichInboxCardSummaries(r, opts, []map[string]any{payload}); err != nil {
@@ -712,7 +719,24 @@ func isStaleTopicException(event map[string]any) bool {
 
 func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
 	out := make(map[string]struct{})
+	// Undo names one exact retirement, so replay order and tied timestamps do
+	// not accidentally reopen a later retirement or an ordinary withdrawal.
+	undone := map[string]bool{}
 	for _, event := range events {
+		if event["type"] == primitives.AskReopenedEventType {
+			p, _ := event["payload"].(map[string]any)
+			undone[strings.TrimPrefix(anyString(p["retirement_event_ref"]), "event:")] = true
+		}
+	}
+	for _, event := range events {
+		if event["type"] == primitives.AskRetiredEventType {
+			if !undone[anyString(event["id"])] && !undone[strings.TrimPrefix(anyString(event["ref"]), "event:")] {
+				p, _ := event["payload"].(map[string]any)
+				out["event:"+anyString(p["request_event_id"])] = struct{}{}
+			}
+			continue
+		}
+
 		eventType, _ := event["type"].(string)
 		if eventType == humanAttentionWithdrawnEventType {
 			payload, _ := event["payload"].(map[string]any)

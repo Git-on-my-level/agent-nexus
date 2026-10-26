@@ -165,7 +165,7 @@ func ExitCode(err error) int {
 		return 9
 	case "needs_context":
 		return 10
-	case "withdrawn":
+	case "withdrawn", "withdrawn_as_stale":
 		return 11
 	case "expired", "lease_expired":
 		return 12
