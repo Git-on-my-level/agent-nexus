@@ -14,13 +14,15 @@ describe("attentionRank", () => {
       "past_promise",
       "no_promise",
       "moving",
+      "digest",
       "done",
     ]);
     expect(attentionRank("past_promise")).toBeLessThan(
       attentionRank("no_promise"),
     );
     expect(attentionRank("no_promise")).toBeLessThan(attentionRank("moving"));
-    expect(attentionRank("moving")).toBeLessThan(attentionRank("done"));
+    expect(attentionRank("moving")).toBeLessThan(attentionRank("digest"));
+    expect(attentionRank("digest")).toBeLessThan(attentionRank("done"));
   });
 
   it("sorts an unknown or removed state with the tail", () => {

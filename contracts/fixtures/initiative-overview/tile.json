@@ -54,9 +54,9 @@
   "title": "Initiative",
   "summary": {
     "status": {
-      "state": "no_promise",
-      "label": "No promise",
-      "reason": "No promise.",
+      "state": "moving",
+      "label": "Moving",
+      "reason": "Next: report progress by 2026-10-05T00:00:00Z.",
       "since": "2026-10-04T12:00:00Z"
     },
     "progress": {
@@ -94,7 +94,8 @@
     },
     "attention_truncated": true,
     "last_movement_at": "2026-10-04T12:00:00Z",
-    "created_at": "2026-10-04T12:00:00Z"
+    "created_at": "2026-10-04T12:00:00Z",
+    "owner": "actor:actor-1"
   },
   "priority": "none",
   "needs": [],
@@ -102,10 +103,20 @@
   "board_ref": "board:portfolio",
   "updated_at": "2026-10-04T12:00:00Z",
   "plan_health": {
-    "state": "no_promise",
-    "reason": "No promise.",
+    "state": "moving",
+    "reason": "Next: report progress by 2026-10-05T00:00:00Z.",
     "since": "2026-10-04T12:00:00Z",
-    "last_evidence_at": "2026-10-04T12:00:00Z"
+    "last_evidence_at": "2026-10-04T12:00:00Z",
+    "promise": {
+      "at": "2026-10-05T00:00:00Z",
+      "what": "report progress",
+      "source": "default",
+      "source_ref": "card:initiative",
+      "author": {
+        "id": "actor-1",
+        "display": "actor-1"
+      }
+    }
   },
   "next_step": {
     "id": "build",
@@ -142,9 +153,9 @@
   "summary_text": "",
   "work_summary": {
     "status": {
-      "state": "no_promise",
-      "label": "No promise",
-      "reason": "No promise.",
+      "state": "moving",
+      "label": "Moving",
+      "reason": "Next: report progress by 2026-10-05T00:00:00Z.",
       "since": "2026-10-04T12:00:00Z"
     },
     "progress": {
@@ -182,6 +193,7 @@
     },
     "attention_truncated": true,
     "last_movement_at": "2026-10-04T12:00:00Z",
-    "created_at": "2026-10-04T12:00:00Z"
+    "created_at": "2026-10-04T12:00:00Z",
+    "owner": "actor:actor-1"
   }
 }

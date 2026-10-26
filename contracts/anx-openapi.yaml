@@ -12070,14 +12070,14 @@ components:
 
     WorkSummary:
       type: object
-      description: Computed card presentation, independent of board role. status.state is the card's promise state (past_promise, moving, no_promise, done), the same value plan_health.state carries; label and reason are computed from it. no_plan is a hint and never a status. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
+      description: Computed card presentation, independent of board role. status.state is the card's promise state (past_promise, moving, no_promise, digest, done), the same value plan_health.state carries; label and reason are computed from it. no_plan is a hint and never a status. Existing Card/Work collections expose this only with summary=1, aliased at summary with prose in summary_text. Default collection shapes remain unchanged; writes still accept prose. Card ref previews and the plan read expose computed summaries directly.
       required: [status]
       properties:
         status:
           type: object
           required: [state, label, reason]
           properties:
-            state: {type: string, enum: [past_promise, moving, no_promise, done]}
+            state: {type: string, enum: [past_promise, moving, no_promise, digest, done]}
             label: {type: string}
             reason: {type: string}
             since: {type: string, nullable: true, format: date-time}
@@ -13042,9 +13042,9 @@ components:
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (open, nothing promised). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
+      description: "New cards receive a computed source=default promise 12 hours after creation, superseded by explicit promises, cadence or evidence. Agent creators automatically acquire a 24-hour work lease. Digest-only work has state=digest and no repeat alerts. Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (live-owned non-cadence work with nothing promised), digest (unowned/fallback work or a default after its one reminder). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
-        state: {type: string, enum: [past_promise, moving, no_promise, done]}
+        state: {type: string, enum: [past_promise, moving, no_promise, digest, done]}
         reason: {type: string}
         since: {type: string, format: date-time, nullable: true}
         promise: { $ref: '#/components/schemas/BriefPromise' }
@@ -15261,6 +15261,11 @@ components:
         generated_at: { type: string, format: date-time }
         principal: { $ref: '#/components/schemas/BriefPrincipal' }
         decisions: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
+        daily_digest:
+          type: array
+          maxItems: 50
+          description: Principal-owned digest preview; reads do not send notifications. Unowned/fallback work and reminded defaults are excluded from ordinary initiatives. Delivery is at most one digest per owner and UTC day, with a bounded preview.
+          items: {$ref: '#/components/schemas/TrackingDigestCard'}
         initiatives: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefInitiative' } }
         your_asks: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
         answered_for_you: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefAnswered' } }
@@ -15273,6 +15278,13 @@ components:
             initiatives: { type: boolean }
             your_asks: { type: boolean }
             answered_for_you: { type: boolean }
+    TrackingDigestCard:
+      type: object
+      required: [ref, title, reason]
+      properties:
+        ref: {type: string}
+        title: {type: string}
+        reason: {type: string, enum: [awaiting_owner, default_promise_lapsed]}
     BriefPrincipal:
       type: object
       required: [id, display]
@@ -15369,9 +15381,9 @@ components:
       type: object
       required: [at, what, source]
       properties:
-        at: { type: string, format: date-time }
+        at: { type: string, format: date-time, description: Exact computed deadline; fractional seconds are preserved by materialized and direct folds. }
         what: { type: string, maxLength: 160 }
-        source: { type: string, enum: [note, plan_step, due_at, wake_condition, cadence] }
+        source: { type: string, enum: [note, plan_step, due_at, wake_condition, cadence, default] }
         source_ref: { type: string }
         author: { $ref: '#/components/schemas/BriefPrincipal' }
     BriefNote:
@@ -15392,8 +15404,8 @@ components:
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         ref: { type: string, description: "card:<handle-or-id>" }
         title: { type: string }
-        owner: { type: string, nullable: true, description: First canonical assignee ref, as in work list; null when unassigned. }
-        state: { type: string, enum: [past_promise, moving, no_promise, done] }
+        owner: { type: string, nullable: true, description: First canonical assignee ref, including an implicit creator or assigned fallback owner; never inferred from the promise author. Null only when unassigned. }
+        state: { type: string, enum: [past_promise, moving, no_promise, digest, done] }
         placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
         promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }
         past_promise_for_seconds: { type: integer, nullable: true }
@@ -15698,7 +15710,7 @@ components:
       type: object
       required: [status, count, items, more, by_state, href]
       description: >
-        Every initiative's promise state, in the shared order (past_promise, no_promise, moving, done). by_state counts all
+        Every initiative's promise state, in the shared order (past_promise, no_promise, moving, digest, done). by_state counts all
         of them by state, so an initiative with no promise is visible as a gap rather than reported as moving.
       properties:
         status: { type: string, enum: [ok] }
@@ -15716,7 +15728,7 @@ components:
               ref: { type: string }
               title: { type: string }
               href: { type: string }
-              state: { type: string, enum: [past_promise, moving, no_promise, done] }
+              state: { type: string, enum: [past_promise, moving, no_promise, digest, done] }
               reason: { type: string }
               phase: { type: string }
               next_step: { type: string }
@@ -16189,6 +16201,7 @@ components:
           items: {type: string, enum: [push, digest]}
         label: {type: string, maxLength: 80, description: Short channel name shown to people in notification settings.}
     Delivery:
+      description: Claims and history revalidate all subject references under the recipient's current access, regardless of kind. Inaccessible rows are omitted. Receipt acknowledgements return queue state with an empty payload and omit source_ref and last_error. Opaque provider errors are not replayed.
       type: object
       additionalProperties: false
       required: [delivery_id, principal_id, channel, kind, status, payload, attempt, max_attempts, next_attempt_at, created_at, updated_at]
@@ -16227,7 +16240,7 @@ components:
         delivery_id: {type: string}
         outcome: {type: string}
         attempt: {type: integer}
-        error: {type: string}
+        error: {type: string, description: Omitted from history to avoid replaying opaque provider content.}
         created_at: {type: string, format: date-time}
     NotificationChannelAddressing:
       type: string

@@ -77,6 +77,16 @@ Each card has at most one row in `card_leases`, holding:
   receipt. A writer that checks "my epoch is still current" rejects work from a
   holder that has been superseded.
 
+Acquire and renew re-point `cards.assignee` to the lease owner's actor in the
+same transaction when `owner` is an `actor:` reference or a resolvable `agent:`
+reference. A renewal does this even when the card was reassigned since acquire.
+Opaque launcher/session labels leave the assignee unchanged. Renewal preserves
+a reminded default promise's digest route; it does not count as progress.
+
+Agent creation's automatic lease has a **24-hour TTL**. David's **12-hour**
+default is the computed promise deadline, not a lease duration. These are
+independent clocks; explicit lease TTLs and renewal keep their existing rules.
+
 ### Hand-off
 
 `anx lease release <card> --owner O --handoff-to P [--ttl D]` transfers the
@@ -97,7 +107,14 @@ lease instead of freeing it, so the card is never ownerless between two lanes.
 - Archived or trashed cards cannot be handed off (or acquired or renewed); the
   holder can still release.
 
-### Ownerless live work wakes the lead
+### Original card_unowned protocol (superseded)
+
+The 2026-10-25 [tracking defaults](tracking-defaults.md) supersede this original
+per-card wake protocol. New agent-created cards acquire a lease automatically;
+release and expiry assign fallback responsibility with a note and route work
+into one daily owner digest. Old pending `card_unowned` marks are consumed into
+the same fallback/digest path. The original protocol below documents historical
+events and upgrade compatibility; it is not the current alert policy.
 
 A lane that exits or idles without handing off can leave live work with no
 owner. anx turns that into a wake.

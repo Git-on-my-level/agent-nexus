@@ -5,8 +5,10 @@ answered for you:  ask/80 "Ship rig firmware 1.4?" → "Hold a week" (not your r
 waiting on human:  none
 your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 Oct 21 checkpoint) · moved 2×
 your initiatives:  fleet-onboarding  moving · next Oct 16 enroll m6
-your initiatives:  observability  moving · next Oct 28 dashboards live
+your initiatives:  observability  moving · next Oct 15 report progress
 your initiatives:  labels  no promise · last evidence Oct 3 · possibly moot
 your initiatives:  ble-reliability  no promise
 your initiatives:  docs-refresh  done
+daily digest:  card:release-check "Release check" · default promise elapsed
+daily digest:  card:orphaned-run "Run awaiting an owner" · awaiting owner
 next: anx note card:battery-measurement --evidence <ref> --next <date> "<what>"

@@ -32,7 +32,12 @@ retry), the reply draft keeps the `inbox:<item-id>:reply` key on the list, the
 permalink and the initiative page, and a PM decision answer goes through
 `enqueuePmDecisionAnswer`, which refuses to send when it cannot persist.
 Placement moves (the Initiatives board, the command palette) use
-`enqueueTaskMove`; the swimlane board's group and fold use `enqueueGrouping`. `tests/e2e/decide.spec.js` covers
+`enqueueTaskMove`; the swimlane board's group, fold and "Make it an
+initiative" use `enqueueGrouping`. The last is the version-fenced
+`work.patch` with no request key: a retry repeats the original `if_version`,
+so a landed patch is refused with 409, and the sender confirms it only from a
+read-back showing a newer version in the wanted `top_level` state
+(`sendTopLevel` in `groupingPlan.js`). `tests/e2e/decide.spec.js` covers
 one-tap answers, undo and drafts across the list and the permalink.
 
 The full invariant remains incomplete. Do not enable blind retries

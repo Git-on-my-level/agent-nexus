@@ -14,7 +14,9 @@ import { waitForAppReady } from "../helpers/pageReady.js";
 import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 
 const BEFORE = process.env.FIRST_RUN_CAPTURE_BEFORE === "1";
-const SHOTS = `.screenshots/review/first-run${BEFORE ? "-before" : ""}`;
+const SHOTS =
+  process.env.FIRST_RUN_SHOTS ||
+  `.screenshots/review/first-run${BEFORE ? "-before" : ""}`;
 
 const WS = "/o/local/w/local";
 
@@ -58,6 +60,8 @@ async function installEmptyWorkspace(page) {
           generated_at: new Date().toISOString(),
           decisions: [],
           initiatives: [],
+          loops: [],
+          daily_digest: [],
           your_asks: [],
           answered_for_you: [],
         },
@@ -83,6 +87,9 @@ test("the first-run path reads as empty, not broken", async ({ page }) => {
   await page.goto(`${WS}/watch`);
   await waitForAppReady(page);
   await expect(page.locator("[data-watch-empty]")).toBeVisible(FIRST_PAINT);
+  await expect(page.getByRole("region", { name: "Daily digest" })).toHaveCount(
+    0,
+  );
   await page.screenshot({ path: `${SHOTS}/4-watch.png`, fullPage: true });
 
   await page.goto(`${WS}/agents`);

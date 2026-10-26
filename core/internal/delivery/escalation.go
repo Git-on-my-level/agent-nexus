@@ -247,7 +247,6 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 					return err
 				}
 			}
-			title := e.askTitle(ctx, a.id)
 			for _, r := range pushRecipients {
 				if e.CanRead == nil || !e.CanRead(ctx, r.principal, a.id) {
 					// A principal who cannot read the ask learns nothing about it.
@@ -262,7 +261,6 @@ func (e *Escalator) escalate(ctx context.Context, now time.Time) error {
 					Payload: map[string]any{
 						"type":         "ask_overdue",
 						"workspace":    e.WorkspaceName,
-						"title":        title,
 						"ref":          "event:" + a.id,
 						"link":         e.link(a.id),
 						"decide_by":    stamp(a.decideBy),
@@ -318,7 +316,7 @@ func (e *Escalator) digest(ctx context.Context, now time.Time) error {
 			if len(items) >= digestItemCap {
 				break
 			}
-			items = append(items, map[string]any{"title": e.askTitle(ctx, a.id), "ref": "event:" + a.id, "link": e.link(a.id), "decide_by": stamp(a.decideBy)})
+			items = append(items, map[string]any{"ref": "event:" + a.id, "link": e.link(a.id), "decide_by": stamp(a.decideBy)})
 		}
 		visible := len(overdue)
 		if visible == 0 {
@@ -400,12 +398,6 @@ func (e *Escalator) readableOverdue(ctx context.Context, now time.Time, principa
 		offset += n
 	}
 	return out, nil
-}
-
-func (e *Escalator) askTitle(ctx context.Context, id string) string {
-	var title sql.NullString
-	_ = e.Store.DB.QueryRowContext(ctx, `SELECT json_extract(payload_json,'$.payload.title') FROM events WHERE id=?`, id).Scan(&title)
-	return title.String
 }
 
 func (e *Escalator) link(id string) string {

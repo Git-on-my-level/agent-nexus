@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/resourceaccess"
 )
 
 const (
@@ -123,8 +125,11 @@ type ChannelSetting struct {
 }
 
 type Store struct {
-	DB  *sql.DB
-	Now func() time.Time
+	// AccessContext binds every payload read to the recipient, never the adapter.
+	// A missing binding fails closed.
+	AccessContext func(context.Context, string) context.Context
+	DB            *sql.DB
+	Now           func() time.Time
 	// CanRead reports whether principalID may read the ask event. Per-principal
 	// attention counts include an ask only when it returns true. Nil fails
 	// closed for those counts; the workspace totals stay unfiltered.
@@ -148,7 +153,20 @@ func newID(prefix string) string {
 }
 
 // Enqueue inserts a delivery once per idempotency key.
+// QueueWriter permits an owning store to atomically enqueue with its
+// domain CAS through the same scoped transaction.
+type QueueWriter interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func (s Store) Enqueue(ctx context.Context, req Request) (Delivery, bool, error) {
+	return EnqueueTx(ctx, s.DB, req, s.now())
+}
+
+// EnqueueTx retains ordinary delivery validation and idempotency; the caller
+// owns transaction commit and must pass its scoped writer.
+func EnqueueTx(ctx context.Context, q QueueWriter, req Request, now time.Time) (Delivery, bool, error) {
 	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
 	req.PrincipalID = strings.TrimSpace(req.PrincipalID)
 	if req.IdempotencyKey == "" || req.PrincipalID == "" || !ValidChannel(req.Channel) || (req.Kind != KindPush && req.Kind != KindDigest) {
@@ -158,19 +176,18 @@ func (s Store) Enqueue(ctx context.Context, req Request) (Delivery, bool, error)
 	if err != nil {
 		return Delivery{}, false, err
 	}
-	now := s.now()
 	notBefore := now
 	if req.NotBefore.After(now) {
 		notBefore = req.NotBefore.UTC()
 	}
-	result, err := s.DB.ExecContext(ctx, `INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, max_attempts, next_attempt_at, created_at, updated_at)
+	result, err := q.ExecContext(ctx, `INSERT INTO deliveries(delivery_id, idempotency_key, principal_id, channel, kind, status, payload_json, source_ref, max_attempts, next_attempt_at, created_at, updated_at)
 		VALUES(?,?,?,?,?,'pending',?,?,?,?,?,?) ON CONFLICT(idempotency_key) DO NOTHING`,
 		newID("dlv_"), req.IdempotencyKey, req.PrincipalID, req.Channel, req.Kind, string(payload), strings.TrimSpace(req.SourceRef), DefaultMaxAttempts, stamp(notBefore), stamp(now), stamp(now))
 	if err != nil {
 		return Delivery{}, false, fmt.Errorf("enqueue delivery: %w", err)
 	}
 	n, _ := result.RowsAffected()
-	d, err := s.getByKey(ctx, req.IdempotencyKey)
+	d, err := scanDelivery(q.QueryRowContext(ctx, `SELECT `+deliveryColumns+` FROM deliveries WHERE idempotency_key=?`, req.IdempotencyKey))
 	return d, n > 0, err
 }
 
@@ -225,8 +242,8 @@ func (s Store) ChannelsForAgent(ctx context.Context, agentID string) ([]string, 
 // set is one seek on idx_deliveries_claim. The address comes from the
 // recipient's channel setting (primary-key lookup); rows whose recipient has
 // since removed the channel, or whose kind the channel no longer accepts, are
-// canceled instead of handed out. A push whose recipient can no longer read
-// its ask (Store.CanRead, checked live per claimed row) is canceled too, and
+// canceled instead of handed out. Every payload and source reference is checked
+// under the recipient's current resource policy before serialization, and
 // a canceled row's payload is cleared. On a principal-addressed channel there is
 // no address: the recipient must still be an active human, and a human signed
 // in through an external identity grant is identified by that grant.
@@ -253,7 +270,7 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 	options, declared := opts[channel]
 	principalAddressed := declared && options.Addressing == AddressingPrincipal
 	now := s.now()
-	tx, err := s.DB.BeginTx(ctx, nil)
+	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +321,11 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 				cancel = "channel disabled by recipient"
 				break
 			}
-			active, identity, err := activeHuman(ctx, tx, d.PrincipalID)
+			// Credential-only routing is the channel's existing service
+			// authority check; unrelated private profile metadata must not
+			// mask active human identity. No business metadata is returned.
+			// Contributor reads below bind the recipient independently.
+			active, identity, err := activeHuman(resourceaccess.WithoutPolicy(ctx), tx, d.PrincipalID)
 			if err != nil {
 				return nil, err
 			}
@@ -315,10 +336,14 @@ func (s Store) Claim(ctx context.Context, channel, claimer string, limit int, le
 		case !saved || strings.TrimSpace(address) == "" || !toggled:
 			cancel = "channel disabled by recipient"
 		}
-		if cancel == "" && s.CanRead != nil && d.Kind == KindPush && strings.HasPrefix(d.SourceRef, "event:") &&
-			!s.CanRead(ctx, d.PrincipalID, strings.TrimPrefix(d.SourceRef, "event:")) {
-			// Access changed since the push was queued: hand out nothing.
-			cancel = "recipient can no longer read the ask"
+		if cancel == "" {
+			visible, err := s.resolvePayload(ctx, tx, &d)
+			if err != nil {
+				return nil, err
+			}
+			if !visible {
+				cancel = "no readable delivery subjects"
+			}
 		}
 		if cancel != "" {
 			// The payload is dropped with the delivery: nothing it held is
@@ -378,7 +403,16 @@ func Backoff(attempts int) time.Duration {
 // A retry of the receipt that already delivered or failed this attempt
 // returns that row and does not append another receipt. The claim token
 // stays on the row so that retry can be recognized; callers do not receive it.
-func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (Delivery, error) {
+func (s Store) RecordReceipt(ctx context.Context, deliveryID, claimToken, channel, outcomeName string, errText string, retryable bool, recordedBy string) (result Delivery, resultErr error) {
+	// Receipts acknowledge queue state; they must never replay a historical
+	// payload, source, or adapter error containing formerly readable content.
+	defer func() {
+		if resultErr == nil {
+			result.Payload = map[string]any{}
+			result.SourceRef = ""
+			result.LastError = ""
+		}
+	}()
 	deliveryID = strings.TrimSpace(deliveryID)
 	claimToken = strings.TrimSpace(claimToken)
 	if deliveryID == "" || claimToken == "" || (outcomeName != ReceiptDelivered && outcomeName != ReceiptFailed && outcomeName != ReceiptSkipped) {
@@ -487,6 +521,18 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 		return nil, nil, err
 	}
 	rows.Close()
+	filtered := make([]Delivery, 0, len(out))
+	for _, d := range out {
+		visible, err := s.resolvePayload(ctx, resourceaccess.NewDB(s.DB), &d)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !visible {
+			continue
+		}
+		filtered = append(filtered, d)
+	}
+	out = filtered
 	receipts := map[string][]Receipt{}
 	if len(out) == 0 {
 		return out, receipts, nil
@@ -511,6 +557,7 @@ func (s Store) ListForPrincipal(ctx context.Context, principalID string, limit i
 		if err := rrows.Scan(&r.DeliveryID, &r.Outcome, &r.Attempt, &r.Error, &r.CreatedAt); err != nil {
 			return nil, nil, err
 		}
+		r.Error = ""
 		receipts[r.DeliveryID] = append(receipts[r.DeliveryID], r)
 	}
 	if err := rrows.Err(); err != nil {

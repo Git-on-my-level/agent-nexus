@@ -12,6 +12,10 @@
    * the reader start open, so the rows that matter read without a click;
    * every other row starts closed. Several rows can be open.
    *
+   * A proposed initiative (core's `proposed`: still in Backlog) carries a
+   * "proposed" tag. Its outcome, when core sends one that says more than the
+   * title, reads under it.
+   *
    * Everything shown is in the brief except a row's plan steps, which
    * `InitiativeDetails` reads only when the reader opens that row.
    */
@@ -29,6 +33,7 @@
     kidRows,
     nextCell,
     nextLine,
+    outcomeLine,
     promisesCell,
     segmentsLabel,
   } from "$lib/watchRollup.js";
@@ -135,12 +140,14 @@
   {@const line = nextLine(row, now)}
   {@const promises = promisesCell(row)}
   {@const next = nextCell(row)}
-  {@const kids = isRowOpen ? kidRows(row.rollup) : null}
+  {@const kids = isRowOpen ? kidRows(row.rollup, now) : null}
+  {@const outcome = outcomeLine(row)}
   <div
     class="border-b border-line-subtle last:border-b-0"
     data-collection-row={row.ref}
     data-watch-state={row.state}
     data-bucket={row.bucket}
+    data-proposed={row.proposed ? "true" : undefined}
     data-expanded={String(isRowOpen)}
   >
     <!-- The title button is the keyboard and screen-reader control; a click
@@ -177,7 +184,21 @@
               >{row.waitingOnYouCount} waiting on you</a
             >
           {/if}
+          {#if row.proposed}
+            <span
+              class="tag bg-accent-soft text-accent-text"
+              data-source="computed:initiatives.proposed"
+              data-rollup-proposed>proposed</span
+            >
+          {/if}
         </span>
+        {#if outcome}
+          <span
+            class="mt-0.5 block text-micro text-fg [overflow-wrap:anywhere]"
+            data-source="computed:initiatives.outcome"
+            data-rollup-outcome>{outcome}</span
+          >
+        {/if}
         {#if line.length}
           <span
             class="mt-0.5 block text-micro text-fg-muted [overflow-wrap:anywhere]"
@@ -237,26 +258,56 @@
             {#each kids.rows as kid (kid.ref)}
               <div class="grid-row kid" data-rollup-kid={kid.ref}>
                 <span></span>
-                <a
-                  class="min-w-0 text-fg hover:text-accent-text [overflow-wrap:anywhere]"
-                  href={hrefFor(kid.ref)}>{kid.title}</a
-                >
+                <span class="min-w-0 [overflow-wrap:anywhere]">
+                  <a
+                    class="text-fg hover:text-accent-text"
+                    href={hrefFor(kid.ref)}>{kid.title}</a
+                  >{#if kid.codes}<span
+                      class="text-fg-muted"
+                      data-source="computed:initiatives.rollup.workstreams.rollup.children.short_code"
+                      data-kid-codes>{` · ${kid.codes}`}</span
+                    >{/if}{#if kid.cards}<span
+                      class="text-fg-muted"
+                      data-source="computed:initiatives.rollup.workstreams.rollup.total"
+                      data-kid-cards
+                      >{` · ${kid.cards} ${kid.cards === 1 ? "card" : "cards"}`}</span
+                    >{/if}
+                </span>
                 <span
-                  class={kid.tone === "needs"
+                  class={kid.stateTone === "needs"
                     ? "font-medium text-danger-text"
                     : "text-fg-muted"}
-                  >{kid.tone === "needs" ? "needs you" : kid.stateText}</span
+                  title={kid.stateTitle || undefined}
+                  data-source="computed:{kid.stateField}"
+                  data-kid-state
+                  >{kid.stateTone === "needs" && !kid.cards
+                    ? "needs you"
+                    : kid.stateText}</span
                 >
                 <span
                   class="col-wide {kid.promise.tone === 'warn'
                     ? 'text-warn-text'
-                    : 'text-fg-muted'}">{kid.promise.text}</span
+                    : 'text-fg-muted'}"
+                  data-source={kid.promise.field
+                    ? `computed:${kid.promise.field}`
+                    : undefined}
+                  data-kid-promise>{kid.promise.text}</span
                 >
-                <span
-                  class="col-wide {kid.next === 'You'
-                    ? 'font-semibold text-fg'
-                    : 'text-fg-muted'}">{kid.next}</span
-                >
+                <span class="col-wide min-w-0 truncate" data-kid-owner>
+                  {#if kid.next.kind === "you"}
+                    <span class="font-semibold text-fg">You</span>
+                  {:else if kid.next.kind === "owner"}
+                    <span
+                      class="text-fg-muted"
+                      data-source={kid.workstream
+                        ? "computed:initiatives.rollup.workstreams.owner"
+                        : "computed:initiatives.rollup.children.owner"}
+                      >{ownerLabel(kid.next.ref)}</span
+                    >
+                  {:else}
+                    <span class="text-fg-muted">—</span>
+                  {/if}
+                </span>
               </div>
             {/each}
             {#if kids.more || kids.otherCards}

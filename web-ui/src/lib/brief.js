@@ -17,13 +17,20 @@ import {
 } from "../../../contracts/gen/ts/dist/enums.js";
 import { normalizeLoop } from "$lib/loops.js";
 
-/** The four computed initiative states, in attention order. */
-export const WATCH_STATES = ["past_promise", "moving", "no_promise", "done"];
+/** Computed initiative states, in attention order. */
+export const WATCH_STATES = [
+  "past_promise",
+  "moving",
+  "no_promise",
+  "digest",
+  "done",
+];
 
 export const WATCH_STATE_LABELS = {
   past_promise: "Past promise",
   moving: "Moving",
   no_promise: "No promise",
+  digest: "Daily digest",
   done: "Done",
 };
 
@@ -44,6 +51,10 @@ export const DECISION_KIND_LABELS = {
  */
 export const BRIEF_COMPUTED_FIELDS = new Set([
   "curation_suggestions",
+  "daily_digest",
+  "daily_digest.ref",
+  "daily_digest.title",
+  "daily_digest.reason",
   "ungrouped.created_by",
   "ungrouped.next_actions",
   "initiatives.loop",
@@ -477,6 +488,9 @@ export function normalizeBrief(raw) {
     decisions: (Array.isArray(brief?.decisions) ? brief.decisions : [])
       .map(normalizeDecision)
       .filter(Boolean),
+    dailyDigest: (Array.isArray(brief?.daily_digest) ? brief.daily_digest : [])
+      .map((row) => ({ ...refTitle(row), reason: text(row?.reason) }))
+      .filter((row) => row.ref),
     initiatives: (Array.isArray(brief?.initiatives) ? brief.initiatives : [])
       .map(normalizeInitiative)
       .filter(Boolean),

@@ -1,5 +1,5 @@
-Fleet onboarding 1 waiting on you next: enroll m6 · Oct 16 no children yet by Oct 16 You Last evidence 3h ago Owner — Next steps: Show next steps Open initiative →
-Label scheme 1 waiting on you no promise·last evidence 12d ago no children yet — You Last evidence 12d ago Owner — Next steps: Show next steps Open initiative →
-Observability next: dashboards live · Oct 28 no children yet by Oct 28 —
-BLE reliability no promise·no evidence yet no children yet — —
+Fleet onboarding 1 waiting on you next: enroll m6 · Oct 16 no children yet by Oct 16 You Last evidence 3h ago Owner CL claude Next steps: Show next steps Open initiative →
+Label scheme 1 waiting on you no promise·last evidence 12d ago no children yet — You Last evidence 12d ago Owner PM pm Next steps: Show next steps Open initiative →
+Observability next: report progress · Oct 15 no children yet by Oct 15 creator
+BLE reliability no promise·no evidence yet no children yet — codex
 1 done

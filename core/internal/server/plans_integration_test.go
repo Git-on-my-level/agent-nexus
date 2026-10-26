@@ -126,14 +126,14 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	ref := anyString(work["ref"])
 	endpoint := h.baseURL + "/cards/" + ref + "/plan"
 	initial := workGetJSON(t, endpoint, 200)
-	if initial["plan_health"].(map[string]any)["state"] != "no_promise" || initial["next_step"] != nil {
+	if initial["plan_health"].(map[string]any)["state"] != "moving" || initial["next_step"] != nil {
 		t.Fatal(initial)
 	}
 	token := initial["if_updated_at"]
 	p := map[string]any{"steps": []any{map[string]any{"id": "build", "title": "Build", "status": "done"}, map[string]any{"id": "ship", "title": "Ship", "status": "blocked", "after": []string{"build"}}}}
 	result := planRequest(t, "PUT", endpoint, map[string]any{"actor_id": "actor-1", "if_updated_at": token, "plan": p}, 200)
 	state := result["plan_state"].(map[string]any)
-	if result["plan_health"].(map[string]any)["state"] != "no_promise" || result["status_mismatch"] != true || state["health"] != nil || state["progress"].(map[string]any)["done"] != float64(1) {
+	if result["plan_health"].(map[string]any)["state"] != "moving" || result["status_mismatch"] != true || state["health"] != nil || state["progress"].(map[string]any)["done"] != float64(1) {
 		t.Fatal(result)
 	}
 	for _, path := range []string{"/cards/" + ref, "/work/" + ref} {
@@ -143,7 +143,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 			key = "work"
 		}
 		card := read[key].(map[string]any)
-		if card["plan_health"].(map[string]any)["state"] != "no_promise" || card["status_mismatch"] != true || card["column_key"] != "backlog" && key == "card" || card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != nil {
+		if card["plan_health"].(map[string]any)["state"] != "moving" || card["status_mismatch"] != true || card["column_key"] != "backlog" && key == "card" || card["plan"] == nil || card["plan_state"].(map[string]any)["health"] != nil {
 			t.Fatal(read)
 		}
 	}
@@ -161,7 +161,7 @@ func TestPlanAPIProjectsCardsWorkReportsAndTimeline(t *testing.T) {
 	report := workGetJSON(t, h.baseURL+"/docs/"+doc+"/report", 200)
 	items := reportPanelByType(t, report, "live-initiatives")["data"].(map[string]any)["items"].([]any)
 	item := items[0].(map[string]any)
-	if item["progress"].(map[string]any)["total"] != float64(2) || item["health"] != "no_promise" || item["needs"].([]any)[0] != "Ship" {
+	if item["progress"].(map[string]any)["total"] != float64(2) || item["health"] != "moving" || item["needs"].([]any)[0] != "Ship" {
 		t.Fatal(item)
 	}
 	planSteps := item["plan"].(map[string]any)["steps"].([]any)
@@ -230,8 +230,8 @@ func TestPromiseHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	}
 	// Nothing is promised on the decision card; the moot flag is what speaks
 	// up here.
-	if put["plan_health"].(map[string]any)["state"] != "no_promise" {
-		t.Fatal("an undated decision card reads no_promise", put)
+	if put["plan_health"].(map[string]any)["state"] != "moving" {
+		t.Fatal("an undated decision card receives its default promise", put)
 	}
 	read := workGetJSON(t, h.baseURL+"/work/"+anyString(decision["ref"]), 200)["work"].(map[string]any)
 	if read["possibly_moot"].(map[string]any)["flagged"] != true {
@@ -270,11 +270,11 @@ func TestPromiseHealthAndPossiblyMootEndToEnd(t *testing.T) {
 	}
 
 	// Promise sequencing on a fresh active card: nothing dated reads
-	// no_promise, a past wake date is a missed promise, a future due moves it.
+	// its default promise, a past wake date is missed, and a future due moves it.
 	quiet := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"actor-1","title":"Quiet initiative","phase":"in_progress"}`, 201)["work"].(map[string]any)
 	quietRead := workGetJSON(t, h.baseURL+"/work/"+anyString(quiet["ref"]), 200)["work"].(map[string]any)
-	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "no_promise" {
-		t.Fatal("nothing dated must read no_promise", quietRead["plan_health"])
+	if state := quietRead["plan_health"].(map[string]any)["state"]; state != "moving" {
+		t.Fatal("a new undated card must receive its default promise", quietRead["plan_health"])
 	}
 	version := int64(quietRead["version"].(float64))
 	patchAndRead := func(patch map[string]any, status int) map[string]any {

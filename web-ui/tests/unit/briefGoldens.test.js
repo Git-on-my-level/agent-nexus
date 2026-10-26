@@ -74,6 +74,28 @@ describe("brief.v1 fixture renders Decide and Watch (I7)", () => {
     expect(BRIEF_COMPUTED_FIELDS.has("curation_suggestions")).toBe(true);
   });
 
+  it("carries default promises and principal-owned digest fields in the shared contract", () => {
+    expect(BRIEF_COMPUTED_FIELDS.has("daily_digest")).toBe(true);
+    for (const field of ["ref", "title", "reason"]) {
+      expect(BRIEF_COMPUTED_FIELDS.has(`daily_digest.${field}`)).toBe(true);
+    }
+    expect(fixture.daily_digest.map((row) => row.reason)).toEqual([
+      "default_promise_lapsed",
+      "awaiting_owner",
+    ]);
+    expect(brief.dailyDigest).toEqual(fixture.daily_digest);
+    expect(normalizeBrief({}).dailyDigest).toEqual([]);
+    const raw = fixture.initiatives.find(
+      (row) => row.ref === "card:observability",
+    );
+    const normalized = brief.initiatives.find((row) => row.ref === raw.ref);
+    expect(raw.promise.source).toBe("default");
+    expect(normalized.promise).toMatchObject({
+      source: "default",
+      at: raw.promise.at,
+    });
+  });
+
   it("Decide golden", async () => {
     const lines = [];
     for (const decision of sortDecisions(brief.decisions)) {

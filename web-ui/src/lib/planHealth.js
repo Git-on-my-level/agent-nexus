@@ -6,7 +6,7 @@
  * it has no `work_summary`:
  *
  * - `plan_health {state, reason, since}` — where `state` is one of
- *   `past_promise | moving | no_promise | done`, computed by core from the
+ *   `past_promise | moving | no_promise | digest | done`, computed by core from the
  *   promise against the evidence. `reason` is time-independent; how long a
  *   promise has been past is `past_promise_for_seconds`.
  *
@@ -16,11 +16,12 @@
 
 const asText = (value) => String(value ?? "").trim();
 
-/** The shared order: past promise first, then no promise, moving, done. */
+/** The shared order: past promise, no promise, moving, digest, done. */
 export const ATTENTION_ORDER = Object.freeze([
   "past_promise",
   "no_promise",
   "moving",
+  "digest",
   "done",
 ]);
 
@@ -52,6 +53,13 @@ export const PLAN_HEALTH = Object.freeze({
     short: "Moving",
     glyph: "●",
     tone: "ok",
+  },
+  digest: {
+    state: "digest",
+    label: "Daily digest",
+    short: "Daily digest",
+    glyph: "○",
+    tone: "neutral",
   },
   done: {
     state: "done",

@@ -7,15 +7,19 @@ import {
   childSegments,
   childrenLine,
   decisionIndex,
+  kidPromise,
   kidRows,
   needsYouItems,
   nextCell,
   nextLine,
+  outcomeLine,
   promisesCell,
   rollupRows,
   rollupSummary,
   SEGMENT_CAP,
   segmentsLabel,
+  shortCodes,
+  stateSummary,
 } from "../../src/lib/watchRollup.js";
 import { mockupBrief } from "../fixtures/watchMockupSeed.js";
 
@@ -123,20 +127,144 @@ describe("children", () => {
   });
 
   it("lists workstreams as kid rows and counts the cards outside them", () => {
-    const kids = kidRows(row("card:capture").rollup);
+    const kids = kidRows(row("card:capture").rollup, NOW);
     expect(kids.workstreams).toBe(true);
+    // Each workstream from its own rollup: cards, codes, state, promise, owner.
     expect(
-      kids.rows.map((k) => [k.title, k.stateText, k.promise.text]),
+      kids.rows.map((k) => [
+        k.title,
+        k.cards,
+        k.codes,
+        k.stateText,
+        k.promise.text,
+        k.next,
+      ]),
     ).toEqual([
-      ["Record lane & legacy retirement", "In progress", "—"],
-      ["Speaker identification", "In progress", "past promise"],
-      ["Custody & merging", "In review", "—"],
+      [
+        "Record lane & legacy retirement",
+        9,
+        "T1 T2 P86 P90",
+        "4 moving · 1 review",
+        "due Oct 25",
+        { kind: "owner", ref: "actor-lead" },
+      ],
+      [
+        "Speaker identification",
+        4,
+        "",
+        "2 moving · 1 review",
+        "10h past",
+        { kind: "owner", ref: "actor-lead" },
+      ],
+      [
+        "Custody & merging",
+        8,
+        "wal ×2 P87",
+        "3 moving · 1 review",
+        "—",
+        { kind: "owner", ref: "actor-agents" },
+      ],
     ]);
+    // The rest of the breakdown is in the title, not lost.
+    expect(kids.rows[0].stateTitle).toBe(
+      "4 moving · 1 review · 2 ready · 1 backlog · 1 done",
+    );
     expect(kids.otherCards).toBe(6);
+    // A workstream with something waiting on the reader says so, and You.
+    const margin = kidRows(row("card:margin").rollup, NOW).rows;
+    const pricing = margin.find((k) => k.ref === "card:pricing-ladder");
+    expect(pricing.stateText).toBe("1 needs you · 1 moving");
+    expect(pricing.stateTone).toBe("needs");
+    expect(pricing.next).toEqual({ kind: "you" });
+    const reads = margin.find((k) => k.ref === "card:db-reads");
+    expect([reads.codes, reads.stateText, reads.promise.text]).toEqual([
+      "db-p1 db-p2 db-p3 db-p4 …",
+      "3 blocked · 4 moving",
+      "3 past",
+    ]);
     // No workstreams: the children themselves, each saying who is next.
-    const plain = kidRows(row("card:security").rollup);
+    const plain = kidRows(row("card:security").rollup, NOW);
     expect(plain.workstreams).toBe(false);
-    expect(plain.rows.find((k) => k.ref === "card:plugins").next).toBe("You");
+    expect(plain.rows.find((k) => k.ref === "card:plugins").next).toEqual({
+      kind: "you",
+    });
+    expect(plain.rows.find((k) => k.ref === "card:plugins").stateText).toBe(
+      "Blocked",
+    );
+  });
+
+  it("falls back to a workstream's own phase when core did not expand it", () => {
+    const kid = {
+      ref: "card:w",
+      title: "W",
+      state: "ready",
+      pastPromise: true,
+      needsViewer: false,
+      owner: null,
+      rollup: null,
+    };
+    const [only] = kidRows(
+      { total: 1, children: [kid], workstreams: [kid] },
+      NOW,
+    ).rows;
+    expect([only.cards, only.codes, only.stateText, only.promise.text]).toEqual(
+      [0, "", "Ready", "past promise"],
+    );
+    expect(only.next).toEqual({ kind: "none" });
+  });
+
+  it("reads a promise from the workstream's rollup, else the card's", () => {
+    const at = (hours) => new Date(NOW + hours * 3_600_000).toISOString();
+    const stream = (rollup) => ({
+      rollup: { pastPromise: 0, earliestPromiseAt: null, ...rollup },
+    });
+    expect(kidPromise(stream({ pastPromise: 3 }), NOW).text).toBe("3 past");
+    expect(kidPromise(stream({ earliestPromiseAt: at(-6) }), NOW)).toEqual({
+      text: "6h past",
+      tone: "warn",
+      field: "initiatives.rollup.workstreams.rollup.earliest_promise_at",
+    });
+    expect(kidPromise(stream({ earliestPromiseAt: at(48) }), NOW).text).toBe(
+      "due Oct 26",
+    );
+    expect(kidPromise(stream({}), NOW).text).toBe("—");
+    expect(kidPromise({ doneAt: at(-30) }, NOW).text).toBe("done Oct 23");
+  });
+
+  it("folds repeated short codes and caps the list", () => {
+    const codes = (...list) =>
+      shortCodes({ children: list.map((shortCode) => ({ shortCode })) });
+    expect(codes("p76", "p76", "p76")).toBe("P76 ×3");
+    expect(codes("fs-p3", "", "cost", "t1")).toBe("fs-p3 cost T1");
+    expect(codes("a1", "a2", "a3", "a4", "a5")).toBe("A1 A2 A3 A4 …");
+    expect(shortCodes(null)).toBe("");
+  });
+
+  it("counts a child waiting on the reader once", () => {
+    expect(
+      stateSummary({
+        byState: { blocked: 2, ready: 1 },
+        needingViewer: 1,
+        children: [{ state: "blocked", needsViewer: true }],
+      }),
+    ).toEqual({
+      text: "1 needs you · 1 blocked",
+      full: "1 needs you · 1 blocked · 1 ready",
+      tone: "needs",
+    });
+  });
+});
+
+describe("outcome", () => {
+  it("shows the outcome only when it says more than the title", () => {
+    expect(outcomeLine(row("card:retention"))).toBe(
+      "established-user retention up · target not set yet",
+    );
+    expect(outcomeLine({ title: "Ship it", outcome: "ship it " })).toBe("");
+    expect(outcomeLine({ title: "Ship it", outcome: "**Ship** v2" })).toBe(
+      "Ship v2",
+    );
+    expect(outcomeLine(row("card:firmware"))).toBe("");
   });
 });
 

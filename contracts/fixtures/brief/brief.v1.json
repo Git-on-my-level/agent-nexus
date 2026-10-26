@@ -208,7 +208,7 @@
         "window_seconds": 604800
       },
       "loop": null,
-      "owner": null,
+      "owner": "actor:codex",
       "parent_ref": null,
       "rollup": {
         "total": 0,
@@ -246,7 +246,7 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null,
+      "owner": "actor:claude",
       "parent_ref": null,
       "rollup": {
         "total": 0,
@@ -264,9 +264,14 @@
       "state": "moving",
       "placement": "in_progress",
       "promise": {
-        "at": "2026-10-28T00:00:00Z",
-        "what": "dashboards live",
-        "source": "plan_step"
+        "at": "2026-10-15T18:00:00.123456789Z",
+        "what": "report progress",
+        "source": "default",
+        "source_ref": "card:observability",
+        "author": {
+          "id": "creator",
+          "display": "Creator"
+        }
       },
       "past_promise_for_seconds": 0,
       "promise_moves": 0,
@@ -284,7 +289,7 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null,
+      "owner": "actor:creator",
       "parent_ref": null,
       "rollup": {
         "total": 0,
@@ -316,7 +321,7 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null,
+      "owner": "actor:pm",
       "parent_ref": null,
       "rollup": {
         "total": 0,
@@ -350,7 +355,7 @@
       "series": [],
       "metric_flat": null,
       "loop": null,
-      "owner": null,
+      "owner": "actor:codex",
       "parent_ref": null,
       "rollup": {
         "total": 0,
@@ -495,5 +500,17 @@
     "target": 15,
     "truncated": false
   },
-  "next_actions": []
+  "next_actions": [],
+  "daily_digest": [
+    {
+      "ref": "card:release-check",
+      "title": "Release check",
+      "reason": "default_promise_lapsed"
+    },
+    {
+      "ref": "card:orphaned-run",
+      "title": "Run awaiting an owner",
+      "reason": "awaiting_owner"
+    }
+  ]
 }

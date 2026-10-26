@@ -259,7 +259,7 @@ func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := card["plan_health"].(plans.Health)
-			if before.State != plans.PromiseNone || before.LastEvidenceAt == nil {
+			if before.State != plans.PromiseMoving || before.LastEvidenceAt == nil {
 				t.Fatal(before)
 			}
 			if subject == "step_move" {
@@ -282,7 +282,11 @@ func TestStepMovementIsEvidenceButCardChatterIsNot(t *testing.T) {
 			// chatter on either card must not manufacture progress.
 			after := card["plan_health"].(plans.Health)
 			moved := *after.LastEvidenceAt != *before.LastEvidenceAt
-			if after.State != plans.PromiseNone || moved != (subject == "step_move") {
+			wantState := plans.PromiseMoving
+			if subject == "step_move" {
+				wantState = plans.PromiseNone
+			}
+			if after.State != wantState || moved != (subject == "step_move") {
 				t.Fatalf("before=%v after=%v", *before.LastEvidenceAt, *after.LastEvidenceAt)
 			}
 		})

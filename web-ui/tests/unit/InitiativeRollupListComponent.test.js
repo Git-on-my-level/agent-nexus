@@ -95,6 +95,49 @@ describe("InitiativeRollupList", () => {
     ).toEqual(["card:retention"]);
   });
 
+  it("draws workstream kid rows from their own rollups", () => {
+    const { container } = render(InitiativeRollupList, props);
+    const kid = rowEl(container, "card:capture").querySelector(
+      '[data-rollup-kid="card:record-lane"]',
+    );
+    expect(kid.querySelector("[data-kid-codes]").textContent).toBe(
+      " · T1 T2 P86 P90",
+    );
+    expect(kid.querySelector("[data-kid-cards]").textContent).toBe(
+      " · 9 cards",
+    );
+    expect(kid.querySelector("[data-kid-state]").textContent.trim()).toBe(
+      "4 moving · 1 review",
+    );
+    expect(kid.querySelector("[data-kid-promise]").textContent).toBe(
+      "due Oct 25",
+    );
+    // Owners come from the brief; without a directory, the ref's name.
+    expect(kid.querySelector("[data-kid-owner]").textContent.trim()).not.toBe(
+      "—",
+    );
+    const speaker = rowEl(container, "card:capture").querySelector(
+      '[data-rollup-kid="card:speaker-id"] [data-kid-promise]',
+    );
+    expect(speaker.textContent).toBe("10h past");
+    expect(speaker.className).toContain("text-warn-text");
+  });
+
+  it("shows the outcome and a proposed tag", () => {
+    const { container } = render(InitiativeRollupList, props);
+    const smarter = rowEl(container, "card:smarter");
+    expect(smarter.dataset.proposed).toBe("true");
+    expect(
+      smarter.querySelector("[data-rollup-proposed]").textContent.trim(),
+    ).toBe("proposed");
+    expect(
+      smarter.querySelector("[data-rollup-outcome]").textContent.trim(),
+    ).toBe("proactive help users act on · readouts per experiment");
+    expect(
+      rowEl(container, "card:capture").querySelector("[data-rollup-proposed]"),
+    ).toBeNull();
+  });
+
   it("tags every computed piece with a brief field (I1)", () => {
     const { container } = render(InitiativeRollupList, props);
     for (const el of container.querySelectorAll("[data-source]"))

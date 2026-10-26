@@ -128,6 +128,15 @@ for (const [name, viewport] of [
       await expect(capture.locator("[data-rollup-children]")).toContainText(
         "9 children in 3 workstreams",
       );
+      // The outcome reads under the title; a proposed initiative says so.
+      await expect(capture.locator("[data-rollup-outcome]")).toHaveText(
+        "every recording synced on the record lane · legacy queues gone · no silent loss · right speaker",
+      );
+      await expect(
+        list.locator(
+          '[data-collection-row="card:smarter"] [data-rollup-proposed]',
+        ),
+      ).toHaveText("proposed");
       await expect(
         list.locator(
           '[data-collection-row="card:smarter"] [data-rollup-promises]',
@@ -136,9 +145,20 @@ for (const [name, viewport] of [
       // Rows that need the reader open by default, with workstream kid rows.
       await expect(capture).toHaveAttribute("data-expanded", "true");
       await expect(capture.locator("[data-rollup-kid]")).toHaveCount(3);
+      // Each workstream from its own rollup: codes, cards, state, promise.
+      const lane = capture.locator('[data-rollup-kid="card:record-lane"]');
+      await expect(lane.locator("[data-kid-codes]")).toHaveText(
+        " · T1 T2 P86 P90",
+      );
+      await expect(lane.locator("[data-kid-cards]")).toHaveText(" · 9 cards");
+      await expect(lane.locator("[data-kid-state]")).toHaveText(
+        "4 moving · 1 review",
+      );
       await expect(
-        capture.locator('[data-rollup-kid="card:speaker-id"]'),
-      ).toContainText("past promise");
+        list.locator(
+          '[data-collection-row="card:margin"] [data-rollup-kid="card:pricing-ladder"] [data-kid-state]',
+        ),
+      ).toHaveText("1 needs you · 1 moving");
       await expect(
         list.locator('[data-collection-row="card:smarter"]'),
       ).toHaveAttribute("data-expanded", "false");
@@ -146,6 +166,18 @@ for (const [name, viewport] of [
         await expect(capture.locator("[data-rollup-promises]")).toHaveText(
           "2 of 9 past",
         );
+        await expect(lane.locator("[data-kid-promise]")).toHaveText(
+          "due Oct 25",
+        );
+        await expect(lane.locator("[data-kid-owner]")).toHaveText("lead");
+        await expect(
+          capture.locator(
+            '[data-rollup-kid="card:speaker-id"] [data-kid-promise]',
+          ),
+        ).toHaveText("10h past");
+        await expect(
+          capture.locator('[data-rollup-kid="card:custody"] [data-kid-owner]'),
+        ).toHaveText("agents");
         await expect(
           list.locator(
             '[data-collection-row="card:smarter"] [data-rollup-owner]',
@@ -159,6 +191,7 @@ for (const [name, viewport] of [
       } else {
         // A phone drops Promises and Next, as the mockup does under 900px.
         await expect(capture.locator("[data-rollup-promises]")).toBeHidden();
+        await expect(lane.locator("[data-kid-promise]")).toBeHidden();
       }
       await shot(page, `impl-rollup-${name}`);
       await expectCleanLayout(page, `watch rollup ${name}`);
@@ -177,12 +210,41 @@ for (const [name, viewport] of [
       const board = page.locator("[data-swimlane-board]");
       const capture = board.locator('[data-lane-ref="card:capture"]');
       await expect(capture).toBeVisible();
-      await expect(capture.locator("[data-lane-next]")).toContainText(
-        "next: legacy queues gone, no silent loss",
+      // The subtitle is the outcome, as in the mockup.
+      await expect(capture.locator("[data-lane-outcome]")).toHaveText(
+        "every recording synced on the record lane · legacy queues gone · no silent loss · right speaker",
       );
+      const smarter = board.locator('[data-lane-ref="card:smarter"]');
+      await expect(smarter).toHaveAttribute("data-lane-proposed", "true");
       if (name === "desktop") {
         await expect(board.locator("[data-swimlane-summary]")).toHaveText(
-          "7 initiatives · 29 cards inside them · 1 loop on their own tab",
+          "6 initiatives + 1 proposed · 29 cards inside them · 1 loop on their own tab",
+        );
+        // A proposed lane is dashed and tagged.
+        await expect(smarter.locator("[data-lane-proposed-tag]")).toHaveText(
+          "proposed",
+        );
+        expect(
+          await smarter
+            .locator(":scope > div")
+            .first()
+            .evaluate((el) => getComputedStyle(el).outlineStyle),
+        ).toBe("dashed");
+        await expect(
+          board.locator('[aria-label="Initiative lanes"] .lane-grid').first(),
+        ).toContainText("Done this week");
+        // Done this week: what entered Done in the last seven days.
+        await expect(
+          capture.locator(
+            '[data-lane-column="done"] [data-work-ref="card:fail-loudly"]',
+          ),
+        ).toBeVisible();
+        const marginDone = board.locator(
+          '[data-lane-ref="card:margin"] [data-lane-column="done"]',
+        );
+        await expect(marginDone.locator("[data-work-ref]")).toHaveCount(0);
+        await expect(marginDone.locator("[data-lane-done-earlier]")).toHaveText(
+          "1 done earlier",
         );
         // Two asks and nothing else waits on the reader in Capture.
         await expect(capture.locator("[data-lane-needs]")).toHaveText(
@@ -203,11 +265,17 @@ for (const [name, viewport] of [
         await expect(
           stuck.locator('[data-work-ref="card:fallback-funding"]'),
         ).toHaveCount(0);
+        // Workstream chips carry their short codes and card counts.
         await expect(
           capture.locator(
-            '[data-lane-column="moving"] [data-work-ref="card:record-lane"]',
+            '[data-lane-column="moving"] [data-work-ref="card:record-lane"] [data-stream-count]',
           ),
-        ).toContainText("workstream");
+        ).toHaveText("T1 T2 P86 P90 · 9");
+        await expect(
+          board.locator(
+            '[data-lane-ref="card:margin"] [data-work-ref="card:gpu-sizing"] [data-stream-count]',
+          ),
+        ).toHaveText("cost ×2 · 5");
         // An ask about a child stands in for that child in needs-you.
         await expect(
           board.locator(
@@ -222,7 +290,19 @@ for (const [name, viewport] of [
         expect(Math.round(width)).toBe(260);
         // The tray sits under the board, dashed, with one-tap homes.
         const tray = board.locator("[data-swimlane-tray]");
-        await expect(tray).toContainText("Ungrouped · 3");
+        await expect(tray).toContainText("Ungrouped · 4");
+        // Who made it, and the tray's own actions.
+        await expect(
+          tray.locator('[data-tray-ref="card:retry-budget"]'),
+        ).toContainText("created 2m ago by lane-stt");
+        await expect(
+          tray.locator('[data-promote="card:ramp-telemetry"]'),
+        ).toHaveText("Make it an initiative");
+        await expect(
+          tray.locator(
+            '[data-tray-ref="card:retry-budget"] option[value="+move"]',
+          ),
+        ).toHaveText("Move to another workspace…");
         await expect(
           tray.locator('[data-group-under="card:capture"]'),
         ).toHaveText(/Group under Every word captured/);
@@ -241,8 +321,9 @@ for (const [name, viewport] of [
       } else {
         // Phone: cards with one tag, the bar, and the lines that matter.
         await expect(board.locator("[data-swimlane-summary]")).toHaveText(
-          "7 initiatives · 5 decisions waiting",
+          "6 initiatives + 1 proposed · 5 decisions waiting",
         );
+        await expect(smarter.locator(".tag").first()).toHaveText("proposed");
         await expect(capture).toHaveAttribute("data-lane-collapsed", "true");
         await expect(capture.locator(".tag").first()).toHaveText("needs you");
         const lines = capture.locator("[data-lane-phone-lines] li");
@@ -250,9 +331,14 @@ for (const [name, viewport] of [
           "Fallback funding & autopay ceiling",
         );
         await expect(lines.nth(0)).toContainText("you");
+        // The moving line counts the workstream's cards.
+        await expect(lines.nth(2)).toContainText(
+          "Record lane & legacy retirement",
+        );
+        await expect(lines.nth(2)).toContainText("9 · moving");
         await expect(lines.last()).toContainText("+ 6 more");
         await expect(page.locator("[data-swimlane-tray-open]")).toContainText(
-          "Ungrouped · 3",
+          "Ungrouped · 4",
         );
         await lines.last().locator("button").tap();
         await expect(capture).toHaveAttribute("data-lane-collapsed", "false");

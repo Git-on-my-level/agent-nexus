@@ -14,6 +14,9 @@ type QueryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 type Policy struct {
+	// ReadableValues checks arbitrary cached projection provenance in the same
+	// read snapshot, without interpreting denial as a database failure.
+	ReadableValues func(context.Context, QueryRower, any) (bool, error)
 	// Optional transaction-local admission. Implementations must refresh their
 	// canonical proof after every authority epoch change and fail closed on a
 	// consuming-statement mismatch. Never share a proof with another transaction.
@@ -203,6 +206,24 @@ func (d *DB) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Ro
 	q, args = readOnDB(ctx, handle, q, args)
 	return handle.QueryRowContext(ctx, q, args...)
 }
+
+// ReadableValues authorizes a cached projection on the underlying connection.
+// A missing recipient policy fails closed; scoped query wrappers must not be
+// applied a second time to the policy's own authorization statements.
+func (d *DB) ReadableValues(ctx context.Context, values any) (bool, error) {
+	return readableValues(ctx, d.readHandle(ctx), values)
+}
+func (t *Tx) ReadableValues(ctx context.Context, values any) (bool, error) {
+	return readableValues(ctx, t.raw, values)
+}
+func readableValues(ctx context.Context, q QueryRower, values any) (bool, error) {
+	p, ok := PolicyFrom(ctx)
+	if !ok || p.ReadableValues == nil {
+		return false, nil
+	}
+	return p.ReadableValues(ctx, q, values)
+}
+
 func (d *DB) CheckValues(ctx context.Context, values any) error {
 	if err := ValidateText(values); err != nil {
 		return err

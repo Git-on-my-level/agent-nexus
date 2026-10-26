@@ -1340,12 +1340,13 @@ delivery:
     - Failed retryable deliveries back off from 30 seconds, doubling to 1 hour, and fail permanently after 6 attempts.
     - Receipts notification_delivered and notification_failed are stored in the queue, not the event log.
     - Escalation: when an ask's decide_by passes unanswered, push immediately if the ask's window (decide_by minus asked_at) is at most 2 hours or the ask blocks 3 or more refs; otherwise include it in the daily digest. The PM is woken to answer, withdraw or re-ask.
-    - Privacy: push and digest content is built only for principals who can read the ask. The heartbeat attention_summary carries counts and times only.
+    - Privacy: every delivery kind revalidates source and payload references against the recipient's current resource access at claim and history serialization, including nested/prose and non-card subjects. Known notification formats retain refs and resolve current content at read time; legacy cached content receives the same guard. Denied subjects are omitted, with no denied-row refill, and empty aggregates are hidden. The heartbeat attention_summary carries counts and times only.
+    - Receipt acknowledgements, including idempotent retries, return queue state with an empty payload and no source_ref or last_error. History and claim responses suppress opaque provider error text; stored errors remain internal queue evidence.
     - A declaration may limit the kinds its channels accept; core never queues a kind a channel does not accept. Every active declaration of one channel must agree on addressing and kinds.
     - Only a grant from the trusted issuer may declare a principal-addressed channel; host adapter declarations always use settings addressing, so no channel reaches people who did not opt in unless the operator's trusted issuer declared it.
     - A principal-addressed channel needs no address and is on by default for every human principal; a saved setting with both toggles off turns it off. A claim on such a channel carries recipient.external_issuer and external_subject only for humans signed in through an external identity grant, and only to the channel's adapter.
     - A workspace managed-agent grant from the configured trusted issuer may carry a delivers claim {channel, addressing, kinds, label, manage_url} declaring one channel adapter owned by the agent the grant creates; a delivers claim with an empty channel revokes it. Revoking that agent revokes the declaration and a later grant cannot restore it. manage_url, when set, is an absolute https URL of at most 512 bytes, exposed in notification settings channel_options.
-    - A claim re-checks that the recipient can still read the ask behind a push; a delivery that can no longer be delivered is canceled and its payload cleared.
+    - A claim rechecks every delivery's subject provenance under the recipient's current access; a delivery that can no longer be delivered is canceled and its payload cleared.
     - A skipped receipt closes a claimed delivery as canceled without a failure receipt.
     - The heartbeat attention_summary lists principals who receive notifications with the channels that reach them, their due/overdue/earliest_decide_by over asks they can read, counts_complete, and external_issuer/external_subject for external-grant humans; pending_deliveries counts claimable deliveries per channel. Per-principal counts are read from materialized readability (one row per notified principal and open ask, refreshed in bounded steps by the escalation clock), never computed on the heartbeat path; they may lag an access change by a bounded number of steps.
 
@@ -1357,7 +1358,7 @@ initiative_overview:
     - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.
     - Planless initiatives return null plan_state and geometry; plan_health still reads the promise state from the card due_at, wake_condition and notes. Summary progress is preserved.
-    - plan_health carries the promise state (past_promise, moving, no_promise, done) and a computed reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
+    - plan_health carries the promise state (past_promise, moving, no_promise, digest, done) and a computed reason. Geometry contains shape, nodes (id, status, layer, after), total_nodes and collapsed_nodes.
     - Geometry uses dependency depth as layer, topological order with lexicographic ties, and at most 24 nodes. Edges only name included nodes; collapsed_nodes counts omitted nodes.
     - plan_step_digest answers what just finished, what is moving and what is next as three lists of at most 3 steps each with the remainder counted in more, from the same steps and referenced facts the read already loaded. completed lists steps a linked resource finished whose resource moved within window_hours (168), newest movement first; a step marked done inline, or linked to a resource whose state says nothing, has no completion time and is omitted rather than dated from a plan edit or a comment. current lists active and blocked steps and next lists ready unstarted steps, so one step never appears in both; both keep the topological order with lexicographic ties that geometry uses. Null without a plan. Overview initiatives only: card and work reads keep their existing plan fields.
     - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
@@ -1377,7 +1378,7 @@ overview_brief:
     - newly_blocked counts transitions, not current state: the visit snapshot records each card's phase, and a card already blocked at the previous visit, or one whose previous phase is unknown, is reported as updated. Editing a blocked card is not a new blocker.
     - at_risk reports only past_promise rows with a computed reason, longest past first; a row without a computed reason is omitted.
     - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
-    - initiatives orders by the shared promise order (past_promise, no_promise, moving, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
+    - initiatives orders by the shared promise order (past_promise, no_promise, moving, digest, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
 overview_changes:
   route: GET /overview/changes
   max_items: 100
@@ -1394,7 +1395,7 @@ overview_changes:
 
 plan_health:
   fields: [state, reason, since, promise, past_promise_for_seconds, promise_moves, last_evidence_at]
-  states: [past_promise, moving, no_promise, done]
+  states: [past_promise, moving, no_promise, digest, done]
   semantics:
     - Added on card reads, lists, refs resolve, reports and initiative overview alongside existing plan_state and progress.
     - The state is the promise fold (see promises). A live note promise is the stated next, so reason names that note's next step and date. Open plan-step due dates, the effective card due_at, and the first RFC3339 instant or YYYY-MM-DD date inside wake_condition (date-only resolves to midnight UTC; the first 1024 bytes are scanned) are milestones and supply the counted promise only when no live note promise remains. A done or cancelled card is done.
@@ -1481,7 +1482,7 @@ work_summary:
   semantics:
     - Supported card-bearing reads opt in with summary=1 to computed work_summary.status with state, label and reason. Default card collections preserve legacy shapes and complete results. Board roles select cards only.
     - Card and work write inputs retain their string summary. Card revision content remains prose. Default responses add no summary fields or pagination; summary=1 adds work_summary, aliases it at summary and preserves prose in summary_text. Stored phase and legacy plan fields remain unchanged.
-    - status is the card's promise state (past_promise, moving, no_promise, done), identical to plan_health.state, with a computed label and reason. Placement (the stored phase) is not a status. no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context.
+    - status is the card's promise state (past_promise, moving, no_promise, digest, done), identical to plan_health.state, with a computed label and reason. Placement (the stored phase) is not a status. no_plan is never a summary status; hints contains no_plan for absent or empty plans. Clients decide whether that hint matters in context.
     - Agent detail opts in with summary=1 to at most 50 recent-card candidates, selected through indexed assignment and current/recent-run refs before hydration and batch enrichment; cards_truncated marks the bounded preview and is always true for scoped readers so hidden candidate counts cannot be inferred.
     - Progress appears for a nonempty plan or explicit child relations; steps appear only for a plan. next names the live note promise when one exists, otherwise a ready plan step. Owner, due, age, last_movement_at and external source appear only when known.
     - Opt-in card and board-card pages contain at most 50 cards with next_cursor. Topic and card timeline bundles and board workspace computed previews cap candidates at 50 before enrichment and signal cards_truncated; their legacy bundles remain complete. Summary SQL batches contain at most 50 card ids. Plan/child refs share bounded resolution and truncated refs remain unknown. Attention samples indexed oldest-first candidates before canonical visibility and recipient checks; a truncated count is a lower bound.
@@ -1531,8 +1532,9 @@ curation:
 promises:
   description: >
     One clock: promise versus evidence. A promise is a field on things agents already write,
-    never an object, table or status enum. Durations are computed at read time.
-  sources: [note, plan_step, due_at, wake_condition]
+    not a separately authored object. Durations are computed at read time; default reminder and digest delivery receipts are durable bookkeeping.
+  sources: [note, plan_step, due_at, wake_condition, cadence, default]
+  timestamp_precision: Materialized and direct folds preserve the same exact RFC3339 deadline, including fractional seconds on computed defaults.
   rules:
     - "Which promise counts: a live note promise is the stated next. That is each principal's latest message_posted note carrying payload.next, that evidence, a step status change, a linked step moving, or a changed observation has not met; the earliest such note wins. Plan-step due dates, the effective due_at, and the first date inside wake_condition are milestones and supply the counted promise only when no live note promise remains, in which case the earliest unmet at wins."
     - "Met: a promise is met when a reset event lands before its `at`. A met promise no longer counts. A plan edit does not meet a promise."
@@ -1543,12 +1545,13 @@ promises:
     - "Grammar: `at` reuses the review_by grammar; `what` is free text up to 160 characters."
     - "Horizon: a promise beyond 2 days warns at write time and shows its distance; it is never a state."
     - "Blocks: human_attention_requested payload.blocks refs that reach a terminal state clear automatically."
-    - "Fallback: an active initiative with no promise reads no_promise. The only duration fallback is the constant plans.NoPromiseFallback (7d, no env knob): a no_promise row whose last evidence is older is quiet. It never creates a state; TestStalenessKnobs pins it as the single knob."
+    - "Fallback: live-owned non-cadence work with no promise reads no_promise; unowned/fallback work reads digest. The only duration fallback is the constant plans.NoPromiseFallback (7d, no env knob): a no_promise row whose last evidence is older is quiet. It never creates a state; TestStalenessKnobs pins it as the single knob."
   derived_outputs: [past_promise_for, promise_moves, decide_by, overdue_for]
   states:
     past_promise: "The counted promise's `at` is in the past and no reset event landed since."
     moving: "A counted promise exists and is still in the future."
-    no_promise: "An open initiative with no counted promise."
+    no_promise: "Live-owned non-cadence work with no counted promise."
+    digest: "Unowned/fallback work, or an elapsed default after its one reminder; daily digest only."
     done: "The initiative is done or cancelled."
 
 brief:
@@ -1567,13 +1570,13 @@ brief:
       location: Top-level CLI envelope field, separate from result; omitted by other commands.
       fields: [alias, base_url, source, other_aliases]
       description: Locally resolved workspace identity, selection source and other configured aliases. Adds no core read.
-  sections: [decisions, initiatives, your_asks, answered_for_you, curation_suggestions]
+  sections: [decisions, initiatives, daily_digest, your_asks, answered_for_you, curation_suggestions]
   section_limit: 50
   decision_kinds: [ask, review, access, host, pm_proposal]
   initiative_outcome: Goal annotation label or metric, otherwise first summary line, trimmed to 280 Unicode code points.
   initiative_proposed: Computed boolean; true exactly for backlog placement, independent of promise health. No new phase or column.
-  initiative_owner: Nullable first canonical assignee ref, matching work list; no new health state.
-  initiative_states: [past_promise, moving, no_promise, done]
+  initiative_owner: Nullable first canonical assignee ref, matching work list, including implicit creator and assigned fallback responsibility; never inferred from the promise author. Unowned and fallback work is routed to daily_digest.
+  initiative_states: [past_promise, moving, no_promise, digest, done]
   placements: [backlog, ready, in_progress, review, done]
   decision_order: "decide_by ascending (absent last), then blocks_count descending, then priority (critical/p0, high/p1, medium/p2, low/p3, absent), then created_at ascending, then ref."
   initiative_order: "past_promise (longest past first), moving (soonest promise first), no_promise (oldest last evidence first), done (most recent first)."
@@ -1609,6 +1612,19 @@ work_grouping:
   suggestions: Deterministic, optional, at most three visible open top-level homes. Related parent ref wins, then shared refs, repository, project and title family. Creation is never refused for lack of grouping or for exceeding the target.
   folds: work.fold records merged_into, transfers authored evidence and related/source refs, retains append-only history and open asks through the linked child, carries its promise as the step due, and archives with a reason. work.unfold restores the saved fields; conflicting intervening edits fail without overwriting user work.
 
+work_tracking_defaults:
+  accepted: 2026-10-25
+  default_promise_seconds: 43200
+  automatic_agent_lease_seconds: 86400
+  daily_digest_hour_utc: 9
+  rules:
+    - Creates remain non-blocking for every creator; the creating actor is the implicit assignee when none was supplied.
+    - The computed default is source default, creation plus 12h. It writes no next note and yields to explicit promises, cadence and resolved evidence.
+    - Agent creators acquire a 24h lease in the create transaction. Human creators do not. Normal lease renew, fencing and explicit hand-off semantics remain available.
+    - Release without hand-off and expiry atomically assign responsibility to the chosen parent initiative owner, then the configured workspace lead, and append an automatic note. A fallback owner gains no read authority. Without a readable configured fallback, existing responsible ownership is retained and digested.
+    - Unowned/fallback non-cadence work reads digest, never no_promise or stale. Cadence continues to use receipts and the overdue rule alone.
+    - A default lapse records one reminder. Subsequent cycles only include the work in a daily owner digest, with idempotent delivery identities. Renewed explicit promises, evidence, terminal state and assignment changes cancel stale queued work.
+    - A workspace dry-run report precedes cadence migration. At least three receipts and a maximum interval spread of 20 percent of the median permit automatic deterministic inference; remaining cards are listed for their owners. No models run in core or migration.
 watch_rollup_data:
   fields: [rollup.earliest_promise_at, rollup.children.owner, rollup.children.done_at, rollup.children.short_code, rollup.workstreams.rollup, ungrouped.created_by, top_level]
   rules:

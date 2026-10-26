@@ -23,7 +23,11 @@
     freshnessLabel,
     briefLoops,
   } from "$lib/brief.js";
-  import { attentionCount, collectionFromLoops } from "$lib/collection.js";
+  import {
+    attentionCount,
+    collectionFromLoops,
+    collectionFromDailyDigest,
+  } from "$lib/collection.js";
   import { bucketCounts, rollupRows, rollupSummary } from "$lib/watchRollup.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
@@ -102,6 +106,9 @@
     rollupSummary(rollup, {
       truncated: Boolean(brief?.truncated?.initiatives),
     }),
+  );
+  let digestCollection = $derived(
+    collectionFromDailyDigest(brief?.dailyDigest, { href: initiativeHref }),
   );
   let loopCollection = $derived(
     collectionFromLoops(briefLoops(brief, initiatives), {
@@ -573,7 +580,7 @@
         actions={loopActions}
       />
     {/if}
-  {:else if !rollup.length}
+  {:else if !rollup.length && !digestCollection.counts.digest}
     <div
       class="rounded-md border border-dashed border-line px-4 py-8 text-center"
       data-watch-empty
@@ -587,13 +594,25 @@
         >
       </p>
     </div>
-  {:else}
+  {:else if rollup.length}
     <InitiativeRollupList
       rows={rollup}
       {now}
       hrefFor={childInitiativeHref}
       {decideHref}
     />
+  {/if}
+  {#if tab === "initiatives" && brief && digestCollection.counts.digest}
+    <section data-source="computed:daily_digest" aria-label="Daily digest">
+      <h2 class="mb-2 text-meta font-semibold text-fg-muted">
+        Needs an owner's look ({digestCollection.counts.digest})
+      </h2>
+      <CollectionTable
+        collection={digestCollection}
+        filters={false}
+        label="daily digest"
+      />
+    </section>
   {/if}
 </WorkspacePageShell>
 
