@@ -123,7 +123,8 @@ describe("children", () => {
       "9 children in 3 workstreams",
     );
     expect(childrenLine(row("card:firmware").rollup)).toBe("1 child");
-    expect(childrenLine(row("card:docs-site").rollup)).toBe("");
+    expect(childrenLine(row("card:docs-site").rollup)).toBe("no children yet");
+    expect(childrenLine()).toBe("no children yet");
   });
 
   it("lists workstreams as kid rows and counts the cards outside them", () => {

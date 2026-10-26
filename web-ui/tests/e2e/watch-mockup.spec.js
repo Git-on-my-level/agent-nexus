@@ -21,7 +21,7 @@ const json = (route, body, status = 200) =>
     body: JSON.stringify(body),
   });
 
-async function setup(page, context) {
+async function setup(page, context, brief = mockupBrief(NOW)) {
   await page.clock.setFixedTime(new Date(NOW));
   await context.addInitScript(() => {
     localStorage.setItem("anx_ui_actor_id:local", "actor-reader");
@@ -47,7 +47,7 @@ async function setup(page, context) {
   );
   await context.route(
     (url) => url.pathname === "/brief",
-    (route) => json(route, mockupBrief(NOW)),
+    (route) => json(route, brief),
   );
   await context.route(
     (url) => url.pathname === "/work/ungrouped",
@@ -86,6 +86,48 @@ for (const [name, viewport] of [
 ]) {
   test.describe(name, () => {
     test.use({ viewport, hasTouch: name === "phone" });
+
+    test(`retains unowned initiatives with no children (${name})`, async ({
+      page,
+      context,
+    }) => {
+      const brief = mockupBrief(NOW);
+      const empty = brief.initiatives.find(
+        (row) => row.ref === "card:docs-site",
+      );
+      Object.assign(empty, {
+        ref: "card:empty-outcome",
+        title: "Unowned outcome",
+        owner: null,
+        state: "no_promise",
+        placement: "ready",
+      });
+      brief.initiatives = [
+        ...brief.initiatives.filter((row) =>
+          [
+            "card:capture",
+            "card:margin",
+            "card:security",
+            "card:smarter",
+          ].includes(row.ref),
+        ),
+        empty,
+      ];
+      await setup(page, context, brief);
+      await page.goto(WATCH);
+      const list = page.locator("[data-rollup-list]");
+      await expect(list.locator("[data-collection-row]")).toHaveCount(5);
+      await expect(page.locator("[data-watch-summary]")).toContainText(
+        "5 initiatives",
+      );
+      const outcome = list.locator(
+        '[data-collection-row="card:empty-outcome"]',
+      );
+      await expect(outcome).toContainText("Unowned outcome");
+      await expect(outcome.locator("[data-rollup-children]")).toHaveText(
+        "no children yet",
+      );
+    });
 
     test(`the list reads like the Rollup mockup (${name})`, async ({
       page,
