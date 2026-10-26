@@ -258,12 +258,19 @@ proc.kill()
 raise SystemExit(2)
 """
         parent = subprocess.Popen(
-            [sys.executable, "-c", parent_code, str(SCRIPT), str(self.receipt), str(self.pidfile)]
+            [sys.executable, "-c", parent_code, str(SCRIPT), str(self.receipt), str(self.pidfile)],
+            stdout=subprocess.PIPE,
         )
-        parent.wait(timeout=15)
+        # The orphaned supervisor inherits this pipe. EOF waits for it to finish
+        # its final receipt write, not merely for the launcher/grandchild to die.
+        # Otherwise TemporaryDirectory cleanup can race that last atomic write.
+        parent.communicate(timeout=15)
+        self.assertEqual(parent.returncode, -signal.SIGKILL)
         grandchild = self.wait_grandchild()
         self.assert_reaped(grandchild)
-        self.assertTrue(self.receipt.is_file())
+        receipt = json.loads(self.receipt.read_text())
+        self.assertEqual(receipt["state"], "stopped")
+        self.assertTrue(receipt["cleared"])
 
     def test_stop_refuses_mismatched_pid(self):
         payload = {
