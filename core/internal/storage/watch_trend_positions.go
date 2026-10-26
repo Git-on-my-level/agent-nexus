@@ -73,6 +73,36 @@ func installWatchTrendPositions(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
+	// This is a rebuildable index, not canonical data. Migration-repair tests
+	// replay older migrations over an existing latest schema, and admission
+	// rebuilds can replace its trigger hosts. Reinstall every owned trigger and
+	// backfill from canonical rows rather than retaining stale programs/keys.
+	rows, err := tx.QueryContext(ctx, `SELECT name FROM sqlite_schema WHERE type='trigger' AND name GLOB 'watch_trend_*'`)
+	if err != nil {
+		return err
+	}
+	names := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return err
+		}
+		names = append(names, name)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		if _, err := tx.ExecContext(ctx, `DROP TRIGGER "`+strings.ReplaceAll(name, `"`, `""`)+`"`); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DROP TABLE IF EXISTS watch_trend_positions`); err != nil {
+		return err
+	}
 	statements := []string{
 		`CREATE TABLE watch_trend_positions(kind TEXT NOT NULL,id TEXT NOT NULL,scope,at_key TEXT NOT NULL,card_id TEXT NOT NULL DEFAULT '',PRIMARY KEY(kind,id)) WITHOUT ROWID`,
 		`CREATE INDEX idx_watch_trend_all ON watch_trend_positions(kind,at_key,id)`,

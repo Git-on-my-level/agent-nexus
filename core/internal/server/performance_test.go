@@ -75,7 +75,14 @@ func performanceBudgets(t *testing.T) []routeBudget {
 		if b.Method == http.MethodGet && (b.Path == "/series/{name}" || b.Path == "/series/{name}/query") {
 			rowCeiling = series.MaxRawQueryPoints + 512 // fixed API cap plus scoped metadata
 		}
-		if b.LatencyMS <= 0 || b.LatencyMS > 500 || b.MaxQueries <= 0 || b.MaxQueries > 100 || b.MaxRows <= 0 || b.MaxRows > rowCeiling || b.MaxVMSteps == 0 || b.MaxVMSteps > 50000 || b.AuthorizedStatus != 200 || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
+		authorizedStatusOK := b.AuthorizedStatus == http.StatusOK
+		if b.Method == http.MethodGet && b.Path == "/watch/trends" {
+			// This surface deliberately has no unrestricted HTTP capability. Preserve
+			// every numeric budget and require its exact denial code on both readers;
+			// an arbitrary 403 on any other route still fails this inventory.
+			authorizedStatusOK = b.AuthorizedStatus == http.StatusForbidden && b.UnauthorizedStatus == http.StatusForbidden && b.MustContain == "restricted_trends" && b.UnauthorizedMustContain == "restricted_trends"
+		}
+		if b.LatencyMS <= 0 || b.LatencyMS > 500 || b.MaxQueries <= 0 || b.MaxQueries > 100 || b.MaxRows <= 0 || b.MaxRows > rowCeiling || b.MaxVMSteps == 0 || b.MaxVMSteps > 50000 || !authorizedStatusOK || (b.UnauthorizedStatus != 200 && b.UnauthorizedStatus != 403 && b.UnauthorizedStatus != 404 && !(b.Path == "/auth/hosts/enrollments/{enrollment_id}" && b.UnauthorizedStatus == 401)) || b.Reason == "" || (b.AuthorizedAs != "" && b.AuthorizedAs != "agent") {
 			t.Errorf("incomplete or excessive route budget: %s", key)
 		}
 	}

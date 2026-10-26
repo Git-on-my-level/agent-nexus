@@ -3856,7 +3856,7 @@
     "../storage/sqlite_temp.go:PrepareSQLiteTempDirectory": "f3c9433e98f293dfae13e07969f9b86186541308be81f6d2caf756790b7dc0b2",
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
     "../storage/usage_tracking.go:*Workspace:InitializeUsageTracking": "fa5492c7faf7d3945e23ebedfcf8b479d41446b07f75514dab0838f15c66ca8e",
-    "../storage/watch_trend_positions.go:installWatchTrendPositions": "a00e732d366b8535faa481c391c43d1be72e6b958f6d10a5f249583147c2fd46",
+    "../storage/watch_trend_positions.go:installWatchTrendPositions": "b135b9d40c7be534931064018bac0140803af55bd8e3e33f87c5f86e31676d3d",
     "../storage/watch_trend_positions.go:trendCardPositions": "50a85ce3e7e43a94c784d175a313b2f2da45aa949b967fed6aced6beac82b1b0",
     "../storage/watch_trend_positions.go:trendEventPositions": "352f86bf0328ce8bb9fd449fce0b49d6ba4649d6d71000b25b1e83346c86cbf3",
     "../storage/watch_trend_positions.go:trendInitiativePositions": "d07b9e1bcc000847df1544d5d9621a66cd21e296ea50870e56c5e3ea329cb0a9",

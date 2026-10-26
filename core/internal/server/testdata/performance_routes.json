@@ -1230,7 +1230,9 @@
     "reason": "Access-scoped readers receive fixed 403 restricted_trends before aggregate reads, root/epoch inspection or cache access. No aggregate queries or result rows; request cost is authentication and fixed routing only, independent of every hidden-record family and inherited privacy mechanism. No unrestricted HTTP capability exists today.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
-    "case": "decisions"
+    "case": "decisions",
+    "must_contain": "restricted_trends",
+    "unauthorized_must_contain": "restricted_trends"
   },
   {
     "method": "GET",
@@ -1243,7 +1245,9 @@
     "reason": "Access-scoped readers receive fixed 403 restricted_trends before aggregate reads, root/epoch inspection or cache access. No aggregate queries or result rows; request cost is authentication and fixed routing only, independent of every hidden-record family and inherited privacy mechanism. No unrestricted HTTP capability exists today.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
-    "case": "initiatives"
+    "case": "initiatives",
+    "must_contain": "restricted_trends",
+    "unauthorized_must_contain": "restricted_trends"
   },
   {
     "method": "GET",
@@ -1256,7 +1260,9 @@
     "reason": "Access-scoped readers receive fixed 403 restricted_trends before aggregate reads, root/epoch inspection or cache access. No aggregate queries or result rows; request cost is authentication and fixed routing only, independent of every hidden-record family and inherited privacy mechanism. No unrestricted HTTP capability exists today.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
-    "case": "loops"
+    "case": "loops",
+    "must_contain": "restricted_trends",
+    "unauthorized_must_contain": "restricted_trends"
   },
   {
     "method": "GET",
