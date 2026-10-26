@@ -7,10 +7,12 @@ import (
 	"time"
 )
 
+var watchTrendPrivacyMechanisms = []string{"board", "subject", "pm-thread", "blocks", "payload-ref", "refs", "prose", "metadata", "evidence", "card-ref", "card-prose", "unconditional", "tombstone", "conflicting", "parent-thread", "revision"}
+
 // Each mechanism contributes at least 2,000 of every trend position family,
 // including open/closed promises, open/answered asks and Done lifecycle events.
 // These are canonical writes: the ownership and position triggers stay enabled.
-func seedWatchTrendsInheritedScale(t *testing.T, db *sql.DB, board, privateBoard, thread, privateRef, publicRef string) {
+func seedWatchTrendsInheritedScale(t *testing.T, db *sql.DB, board, privateBoard, thread, privateRef, publicRef string, mechanisms ...string) {
 	t.Helper()
 	tx, err := db.Begin()
 	if err != nil {
@@ -29,7 +31,7 @@ func seedWatchTrendsInheritedScale(t *testing.T, db *sql.DB, board, privateBoard
 	exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('scale-other-owner',?,'owner','{"pm_actor_id":"other-owner"}')`, stamp)
 	exec(`INSERT INTO resource_access_tombstones(kind,id,ref,owner) VALUES('card','scale-retained','card:scale-retained','owner')`)
 	exec(`INSERT INTO artifacts(id,kind,thread_id,created_at,created_by,content_type,content_hash,content_refs_json) SELECT 'scale-private-artifact','text',thread_id,?,'owner','text/plain','private','[]' FROM boards WHERE id=?`, stamp, privateBoard)
-	for _, mechanism := range []string{"board", "subject", "pm-thread", "blocks", "payload-ref", "refs", "prose", "metadata", "evidence", "card-ref", "card-prose", "unconditional", "tombstone", "conflicting", "parent-thread", "revision"} {
+	for _, mechanism := range mechanisms {
 		t.Logf("seed 2,000 per trend family: %s", mechanism)
 		prefix := "scale-" + mechanism + "-"
 		// A shared backing thread keeps fixture setup small. Each family still

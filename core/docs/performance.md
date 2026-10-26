@@ -713,7 +713,7 @@ complete-denial enforcement assertions.
 ```sh
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
   -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget|WorkLifecyclePrivatePrefixBudget|CanonicalEpochChurn)$|^TestCandidateDenseAncestryAndBucketFanout$' \
-  -count=1 -v -timeout=60m
+  -count=1 -v -parallel=2 -timeout=60m
 go test -C core ./internal/primitives \
   -run '^Test(AdmissionGraph|AdmissionWrites|InventoryAdmission|Candidate|WorkLifecycle|OverviewReadSnapshot|ResourceReadSnapshotRandomizedDifferential)' \
   -count=1 -timeout=15m
@@ -2409,7 +2409,7 @@ calculation is safe to expose to scoped callers; the public guard is mandatory.
 
 `TestPerformanceWatchTrendsBudget` measures real authenticated HTTP requests,
 including authentication, after adding 2,000+ positions per trend family for
-16 hiding mechanisms: board, PM thread, subject, blocks, other payload refs,
+16 isolated hiding-mechanism cases: board, PM thread, subject, blocks, other payload refs,
 refs_json, prose, metadata, evidence, card refs/prose, unknown artifact contents,
 retained tombstones, conflicting owners, parent threads and revision artifacts.
 Responses must remain byte-identical; queries stay <=100, rows <=1,024, VM steps
@@ -2419,7 +2419,7 @@ sides of board/PM-thread ownership transfers. Scoped callers remain unavailable
 throughout; these tests do not claim that a new owner receives aggregate data.
 
 ```sh
-ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v -timeout=60m
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v -parallel=2 -timeout=60m
 go test -C core ./internal/primitives -run '^TestWatchTrends' -count=1
 go test -C core ./internal/server -run '^TestWatchTrends' -count=1
 ```

@@ -77,6 +77,18 @@ func TestWatchTrendsRouteRejectsScopedReaders(t *testing.T) {
 // unrelated cards plus a private board, for the owner and an unrelated reader.
 func TestPerformanceWatchTrendsBudget(t *testing.T) {
 	requirePerformanceTest(t)
+	for _, mechanism := range watchTrendPrivacyMechanisms {
+		t.Run(mechanism, func(t *testing.T) {
+			// VM/query/row work is connection-local and deterministic. Isolate each
+			// mechanism's corpus so fixture writes do not grow with previous cases.
+			t.Parallel()
+			testWatchTrendsMechanismBudget(t, mechanism)
+		})
+	}
+}
+
+func testWatchTrendsMechanismBudget(t *testing.T, mechanism string) {
+	t.Helper()
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 	ctx := context.Background()
 	db := env.workspace.DB()
@@ -114,7 +126,7 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 	for _, group := range primitives.WatchTrendGroups {
 		baseline[group] = string(trendsBody(t, server.URL+"/watch/trends?group="+group+"&range=90d", stranger.AccessToken))
 	}
-	seedWatchTrendsInheritedScale(t, db, anyString(board["id"]), anyString(private["id"]), anyString(host["thread_id"]), anyString(secret["ref"]), anyString(host["ref"]))
+	seedWatchTrendsInheritedScale(t, db, anyString(board["id"]), anyString(private["id"]), anyString(host["thread_id"]), anyString(secret["ref"]), anyString(host["ref"]), mechanism)
 	for _, actor := range []struct{ name, token string }{{"owner", owner.AccessToken}, {"stranger", stranger.AccessToken}} {
 		for _, group := range primitives.WatchTrendGroups {
 			capture.Start()
