@@ -146,6 +146,31 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 			}
 		}
 	}
+	// The newest records in every family are hidden from the stranger, far past
+	// every cap: 2,000 runs, asks and answers on a private card and 2,000
+	// private cards (half done). A capped window must stop at its cap rather
+	// than examine them all to find visible rows.
+	hidden, err := s.CreateWork(ctx, "owner", anyString(private["id"]), map[string]any{"title": "Hidden"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hiddenThread, hiddenRef := anyString(hidden["thread_id"]), anyString(hidden["ref"])
+	const hiddenN = `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000) `
+	const hiddenTS = `strftime('%Y-%m-%dT%H:%M:%fZ','now','-'||i||' seconds')`
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('hidden-run-%05d',i),'run_recorded',` + hiddenTS + `,'agent-hidden',?,json_array('thread:'||?),json_object('subject_ref',?,'payload',json_object('run_id',i,'outcome','acted')) FROM n`, []any{hiddenThread, hiddenThread, hiddenRef}},
+		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('hidden-ask-%05d',i),'human_attention_requested',` + hiddenTS + `,'agent-hidden',?,json_array('thread:'||?),json_object('payload',json_object('kind','ask','title','Hidden','requester_actor_id','agent-hidden','subject_ref',?,'response_proposals',json_array('Proceed'))) FROM n`, []any{hiddenThread, hiddenThread, hiddenRef}},
+		{hiddenN + `INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT printf('hidden-answer-%05d',i),'human_attention_responded',` + hiddenTS + `,'owner',?,json_array('thread:'||?),'{"payload":{"outcome":"answered"}}' FROM n WHERE i<1000`, []any{hiddenThread, hiddenThread}},
+		{hiddenN + `INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) SELECT printf('hidden-ask-%05d',i),printf('hidden-answer-%05d',i),'answered','owner',` + hiddenTS + ` FROM n WHERE i<1000`, nil},
+		{hiddenN + `INSERT INTO cards(id,board_id,title,summary,column_key,created_at,created_by,updated_at,updated_by) SELECT printf('hidden-card-%05d',i),?,'Hidden','',CASE WHEN i%2=0 THEN 'done' ELSE 'todo' END,` + hiddenTS + `,'owner',` + hiddenTS + `,'owner' FROM n`, []any{anyString(private["id"])}},
+	} {
+		if _, err = db.Exec(q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for drained := false; !drained; {
 		if drained, err = s.RefreshBriefInitiatives(ctx, 200); err != nil {
 			t.Fatal(err)

@@ -1191,6 +1191,15 @@ var migrations = []migration{
 	}},
 	{Version: 123, AfterApply: installAskPresentationHeads},
 	{Version: 124, AfterApply: installAskRetirementDeliveryPolicy},
+	// Watch trends admit a capped window of record positions before loading
+	// any scoped payload, so hidden records use window places instead of
+	// unbounded examination. The views expose only identity, type and time;
+	// the existing idx_events_ask_order and card grouping/closed-page indexes
+	// serve them. No data is copied and no index is built.
+	{Version: 125, Statements: []string{
+		`CREATE VIEW IF NOT EXISTS watch_trend_event_positions AS SELECT id,type,ts FROM events WHERE trashed_at IS NULL`,
+		`CREATE VIEW IF NOT EXISTS watch_trend_card_positions AS SELECT id,column_key,created_at,updated_at FROM cards WHERE archived_at IS NULL AND trashed_at IS NULL`,
+	}},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

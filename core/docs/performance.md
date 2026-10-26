@@ -2370,9 +2370,15 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 ## Watch trends
 
 `GET /watch/trends` is three requests, one per group, so no single read admits
-every record family. Each family is one newest-first indexed seek with a fixed
-cap; visibility filters run inside the scoped relations before counting, and
-the cap bounds examined rows, not just returned rows:
+every record family. Each family admits its newest cap+1 positions in a
+`MATERIALIZED` CTE over an unscoped position view that exposes only identity,
+type and time (migration 125: `watch_trend_event_positions` over untrashed
+events, `watch_trend_card_positions` over active cards; existing
+`attention_ask_positions` and `work_grouping_brief_positions`), then
+left-joins the scoped relations for payload. A record the reader cannot see
+takes a place in the window and returns nothing about itself, so the cap
+bounds examined rows however many hidden records are newer; a full window
+reads as truncated, with its horizon at the oldest visible record admitted:
 
 - decisions: `idx_events_ask_order` (type, time key) over at most 81 raised
   asks and 61 answer events, with primary-key `brief_asks`/thread joins and
@@ -2394,12 +2400,14 @@ older buckets null. Each group is cached per caller, authorization epoch,
 group and range for 60 seconds.
 
 `TestPerformanceWatchTrendsBudget` fills every cap (240 asks, 80 answers, 240
-runs, 4,096 unrelated cards, every initiative promised, a private board) and
-measures the 90-day read for the owner and an unrelated reader against the
-ordinary budget, and fails on any unindexed scan of events, cards, asks,
-initiatives or threads. Local acceptance: owner 5-7 queries / 177-215 rows /
-5,964-11,633 VM steps; unrelated reader decisions 44,610, initiatives 43,894,
-loops 29,001 VM steps.
+runs, 4,096 unrelated cards, every initiative promised) and adds, newest of
+all, 2,000 private runs, asks and cards plus 1,000 private answers. It measures
+the 90-day read for the owner and an unrelated reader against the ordinary
+budget and fails on any unindexed scan of events, cards, asks, initiatives or
+threads. Local acceptance: owner 5-7 queries / 177-215 rows / 9,099-16,019 VM
+steps; unrelated reader decisions 36,712, initiatives 40,348, loops 26,928 VM
+steps. Filtering visibility inside the window instead measured 238,677 VM steps
+for the unrelated decisions read on the same fixture.
 The per-row cost of scoped reads for a reader who is denied part of the graph
 (about 140-380 VM steps) is why the caps are this size and why the groups are
 separate requests.

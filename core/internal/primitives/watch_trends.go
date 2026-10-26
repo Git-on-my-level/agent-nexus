@@ -213,10 +213,8 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	panels := []map[string]any{b.loopRunsPanel(runs, horizon)}
-	if len(loops) > 0 {
-		health := b.loopHealthPanel(loops, runs, horizon)
-		health["truncated"] = health["truncated"] == true || loopsTruncated
-		panels = append(panels, health)
+	if len(loops) > 0 || loopsTruncated {
+		panels = append(panels, b.loopHealthPanel(loops, runs, horizon, loopsTruncated))
 	}
 	active, err := b.agentRunsPanel(runs, horizon)
 	if err != nil {
@@ -225,99 +223,128 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 	return append(panels, active), nil
 }
 
-// trendAsks admits asks raised since the previous period began, newest first,
-// through idx_events_ask_order and primary-key joins.
+// Every capped family admits its window in a MATERIALIZED CTE over an
+// unscoped position view (identity, type and time only), then left-joins the
+// scoped relations. A record the reader cannot see still takes a place in the
+// window but returns nothing about itself, so the cap bounds the rows the read
+// examines, not just the rows it returns. A window of cap+1 places reads as
+// truncated; its horizon is the oldest visible record admitted, which errs
+// towards marking more history unknown and never times a hidden record.
+//
+// Placeholders bind in SQL text order: the admission CTE, then the visibility
+// predicate in the select list.
+
+// trendEventAdmission admits the newest positions of one event type.
+const trendEventAdmission = `WITH admitted AS MATERIALIZED (SELECT id FROM watch_trend_event_positions
+ WHERE type=? AND anx_timestamp_key(ts)>=anx_timestamp_key(?) ORDER BY anx_timestamp_key(ts) DESC,id DESC LIMIT ?) `
+
+// trendCapRead tracks one capped admission.
+type trendCapRead struct {
+	limit, admitted int
+	oldest          time.Time
+}
+
+// admit counts an admitted row, visible or not.
+func (r *trendCapRead) admit() { r.admitted++ }
+
+// saw records the time of a visible admitted record.
+func (r *trendCapRead) saw(t time.Time) {
+	if !t.IsZero() && (r.oldest.IsZero() || t.Before(r.oldest)) {
+		r.oldest = t
+	}
+}
+
+// horizon is zero when the window was not full; otherwise everything before
+// the oldest visible admitted record is unknown (all of it, when none was
+// visible).
+func (r trendCapRead) horizon(end time.Time) time.Time {
+	if r.admitted <= r.limit {
+		return time.Time{}
+	}
+	if r.oldest.IsZero() {
+		return end
+	}
+	return r.oldest
+}
+
+// trendAsks admits asks raised since the previous period began.
 func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
-	pred, args := b.askThreadOwnerSQL()
-	args = append(args, loopTS(b.w.start()), trendsAskCap+1)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT e.id,e.ts,a.requester,a.state,COALESCE(a.answered_at,''),COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
-	 FROM events e CROSS JOIN brief_asks a ON a.ask_id=e.id `+briefAnswerableAskJoin+`
-	 WHERE e.type='human_attention_requested' AND e.trashed_at IS NULL AND `+pred+` AND anx_timestamp_key(e.ts)>=anx_timestamp_key(?)
-	 ORDER BY anx_timestamp_key(e.ts) DESC,e.id DESC LIMIT ?`, args...)
+	pred, predArgs := b.askThreadOwnerSQL()
+	args := append([]any{"human_attention_requested", loopTS(b.w.start()), trendsAskCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.ctx, trendEventAdmission+`SELECT CASE WHEN e.id IS NOT NULL AND a.ask_id IS NOT NULL AND brief_ask_thread.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,
+	 COALESCE(e.ts,''),COALESCE(a.requester,''),COALESCE(a.state,''),COALESCE(a.answered_at,''),COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
+	 FROM admitted LEFT JOIN events e ON e.id=admitted.id LEFT JOIN brief_asks a ON a.ask_id=admitted.id LEFT JOIN threads brief_ask_thread ON brief_ask_thread.id=e.thread_id`, args...)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	defer rows.Close()
 	out := []trendAsk{}
-	admitted := 0
-	var oldest time.Time
+	read := trendCapRead{limit: trendsAskCap}
 	for rows.Next() {
 		var a trendAsk
+		var visible bool
 		var created, answered, thread, owner string
-		if err = rows.Scan(&a.id, &created, &a.requester, &a.state, &answered, &thread, &owner); err != nil {
+		if err = rows.Scan(&visible, &created, &a.requester, &a.state, &answered, &thread, &owner); err != nil {
 			return nil, time.Time{}, err
 		}
-		admitted++
-		if admitted > trendsAskCap {
-			if oldest.IsZero() {
-				oldest = b.w.end
-			}
-			return out, oldest, rows.Err()
+		read.admit()
+		if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
+			continue
 		}
 		a.created, a.answered = trendTime(created), trendTime(answered)
 		a.requester = stripActor(a.requester)
-		if !a.created.IsZero() && (oldest.IsZero() || a.created.Before(oldest)) {
-			oldest = a.created
-		}
-		if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
-			continue
-		}
+		read.saw(a.created)
 		out = append(out, a)
 	}
-	return out, time.Time{}, rows.Err()
+	return out, read.horizon(b.w.end), rows.Err()
 }
 
-// trendAnswers admits answers given since the previous period began, newest
-// first, by the answer event through idx_events_ask_order; the resolution and
-// the ask join by unique key. Measuring answers by when they happened keeps
-// both periods comparable: an answer late in the window to an old ask counts,
-// in its own period. Left joins keep every admitted event inside the cap.
+// trendAnswers admits answers given since the previous period began, by the
+// answer event; the resolution and the ask join by unique key. Measuring
+// answers by when they happened keeps both periods comparable: an answer late
+// in the window to an old ask counts, in its own period.
 func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
-	pred, args := b.askThreadOwnerSQL()
-	args = append(args, loopTS(b.w.start()), trendsAnswerCap+1)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,''),e.ts,COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
-	 FROM events e `+briefAnswerableAskJoin+` LEFT JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id LEFT JOIN brief_asks a ON a.ask_id=r.request_event_id
-	 WHERE e.type='human_attention_responded' AND e.trashed_at IS NULL AND `+pred+` AND anx_timestamp_key(e.ts)>=anx_timestamp_key(?)
-	 ORDER BY anx_timestamp_key(e.ts) DESC,e.id DESC LIMIT ?`, args...)
+	pred, predArgs := b.askThreadOwnerSQL()
+	args := append([]any{"human_attention_responded", loopTS(b.w.start()), trendsAnswerCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.ctx, trendEventAdmission+`SELECT CASE WHEN e.id IS NOT NULL AND brief_ask_thread.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,
+	 COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,''),COALESCE(e.ts,''),COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
+	 FROM admitted LEFT JOIN events e ON e.id=admitted.id LEFT JOIN threads brief_ask_thread ON brief_ask_thread.id=e.thread_id
+	 LEFT JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id LEFT JOIN brief_asks a ON a.ask_id=r.request_event_id`, args...)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	defer rows.Close()
 	out := []trendAnswer{}
-	admitted := 0
-	var oldest time.Time
+	read := trendCapRead{limit: trendsAnswerCap}
 	for rows.Next() {
+		var visible bool
 		var kind, created, answered, at, thread, owner string
-		if err = rows.Scan(&kind, &created, &answered, &at, &thread, &owner); err != nil {
+		if err = rows.Scan(&visible, &kind, &created, &answered, &at, &thread, &owner); err != nil {
 			return nil, time.Time{}, err
 		}
-		admitted++
-		if admitted > trendsAnswerCap {
-			if oldest.IsZero() {
-				oldest = b.w.end
-			}
-			return out, oldest, rows.Err()
+		read.admit()
+		if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
+			continue
 		}
-		if t := trendTime(at); !t.IsZero() && (oldest.IsZero() || t.Before(oldest)) {
-			oldest = t
-		}
+		read.saw(trendTime(at))
 		// A repeated response to an answered ask has no resolution of its own.
-		if kind != "answered" || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
+		if kind != "answered" {
 			continue
 		}
 		out = append(out, trendAnswer{created: trendTime(created), answered: trendTime(answered)})
 	}
-	return out, time.Time{}, rows.Err()
+	return out, read.horizon(b.w.end), rows.Err()
 }
 
 // trendOpenAsks reads the creation time of every open ask the reader can see,
-// up to the cap, through idx_brief_asks_open_decide_by.
+// admitting at most the cap of open asks through the brief_asks state index.
 func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
-	pred, args := b.askThreadOwnerSQL()
-	args = append(args, trendsOpenAskCap+1)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT a.created_at,COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
-	 FROM brief_asks a CROSS JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+`
-	 WHERE a.state='open' AND COALESCE(e.trashed_at,'')='' AND `+pred+` LIMIT ?`, args...)
+	pred, predArgs := b.askThreadOwnerSQL()
+	args := append([]any{trendsOpenAskCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.ctx, `WITH admitted AS MATERIALIZED (SELECT ask_id FROM attention_ask_positions WHERE state='open' LIMIT ?)
+	 SELECT CASE WHEN a.ask_id IS NOT NULL AND e.id IS NOT NULL AND COALESCE(e.trashed_at,'')='' AND brief_ask_thread.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,
+	 COALESCE(a.created_at,''),COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
+	 FROM admitted LEFT JOIN brief_asks a ON a.ask_id=admitted.ask_id LEFT JOIN events e ON e.id=admitted.ask_id LEFT JOIN threads brief_ask_thread ON brief_ask_thread.id=e.thread_id`, args...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -325,23 +352,21 @@ func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
 	out := []time.Time{}
 	admitted := 0
 	for rows.Next() {
+		var visible bool
 		var created, thread, owner string
-		if err = rows.Scan(&created, &thread, &owner); err != nil {
+		if err = rows.Scan(&visible, &created, &thread, &owner); err != nil {
 			return nil, false, err
 		}
 		admitted++
-		if admitted > trendsOpenAskCap {
-			return out, true, rows.Err()
-		}
-		if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
+		if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 			continue
 		}
 		out = append(out, trendTime(created))
 	}
-	return out, false, rows.Err()
+	return out, admitted > trendsOpenAskCap, rows.Err()
 }
 
-// trendCardOwner is the PM-private owner of a card's backing thread.
+// trendCardOwnerSQL is the PM-private owner of a card's backing thread.
 const trendCardOwnerSQL = `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'')`
 
 // eventOwner is cardOwner for an event's thread.
@@ -364,13 +389,10 @@ func (b *trendsBuild) cardOwner() string {
 const trendDoneAt = `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
  WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY anx_timestamp_key(position.ts) DESC,position.id DESC LIMIT 1)) END`
 
-// trendPromises admits top-level initiatives with a promise: open ones by
-// soonest promise (the overdue first), and closed ones whose promise fell in
-// the window. Both seek idx_brief_initiatives_page through an unscoped view, so
-// the cap counts every admitted row and visibility is a flag on each: a hidden
-// or child initiative uses a place in the window but returns nothing about
-// itself. The horizon and cutoff come from visible rows only, which errs
-// towards marking more history unknown and never times a hidden promise.
+// trendPromises admits initiatives with a promise through
+// idx_brief_initiatives_page: open ones by soonest promise (the overdue
+// first), and closed ones whose promise fell in the window, newest first.
+// Visibility, board role and top-level are flags on each admitted row.
 func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, error) {
 	out := []trendPromise{}
 	var horizon, openCutoff time.Time
@@ -388,17 +410,17 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 		args = append(args, limit+1)
 		pred, predArgs := b.pmOwnerSQL("c.thread_id")
 		args = append(args, predArgs...)
-		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT CASE WHEN bi.card_id IS NOT NULL AND c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
+		rows, err := b.s.db.QueryContext(b.groupingContext(), `WITH admitted AS MATERIALIZED (SELECT card_id FROM work_grouping_brief_positions WHERE `+admission+` LIMIT ?)
+		 SELECT CASE WHEN bi.card_id IS NOT NULL AND c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
 		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))
 		  AND NOT `+workHasParentSQL("c")+` AND `+pred+` THEN 1 ELSE 0 END,
 		 COALESCE(bi.open,0),COALESCE(bi.promise_at,''),COALESCE(c.created_at,''),COALESCE(c.column_key,''),COALESCE(`+trendDoneAt+`,''),COALESCE(c.thread_id,''),`+b.cardOwner()+`
-		 FROM (SELECT card_id FROM work_grouping_brief_positions WHERE `+admission+` LIMIT ?) admitted
-		 LEFT JOIN brief_initiatives bi ON bi.card_id=admitted.card_id LEFT JOIN cards c ON c.id=admitted.card_id`, args...)
+		 FROM admitted LEFT JOIN brief_initiatives bi ON bi.card_id=admitted.card_id LEFT JOIN cards c ON c.id=admitted.card_id`, args...)
 		if err != nil {
 			return nil, time.Time{}, time.Time{}, err
 		}
-		admitted := 0
-		var last time.Time
+		read := trendCapRead{limit: limit}
+		var latest time.Time
 		for rows.Next() {
 			var p trendPromise
 			var visible bool
@@ -407,35 +429,34 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 				rows.Close()
 				return nil, time.Time{}, time.Time{}, err
 			}
-			admitted++
-			if admitted > limit {
-				// Closed promises are newest first: older history stops at the
-				// last one read. Open ones are soonest first: later promises
-				// are missing, so buckets after the last one read are unknown.
-				if last.IsZero() {
-					last = b.w.end
-					if open {
-						last = b.w.start()
-					}
-				}
-				if open {
-					openCutoff = last
-				} else {
-					horizon = last
-				}
-				break
-			}
+			read.admit()
 			if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 				continue
 			}
 			p.promise, p.created, p.done, p.cancelled = trendTime(promise), trendTime(created), trendTime(done), phase == "cancelled"
-			last = p.promise
+			read.saw(p.promise)
+			if p.promise.After(latest) {
+				latest = p.promise
+			}
 			out = append(out, p)
 		}
 		err = rows.Err()
 		rows.Close()
 		if err != nil {
 			return nil, time.Time{}, time.Time{}, err
+		}
+		if read.admitted > limit {
+			// Closed promises are newest first: older history stops at the
+			// oldest one seen. Open ones are soonest first: later promises are
+			// missing, so buckets after the latest one seen are unknown.
+			if open {
+				openCutoff = latest
+				if openCutoff.IsZero() {
+					openCutoff = b.w.start()
+				}
+			} else {
+				horizon = read.horizon(b.w.end)
+			}
 		}
 	}
 	return out, horizon, openCutoff, nil
@@ -448,11 +469,11 @@ func (b *trendsBuild) trendCreated() ([]time.Time, time.Time, error) {
 	var horizon time.Time
 	for _, closed := range []string{`NOT IN ('done','cancelled')`, `IN ('done','cancelled')`} {
 		pred, predArgs := b.pmOwnerSQL("c.thread_id")
-		args := append([]any{loopTS(b.w.start())}, predArgs...)
-		args = append(args, trendsCreatedCap+1)
-		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT c.created_at,c.created_at,COALESCE(c.thread_id,''),`+b.cardOwner()+`
-		 FROM cards c WHERE c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key `+closed+` AND c.created_at>=? AND `+pred+`
-		 ORDER BY c.trashed_at,c.archived_at,c.created_at DESC,c.id DESC LIMIT ?`, args...)
+		args := append([]any{loopTS(b.w.start()), trendsCreatedCap + 1}, predArgs...)
+		rows, err := b.s.db.QueryContext(b.groupingContext(), `WITH admitted AS MATERIALIZED (SELECT id FROM watch_trend_card_positions
+		 WHERE column_key `+closed+` AND created_at>=? ORDER BY created_at DESC,id DESC LIMIT ?)
+		 SELECT CASE WHEN c.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,COALESCE(c.created_at,''),COALESCE(c.created_at,''),COALESCE(c.thread_id,''),`+b.cardOwner()+`
+		 FROM admitted LEFT JOIN cards c ON c.id=admitted.id`, args...)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
@@ -468,15 +489,15 @@ func (b *trendsBuild) trendCreated() ([]time.Time, time.Time, error) {
 }
 
 // trendDone admits cards that entered Done in the window. Their last update
-// bounds the done time from above, so idx_cards_closed_work_page seeks them
+// bounds the done time from above, so idx_cards_closed_work_page admits them
 // newest first; the lifecycle index supplies the exact time.
 func (b *trendsBuild) trendDone() ([]time.Time, time.Time, error) {
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	args := append([]any{loopTS(b.w.start())}, predArgs...)
-	args = append(args, trendsDoneCap+1)
-	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT COALESCE(`+trendDoneAt+`,c.updated_at),c.updated_at,COALESCE(c.thread_id,''),`+b.cardOwner()+`
-	 FROM cards c WHERE c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key='done' AND anx_timestamp_key(c.updated_at)>=anx_timestamp_key(?) AND `+pred+`
-	 ORDER BY anx_timestamp_key(c.updated_at) DESC,c.id DESC LIMIT ?`, args...)
+	args := append([]any{loopTS(b.w.start()), trendsDoneCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.groupingContext(), `WITH admitted AS MATERIALIZED (SELECT id FROM watch_trend_card_positions
+	 WHERE column_key='done' AND anx_timestamp_key(updated_at)>=anx_timestamp_key(?) ORDER BY anx_timestamp_key(updated_at) DESC,id DESC LIMIT ?)
+	 SELECT CASE WHEN c.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,COALESCE(`+trendDoneAt+`,c.updated_at,''),COALESCE(c.updated_at,''),COALESCE(c.thread_id,''),`+b.cardOwner()+`
+	 FROM admitted LEFT JOIN cards c ON c.id=admitted.id`, args...)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -492,84 +513,68 @@ type trendRows interface {
 	Close() error
 }
 
-// collectTimes reads (time, order, thread, owner) rows admitted in descending
-// order. When the cap is exceeded the horizon is the last admitted row's order
-// value: every row not read sorts at or before it, so its time does too.
+// collectTimes reads (visible, time, order, thread, owner) rows. The horizon
+// is the oldest visible order value: every record not admitted sorts at or
+// before every admitted one, so its time does too.
 func (b *trendsBuild) collectTimes(rows trendRows, limit int, out *[]time.Time) (time.Time, error) {
 	defer rows.Close()
-	admitted := 0
-	horizon := b.w.end
+	read := trendCapRead{limit: limit}
 	for rows.Next() {
+		var visible bool
 		var at, order, thread, owner string
-		if err := rows.Scan(&at, &order, &thread, &owner); err != nil {
+		if err := rows.Scan(&visible, &at, &order, &thread, &owner); err != nil {
 			return time.Time{}, err
 		}
-		admitted++
-		if admitted > limit {
-			return horizon, rows.Err()
-		}
-		if t := trendTime(order); !t.IsZero() {
-			horizon = t
-		}
-		if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
+		read.admit()
+		if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 			continue
 		}
+		read.saw(trendTime(order))
 		*out = append(*out, trendTime(at))
 	}
-	return time.Time{}, rows.Err()
+	return read.horizon(b.w.end), rows.Err()
 }
 
-// trendRuns admits run receipts in the window, newest first, through
-// idx_events_ask_order (type, time key, id).
+// trendRuns admits run receipts in the window, newest first.
 func (b *trendsBuild) trendRuns() ([]trendRun, time.Time, error) {
 	pred, predArgs := b.pmOwnerSQL("e.thread_id")
-	args := append([]any{loopTS(b.w.start())}, predArgs...)
-	args = append(args, trendsRunCap+1)
-	rows, err := b.s.db.QueryContext(b.ctx, `SELECT e.ts,COALESCE(json_extract(e.payload_json,'$.subject_ref'),''),COALESCE(e.actor_id,''),COALESCE(json_extract(e.payload_json,'$.payload.outcome'),''),COALESCE(e.thread_id,''),`+b.eventOwner()+`
-	 FROM events e WHERE e.type='run_recorded' AND e.trashed_at IS NULL AND anx_timestamp_key(e.ts)>=anx_timestamp_key(?) AND `+pred+`
-	 ORDER BY anx_timestamp_key(e.ts) DESC,e.id DESC LIMIT ?`, args...)
+	args := append([]any{"run_recorded", loopTS(b.w.start()), trendsRunCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.ctx, trendEventAdmission+`SELECT CASE WHEN e.id IS NOT NULL AND `+pred+` THEN 1 ELSE 0 END,
+	 COALESCE(e.ts,''),COALESCE(json_extract(e.payload_json,'$.subject_ref'),''),COALESCE(e.actor_id,''),COALESCE(json_extract(e.payload_json,'$.payload.outcome'),''),COALESCE(e.thread_id,''),`+b.eventOwner()+`
+	 FROM admitted LEFT JOIN events e ON e.id=admitted.id`, args...)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	defer rows.Close()
 	out := []trendRun{}
-	admitted := 0
-	var oldest time.Time
+	read := trendCapRead{limit: trendsRunCap}
 	for rows.Next() {
+		var visible bool
 		var at, outcome, thread, owner string
 		var r trendRun
-		if err = rows.Scan(&at, &r.subject, &r.actor, &outcome, &thread, &owner); err != nil {
+		if err = rows.Scan(&visible, &at, &r.subject, &r.actor, &outcome, &thread, &owner); err != nil {
 			return nil, time.Time{}, err
 		}
-		admitted++
-		if admitted > trendsRunCap {
-			if oldest.IsZero() {
-				oldest = b.w.end
-			}
-			return out, oldest, rows.Err()
-		}
-		r.at, r.infraErr, r.actor = trendTime(at), outcome == "infra_error", stripActor(r.actor)
-		if !r.at.IsZero() && (oldest.IsZero() || r.at.Before(oldest)) {
-			oldest = r.at
-		}
-		if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
+		read.admit()
+		if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 			continue
 		}
+		r.at, r.infraErr, r.actor = trendTime(at), outcome == "infra_error", stripActor(r.actor)
+		read.saw(r.at)
 		out = append(out, r)
 	}
-	return out, time.Time{}, rows.Err()
+	return out, read.horizon(b.w.end), rows.Err()
 }
 
 // trendLoops admits the most recently annotated loops through
-// idx_brief_loop_annotated_recent. As with promises the view is unscoped, so
-// the cap counts every admitted row and visibility is a flag.
+// idx_brief_loop_annotated_recent; visibility is a flag on each admitted row.
 func (b *trendsBuild) trendLoops() ([]trendLoop, bool, error) {
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
 	args := append([]any{trendsLoopCap + 1}, predArgs...)
-	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT CASE WHEN c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND c.column_key NOT IN ('done','cancelled') AND `+pred+` THEN 1 ELSE 0 END,
+	rows, err := b.s.db.QueryContext(b.groupingContext(), `WITH admitted AS MATERIALIZED (SELECT card_id FROM work_grouping_brief_positions WHERE loop_annotated=1 ORDER BY loop_annotated_at DESC,card_id LIMIT ?)
+	 SELECT CASE WHEN c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND c.column_key NOT IN ('done','cancelled') AND `+pred+` THEN 1 ELSE 0 END,
 	 COALESCE(c.id,''),COALESCE(c.handle,''),COALESCE(c.created_at,''),COALESCE(json_extract(m.metadata_json,'$.cadence.every_seconds'),0),COALESCE(c.thread_id,''),`+b.cardOwner()+`
-	 FROM (SELECT card_id FROM work_grouping_brief_positions WHERE loop_annotated=1 ORDER BY loop_annotated_at DESC,card_id LIMIT ?) admitted
-	 LEFT JOIN cards c ON c.id=admitted.card_id LEFT JOIN work_metadata m ON m.card_id=c.id`, args...)
+	 FROM admitted LEFT JOIN cards c ON c.id=admitted.card_id LEFT JOIN work_metadata m ON m.card_id=c.id`, args...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -584,9 +589,6 @@ func (b *trendsBuild) trendLoops() ([]trendLoop, bool, error) {
 			return nil, false, err
 		}
 		admitted++
-		if admitted > trendsLoopCap {
-			return out, true, rows.Err()
-		}
 		if !visible || every <= 0 || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 			continue
 		}
@@ -596,7 +598,7 @@ func (b *trendsBuild) trendLoops() ([]trendLoop, bool, error) {
 		}
 		out = append(out, l)
 	}
-	return out, false, rows.Err()
+	return out, admitted > trendsLoopCap, rows.Err()
 }
 
 // --- panels ---
@@ -702,11 +704,16 @@ func (b *trendsBuild) answerTimePanel(answers []trendAnswer, horizon time.Time) 
 	for i := range per {
 		s.points[i] = median(per[i])
 	}
-	prev := median(periods[0])
+	// A period missing answers has no median: the ones left out could move
+	// it either way.
+	value, prev := median(periods[1]), median(periods[0])
+	if !b.w.complete(b.w.n, horizon) {
+		value = nil
+	}
 	if !b.w.complete(0, horizon) {
 		prev = nil
 	}
-	return b.panel("answer_time", "Time to answer", "seconds", "down_good", median(periods[1]), prev, !horizon.IsZero(), s)
+	return b.panel("answer_time", "Time to answer", "seconds", "down_good", value, prev, !horizon.IsZero(), s)
 }
 
 // backlogPanel rebuilds open asks at each bucket end: asks open now that were
@@ -857,7 +864,14 @@ func (b *trendsBuild) loopRunsPanel(runs []trendRun, horizon time.Time) map[stri
 // cadences at each bucket end: the brief's own "stopped reporting" rule. A
 // bucket whose lookback reaches before the read (or a capped read's horizon)
 // is unknown rather than unhealthy.
-func (b *trendsBuild) loopHealthPanel(loops []trendLoop, runs []trendRun, horizon time.Time) map[string]any {
+//
+// With more loops than the read admits, the population is incomplete and
+// every share is unknown: the loops left out could be the overdue ones.
+func (b *trendsBuild) loopHealthPanel(loops []trendLoop, runs []trendRun, horizon time.Time, partial bool) map[string]any {
+	if partial {
+		s := b.newSeries("on_time", "Reporting on time")
+		return b.panel("loop_health", "Loops reporting on time", "percent", "up_good", nil, nil, true, s)
+	}
 	bySubject := map[string][]time.Time{}
 	for _, r := range runs {
 		bySubject[r.subject] = append(bySubject[r.subject], r.at)

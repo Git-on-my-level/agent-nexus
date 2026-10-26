@@ -89,6 +89,8 @@ export function trendDelta(panel) {
 function change(value, previous) {
   if (!isNumber(value) || !isNumber(previous)) return "";
   if (previous === 0) return value === 0 ? "about the same" : "up from none";
+  // A fall to zero has no factor: dividing by it printed "down Infinity×".
+  if (value === 0) return "down to none";
   const ratio = value / previous;
   if (Math.abs(ratio - 1) < 0.1) return "about the same";
   if (ratio >= 2) return `up ${round(ratio, 1)}×`;

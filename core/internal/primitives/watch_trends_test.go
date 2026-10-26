@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -380,5 +381,122 @@ func TestWatchTrendsHiddenPromisesMarkTruncation(t *testing.T) {
 	past := f.group("stranger", "initiatives", 30)["past_promise"]
 	if past["truncated"] != true || past["value"].(*float64) != nil {
 		t.Fatalf("stranger past promise = %#v", past)
+	}
+}
+
+// rawEvents inserts n events of one type on work's thread, newest at ago,
+// one minute apart. Database triggers derive brief_asks rows and ownership
+// edges exactly as for an appended event.
+func (f *trendsFixture) rawEvents(work map[string]any, prefix, kind string, n int, ago time.Duration, payload func(i int) string) {
+	f.t.Helper()
+	for i := 0; i < n; i++ {
+		f.exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,?,?,?,?,?,?)`,
+			fmt.Sprintf("%s-%04d", prefix, i), kind, loopTS(f.now.Add(-ago-time.Duration(i)*time.Minute)), "agent-hidden",
+			anyStringValue(work["thread_id"]), `["thread:`+anyStringValue(work["thread_id"])+`"]`, payload(i))
+	}
+}
+
+// Records the reader cannot see still take places in each capped window, so
+// the read examines at most the cap however many hidden records are newer,
+// and reads as truncated instead of reaching past them.
+func TestWatchTrendsHiddenRecordsUseWindowPlaces(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	public := f.card("Public", "", nil)
+	day := 24 * time.Hour
+	f.ask(public, "agent-1", 5*day, 0)
+	f.run(public, 5*day, "acted")
+	private := f.card("Private", "owner", nil)
+	ref := anyStringValue(private["ref"])
+	f.rawEvents(private, "hidden-run", "run_recorded", trendsRunCap+1, time.Hour, func(i int) string {
+		return fmt.Sprintf(`{"subject_ref":%q,"payload":{"run_id":"%d","outcome":"acted"}}`, ref, i)
+	})
+	f.rawEvents(private, "hidden-ask", "human_attention_requested", trendsAskCap+1, time.Hour, func(int) string {
+		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Hidden","requester_actor_id":"agent-hidden","subject_ref":%q,"response_proposals":["Proceed"]}}`, ref)
+	})
+	for i := 0; i <= trendsCreatedCap; i++ {
+		f.card("Hidden work", "owner", nil)
+	}
+	stranger := f.trends("stranger", 30)
+	for _, id := range []string{"loop_runs", "asks_flow", "work_flow"} {
+		if stranger[id]["truncated"] != true {
+			t.Fatalf("%s not truncated for the stranger: %#v", id, stranger[id])
+		}
+	}
+	if stranger["loop_runs"]["value"].(*float64) != nil || stranger["asks_flow"]["raised"].(*float64) != nil {
+		t.Fatal("a capped window reached past hidden records to a visible total")
+	}
+	owner := f.trends("owner", 30)
+	if owner["loop_runs"]["truncated"] != true {
+		t.Fatal("owner window should also be full")
+	}
+}
+
+// A read with the explicit PM rule and no access scope (an unauthenticated
+// development reader) binds the predicate's argument in text order.
+func TestWatchTrendsReadsWithoutAccessScope(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	work := f.card("Battery", "", nil)
+	f.ask(work, "agent-1", 24*time.Hour, time.Hour)
+	f.run(work, 24*time.Hour, "acted")
+	if _, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(f.board["id"]), map[string]any{"title": "Loop", "cadence": map[string]any{"every_seconds": 3600}}); err != nil {
+		t.Fatal(err)
+	}
+	f.trends("owner", 30) // fold
+	visible := func(_, owner string) bool { return owner == "" }
+	for _, group := range WatchTrendGroups {
+		out, err := f.store.WatchTrends(f.ctx, BriefReader{Visible: visible}, group, 30, f.now)
+		if err != nil {
+			t.Fatalf("%s: %v", group, err)
+		}
+		if len(out["panels"].([]map[string]any)) == 0 {
+			t.Fatalf("%s: no panels", group)
+		}
+	}
+}
+
+// When the answer cap cuts into the current period, that period has no
+// median: the answers left out could move it either way.
+func TestWatchTrendsAnswerTimeUnknownWhenCurrentPeriodIsCapped(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	work := f.card("Busy", "", nil)
+	thread := anyStringValue(work["thread_id"])
+	f.rawEvents(work, "ask", "human_attention_requested", trendsAnswerCap+5, 3*24*time.Hour, func(int) string {
+		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Q","requester_actor_id":"agent-1","subject_ref":%q,"response_proposals":["Proceed"]}}`, anyStringValue(work["ref"]))
+	})
+	for i := 0; i < trendsAnswerCap+5; i++ {
+		at := loopTS(f.now.Add(-time.Duration(i) * time.Hour))
+		f.exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,?,?,?,?,?,?)`,
+			fmt.Sprintf("answer-%04d", i), "human_attention_responded", at, "human", thread, `["thread:`+thread+`"]`, `{"payload":{"outcome":"answered"}}`)
+		f.exec(`INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'answered','human',?)`,
+			fmt.Sprintf("ask-%04d", i), fmt.Sprintf("answer-%04d", i), at)
+	}
+	wait := f.group("owner", "decisions", 7)["answer_time"]
+	if wait["truncated"] != true || wait["value"].(*float64) != nil {
+		t.Fatalf("answer time from a capped current period: %#v", wait)
+	}
+}
+
+// With more loops than the read admits, every reporting share is unknown.
+func TestWatchTrendsLoopHealthUnknownWhenLoopsAreCapped(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	for i := 0; i <= trendsLoopCap; i++ {
+		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(f.board["id"]), map[string]any{"title": fmt.Sprintf("Loop %d", i), "cadence": map[string]any{"every_seconds": 3600}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.run(w, time.Minute, "acted")
+	}
+	health := f.group("owner", "loops", 7)["loop_health"]
+	if health == nil || health["truncated"] != true || health["value"].(*float64) != nil || health["previous"].(*float64) != nil {
+		t.Fatalf("loop health over a partial population: %#v", health)
+	}
+	for _, p := range health["series"].([]map[string]any)[0]["points"].([]*float64) {
+		if p != nil {
+			t.Fatal("a share over a partial population was charted")
+		}
 	}
 }

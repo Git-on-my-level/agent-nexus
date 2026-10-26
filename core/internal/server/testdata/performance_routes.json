@@ -1227,7 +1227,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 decisions: newest-first idx_events_ask_order seeks over at most 81 raised asks and 61 answer events (primary-key brief_asks/thread joins, unique-key resolution join), one brief_asks state-index seek over at most 71 open asks, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps, not workspace size. Groups are separate requests; each is cached per caller, authorization epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 decisions: each family admits cap+1 positions through an unscoped identity/type/time view before scoped payload joins, so hidden records cannot extend the examined window; newest-first idx_events_ask_order seeks over at most 81 raised asks and 61 answer events (primary-key brief_asks/thread joins, unique-key resolution join), one brief_asks state-index seek over at most 71 open asks, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps, not workspace size. Groups are separate requests; each is cached per caller, authorization epoch, group and range for 60 seconds.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "decisions"
@@ -1240,7 +1240,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 initiatives: two idx_brief_initiatives_page seeks (at most 56 open and 36 closed promised initiatives, counted before visibility) with primary-key card joins and one lifecycle-index done seek per admitted done card, two grouping-index seeks of at most 21 created cards each, and one idx_cards_closed_work_page seek of at most 41 done cards. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 initiatives: each family admits cap+1 positions through an unscoped identity/type/time view before scoped payload joins, so hidden records cannot extend the examined window; two idx_brief_initiatives_page seeks (at most 56 open and 36 closed promised initiatives, counted before visibility) with primary-key card joins and one lifecycle-index done seek per admitted done card, two grouping-index seeks of at most 21 created cards each, and one idx_cards_closed_work_page seek of at most 41 done cards. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "initiatives"
@@ -1253,7 +1253,7 @@
     "max_rows": 1024,
     "authorized_status": 200,
     "unauthorized_status": 200,
-    "reason": "watch_trends.v1 loops: one newest-first idx_events_ask_order seek over at most 171 run receipts, one idx_brief_loop_annotated_recent seek of at most 26 loops with primary-key card and metadata joins, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
+    "reason": "watch_trends.v1 loops: each family admits cap+1 positions through an unscoped identity/type/time view before scoped payload joins, so hidden records cannot extend the examined window; one newest-first idx_events_ask_order seek over at most 171 run receipts, one idx_brief_loop_annotated_recent seek of at most 26 loops with primary-key card and metadata joins, and one actor batch of at most five ids. Visibility filters precede counting; examined rows are fixed by the caps. Cached per caller, epoch, group and range for 60 seconds.",
     "latency_ms": 500,
     "max_vm_steps": 50000,
     "case": "loops"

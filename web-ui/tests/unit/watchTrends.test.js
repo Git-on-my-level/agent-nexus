@@ -115,6 +115,25 @@ describe("trendTakeaway", () => {
       ),
     ).toBe("builder needed the most help: 9 asks, up from 3.");
   });
+  it("says a fall to zero in words, never as a factor", () => {
+    expect(
+      trendTakeaway(panel({ id: "loop_runs", value: 0, previous: 12 }), 30),
+    ).toBe("Runs down to none vs the previous 30 days.");
+    for (const id of [
+      "asks_flow",
+      "answer_time",
+      "work_flow",
+      "loop_runs",
+      "x",
+    ])
+      expect(
+        trendTakeaway(
+          panel({ id, value: 0, previous: 5, raised: 0, started: 0 }),
+          7,
+        ),
+      ).not.toMatch(/Infinity|NaN/);
+  });
+
   it("admits a capped read instead of guessing", () => {
     expect(
       trendTakeaway(
