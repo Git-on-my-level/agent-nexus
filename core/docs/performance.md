@@ -713,7 +713,7 @@ complete-denial enforcement assertions.
 ```sh
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
   -run '^TestPerformance(CanonicalAdmission|GroupingFeedBudget|ResourceReadSnapshotBudget|WorkLifecyclePrivatePrefixBudget|CanonicalEpochChurn)$|^TestCandidateDenseAncestryAndBucketFanout$' \
-  -count=1 -v -timeout=30m
+  -count=1 -v -timeout=60m
 go test -C core ./internal/primitives \
   -run '^Test(AdmissionGraph|AdmissionWrites|InventoryAdmission|Candidate|WorkLifecycle|OverviewReadSnapshot|ResourceReadSnapshotRandomizedDifferential)' \
   -count=1 -timeout=15m
@@ -2369,62 +2369,57 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 
 ## Watch trends
 
-`GET /watch/trends` is three requests, one per group, so no single read admits
-every record family. Migration 125 adds `watch_trend_positions(kind, id,
-scope, at_key)` with `idx_watch_trend_positions(kind, scope, at_key, id)`.
-`scope` is the record's private owner, inherited from its backing thread, its
-card's board thread, the card it is about (`subject_ref`) or, for an answer,
-the ask it resolves; `''` when none is private. Triggers keep it current on
-event, ask, resolution, card and brief-initiative writes, and re-key when
-privacy changes: a thread's PM owner change re-keys the cards it backs or
-whose board it is, events on those cards' threads, events about those cards
-and answers to those asks; a card moved between boards re-keys the same for
-that card. The re-key is rare and bounded by the container's size. Only
-identity, kind, scope and a time key are stored. Privacy inherited through
-other references (blocks, prose mentions, evidence) is still enforced by the
-scoped relation; such a record keeps a visible scope and costs one check.
+`GET /watch/trends` returns a fixed `403 restricted_trends` to HTTP callers.
+There is no unrestricted HTTP resource capability today. The handler validates
+`group` and `range`, then rejects before aggregate queries, contributor reads,
+authorization epochs/roots or cached results. This choice depends only on the
+capability boundary, never on whether a workspace happens to contain hidden
+records. Authentication remains part of the ordinary request budget.
 
-A reader admits each family with one seek per scope it belongs to (`''` and
-its own actor), newest or soonest first, with the canonical scoped relation
-and the PM-private predicate joined inside each `LIMIT`. The two capped lists
-merge in Go. The cap therefore counts visible records only and the response
-— truncation, horizons and every null bucket included — is the same whether
-or not records the reader cannot see exist. Records in other owners' scopes
-are never examined. A record denied by inherited ownership inside a visible
-scope (for example an ask on a public thread about a private card) is examined
-and skipped before the `LIMIT`: one canonical check, no effect on the result.
-The key steers cost and completeness only; it never grants visibility.
+The exported Store read also rejects any access scope or visibility callback
+before database work. Trusted internal callers with no scope may calculate the
+aggregate. Auth-admin, selected PM and resource ownership do not grant this
+unrestricted capability. The UI explains unavailability without a retry loop.
 
-Caps per scope seek: decisions 81 raised asks, 61 answers, 71 open asks;
-initiatives 56 open and 36 closed promised initiatives, 41 created and 41
-done cards; loops 171 runs and 26 loops; plus one actor batch of at most five
-ids per ranked panel. Board role, top-level and lifecycle are flags on
-admitted visible rows.
+Why the restriction is required: partitioned candidates alone cannot make the
+canonical brief projection viewer-specific. An invisible answer can resolve a
+public ask, and an invisible later promise note can replace a visible promise.
+Parent/board eligibility probes can also walk a large denied set after candidate
+admission. Serving scoped results needs a contributor-aware per-scope projection;
+filtering a canonical projection at read time is insufficient. Ownership transfers
+therefore do not enable Trends. Earlier claims of enabled per-reader trends and
+same-window aggregate grants are superseded.
 
-`TestPerformanceWatchTrendsBudget` fills every cap (240 asks, 80 answers, 240
-runs, 4,096 unrelated cards, every initiative promised) and adds, newest of
-all, 2,000 private runs, asks and cards plus 1,000 private answers on a private
-board, and on a public thread about a private card 4,000 asks (2,000 answered,
-2,000 open) and 2,000 runs. It measures the 90-day read for the owner and an
-unrelated reader against the ordinary budget and fails on any unindexed scan
-of events, cards, asks, initiatives, threads or positions. Local acceptance:
-unrelated reader decisions 33,801, initiatives 43,327-43,574 (varies by run), loops 23,573 VM steps.
-Keyed by thread and board only, the reference-private records cost the same
-reader 494,748 (decisions) and 225,573 (loops) VM steps.
-`TestWatchTrendsResponseIsInvariantToHiddenRecords` compares the restricted
-reader's JSON byte for byte, for every group and range, before and after adding
-hidden records; the `TestWatchTrendsRekeys*` tests populate a container while
-private, change its privacy and check restored counts, byte-identical hidden
-responses and that a key forced public cannot leak. Each re-key clause was
-removed in turn and fails at least one of them.
+Migration 125 retains identity/time positions. Partitions now use the canonical
+inherited-owner index (exact/compact ledgers conservatively unioned), covering
+thread, board, blocks, arbitrary refs, metadata, evidence, prose, tombstones and
+unconditional denial. Public is `''`, one text owner is that owner's partition,
+and conflicting owners/unconditional denial use NULL. Membership insert/delete
+rekeys synchronously. Canonical row authorization remains necessary. Completion
+positions add a card-specific index and authorize before choosing the latest
+completion. Unrestricted reads use `(kind,at_key,id)` and
+`(kind,card_id,at_key,id)` indexes across all partitions without listing owners.
 
-Responses are computed as of the end of a 60-second clock window and cached by
-reader scope, group, range and window. The workspace authorization epoch is
-not in the key: writes a reader cannot see move it, and a recomputation it
-forced would show in `generated_at`. `TestWatchTrendsCacheIgnoresHiddenWrites`
-checks the bytes through HTTP.
+The internal calculation retains bounded-history regression coverage. Backlog
+admits a capped history of asks before resolving their visible responses; a capped
+history reports unknown backlog. Event timestamp updates atomically synchronize
+position keys. Fixture timestamps use their intended fixed clock, without a
+six-hour read offset. These mechanical repairs are not proof that the private
+calculation is safe to expose to scoped callers; the public guard is mandatory.
+
+`TestPerformanceWatchTrendsBudget` measures real authenticated HTTP requests,
+including authentication, after adding 2,000+ positions per trend family for
+16 hiding mechanisms: board, PM thread, subject, blocks, other payload refs,
+refs_json, prose, metadata, evidence, card refs/prose, unknown artifact contents,
+retained tombstones, conflicting owners, parent threads and revision artifacts.
+Responses must remain byte-identical; queries stay <=100, rows <=1,024, VM steps
+<50,000, with no business-table full scans. No budget or plan exception is widened.
+Focused HTTP tests compare complete responses across hidden writes and both
+sides of board/PM-thread ownership transfers. Scoped callers remain unavailable
+throughout; these tests do not claim that a new owner receives aggregate data.
 
 ```sh
-ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v -timeout=60m
 go test -C core ./internal/primitives -run '^TestWatchTrends' -count=1
+go test -C core ./internal/server -run '^TestWatchTrends' -count=1
 ```

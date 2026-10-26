@@ -118,6 +118,20 @@ type trendsBuild struct {
 // WatchTrends returns one group of watch_trends.v1 for the reader over days
 // (7, 30 or 90).
 func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
+	// Scope identity, not workspace contents, determines eligibility. Neither an
+	// auth-admin nor the selected PM has an unrestricted resource capability.
+	// Do not query roots/epochs to infer eligibility: that itself leaks hidden
+	// records. Canonical projections can incorporate invisible contributors.
+	if _, scoped := accessScopeFrom(ctx); scoped || reader.Visible != nil {
+		return nil, ErrForbidden
+	}
+	return s.buildWatchTrends(ctx, reader, group, days, now)
+}
+
+// buildWatchTrends is an internal calculation, not a scoped read API. Some
+// implementation tests exercise scoped calculations to retain regression
+// coverage, but those tests do not confer eligibility on scoped callers.
+func (s *Store) buildWatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
 	// Under a canonical access scope the PM-private rule is already part of
 	// every scoped relation (another owner's PM thread is a denial root), so
 	// the per-row owner lookups would only repeat it. The one scope broader
@@ -231,9 +245,8 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 // predicate are joined inside each LIMIT, so the cap counts records the reader
 // can see and nothing else: the response, including truncation and every
 // null bucket, is the same whether or not records it cannot see exist.
-// Records in other owners' scopes are never examined. A record hidden by
-// inherited ownership inside a visible scope is examined and skipped before
-// the LIMIT; that costs the read one check and changes nothing it returns.
+// All inherited ownership sources participate in partitioning. Conflicting
+// owners and unconditional denials live in an unservable partition.
 
 // trendScopes are the privacy scopes a reader admits from.
 func (b *trendsBuild) trendScopes() []string {
@@ -253,8 +266,20 @@ func (b *trendsBuild) trendScopes() []string {
 // a further visible record exists beyond the window.
 func (b *trendsBuild) admitScoped(ctx context.Context, query string, limit int, ascending bool, args func(scope string) []any) ([][]string, bool, error) {
 	merged := [][]string{}
-	for _, scope := range b.trendScopes() {
-		rows, err := b.s.db.QueryContext(ctx, query, args(scope)...)
+	scopes := b.trendScopes()
+	_, scoped := accessScopeFrom(b.ctx)
+	unrestricted := !scoped && b.reader.Visible == nil
+	if unrestricted {
+		// One cap across all partitions; never enumerate private owners.
+		query = strings.Replace(query, " AND p.scope=?", "", 1)
+		scopes = []string{""}
+	}
+	for _, scope := range scopes {
+		params := args(scope)
+		if unrestricted {
+			params = append(params[:1], params[2:]...)
+		}
+		rows, err := b.s.db.QueryContext(ctx, query, params...)
 		if err != nil {
 			return nil, false, err
 		}
@@ -317,8 +342,8 @@ const trendPositionsDesc = ` WHERE p.kind=? AND p.scope=? AND p.at_key>=anx_time
 // trendAsks admits asks raised since the previous period began.
 func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
 	pred, predArgs := b.askThreadOwnerSQL()
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,a.requester,a.state,COALESCE(a.answered_at,'')
-	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id CROSS JOIN brief_asks a ON a.ask_id=p.id `+briefAnswerableAskJoin+
+	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,a.requester,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END,CASE WHEN response.id IS NOT NULL THEN COALESCE(a.answered_at,'') ELSE '' END
+	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id CROSS JOIN brief_asks a ON a.ask_id=p.id `+briefAnswerableAskJoin+` LEFT JOIN events response ON response.id=a.response_event_id AND COALESCE(response.trashed_at,'')=''`+
 		trendPositionsDesc+`e.trashed_at IS NULL AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAskCap, false,
 		func(scope string) []any {
 			return append(append([]any{"ask", scope, loopTS(b.w.start())}, predArgs...), trendsAskCap+1)
@@ -365,13 +390,15 @@ func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
 	return out, trendHorizon(truncated, last, b.w.end), nil
 }
 
-// trendOpenAsks reads the creation time of every open ask the reader can see,
-// up to the cap.
+// trendOpenAsks admits a bounded history of visible asks, then derives open
+// state using only visible responses. If history is capped, backlog is unknown.
+// Filtering resolved asks before LIMIT would permit unbounded history walks.
 func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
 	pred, predArgs := b.askThreadOwnerSQL()
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,a.created_at
+	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,a.created_at,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END
 	 FROM watch_trend_positions p CROSS JOIN brief_asks a ON a.ask_id=p.id CROSS JOIN events e ON e.id=p.id `+briefAnswerableAskJoin+`
-	 WHERE p.kind=? AND p.scope=? AND a.state='open' AND COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsOpenAskCap, false,
+	 LEFT JOIN events response ON response.id=a.response_event_id AND COALESCE(response.trashed_at,'')=''
+	 WHERE p.kind=? AND p.scope=? AND COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsOpenAskCap, false,
 		func(scope string) []any {
 			return append(append([]any{"open_ask", scope}, predArgs...), trendsOpenAskCap+1)
 		})
@@ -380,14 +407,30 @@ func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
 	}
 	out := []time.Time{}
 	for _, r := range rows {
-		out = append(out, trendTime(r[2]))
+		if r[3] == "open" {
+			out = append(out, trendTime(r[2]))
+		}
 	}
 	return out, truncated, nil
 }
 
-// trendDoneAt is the latest entry into Done, by the lifecycle index.
-const trendDoneAt = `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
- WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY anx_timestamp_key(position.ts) DESC,position.id DESC LIMIT 1)) END`
+// trendDoneAt seeks each readable completion partition independently and
+// authorizes before taking its newest event. Hidden completions cannot displace
+// a visible completion or make the seek walk an arbitrarily large denied tail.
+func (b *trendsBuild) trendDoneAt() string {
+	if _, scoped := accessScopeFrom(b.ctx); !scoped && b.reader.Visible == nil {
+		return `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM watch_trend_positions position CROSS JOIN events e ON e.id=position.id WHERE position.kind='done_event' AND position.card_id=+c.id AND COALESCE(e.trashed_at,'')='' ORDER BY position.at_key DESC,position.id DESC LIMIT 1) END`
+	}
+
+	seeks := []string{}
+	for _, scope := range b.trendScopes() {
+		quoted := "'" + strings.ReplaceAll(scope, "'", "''") + "'"
+		seeks = append(seeks, `SELECT * FROM (SELECT position.at_key,position.id,e.ts FROM watch_trend_positions position CROSS JOIN events e ON e.id=position.id
+   WHERE position.kind='done_event' AND position.scope=`+quoted+` AND position.card_id=+c.id AND COALESCE(e.trashed_at,'')=''
+   ORDER BY position.at_key DESC,position.id DESC LIMIT 1)`)
+	}
+	return `CASE WHEN c.column_key='done' THEN (SELECT ts FROM (` + strings.Join(seeks, ` UNION ALL `) + `) ORDER BY at_key DESC,id DESC LIMIT 1) END`
+}
 
 // trendPromises admits initiatives with a promise: open ones by soonest
 // promise (the overdue first), and closed ones whose promise fell in the
@@ -406,7 +449,7 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 		 CASE WHEN COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
 		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))
 		  AND NOT `+workHasParentSQL("c")+` THEN 1 ELSE 0 END,
-		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+trendDoneAt+`,'')
+		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+b.trendDoneAt()+`,'')
 		 FROM watch_trend_positions p CROSS JOIN brief_initiatives bi ON bi.card_id=p.id CROSS JOIN cards c ON c.id=p.id
 		 WHERE p.kind=? AND p.scope=?`+bound+` AND `+pred+` ORDER BY p.at_key `+order+`,p.id `+order+` LIMIT ?`, limit, open,
 			func(scope string) []any {
@@ -474,7 +517,7 @@ func (b *trendsBuild) trendCreated() ([]time.Time, time.Time, error) {
 // bounds the done time from above, so the window is ordered by it; the
 // lifecycle index supplies the exact time.
 func (b *trendsBuild) trendDone() ([]time.Time, time.Time, error) {
-	return b.trendCardTimes("card_done", `COALESCE(`+trendDoneAt+`,c.updated_at)`, "c.updated_at", trendsDoneCap)
+	return b.trendCardTimes("card_done", `COALESCE(`+b.trendDoneAt()+`,c.updated_at)`, "c.updated_at", trendsDoneCap)
 }
 
 // trendRuns admits run receipts in the window, newest first.

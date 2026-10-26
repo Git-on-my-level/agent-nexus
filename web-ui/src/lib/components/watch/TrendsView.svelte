@@ -33,7 +33,12 @@
     } catch (error) {
       if (closing.aborted) return;
       groups[key] = {
-        status: error?.name === "TimeoutError" ? "slow" : "failed",
+        status:
+          error?.body?.error?.code === "restricted_trends"
+            ? "restricted"
+            : error?.name === "TimeoutError"
+              ? "slow"
+              : "failed",
       };
     }
   }
@@ -70,6 +75,11 @@
         {:else}
           <p class="text-meta text-fg-muted">Nothing to chart here yet.</p>
         {/if}
+      {:else if state.status === "restricted"}
+        <p class="text-meta text-fg-muted" data-trend-restricted>
+          Trends are unavailable with your current access. You can still follow
+          work in Initiatives and Loops.
+        </p>
       {:else if state.status === "loading"}
         <div class="trend-grid" aria-busy="true">
           {#each [0, 1, 2] as i (i)}

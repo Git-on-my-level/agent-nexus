@@ -3408,9 +3408,9 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: See trends over time that the current-state views cannot show.
 - Concepts: `home`, `inbox`, `cards`
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `restricted_trends`, `unavailable`
 - Output: Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.
-- Agent notes: Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting; caps count only records the caller can see. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Each response describes the end of a 60-second clock window and is cached per caller scope, group, range and window, never by the workspace authorization epoch, so writes the caller cannot see cannot change any byte of it (generated_at included); a change to the caller's own scope takes effect at once.
+- Agent notes: Restricted viewers are rejected before aggregate reads, independent of workspace contents, owner counts, auth epochs or caches. This preserves byte invariance and constant read cost across every inherited privacy mechanism. Unrestricted internal reads use capped indexed positions. A per-scope projection is required before enabling restricted-viewer trends.
 
 ## `work.capabilities`
 

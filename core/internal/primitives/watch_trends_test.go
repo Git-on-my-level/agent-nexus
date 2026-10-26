@@ -31,10 +31,7 @@ func newTrendsFixture(t *testing.T) *trendsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Records written through the store carry the wall clock. Reading well
-	// ahead of it keeps them inside the window however long a loaded test
-	// host takes to write the fixture.
-	return &trendsFixture{t: t, ctx: ctx, store: store, board: board, now: time.Now().UTC().Add(6 * time.Hour)}
+	return &trendsFixture{t: t, ctx: ctx, store: store, board: board, now: time.Now().UTC()}
 }
 
 func (f *trendsFixture) card(title, pmOwner string, fields map[string]any) map[string]any {
@@ -123,6 +120,7 @@ func (f *trendsFixture) trends(actor string, days int) map[string]map[string]any
 
 func (f *trendsFixture) group(actor, group string, days int) map[string]map[string]any {
 	f.t.Helper()
+	f.freezeLiveWrites()
 	for drained := false; !drained; {
 		var err error
 		if drained, err = f.store.RefreshBriefInitiatives(f.ctx, 200); err != nil {
@@ -130,7 +128,7 @@ func (f *trendsFixture) group(actor, group string, days int) map[string]map[stri
 		}
 	}
 	scoped := WithAccessScope(f.ctx, AccessScope{ActorID: actor})
-	out, err := f.store.WatchTrends(scoped, BriefReader{ActorID: actor, Kind: "human"}, group, days, f.now)
+	out, err := f.store.buildWatchTrends(scoped, BriefReader{ActorID: actor, Kind: "human"}, group, days, f.now)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -214,7 +212,7 @@ func TestWatchTrendsComputesFlowsAndDeltas(t *testing.T) {
 	if len(active) != 1 || active[0]["principal"].(map[string]any)["id"] != "agent-1" || active[0]["value"] != 2.0 || active[0]["previous"] != 1.0 {
 		t.Fatalf("agent runs = %#v", active)
 	}
-	if _, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{ActorID: "owner"}, "everything", 30, f.now); err == nil {
+	if _, err := f.store.buildWatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{ActorID: "owner"}, "everything", 30, f.now); err == nil {
 		t.Fatal("unknown group accepted")
 	}
 }
@@ -388,7 +386,7 @@ func TestWatchTrendsReadsWithoutAccessScope(t *testing.T) {
 	visible := func(_, owner string) bool { return owner == "" }
 	panels := map[string]map[string]any{}
 	for _, group := range WatchTrendGroups {
-		out, err := f.store.WatchTrends(f.ctx, BriefReader{Visible: visible}, group, 30, f.now)
+		out, err := f.store.buildWatchTrends(f.ctx, BriefReader{Visible: visible}, group, 30, f.now)
 		if err != nil {
 			t.Fatalf("%s: %v", group, err)
 		}
@@ -472,7 +470,7 @@ func TestWatchTrendsResponseIsInvariantToHiddenRecords(t *testing.T) {
 		out := map[string][]byte{}
 		for _, days := range WatchTrendRanges {
 			for _, group := range WatchTrendGroups {
-				body, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, days, f.now)
+				body, err := f.store.buildWatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, days, f.now)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -597,9 +595,10 @@ func (f *trendsFixture) counts(actor string) trendCounts {
 // reader does between a write and the next fold.
 func (f *trendsFixture) countsUnfolded(actor string) trendCounts {
 	f.t.Helper()
+	f.freezeLiveWrites()
 	p := map[string]map[string]any{}
 	for _, group := range WatchTrendGroups {
-		out, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: actor}), BriefReader{ActorID: actor, Kind: "human"}, group, 30, f.now)
+		out, err := f.store.buildWatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: actor}), BriefReader{ActorID: actor, Kind: "human"}, group, 30, f.now)
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -622,7 +621,7 @@ func (f *trendsFixture) strangerBytes() string {
 	f.trends("stranger", 30) // settle derived state
 	out := ""
 	for _, group := range WatchTrendGroups {
-		body, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, 30, f.now)
+		body, err := f.store.buildWatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, 30, f.now)
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -864,4 +863,18 @@ func TestWatchTrendsRekeysAnswersWhenResolved(t *testing.T) {
 	if got := scope(); got != "owner" {
 		t.Fatalf("answer to a private ask keyed %q, want owner", got)
 	}
+}
+
+// API writes use the wall clock. Pin only their future timestamps to the
+// fixture's fixed instant; historical events already carry their intended time.
+// The event timestamp trigger synchronizes every derived seek key atomically.
+func (f *trendsFixture) freezeLiveWrites() {
+	f.t.Helper()
+	at := loopTS(f.now)
+	f.exec(`UPDATE events SET ts=? WHERE anx_timestamp_key(ts)>anx_timestamp_key(?)`, at, at)
+	f.exec(`UPDATE cards SET created_at=? WHERE anx_timestamp_key(created_at)>anx_timestamp_key(?)`, at, at)
+	f.exec(`UPDATE cards SET updated_at=? WHERE anx_timestamp_key(updated_at)>anx_timestamp_key(?)`, at, at)
+	f.exec(`UPDATE brief_asks SET created_at=? WHERE anx_timestamp_key(created_at)>anx_timestamp_key(?)`, at, at)
+	f.exec(`UPDATE brief_asks SET answered_at=? WHERE anx_timestamp_key(answered_at)>anx_timestamp_key(?)`, at, at)
+	f.exec(`UPDATE human_attention_request_resolutions SET created_at=? WHERE anx_timestamp_key(created_at)>anx_timestamp_key(?)`, at, at)
 }

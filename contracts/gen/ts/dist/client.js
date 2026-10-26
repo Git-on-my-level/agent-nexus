@@ -15093,7 +15093,7 @@ export const commandRegistry = [
         "path": "/watch/trends",
         "operation_id": "getWatchTrends",
         "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
-        "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Watch's Trends tab renders all three.",
+        "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Access-scoped HTTP readers receive a fixed 403 restricted_trends response. The canonical projections are not viewer-specific: hidden contributors can change visible derived state. No unrestricted HTTP capability currently exists; aggregates remain available only to trusted internal callers without an access scope. Ownership transfers do not enable this endpoint.",
         "why": "See trends over time that the current-state views cannot show.",
         "input_mode": "none",
         "streaming": {
@@ -15104,6 +15104,7 @@ export const commandRegistry = [
             "auth_required",
             "invalid_token",
             "invalid_request",
+            "restricted_trends",
             "unavailable"
         ],
         "concepts": [
@@ -15113,7 +15114,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "projection",
-        "agent_notes": "Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered by the caller's access and the PM-private rule before counting; caps count only records the caller can see. truncated means a cap was reached; buckets older than the oldest admitted record are null, never zero. Groups are separate requests so each stays within the ordinary per-request read budget. Each response describes the end of a 60-second clock window and is cached per caller scope, group, range and window, never by the workspace authorization epoch, so writes the caller cannot see cannot change any byte of it (generated_at included); a change to the caller's own scope takes effect at once.",
+        "agent_notes": "Restricted viewers are rejected before aggregate reads, independent of workspace contents, owner counts, auth epochs or caches. This preserves byte invariance and constant read cost across every inherited privacy mechanism. Unrestricted internal reads use capped indexed positions. A per-scope projection is required before enabling restricted-viewer trends.",
         "go_method": "WatchTrends",
         "ts_method": "watchTrends"
     },

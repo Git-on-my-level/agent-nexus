@@ -180,7 +180,6 @@ type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
 	reportPanels                   *reportPanelCache
-	watchTrends                    *reportPanelCache // watch_trends.v1 per reader and range, for watchTrendsTTL.
 	readAdmission                  *readAdmission
 	routeObserver                  func(string, routeAccessClassifier)
 	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
@@ -682,7 +681,6 @@ func enforceRouteAccess(w http.ResponseWriter, r *http.Request, opts handlerOpti
 func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		reportPanels:                  &reportPanelCache{},
-		watchTrends:                   &reportPanelCache{ttl: watchTrendsTTL},
 		coreVersion:                   strings.TrimSpace(schemaVersion),
 		apiVersion:                    "v0",
 		minCLIVersion:                 buildinfo.MinCompatibleCLI,

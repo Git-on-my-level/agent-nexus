@@ -5948,23 +5948,25 @@ paths:
         One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask
         backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise
         and work started vs finished. loops: loop runs, loops reporting on time and the most active agents.
-        Each panel compares the current period with the one before it. Watch's Trends tab renders all three.
+        Each panel compares the current period with the one before it.
+        Access-scoped HTTP readers receive a fixed 403 restricted_trends response. The canonical
+        projections are not viewer-specific: hidden contributors can change visible derived state.
+        No unrestricted HTTP capability currently exists; aggregates remain available only to trusted
+        internal callers without an access scope. Ownership transfers do not enable this endpoint.
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: watch.trends
       x-anx-agent-notes: >
-        Principal-scoped passive read computed from stored asks, cards, promises and run receipts; no models
-        and no external fetches. Each record family is one indexed newest-first seek with a fixed cap, filtered
-        by the caller's access and the PM-private rule before counting; caps count only records the caller
-        can see. truncated means a cap was reached; buckets older than the oldest admitted record are null,
-        never zero. Groups are separate requests so each stays within the ordinary per-request read budget.
-        Each response describes the end of a 60-second clock window and is cached per caller scope, group, range and window, never by the workspace authorization epoch, so writes the caller cannot see cannot change any byte of it (generated_at included); a change to the caller's own scope takes effect at once.
+        Restricted viewers are rejected before aggregate reads, independent of workspace contents,
+        owner counts, auth epochs or caches. This preserves byte invariance and constant read cost
+        across every inherited privacy mechanism. Unrestricted internal reads use capped indexed
+        positions. A per-scope projection is required before enabling restricted-viewer trends.
       x-anx-cli-path: watch trends
       x-anx-why: See trends over time that the current-state views cannot show.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }."
-      x-anx-error-codes: [auth_required, invalid_token, invalid_request, unavailable]
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request, restricted_trends, unavailable]
       x-anx-concepts: [home, inbox, cards]
       x-anx-stability: beta
       parameters:
@@ -5988,6 +5990,8 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
           $ref: '#/components/responses/ErrorResponse'
         '503':
           $ref: '#/components/responses/ErrorResponse'

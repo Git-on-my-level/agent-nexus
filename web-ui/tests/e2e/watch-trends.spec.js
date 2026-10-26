@@ -379,3 +379,35 @@ test("the workspace default dashboard is not a standing tab", async ({
     page.locator('[data-watch-tab="dashboard:alpha"]'),
   ).toHaveAttribute("aria-selected", "true");
 });
+
+test("restricted trends explain unavailability without retrying", async ({
+  page,
+  context,
+}) => {
+  await setup(context, (route) =>
+    json(
+      route,
+      {
+        error: {
+          code: "restricted_trends",
+          message: "Internal detail must not be shown",
+        },
+      },
+      403,
+    ),
+  );
+  await page.goto(`${WATCH}?tab=trends`);
+  await expect(page.locator("[data-trend-restricted]")).toHaveCount(3);
+  await expect(
+    page.getByText("Trends are unavailable with your current access.", {
+      exact: false,
+    }),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Retry", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText("Internal detail must not be shown")).toHaveCount(
+    0,
+  );
+  await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
+});

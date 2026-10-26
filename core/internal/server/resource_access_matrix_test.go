@@ -333,7 +333,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 							t.Errorf("private reference read: %d %s", resp.StatusCode, out)
 						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {
