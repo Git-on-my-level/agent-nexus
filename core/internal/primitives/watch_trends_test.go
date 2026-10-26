@@ -31,7 +31,10 @@ func newTrendsFixture(t *testing.T) *trendsFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &trendsFixture{t: t, ctx: ctx, store: store, board: board, now: time.Now().UTC().Add(time.Minute)}
+	// Records written through the store carry the wall clock. Reading well
+	// ahead of it keeps them inside the window however long a loaded test
+	// host takes to write the fixture.
+	return &trendsFixture{t: t, ctx: ctx, store: store, board: board, now: time.Now().UTC().Add(6 * time.Hour)}
 }
 
 func (f *trendsFixture) card(title, pmOwner string, fields map[string]any) map[string]any {
