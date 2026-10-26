@@ -2312,7 +2312,7 @@
     "../primitives/brief.go:*briefBuild:participatingInitiativeCards": "d711b48dbf5f9da9d8ecd97e5500a0899b437b3ec7884230d10cf75eda9b2fdb",
     "../primitives/brief.go:*briefBuild:possiblyMoot": "54618efad9e9bd7003ab697783ccf998f1fe4165099d0b6cc3aa46134af8d445",
     "../primitives/brief.go:*briefBuild:queryAsks": "4ba319909485d59540581c21b896855c17fda55b7b2d56f149ebd438cc275dc3",
-    "../primitives/brief.go:*briefBuild:queryInitiatives": "2df1012fdc4ee22c04c26832ed02ee0baafe6b9e3f185e58c0cda84edcad771a",
+    "../primitives/brief.go:*briefBuild:queryInitiatives": "a34aba1306c9ed58825e351906639fe1023f22dd32fe32c1157be7aa12e6af3b",
     "../primitives/brief.go:*briefBuild:readableProposals": "672fdd9a220295c17131f00161984ab2ff423e78c98285a31f43485d0839fcf9",
     "../primitives/brief.go:*briefBuild:renderAsks": "e2adf40b298d697988b148250abfccbd875111f10f09eec9a2b7b3a375d10070",
     "../primitives/brief.go:*briefBuild:resolveActors": "c8188a8e845da245788505a9323bdf930ddd87f123e93ad2e96e8bf8365d19ae",

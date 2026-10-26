@@ -1,5 +1,15 @@
 # Performance guardrails
 
+## Explicit initiative visibility
+
+Brief's explicit-board selection uses one board primary-key existence probe
+inside each existing initiative-selection statement. It does not add a query,
+refill candidates, or change the 200-position admission and 50-result bounds.
+Work grows with the admitted candidates, independent of unrelated workspace
+size. Promise/evidence ordering indexes and existing card, tracking and lease
+primary-key lookups remain unchanged. The grouping, denied-prefix and tracking
+scale gates below cover this read; no budget or plan allowance is increased.
+
 ## Default tracking and daily digest reads
 
 Delivery claim/list serialization admits at most 50 deliveries and at most 50

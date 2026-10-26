@@ -25,6 +25,12 @@ them. A slipped promise or high risk makes it at risk; no promise or blocked
 work is stalled. Progress comes from the reader-visible plan and time from the
 current promise. Hidden linked plan text remains hidden.
 
+Watch's Initiatives tab retains top-level, non-loop cards on designated
+initiative boards even when they have no assignee, their worker lease ends,
+or reminder delivery routes them to a daily digest. Empty outcomes show
+"no children yet". Archived and trashed cards remain excluded; ordinary work
+without a designated initiative board keeps its existing digest-only policy.
+
 The next actor is returned for generic human/agent assignments and concrete
 assignments to the viewer. Other concrete actor refs return `next_actor: null`
 until authoritative principal-kind enrichment is available.

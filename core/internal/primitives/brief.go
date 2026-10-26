@@ -920,7 +920,11 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`
 	}
 	if !loops {
-		groupFilter += ` AND (bi.open=0 OR (COALESCE(c.assignee,'')<>'' AND NOT EXISTS(SELECT 1 FROM work_tracking tracking WHERE tracking.card_id=c.id AND (tracking.orphaned_at<>'' OR (bi.promise_source='default' AND tracking.reminder_event_id<>''))) AND NOT EXISTS(SELECT 1 FROM card_leases lease WHERE lease.card_id=c.id AND lease.owner=c.assignee AND (lease.released_at<>'' OR lease.expires_at<='` + cardLeaseStamp(b.now) + `'))))`
+		// An explicit initiative board selects outcomes independently of who is
+		// currently working on them. Digest routing controls reminders, not
+		// whether those outcomes remain visible in Watch. Keep the fallback
+		// selection of ordinary work subject to its existing tracking policy.
+		groupFilter += ` AND (EXISTS(SELECT 1 FROM boards initiative_board WHERE initiative_board.id=c.board_id AND initiative_board.role='initiatives') OR bi.open=0 OR (COALESCE(c.assignee,'')<>'' AND NOT EXISTS(SELECT 1 FROM work_tracking tracking WHERE tracking.card_id=c.id AND (tracking.orphaned_at<>'' OR (bi.promise_source='default' AND tracking.reminder_event_id<>''))) AND NOT EXISTS(SELECT 1 FROM card_leases lease WHERE lease.card_id=c.id AND lease.owner=c.assignee AND (lease.released_at<>'' OR lease.expires_at<='` + cardLeaseStamp(b.now) + `'))))`
 	}
 	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
 	if b.allCardsAreRoots {

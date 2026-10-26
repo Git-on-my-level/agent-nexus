@@ -142,10 +142,10 @@ export function segmentsLabel(rollup) {
     .join(", ");
 }
 
-/** "22 children in 4 workstreams", "8 children", "1 child", or "". */
+/** "22 children in 4 workstreams", "8 children", or "no children yet". */
 export function childrenLine(rollup) {
   const total = rollup?.total ?? 0;
-  if (!total) return "";
+  if (!total) return "no children yet";
   const kids = `${total} ${total === 1 ? "child" : "children"}`;
   const streams = rollup.workstreams?.length ?? 0;
   if (streams)
