@@ -113,8 +113,8 @@
   let failure = $derived($inboxResponseFailures[itemId]);
   /** Core refused the default notify target: the requester is unreachable. */
   let unnotifiable = $derived(failure?.code === "notification_target_required");
-  // Core no longer has this item (404): no retry can succeed.
-  let gone = $derived(failure?.status === 404);
+  // Only an explicit canonical resolution makes an ask closed.
+  let gone = $derived(failure?.closed === true);
   let answered = $derived(
     Boolean(overlay && overlay.status !== "failed") || Boolean(unsent),
   );

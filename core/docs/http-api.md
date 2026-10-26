@@ -157,6 +157,23 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
 - **SSE**: `GET /stream/events`, `GET /stream/inbox`, and `GET /stream/agent-notification-receipts` use `text/event-stream`; see OpenAPI `x-anx-input-mode` / streaming metadata.
   - Inbox emits at most 200 authorized, lifecycle-visible items per poll. An `inbox_page` event reports `partial: true` and a `resume_cursor` until the sweep completes with `partial: false`. Its event ID can be sent as `Last-Event-ID` after reconnect. Merge repeated items by ID and qualify counts during a partial sweep. Every poll refreshes authorization; lifecycle eligibility is indexed and maintained atomically with canonical writes.
 
+## Answer identity and saved retries
+
+`POST /inbox/{inbox_id}/respond` binds a single answer to the original
+`human_attention_requested` event. Presentation revisions change copy only.
+If the asynchronous inbox row is absent, the server reconstructs the single
+item from the scoped original event and verifies the complete deterministic
+inbox ID, including kind, thread and request ID. Prefix-wrapped and unwrapped
+inbox IDs resolve to that same item; replay hashes retain the submitted path
+and body. Filed batches retain their separate atomic admission path.
+
+Canonical response claims/resolutions still serialize answers against
+withdrawal and retirement. A `409 conflict` with `Ask is no longer open` means
+the request has resolved; a `404 not_found` alone does not establish closure.
+Clients must retain an unconfirmed answer and its original idempotency key
+for retry, including after reload. Missing or inaccessible resources remain
+indistinguishable, and no fallback refreshes thread history on the request.
+
 ## Derived projections (materialized views)
 
 - Materialized derived projections used by the common read path:

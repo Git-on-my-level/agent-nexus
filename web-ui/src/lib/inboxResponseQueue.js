@@ -246,6 +246,12 @@ async function checkpointFailure(entry, err, lease = null) {
     // Core's error code, so a row can offer the fix it names (for example
     // answering without notifying an unreachable requester).
     code: String(err?.body?.error?.code ?? ""),
+    // A missing projection or inaccessible item (404) is not a resolution.
+    // This exact server conflict is emitted only for canonical closed asks.
+    closed:
+      err?.status === 409 &&
+      err?.body?.error?.code === "conflict" &&
+      err?.body?.error?.message === "Ask is no longer open",
     nextAt: classification.state === "retrying" ? entry.nextAt : null,
     outcome: String(entry.request?.outcome ?? ""),
     response_text: String(entry.request?.response_text ?? ""),
@@ -1056,7 +1062,7 @@ async function commit(entry, recovered = false) {
       deadline: 0,
       error: failure.error,
       expired: failure.expired,
-      gone: failure.status === 404,
+      gone: failure.closed === true,
       retrying: classification.state === "retrying",
     });
   } finally {

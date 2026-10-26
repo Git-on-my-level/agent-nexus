@@ -2329,3 +2329,30 @@ read paths and their bounds/indexes are unchanged. Retirement/undo add one
 bounded notification message on the existing card thread in their mutation
 transaction and add no read path or poll loop. No budget or plan allowance is
 increased.
+
+## Canonical single-ask answer fallback
+
+`POST /inbox/{inbox_id}/respond` can recover a single ask before its asynchronous
+inbox projection exists. Each lookup admits at most two prefix variants, seeks
+`derived_inbox_items` by primary key, then loads at most one original event and
+one backing thread by primary key per variant. The full reconstructed inbox ID
+must match; revision events and filed batch members cannot impersonate a single
+ask. Existing scoped event/thread hydration retains its indexed reference
+lookups. The handler's batch detection, authorization and answer preparation
+perform at most three such lookups, independent of workspace size and revision
+history. There is no thread-history scan, projection rebuild or polling change.
+Canonical resolution and idempotency admission remain in the existing write
+transaction using their unique indexes.
+
+`TestPerformanceCanonicalAskAnswerLookup` enforces
+`server/testdata/ask_answer_lookup_budget.json` with zero and 4,096 unrelated
+asks. It bounds each warm scoped fallback to 20 statements, 32 returned rows,
+10,000 VM steps and zero full scan steps. No existing budget or query-plan
+allowance is changed. Run alongside the existing presentation/delivery gates:
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/server \
+  -run '^TestPerformanceCanonicalAskAnswerLookup$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformance(AskPresentationReadBudget|AskDeliveryReadBudgets|InboxItemResolutionRead)$' -count=1 -v -timeout=5m
+```

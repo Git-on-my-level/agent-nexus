@@ -605,7 +605,7 @@ func handleGetInboxItem(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 	}
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
+		writeError(w, http.StatusNotFound, "not_found", "Inbox item not found")
 		return
 	}
 	payload := payloadFromDerivedInboxItem(item)
@@ -785,7 +785,15 @@ func inboxItemIDVariants(inboxItemID string) []string {
 	if inboxItemID == "" {
 		return nil
 	}
-	return []string{inboxItemID}
+	variants := []string{inboxItemID}
+	// Older links/clients can omit or wrap the typed inbox prefix. Preserve
+	// the submitted path for replay hashing; normalize only identity lookup.
+	if strings.HasPrefix(inboxItemID, "inbox:inbox:") {
+		variants = append(variants, strings.TrimPrefix(inboxItemID, "inbox:"))
+	} else if !strings.HasPrefix(inboxItemID, "inbox:") {
+		variants = append(variants, "inbox:"+inboxItemID)
+	}
+	return variants
 }
 
 func canonicalHumanAttentionKind(kind string) string {

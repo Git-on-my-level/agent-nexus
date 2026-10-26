@@ -16,13 +16,13 @@ const queue = await vi.hoisted(async () => {
     queueInboxResponse: vi.fn(() => 1),
     captureInboxResponseBinding: vi.fn(() => ({ scope: "s", identity: "i" })),
     resendInboxResponse: vi.fn(),
+    retryInboxResponse: vi.fn(),
     failures: writable({}),
   };
 });
 vi.mock("$lib/inboxResponseQueue.js", () => ({
   ...queue,
   editInboxResponse: vi.fn(),
-  retryInboxResponse: vi.fn(),
   inboxResponseFailures: queue.failures,
   inboxResponseOverlay: writable({}),
   inboxUnsentResponses: writable([]),
@@ -63,6 +63,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DecisionCard", () => {
+  it.each([404, 409, 500])(
+    "retains retry and edit after a non-resolution %s",
+    async (status) => {
+      queue.failures.set({
+        [merge.inboxItemId]: { status, response_text: "Saved answer" },
+      });
+      const { container, getByRole } = render(DecisionCard, {
+        decision: merge,
+        now: NOW,
+      });
+      expect(container.querySelector("[data-decision-gone]")).toBeNull();
+      await fireEvent.click(
+        getByRole("button", { name: "Retry", exact: true }),
+      );
+      expect(queue.retryInboxResponse).toHaveBeenCalledWith(merge.inboxItemId);
+      expect(getByRole("button", { name: "Edit", exact: true })).toBeTruthy();
+    },
+  );
+
   it("puts the recommended proposal first and answers in one tap", async () => {
     const { container } = render(DecisionCard, { decision: merge, now: NOW });
     const buttons = container.querySelectorAll("[data-decision-proposal]");
