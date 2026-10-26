@@ -363,19 +363,21 @@ func TestWatchTrendsHiddenPromisesMarkTruncation(t *testing.T) {
 	if _, err = f.store.PatchThread(f.ctx, "owner", anyStringValue(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	f.trends("owner", 30)
+	hidden := []string{}
 	for i := 0; i <= trendsOpenPromCap; i++ {
 		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Hidden"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		f.trends("owner", 30)
-		f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Duration(40+i)*time.Hour)), anyStringValue(w["id"]))
+		hidden = append(hidden, anyStringValue(w["id"]))
 	}
 	public := f.card("Public", "", nil)
-	f.trends("owner", 30)
+	f.group("owner", "initiatives", 30) // fold every card once
+	for i, id := range hidden {
+		f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Duration(40+i)*time.Hour)), id)
+	}
 	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Hour)), anyStringValue(public["id"]))
-	past := f.trends("stranger", 30)["past_promise"]
+	past := f.group("stranger", "initiatives", 30)["past_promise"]
 	if past["truncated"] != true || past["value"].(*float64) != nil {
 		t.Fatalf("stranger past promise = %#v", past)
 	}
