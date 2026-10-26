@@ -395,7 +395,9 @@ one group of `watch_trends.v1`: `{schema,group,generated_at,range_days,bucket,
 buckets,panels}`. It reads the previous and current period (daily buckets for
 7d and 30d, 13 weekly buckets for 90d) from stored asks, cards, promises and
 run receipts; core runs no models and fetches nothing. Each record family is
-one indexed newest-first seek with a fixed cap. A fresh indexed access check in
+a capped indexed position page followed by bounded hydration. Eligibility joins
+cannot walk beyond the page to fill it; a full page remains truncated even when
+some records are no longer answerable. A fresh indexed access check in
 the same read snapshot admits the calculation only when the viewer's effective
 scope denies zero workspace resources. No role grants eligibility and nothing is
 cached; transfers/grants/revocations apply on the next request. Otherwise the

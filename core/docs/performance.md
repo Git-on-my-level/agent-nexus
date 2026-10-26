@@ -2396,8 +2396,11 @@ The coordinator explicitly required this residual assessment before enabling it.
 
 No scoped aggregate is served: canonical promise/ask projections can incorporate
 invisible contributors. Once admission proves full visibility, every contributor
-is readable in that snapshot. The unscoped calculation uses one capped seek per
-family across all partitions. Role eligibility uses one indexed existence seek
+is readable in that snapshot. The unscoped calculation counts a capped position page, then materializes the
+same capped page before joining records. Both seeks use `(kind,at_key,id)`
+across all partitions; joins cannot walk past missing/ineligible records to fill
+the cap. A bounded temporary-page scan is permitted; no business-table full scan
+is introduced. A full page remains truncated even when hydration drops rows. Role eligibility uses one indexed existence seek
 and a board primary-key lookup per candidate, without listing role boards.
 Promise panels conservatively omit any child with an incoming plan reference,
 including closed parents: two indexed one-row probes replace an unbounded walk
@@ -2415,7 +2418,8 @@ completion. Unrestricted reads use `(kind,at_key,id)` and
 
 The internal calculation retains bounded-history regression coverage. Backlog
 admits a capped history of asks before resolving their visible responses; a capped
-history reports unknown backlog. Event timestamp updates atomically synchronize
+history reports unknown backlog. Empty lifecycle values have the same meaning
+as NULL, matching the position index. Event timestamp updates atomically synchronize
 position keys. Fixture timestamps use their intended fixed clock, without a
 six-hour read offset. These mechanical repairs are not proof that the private
 calculation is safe to expose to scoped callers; the full-visibility admission guard is mandatory.

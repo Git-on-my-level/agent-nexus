@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,8 +14,8 @@ import (
 
 // Watch trends: whether the workspace is getting better or worse, computed at
 // read time from records core already keeps. HTTP readers must first prove full
-// visibility in the calculation's read snapshot. Every family then uses one
-// indexed seek with a fixed cap across all partitions. A capped family reports
+// visibility in the calculation's read snapshot. Every family then uses capped
+// indexed position seeks and hydration across all partitions. A family reports
 // where its history stops: older buckets are null rather than a guessed zero.
 const (
 	trendsAskCap      = 80
@@ -291,6 +292,7 @@ func (b *trendsBuild) trendScopes() []string {
 // a further visible record exists beyond the window.
 func (b *trendsBuild) admitScoped(ctx context.Context, query string, limit int, ascending bool, args func(scope string) []any) ([][]string, bool, error) {
 	merged := [][]string{}
+	pageTruncated := false
 	scopes := b.trendScopes()
 	_, scoped := accessScopeFrom(b.ctx)
 	unrestricted := !scoped && b.reader.Visible == nil
@@ -303,6 +305,33 @@ func (b *trendsBuild) admitScoped(ctx context.Context, query string, limit int, 
 		params := args(scope)
 		if unrestricted {
 			params = append(params[:1], params[2:]...)
+			// Bound physical positions before joins/lifecycle eligibility. Old
+			// unanswerable asks (for example after their thread is removed) must
+			// not make hydration walk an arbitrary tail before filling the cap.
+			// All current callers have kind, optional lower time bound, and cap.
+			if len(params) != 2 && len(params) != 3 {
+				return nil, false, workInvalid("invalid unrestricted trend seek")
+			}
+			page := `SELECT * FROM watch_trend_positions WHERE kind=?`
+			if len(params) == 3 {
+				page += ` AND at_key>=anx_timestamp_key(?)`
+			}
+			direction := "DESC"
+			if ascending {
+				direction = "ASC"
+			}
+			page += ` ORDER BY at_key ` + direction + `,id ` + direction + ` LIMIT ?`
+			var count int
+			if err := b.s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+page+`)`, params...).Scan(&count); err != nil {
+				return nil, false, err
+			}
+			pageTruncated = count > limit
+			// Name the bounded temporary page explicitly in query plans; only
+			// the capped index seek above reads the business position table.
+			query = trendPositionAlias.ReplaceAllString(query, "bounded_trend_page.")
+			query = strings.Replace(query, "FROM watch_trend_positions p ", "FROM _watch_page bounded_trend_page ", 1)
+			query = `WITH _watch_page AS MATERIALIZED (` + page + `) ` + query
+			params = append(append([]any{}, params...), params...)
 		}
 		rows, err := b.s.db.QueryContext(ctx, query, params...)
 		if err != nil {
@@ -345,8 +374,10 @@ func (b *trendsBuild) admitScoped(ctx context.Context, query string, limit int, 
 	if len(merged) > limit {
 		return merged[:limit], true, nil
 	}
-	return merged, false, nil
+	return merged, pageTruncated, nil
 }
+
+var trendPositionAlias = regexp.MustCompile(`\bp\.`)
 
 // trendHorizon is where a truncated window's history stops: the time of its
 // last record. Everything before it is unknown.
@@ -369,7 +400,7 @@ func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
 	pred, predArgs := b.askThreadOwnerSQL()
 	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,a.requester,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END,CASE WHEN response.id IS NOT NULL THEN COALESCE(a.answered_at,'') ELSE '' END
 	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id CROSS JOIN brief_asks a ON a.ask_id=p.id `+briefAnswerableAskJoin+` LEFT JOIN events response ON response.id=a.response_event_id AND COALESCE(response.trashed_at,'')=''`+
-		trendPositionsDesc+`e.trashed_at IS NULL AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAskCap, false,
+		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAskCap, false,
 		func(scope string) []any {
 			return append(append([]any{"ask", scope, loopTS(b.w.start())}, predArgs...), trendsAskCap+1)
 		})
@@ -395,7 +426,7 @@ func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
 	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,'')
 	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id `+briefAnswerableAskJoin+`
 	 LEFT JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id LEFT JOIN brief_asks a ON a.ask_id=r.request_event_id`+
-		trendPositionsDesc+`e.trashed_at IS NULL AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAnswerCap, false,
+		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAnswerCap, false,
 		func(scope string) []any {
 			return append(append([]any{"answer", scope, loopTS(b.w.start())}, predArgs...), trendsAnswerCap+1)
 		})
@@ -523,7 +554,7 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 func (b *trendsBuild) trendCardTimes(kind, timeExpr, orderExpr string, limit int) ([]time.Time, time.Time, error) {
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
 	rows, truncated, err := b.admitScoped(b.groupingContext(), `SELECT p.at_key,p.id,`+timeExpr+`,`+orderExpr+`
-	 FROM watch_trend_positions p CROSS JOIN cards c ON c.id=p.id`+trendPositionsDesc+`c.archived_at IS NULL AND c.trashed_at IS NULL AND `+pred+`
+	 FROM watch_trend_positions p CROSS JOIN cards c ON c.id=p.id`+trendPositionsDesc+`COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND `+pred+`
 	 ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, limit, false,
 		func(scope string) []any {
 			return append(append([]any{kind, scope, loopTS(b.w.start())}, predArgs...), limit+1)
@@ -556,7 +587,7 @@ func (b *trendsBuild) trendDone() ([]time.Time, time.Time, error) {
 func (b *trendsBuild) trendRuns() ([]trendRun, time.Time, error) {
 	pred, predArgs := b.pmOwnerSQL("e.thread_id")
 	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(json_extract(e.payload_json,'$.subject_ref'),''),COALESCE(e.actor_id,''),COALESCE(json_extract(e.payload_json,'$.payload.outcome'),'')
-	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id`+trendPositionsDesc+`e.trashed_at IS NULL AND `+pred+`
+	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id`+trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+`
 	 ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsRunCap, false,
 		func(scope string) []any {
 			return append(append([]any{"run", scope, loopTS(b.w.start())}, predArgs...), trendsRunCap+1)

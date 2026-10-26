@@ -182,8 +182,8 @@ func testWatchTrendsMechanismBudget(t *testing.T, mechanism string) {
 		// Fanout adversaries for the enabled path: role-board enumeration and
 		// walking closed parents must not hide behind an otherwise small corpus.
 		if _, err := db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000)
-		 INSERT INTO boards(id,title,status,thread_id,column_schema_json,role,created_at,created_by,updated_at,updated_by)
-		 SELECT 'trends-role-'||i,'Role board',status,thread_id,column_schema_json,'initiatives',created_at,created_by,updated_at,updated_by FROM n CROSS JOIN boards b WHERE b.id=?`, anyString(board["id"])); err != nil {
+		 INSERT INTO boards(id,title,thread_id,column_schema_json,role,created_at,created_by,updated_at,updated_by)
+		 SELECT 'trends-role-'||i,'Role board',thread_id,column_schema_json,'initiatives',created_at,created_by,updated_at,updated_by FROM n CROSS JOIN boards b WHERE b.id=?`, anyString(board["id"])); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(`INSERT INTO card_plans(card_id,body_json,updated_at)

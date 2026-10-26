@@ -243,3 +243,59 @@ func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
 	f.exec(`DELETE FROM card_plans WHERE card_id=?`, parent["id"])
 	read(1)
 }
+
+func TestWatchTrendsBoundsHydrationBeforeEligibility(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	visible := f.card("Answerable", "", nil)
+	f.ask(visible, "agent-1", 3*24*time.Hour, 0)
+	orphan := f.card("Retained ask history", "", nil)
+	f.exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000)
+	 INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json)
+	 SELECT 'orphan-ask-'||i,'human_attention_requested',?,'agent-1',?,'[]',? FROM n`, loopTS(f.now.Add(-time.Hour)), orphan["thread_id"],
+		fmt.Sprintf(`{"payload":{"kind":"ask","title":"Retained","requester_actor_id":"agent-1","subject_ref":%q,"response_proposals":["Proceed"]}}`, orphan["ref"]))
+	f.exec(`DELETE FROM threads WHERE id=?`, orphan["thread_id"])
+	b := &trendsBuild{briefBuild: &briefBuild{s: f.store, ctx: f.ctx, now: f.now}, w: newTrendWindow(30, f.now)}
+	asks, horizon, err := b.trendAsks()
+	if err != nil || len(asks) != 0 || !horizon.Equal(f.now) {
+		t.Fatalf("hydration walked past the capped unanswerable page: asks=%d horizon=%v err=%v", len(asks), horizon, err)
+	}
+	out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{}, "decisions", 30, f.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if panel := out["panels"].([]map[string]any)[0]; panel["truncated"] != true || panel["raised"] != (*float64)(nil) {
+		t.Fatalf("incomplete history presented as complete: %v", panel)
+	}
+}
+
+func TestWatchTrendsEmptyLifecycleValuesRemainReadable(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	work := f.card("Public", "", map[string]any{"cadence": map[string]any{"every_seconds": 3600}})
+	f.ask(work, "agent-1", time.Hour, 0)
+	f.run(work, time.Hour, "acted")
+	f.group("owner", "initiatives", 30)
+	read := func() string {
+		t.Helper()
+		all := map[string]any{}
+		for _, group := range WatchTrendGroups {
+			out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{}, group, 30, f.now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			all[group] = out
+		}
+		data, err := json.Marshal(all)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	before := read()
+	f.exec(`UPDATE events SET trashed_at=''`)
+	f.exec(`UPDATE cards SET archived_at='',trashed_at=''`)
+	if after := read(); after != before {
+		t.Fatalf("empty lifecycle values changed trends:\nbefore %s\nafter %s", before, after)
+	}
+}
