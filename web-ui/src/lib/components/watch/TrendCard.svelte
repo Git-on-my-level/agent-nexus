@@ -8,6 +8,7 @@
     formatTrendValue,
     panelMax,
     sparklinePath,
+    trendChartLabel,
     trendDelta,
     trendTakeaway,
   } from "$lib/watchTrends.js";
@@ -27,20 +28,7 @@
     })),
   );
   let drawn = $derived(lines.some((line) => line.d));
-  let chartLabel = $derived(
-    `${panel.title}: ${(panel.series ?? [])
-      .map(
-        (s) =>
-          `${s.label} ${(s.points ?? [])
-            .map((p) =>
-              typeof p === "number"
-                ? formatTrendValue(panel.unit, p)
-                : "unknown",
-            )
-            .join(", ")}`,
-      )
-      .join("; ")}`,
-  );
+  let chartLabel = $derived(trendChartLabel(panel));
 </script>
 
 <article
@@ -53,7 +41,7 @@
     {#if panel.truncated}
       <span
         class="partial"
-        title="This period had more records than one read covers. Older buckets show as gaps rather than zero."
+        aria-describedby="trend-partial-{panel.id}"
         data-trend-partial>Recent only</span
       >
     {/if}
@@ -73,6 +61,16 @@
   {/if}
 
   <p class="mt-1 text-meta text-fg-muted" data-trend-takeaway>{takeaway}</p>
+  {#if panel.truncated}
+    <p
+      id="trend-partial-{panel.id}"
+      class="mt-1 text-micro text-fg-subtle"
+      data-trend-partial-note
+    >
+      Busy period: only the most recent records were read. Gaps are unknown, not
+      zero.
+    </p>
+  {/if}
 
   {#if ranked}
     <ol class="mt-2 space-y-1" data-trend-rows>

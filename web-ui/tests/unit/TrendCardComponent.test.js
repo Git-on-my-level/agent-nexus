@@ -67,3 +67,54 @@ it("marks a capped read and draws ranked rows instead of a chart", () => {
   );
   expect(rows[1].textContent).not.toContain("was");
 });
+
+it("labels count series in a percentage panel as counts", () => {
+  const { container } = render(TrendCard, {
+    panel: {
+      id: "promises",
+      title: "Promises kept",
+      unit: "percent",
+      direction: "up_good",
+      value: 62,
+      previous: 78,
+      due: 13,
+      truncated: false,
+      series: [
+        { key: "kept", label: "Kept", unit: "count", points: [2, 1] },
+        { key: "missed", label: "Missed", unit: "count", points: [0, 1] },
+      ],
+      rows: [],
+    },
+  });
+  const label = container
+    .querySelector("[data-trend-spark]")
+    .getAttribute("aria-label");
+  expect(label).toBe("Promises kept: Kept 2, 1; Missed 0, 1");
+  expect(container.querySelector("[data-trend-value]").textContent).toBe("62%");
+});
+
+it("explains a partial read in text, not only a tooltip", () => {
+  const { container } = render(TrendCard, {
+    panel: {
+      id: "loop_runs",
+      title: "Loop runs",
+      unit: "count",
+      direction: "up_good",
+      value: null,
+      previous: null,
+      truncated: true,
+      series: [
+        { key: "runs", label: "Runs", unit: "count", points: [null, 4] },
+      ],
+      rows: [],
+    },
+  });
+  const badge = container.querySelector("[data-trend-partial]");
+  expect(badge.getAttribute("title")).toBeNull();
+  const note = container.querySelector(
+    `#${badge.getAttribute("aria-describedby")}`,
+  );
+  expect(note?.textContent.replace(/\s+/g, " ")).toMatch(
+    /Gaps are unknown, not zero/,
+  );
+});

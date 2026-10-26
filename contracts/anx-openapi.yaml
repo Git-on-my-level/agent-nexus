@@ -15896,10 +15896,11 @@ components:
           type: array
           items:
             type: object
-            required: [key, label, points]
+            required: [key, label, unit, points]
             properties:
               key: {type: string}
               label: {type: string}
+              unit: {type: string, enum: [count, seconds, percent], description: "The series' own unit; it can differ from the panel's (promises kept is a percent drawn from kept and missed counts)."}
               points:
                 type: array
                 items: {type: number, nullable: true}

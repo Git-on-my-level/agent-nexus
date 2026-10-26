@@ -14,7 +14,7 @@ import (
 )
 
 // A SCAN of a business table without an index is an O(workspace) read.
-var trendsFullScan = regexp.MustCompile(`^SCAN (events|cards|brief_asks|brief_initiatives|threads|e|c|a|bi)$`)
+var trendsFullScan = regexp.MustCompile(`^SCAN (events|cards|brief_asks|brief_initiatives|threads|watch_trend_positions|e|c|a|bi|p)$`)
 
 func trendsRaised(t *testing.T, body map[string]any) float64 {
 	t.Helper()

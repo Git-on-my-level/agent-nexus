@@ -396,7 +396,7 @@ buckets,panels}`. It reads the previous and current period (daily buckets for
 7d and 30d, 13 weekly buckets for 90d) from stored asks, cards, promises and
 run receipts; core runs no models and fetches nothing. Each record family is
 one indexed newest-first seek with a fixed cap, filtered by the caller's access
-before counting, so a hidden record never changes a number. A panel that hits a
+before counting, so a hidden record never changes a number, and caps count only records the caller can see: the response is identical whether or not hidden records exist. A panel that hits a
 cap is `truncated` and its buckets older than the oldest admitted record are
 null, never zero. Answers are counted when they were given, including answers
 to asks raised before the window. Results are cached per caller, authorization epoch, group and

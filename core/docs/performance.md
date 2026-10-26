@@ -2370,47 +2370,44 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
 ## Watch trends
 
 `GET /watch/trends` is three requests, one per group, so no single read admits
-every record family. Each family admits its newest cap+1 positions in a
-`MATERIALIZED` CTE over an unscoped position view that exposes only identity,
-type and time (migration 125: `watch_trend_event_positions` over untrashed
-events, `watch_trend_card_positions` over active cards; existing
-`attention_ask_positions` and `work_grouping_brief_positions`), then
-left-joins the scoped relations for payload. A record the reader cannot see
-takes a place in the window and returns nothing about itself, so the cap
-bounds examined rows however many hidden records are newer; a full window
-reads as truncated, with its horizon at the oldest visible record admitted:
+every record family. Migration 125 adds `watch_trend_positions(kind, id,
+scope, at_key)` with `idx_watch_trend_positions(kind, scope, at_key, id)`.
+`scope` is the record's private owner: the PM owner of its backing thread, or
+of its card's board thread, else `''`. Triggers keep it current on event,
+ask, card and brief-initiative writes, and re-key a thread's contents (and a
+board thread's cards and their events) when its PM owner changes; that rare
+re-key is bounded by the container's size. Only identity, kind, scope and a
+time key are stored.
 
-- decisions: `idx_events_ask_order` (type, time key) over at most 81 raised
-  asks and 61 answer events, with primary-key `brief_asks`/thread joins and
-  the unique resolution-event key; the `brief_asks` state index over at most
-  71 open asks; one actor batch of at most five ids.
-- initiatives: two `idx_brief_initiatives_page` seeks (56 open, 36 closed
-  promised initiatives, counted before visibility so hidden rows cannot make a
-  full window look empty) with primary-key card joins and one lifecycle-index
-  done seek per admitted Done card; two grouping-index seeks of 21 created
-  cards; one `idx_cards_closed_work_page` seek of 41 done cards.
-- loops: `idx_events_ask_order` over at most 171 run receipts;
-  `idx_brief_loop_annotated_recent` over 25 loops; one actor batch.
+A reader admits each family with one seek per scope it belongs to (`''` and
+its own actor), newest or soonest first, with the canonical scoped relation
+and the PM-private predicate joined inside each `LIMIT`. The two capped lists
+merge in Go. The cap therefore counts visible records only and the response
+— truncation, horizons and every null bucket included — is the same whether
+or not records the reader cannot see exist. Records in other owners' scopes
+are never examined. A record denied by inherited ownership inside a visible
+scope (for example an ask on a public thread about a private card) is examined
+and skipped before the `LIMIT`: one canonical check, no effect on the result.
+The key steers cost and completeness only; it never grants visibility.
 
-Under a canonical access scope the PM-private rule is already a denial root,
-so the read skips the brief's per-row owner lookups, except for the PM actor
-reading as itself, whose scope is broader. Nothing grows with workspace size
-except through the caps; a capped family marks its panel truncated and leaves
-older buckets null. Each group is cached per caller, authorization epoch,
-group and range for 60 seconds.
+Caps per scope seek: decisions 81 raised asks, 61 answers, 71 open asks;
+initiatives 56 open and 36 closed promised initiatives, 41 created and 41
+done cards; loops 171 runs and 26 loops; plus one actor batch of at most five
+ids per ranked panel. Board role, top-level and lifecycle are flags on
+admitted visible rows.
 
 `TestPerformanceWatchTrendsBudget` fills every cap (240 asks, 80 answers, 240
 runs, 4,096 unrelated cards, every initiative promised) and adds, newest of
 all, 2,000 private runs, asks and cards plus 1,000 private answers. It measures
 the 90-day read for the owner and an unrelated reader against the ordinary
-budget and fails on any unindexed scan of events, cards, asks, initiatives or
-threads. Local acceptance: owner 5-7 queries / 177-215 rows / 9,099-16,019 VM
-steps; unrelated reader decisions 36,712, initiatives 40,348, loops 26,928 VM
-steps. Filtering visibility inside the window instead measured 238,677 VM steps
-for the unrelated decisions read on the same fixture.
-The per-row cost of scoped reads for a reader who is denied part of the graph
-(about 140-380 VM steps) is why the caps are this size and why the groups are
-separate requests.
+budget and fails on any unindexed scan of events, cards, asks, initiatives,
+threads or positions. Local acceptance: owner 6-10 queries / 350-427 rows /
+11,206-24,665 VM steps (the owner's own scope holds the 2,000 private records,
+so its windows fill); unrelated reader decisions 33,801, initiatives 43,536,
+loops 23,573 VM steps. `TestWatchTrendsResponseIsInvariantToHiddenRecords`
+compares the restricted reader's JSON byte for byte, for every group and
+range, before and after adding hidden records newer and older than the
+visible ones in every family.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v

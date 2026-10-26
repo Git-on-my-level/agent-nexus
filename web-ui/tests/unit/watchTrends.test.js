@@ -5,6 +5,7 @@ import {
   formatTrendValue,
   panelMax,
   sparklinePath,
+  trendChartLabel,
   trendDelta,
   trendRange,
   trendTakeaway,
@@ -165,5 +166,29 @@ describe("sparklinePath", () => {
     expect(
       panelMax({ unit: "percent", series: [{ points: [2] }, { points: [3] }] }),
     ).toBe(3);
+  });
+});
+
+describe("trendChartLabel", () => {
+  it("words each series in its own unit, not the panel summary's", () => {
+    const label = trendChartLabel({
+      title: "Promises kept",
+      unit: "percent",
+      series: [
+        { key: "kept", label: "Kept", unit: "count", points: [2, null, 1] },
+        { key: "missed", label: "Missed", unit: "count", points: [0, 3, 1] },
+      ],
+    });
+    expect(label).toBe("Promises kept: Kept 2, unknown, 1; Missed 0, 3, 1");
+    expect(label).not.toMatch(/%/);
+  });
+  it("keeps percentages for a share series", () => {
+    expect(
+      trendChartLabel({
+        title: "Past promise",
+        unit: "percent",
+        series: [{ label: "Past", unit: "percent", points: [50] }],
+      }),
+    ).toBe("Past promise: Past 50%");
   });
 });

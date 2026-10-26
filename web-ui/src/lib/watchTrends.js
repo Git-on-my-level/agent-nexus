@@ -243,3 +243,23 @@ export function panelMax(panel) {
   const values = series.flatMap((s) => (s.points ?? []).filter(isNumber));
   return values.length ? Math.max(...values) : 0;
 }
+
+/**
+ * The words a screen reader hears for a panel's chart. Each series is
+ * formatted in its own unit: a percentage panel can chart counts (promises
+ * kept is a share of kept and missed counts), and "Kept 2%" would misstate
+ * them. Older responses without a series unit fall back to the panel's.
+ */
+export function trendChartLabel(panel) {
+  const series = (panel?.series ?? [])
+    .map(
+      (s) =>
+        `${s.label} ${(s.points ?? [])
+          .map((p) =>
+            isNumber(p) ? formatTrendValue(s.unit ?? panel.unit, p) : "unknown",
+          )
+          .join(", ")}`,
+    )
+    .join("; ");
+  return `${panel?.title ?? ""}: ${series}`;
+}

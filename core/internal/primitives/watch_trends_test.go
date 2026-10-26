@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -321,6 +322,11 @@ func TestWatchTrendsPromisesKeptAndPast(t *testing.T) {
 	if got := trendValue(t, p, "value"); got != 100.0/3 {
 		t.Fatalf("kept rate = %v (%#v)", got, p)
 	}
+	for _, series := range p["series"].([]map[string]any) {
+		if series["unit"] != "count" {
+			t.Fatalf("promise series %s unit = %v, want count", series["key"], series["unit"])
+		}
+	}
 	past := panels["past_promise"]
 	// Open and promised now: overdue (past) and future.
 	if got := trendValue(t, past, "value"); got != 50 || past["past"] != 1.0 || past["total"] != 2.0 {
@@ -352,38 +358,6 @@ func TestWatchTrendsCountsAnswersToOldAsks(t *testing.T) {
 	}
 }
 
-// Initiatives the reader cannot see still use places in the promise window,
-// so a window full of them reads as truncated, never as "no promises".
-func TestWatchTrendsHiddenPromisesMarkTruncation(t *testing.T) {
-	t.Parallel()
-	f := newTrendsFixture(t)
-	private, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Private", "role": "initiatives"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = f.store.PatchThread(f.ctx, "owner", anyStringValue(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
-		t.Fatal(err)
-	}
-	hidden := []string{}
-	for i := 0; i <= trendsOpenPromCap; i++ {
-		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Hidden"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		hidden = append(hidden, anyStringValue(w["id"]))
-	}
-	public := f.card("Public", "", nil)
-	f.group("owner", "initiatives", 30) // fold every card once
-	for i, id := range hidden {
-		f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Duration(40+i)*time.Hour)), id)
-	}
-	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Hour)), anyStringValue(public["id"]))
-	past := f.group("stranger", "initiatives", 30)["past_promise"]
-	if past["truncated"] != true || past["value"].(*float64) != nil {
-		t.Fatalf("stranger past promise = %#v", past)
-	}
-}
-
 // rawEvents inserts n events of one type on work's thread, newest at ago,
 // one minute apart. Database triggers derive brief_asks rows and ownership
 // edges exactly as for an appended event.
@@ -393,42 +367,6 @@ func (f *trendsFixture) rawEvents(work map[string]any, prefix, kind string, n in
 		f.exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,?,?,?,?,?,?)`,
 			fmt.Sprintf("%s-%04d", prefix, i), kind, loopTS(f.now.Add(-ago-time.Duration(i)*time.Minute)), "agent-hidden",
 			anyStringValue(work["thread_id"]), `["thread:`+anyStringValue(work["thread_id"])+`"]`, payload(i))
-	}
-}
-
-// Records the reader cannot see still take places in each capped window, so
-// the read examines at most the cap however many hidden records are newer,
-// and reads as truncated instead of reaching past them.
-func TestWatchTrendsHiddenRecordsUseWindowPlaces(t *testing.T) {
-	t.Parallel()
-	f := newTrendsFixture(t)
-	public := f.card("Public", "", nil)
-	day := 24 * time.Hour
-	f.ask(public, "agent-1", 5*day, 0)
-	f.run(public, 5*day, "acted")
-	private := f.card("Private", "owner", nil)
-	ref := anyStringValue(private["ref"])
-	f.rawEvents(private, "hidden-run", "run_recorded", trendsRunCap+1, time.Hour, func(i int) string {
-		return fmt.Sprintf(`{"subject_ref":%q,"payload":{"run_id":"%d","outcome":"acted"}}`, ref, i)
-	})
-	f.rawEvents(private, "hidden-ask", "human_attention_requested", trendsAskCap+1, time.Hour, func(int) string {
-		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Hidden","requester_actor_id":"agent-hidden","subject_ref":%q,"response_proposals":["Proceed"]}}`, ref)
-	})
-	for i := 0; i <= trendsCreatedCap; i++ {
-		f.card("Hidden work", "owner", nil)
-	}
-	stranger := f.trends("stranger", 30)
-	for _, id := range []string{"loop_runs", "asks_flow", "work_flow"} {
-		if stranger[id]["truncated"] != true {
-			t.Fatalf("%s not truncated for the stranger: %#v", id, stranger[id])
-		}
-	}
-	if stranger["loop_runs"]["value"].(*float64) != nil || stranger["asks_flow"]["raised"].(*float64) != nil {
-		t.Fatal("a capped window reached past hidden records to a visible total")
-	}
-	owner := f.trends("owner", 30)
-	if owner["loop_runs"]["truncated"] != true {
-		t.Fatal("owner window should also be full")
 	}
 }
 
@@ -445,14 +383,21 @@ func TestWatchTrendsReadsWithoutAccessScope(t *testing.T) {
 	}
 	f.trends("owner", 30) // fold
 	visible := func(_, owner string) bool { return owner == "" }
+	panels := map[string]map[string]any{}
 	for _, group := range WatchTrendGroups {
 		out, err := f.store.WatchTrends(f.ctx, BriefReader{Visible: visible}, group, 30, f.now)
 		if err != nil {
 			t.Fatalf("%s: %v", group, err)
 		}
-		if len(out["panels"].([]map[string]any)) == 0 {
-			t.Fatalf("%s: no panels", group)
+		for _, p := range out["panels"].([]map[string]any) {
+			panels[p["id"].(string)] = p
 		}
+	}
+	if trendValue(t, panels["asks_flow"], "raised") != 1 || trendValue(t, panels["asks_flow"], "value") != 1 {
+		t.Fatalf("asks = %#v", panels["asks_flow"])
+	}
+	if trendValue(t, panels["loop_runs"], "value") != 1 || trendValue(t, panels["work_flow"], "started") != 2 {
+		t.Fatalf("runs = %#v work = %#v", panels["loop_runs"], panels["work_flow"])
 	}
 }
 
@@ -497,6 +442,141 @@ func TestWatchTrendsLoopHealthUnknownWhenLoopsAreCapped(t *testing.T) {
 	for _, p := range health["series"].([]map[string]any)[0]["points"].([]*float64) {
 		if p != nil {
 			t.Fatal("a share over a partial population was charted")
+		}
+	}
+}
+
+// The response a reader gets is byte-identical whether or not records it
+// cannot see exist: hidden records newer and older than the visible ones, in
+// every family, past every cap, private by board, by thread and by reference.
+func TestWatchTrendsResponseIsInvariantToHiddenRecords(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	day := 24 * time.Hour
+	public := f.card("Public", "", nil)
+	f.ask(public, "agent-1", 2*day, 3*time.Hour)
+	f.ask(public, "agent-2", 20*day, 0)
+	f.ask(public, "agent-1", 70*day, day)
+	f.run(public, day, "acted")
+	f.run(public, 40*day, "infra_error")
+	if _, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(f.board["id"]), map[string]any{"title": "Public loop", "cadence": map[string]any{"every_seconds": 3600}}); err != nil {
+		t.Fatal(err)
+	}
+	f.group("owner", "initiatives", 30) // fold
+	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-3*day)), anyStringValue(public["id"]))
+
+	read := func() map[string][]byte {
+		out := map[string][]byte{}
+		for _, days := range WatchTrendRanges {
+			for _, group := range WatchTrendGroups {
+				body, err := f.store.WatchTrends(WithAccessScope(f.ctx, AccessScope{ActorID: "stranger"}), BriefReader{ActorID: "stranger", Kind: "human"}, group, days, f.now)
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw, err := json.Marshal(body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out[fmt.Sprintf("%s/%d", group, days)] = raw
+			}
+		}
+		return out
+	}
+	f.trends("owner", 30) // settle derived state before the first read
+	before := read()
+	ownerBefore := f.trends("owner", 30)
+
+	// A private board, a PM-private card thread on the public board, and an
+	// ask on a public thread about a private card.
+	private, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Private", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.PatchThread(f.ctx, "owner", anyStringValue(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pmThread := f.card("PM private", "owner", nil)
+	ref := anyStringValue(secret["ref"])
+	askPayload := func(int) string {
+		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Hidden","requester_actor_id":"agent-hidden","subject_ref":%q,"response_proposals":["Proceed"]}}`, ref)
+	}
+	runPayload := func(batch string) func(int) string {
+		return func(i int) string {
+			return fmt.Sprintf(`{"subject_ref":%q,"payload":{"run_id":"%s-%d","outcome":"acted"}}`, ref, batch, i)
+		}
+	}
+	for _, at := range []time.Duration{time.Hour, 50 * day} { // newer and older than the visible records
+		tag := fmt.Sprint(int(at.Hours()))
+		f.rawEvents(secret, "hidden-run-"+tag, "run_recorded", trendsRunCap+5, at, runPayload("hidden-"+tag))
+		f.rawEvents(pmThread, "pm-run-"+tag, "run_recorded", 5, at, runPayload("pm-"+tag))
+		f.rawEvents(secret, "hidden-ask-"+tag, "human_attention_requested", trendsAskCap+5, at, askPayload)
+		for i := 0; i < trendsAnswerCap+5; i++ {
+			id := fmt.Sprintf("hidden-ask-%s-%04d", tag, i)
+			answer := fmt.Sprintf("hidden-answer-%s-%04d", tag, i)
+			stamp := loopTS(f.now.Add(-at - time.Duration(i)*time.Minute + 30*time.Second))
+			f.exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,?,?,?,?,?,?)`, answer, "human_attention_responded", stamp, "owner",
+				anyStringValue(secret["thread_id"]), `["thread:`+anyStringValue(secret["thread_id"])+`"]`, `{"payload":{"outcome":"answered"}}`)
+			f.exec(`INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'answered','owner',?)`, id, answer, stamp)
+		}
+		for i := 0; i < 2*trendsCreatedCap+5; i++ {
+			column := "todo"
+			if i%2 == 0 {
+				column = "done"
+			}
+			stamp := loopTS(f.now.Add(-at - time.Duration(i)*time.Minute))
+			f.exec(`INSERT INTO cards(id,board_id,title,summary,column_key,created_at,created_by,updated_at,updated_by) VALUES(?,?,'Hidden','',?,?,'owner',?,'owner')`,
+				fmt.Sprintf("hidden-card-%s-%04d", tag, i), anyStringValue(private["id"]), column, stamp, stamp)
+		}
+	}
+	if _, err := f.store.AppendEvent(f.ctx, "agent-1", map[string]any{
+		"type": "human_attention_requested", "thread_id": public["thread_id"], "summary": "About a secret",
+		"refs":    []string{"thread:" + anyStringValue(public["thread_id"])},
+		"payload": map[string]any{"kind": "ask", "title": "About a secret", "requester_actor_id": "agent-1", "subject_ref": ref, "response_proposals": []any{"Proceed"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i <= trendsLoopCap; i++ {
+		if _, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Hidden loop", "cadence": map[string]any{"every_seconds": 3600}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.trends("owner", 30) // fold every hidden card
+	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id IN (SELECT id FROM cards WHERE board_id=?)`, loopTS(f.now.Add(-2*day)), anyStringValue(private["id"]))
+
+	after := read()
+	for key, want := range before {
+		if string(after[key]) != string(want) {
+			t.Fatalf("%s changed with hidden records:\nbefore %s\nafter  %s", key, want, after[key])
+		}
+	}
+	// The hidden records are real: the owner sees them.
+	ownerAfter := f.trends("owner", 30)
+	if ownerAfter["loop_runs"]["truncated"] != true || ownerBefore["loop_runs"]["truncated"] == true {
+		t.Fatalf("owner runs before %#v after %#v", ownerBefore["loop_runs"], ownerAfter["loop_runs"])
+	}
+}
+
+// A ranking is only offered for a period the read covered in full.
+func TestWatchTrendsRankingsNeedACompleteCurrentPeriod(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	work := f.card("Busy", "", nil)
+	ref := anyStringValue(work["ref"])
+	f.rawEvents(work, "ask", "human_attention_requested", trendsAskCap+5, time.Hour, func(int) string {
+		return fmt.Sprintf(`{"payload":{"kind":"ask","title":"Q","requester_actor_id":"agent-1","subject_ref":%q,"response_proposals":["Proceed"]}}`, ref)
+	})
+	f.rawEvents(work, "run", "run_recorded", trendsRunCap+5, time.Hour, func(i int) string {
+		return fmt.Sprintf(`{"subject_ref":%q,"payload":{"run_id":"%d","outcome":"acted"}}`, ref, i)
+	})
+	panels := f.trends("owner", 7)
+	for _, id := range []string{"ask_sources", "agent_runs"} {
+		p := panels[id]
+		if p["truncated"] != true || len(p["rows"].([]map[string]any)) != 0 {
+			t.Fatalf("%s ranked a capped current period: %#v", id, p)
 		}
 	}
 }
