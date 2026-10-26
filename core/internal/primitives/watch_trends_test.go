@@ -79,7 +79,10 @@ func (f *trendsFixture) ask(work map[string]any, requester string, raisedAgo, an
 	f.exec(`UPDATE events SET ts=? WHERE id=?`, loopTS(raised), id)
 	f.exec(`UPDATE brief_asks SET created_at=? WHERE ask_id=?`, loopTS(raised), id)
 	if answeredAfter > 0 {
-		f.exec(`UPDATE brief_asks SET answered_at=? WHERE ask_id=?`, loopTS(raised.Add(answeredAfter)), id)
+		at := loopTS(raised.Add(answeredAfter))
+		f.exec(`UPDATE brief_asks SET answered_at=? WHERE ask_id=?`, at, id)
+		f.exec(`UPDATE events SET ts=? WHERE id=(SELECT resolution_event_id FROM human_attention_request_resolutions WHERE request_event_id=?)`, at, id)
+		f.exec(`UPDATE human_attention_request_resolutions SET created_at=? WHERE request_event_id=?`, at, id)
 	}
 }
 
@@ -321,5 +324,59 @@ func TestWatchTrendsPromisesKeptAndPast(t *testing.T) {
 	// Open and promised now: overdue (past) and future.
 	if got := trendValue(t, past, "value"); got != 50 || past["past"] != 1.0 || past["total"] != 2.0 {
 		t.Fatalf("past = %#v", past)
+	}
+}
+
+// An answer counts in the period it was given, even to an ask raised before
+// the read began, and that ask was open in the buckets before its answer.
+func TestWatchTrendsCountsAnswersToOldAsks(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	work := f.card("Battery", "", nil)
+	day := 24 * time.Hour
+	f.ask(work, "agent-1", 20*day, 18*day) // raised before the 14-day read, answered 2 days ago
+	panels := f.trends("owner", 7)
+	if got := trendValue(t, panels["asks_flow"], "value"); got != 1 {
+		t.Fatalf("answered this week = %v", got)
+	}
+	if got := trendValue(t, panels["asks_flow"], "raised"); got != 0 {
+		t.Fatalf("raised this week = %v", got)
+	}
+	if got := trendValue(t, panels["answer_time"], "value"); got != (18 * day).Seconds() {
+		t.Fatalf("answer time = %v", got)
+	}
+	backlog := panels["ask_backlog"]
+	if trendValue(t, backlog, "value") != 0 || trendValue(t, backlog, "previous") != 1 {
+		t.Fatalf("backlog = %v → %v", *backlog["previous"].(*float64), *backlog["value"].(*float64))
+	}
+}
+
+// Initiatives the reader cannot see still use places in the promise window,
+// so a window full of them reads as truncated, never as "no promises".
+func TestWatchTrendsHiddenPromisesMarkTruncation(t *testing.T) {
+	t.Parallel()
+	f := newTrendsFixture(t)
+	private, err := f.store.CreateBoard(f.ctx, "owner", map[string]any{"title": "Private", "role": "initiatives"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.PatchThread(f.ctx, "owner", anyStringValue(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.trends("owner", 30)
+	for i := 0; i <= trendsOpenPromCap; i++ {
+		w, err := f.store.CreateWork(f.ctx, "owner", anyStringValue(private["id"]), map[string]any{"title": "Hidden"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.trends("owner", 30)
+		f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Duration(40+i)*time.Hour)), anyStringValue(w["id"]))
+	}
+	public := f.card("Public", "", nil)
+	f.trends("owner", 30)
+	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Hour)), anyStringValue(public["id"]))
+	past := f.trends("stranger", 30)["past_promise"]
+	if past["truncated"] != true || past["value"].(*float64) != nil {
+		t.Fatalf("stranger past promise = %#v", past)
 	}
 }

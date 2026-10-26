@@ -125,9 +125,19 @@ func TestPerformanceWatchTrendsBudget(t *testing.T) {
 			}
 			thread := anyString(w["thread_id"])
 			for j := 0; j < 6; j++ {
-				if _, err = s.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "Q", "refs": []string{"thread:" + thread},
-					"payload": map[string]any{"kind": "ask", "title": "Q", "requester_actor_id": fmt.Sprintf("agent-%d", j), "subject_ref": anyString(w["ref"]), "response_proposals": []any{"Proceed"}}}); err != nil {
+				asked, err := s.AppendEvent(ctx, "agent-1", map[string]any{"type": "human_attention_requested", "thread_id": thread, "summary": "Q", "refs": []string{"thread:" + thread},
+					"payload": map[string]any{"kind": "ask", "title": "Q", "requester_actor_id": fmt.Sprintf("agent-%d", j), "subject_ref": anyString(w["ref"]), "response_proposals": []any{"Proceed"}}})
+				if err != nil {
 					t.Fatal(err)
+				}
+				if j < 2 {
+					id := anyString(asked["id"])
+					if _, _, err = s.AppendHumanAttentionResponse(ctx, "owner", id, "inbox:"+id, "", "", map[string]any{
+						"type": "human_attention_responded", "thread_id": thread, "refs": []string{"event:" + id},
+						"payload": map[string]any{"outcome": "answered", "response_text": "Proceed", "request_event_ref": "event:" + id},
+					}, map[string]any{"requested": true, "target_actor_id": "agent-1", "thread_id": thread}); err != nil {
+						t.Fatal(err)
+					}
 				}
 				if _, err = s.AppendEvent(ctx, "agent-1", map[string]any{"type": "run_recorded", "summary": "Ran", "thread_id": thread, "refs": []string{anyString(w["ref"])},
 					"payload": map[string]any{"run_id": fmt.Sprint(j), "outcome": "acted"}}); err != nil {

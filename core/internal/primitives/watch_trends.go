@@ -14,8 +14,9 @@ import (
 // count. A capped family reports where its history stops: buckets older than
 // the oldest admitted record are null rather than a guessed zero.
 const (
-	trendsAskCap      = 110
-	trendsOpenAskCap  = 90
+	trendsAskCap      = 80
+	trendsAnswerCap   = 60
+	trendsOpenAskCap  = 70
 	trendsOpenPromCap = 55
 	trendsPromiseCap  = 35
 	trendsCreatedCap  = 20
@@ -81,6 +82,10 @@ func trendTime(raw string) time.Time {
 type trendAsk struct {
 	id, requester, state string
 	created, answered    time.Time
+}
+
+type trendAnswer struct {
+	created, answered time.Time
 }
 
 type trendPromise struct {
@@ -158,6 +163,10 @@ func (b *trendsBuild) decisionPanels() ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	answers, answersHorizon, err := b.trendAnswers()
+	if err != nil {
+		return nil, err
+	}
 	open, openTruncated, err := b.trendOpenAsks()
 	if err != nil {
 		return nil, err
@@ -167,15 +176,15 @@ func (b *trendsBuild) decisionPanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	return []map[string]any{
-		b.askFlowPanel(asks, horizon),
-		b.answerTimePanel(asks, horizon),
-		b.backlogPanel(asks, horizon, open, openTruncated),
+		b.askFlowPanel(asks, horizon, answers, answersHorizon),
+		b.answerTimePanel(answers, answersHorizon),
+		b.backlogPanel(asks, horizon, answers, answersHorizon, open, openTruncated),
 		sources,
 	}, nil
 }
 
 func (b *trendsBuild) initiativePanels() ([]map[string]any, error) {
-	promises, promiseHorizon, openTruncated, err := b.trendPromises()
+	promises, promiseHorizon, openCutoff, err := b.trendPromises()
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +197,8 @@ func (b *trendsBuild) initiativePanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	return []map[string]any{
-		b.promisesPanel(promises, promiseHorizon),
-		b.pastPromisePanel(promises, promiseHorizon, openTruncated),
+		b.promisesPanel(promises, promiseHorizon, openCutoff),
+		b.pastPromisePanel(promises, promiseHorizon, !openCutoff.IsZero()),
 		b.workFlowPanel(created, createdHorizon, done, doneHorizon),
 	}, nil
 }
@@ -199,13 +208,15 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	loops, err := b.trendLoops()
+	loops, loopsTruncated, err := b.trendLoops()
 	if err != nil {
 		return nil, err
 	}
 	panels := []map[string]any{b.loopRunsPanel(runs, horizon)}
 	if len(loops) > 0 {
-		panels = append(panels, b.loopHealthPanel(loops, runs, horizon))
+		health := b.loopHealthPanel(loops, runs, horizon)
+		health["truncated"] = health["truncated"] == true || loopsTruncated
+		panels = append(panels, health)
 	}
 	active, err := b.agentRunsPanel(runs, horizon)
 	if err != nil {
@@ -252,6 +263,49 @@ func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
 			continue
 		}
 		out = append(out, a)
+	}
+	return out, time.Time{}, rows.Err()
+}
+
+// trendAnswers admits answers given since the previous period began, newest
+// first, by the answer event through idx_events_ask_order; the resolution and
+// the ask join by unique key. Measuring answers by when they happened keeps
+// both periods comparable: an answer late in the window to an old ask counts,
+// in its own period. Left joins keep every admitted event inside the cap.
+func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
+	pred, args := b.askThreadOwnerSQL()
+	args = append(args, loopTS(b.w.start()), trendsAnswerCap+1)
+	rows, err := b.s.db.QueryContext(b.ctx, `SELECT COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,''),e.ts,COALESCE(e.thread_id,''),COALESCE(json_extract(brief_ask_thread.body_json,'$.pm_actor_id'),'')
+	 FROM events e `+briefAnswerableAskJoin+` LEFT JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id LEFT JOIN brief_asks a ON a.ask_id=r.request_event_id
+	 WHERE e.type='human_attention_responded' AND e.trashed_at IS NULL AND `+pred+` AND anx_timestamp_key(e.ts)>=anx_timestamp_key(?)
+	 ORDER BY anx_timestamp_key(e.ts) DESC,e.id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	defer rows.Close()
+	out := []trendAnswer{}
+	admitted := 0
+	var oldest time.Time
+	for rows.Next() {
+		var kind, created, answered, at, thread, owner string
+		if err = rows.Scan(&kind, &created, &answered, &at, &thread, &owner); err != nil {
+			return nil, time.Time{}, err
+		}
+		admitted++
+		if admitted > trendsAnswerCap {
+			if oldest.IsZero() {
+				oldest = b.w.end
+			}
+			return out, oldest, rows.Err()
+		}
+		if t := trendTime(at); !t.IsZero() && (oldest.IsZero() || t.Before(oldest)) {
+			oldest = t
+		}
+		// A repeated response to an answered ask has no resolution of its own.
+		if kind != "answered" || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
+			continue
+		}
+		out = append(out, trendAnswer{created: trendTime(created), answered: trendTime(answered)})
 	}
 	return out, time.Time{}, rows.Err()
 }
@@ -312,11 +366,14 @@ const trendDoneAt = `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events
 
 // trendPromises admits top-level initiatives with a promise: open ones by
 // soonest promise (the overdue first), and closed ones whose promise fell in
-// the window. Both seek idx_brief_initiatives_page.
-func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, bool, error) {
+// the window. Both seek idx_brief_initiatives_page through an unscoped view, so
+// the cap counts every admitted row and visibility is a flag on each: a hidden
+// or child initiative uses a place in the window but returns nothing about
+// itself. The horizon and cutoff come from visible rows only, which errs
+// towards marking more history unknown and never times a hidden promise.
+func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, error) {
 	out := []trendPromise{}
-	var horizon time.Time
-	openTruncated := false
+	var horizon, openCutoff time.Time
 	for _, open := range []bool{true, false} {
 		admission := `open=1 AND promise_at IS NOT NULL ORDER BY open,promise_at`
 		args := []any{}
@@ -331,48 +388,57 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, bool, error) {
 		args = append(args, limit+1)
 		pred, predArgs := b.pmOwnerSQL("c.thread_id")
 		args = append(args, predArgs...)
-		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT bi.open,bi.promise_at,c.created_at,c.column_key,COALESCE(`+trendDoneAt+`,''),COALESCE(c.thread_id,''),`+b.cardOwner()+`
+		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT CASE WHEN bi.card_id IS NOT NULL AND c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
+		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))
+		  AND NOT `+workHasParentSQL("c")+` AND `+pred+` THEN 1 ELSE 0 END,
+		 COALESCE(bi.open,0),COALESCE(bi.promise_at,''),COALESCE(c.created_at,''),COALESCE(c.column_key,''),COALESCE(`+trendDoneAt+`,''),COALESCE(c.thread_id,''),`+b.cardOwner()+`
 		 FROM (SELECT card_id FROM work_grouping_brief_positions WHERE `+admission+` LIMIT ?) admitted
-		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id CROSS JOIN cards c ON c.id=bi.card_id
-		 WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
-		 AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))
-		 AND NOT `+workHasParentSQL("c")+` AND `+pred, args...)
+		 LEFT JOIN brief_initiatives bi ON bi.card_id=admitted.card_id LEFT JOIN cards c ON c.id=admitted.card_id`, args...)
 		if err != nil {
-			return nil, time.Time{}, false, err
+			return nil, time.Time{}, time.Time{}, err
 		}
 		admitted := 0
+		var last time.Time
 		for rows.Next() {
 			var p trendPromise
+			var visible bool
 			var promise, created, phase, done, thread, owner string
-			if err = rows.Scan(&p.open, &promise, &created, &phase, &done, &thread, &owner); err != nil {
+			if err = rows.Scan(&visible, &p.open, &promise, &created, &phase, &done, &thread, &owner); err != nil {
 				rows.Close()
-				return nil, time.Time{}, false, err
+				return nil, time.Time{}, time.Time{}, err
 			}
 			admitted++
 			if admitted > limit {
-				// Closed promises are newest first: older history stops here.
-				// Open ones are soonest first: the remainder are not past yet,
-				// but they are missing from the share's denominator.
+				// Closed promises are newest first: older history stops at the
+				// last one read. Open ones are soonest first: later promises
+				// are missing, so buckets after the last one read are unknown.
+				if last.IsZero() {
+					last = b.w.end
+					if open {
+						last = b.w.start()
+					}
+				}
 				if open {
-					openTruncated = true
+					openCutoff = last
 				} else {
-					horizon = trendTime(promise)
+					horizon = last
 				}
 				break
 			}
-			if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
+			if !visible || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 				continue
 			}
 			p.promise, p.created, p.done, p.cancelled = trendTime(promise), trendTime(created), trendTime(done), phase == "cancelled"
+			last = p.promise
 			out = append(out, p)
 		}
 		err = rows.Err()
 		rows.Close()
 		if err != nil {
-			return nil, time.Time{}, false, err
+			return nil, time.Time{}, time.Time{}, err
 		}
 	}
-	return out, horizon, openTruncated, nil
+	return out, horizon, openCutoff, nil
 }
 
 // trendCreated admits cards created in the window, newest first, through the
@@ -384,7 +450,7 @@ func (b *trendsBuild) trendCreated() ([]time.Time, time.Time, error) {
 		pred, predArgs := b.pmOwnerSQL("c.thread_id")
 		args := append([]any{loopTS(b.w.start())}, predArgs...)
 		args = append(args, trendsCreatedCap+1)
-		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT c.created_at,COALESCE(c.thread_id,''),`+b.cardOwner()+`
+		rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT c.created_at,c.created_at,COALESCE(c.thread_id,''),`+b.cardOwner()+`
 		 FROM cards c WHERE c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key `+closed+` AND c.created_at>=? AND `+pred+`
 		 ORDER BY c.trashed_at,c.archived_at,c.created_at DESC,c.id DESC LIMIT ?`, args...)
 		if err != nil {
@@ -408,7 +474,7 @@ func (b *trendsBuild) trendDone() ([]time.Time, time.Time, error) {
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
 	args := append([]any{loopTS(b.w.start())}, predArgs...)
 	args = append(args, trendsDoneCap+1)
-	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT COALESCE(`+trendDoneAt+`,c.updated_at),COALESCE(c.thread_id,''),`+b.cardOwner()+`
+	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT COALESCE(`+trendDoneAt+`,c.updated_at),c.updated_at,COALESCE(c.thread_id,''),`+b.cardOwner()+`
 	 FROM cards c WHERE c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key='done' AND anx_timestamp_key(c.updated_at)>=anx_timestamp_key(?) AND `+pred+`
 	 ORDER BY anx_timestamp_key(c.updated_at) DESC,c.id DESC LIMIT ?`, args...)
 	if err != nil {
@@ -426,32 +492,29 @@ type trendRows interface {
 	Close() error
 }
 
-// collectTimes reads (time, thread, owner) rows. When the cap is exceeded it
-// returns the oldest admitted time as the horizon.
+// collectTimes reads (time, order, thread, owner) rows admitted in descending
+// order. When the cap is exceeded the horizon is the last admitted row's order
+// value: every row not read sorts at or before it, so its time does too.
 func (b *trendsBuild) collectTimes(rows trendRows, limit int, out *[]time.Time) (time.Time, error) {
 	defer rows.Close()
 	admitted := 0
-	var oldest time.Time
+	horizon := b.w.end
 	for rows.Next() {
-		var at, thread, owner string
-		if err := rows.Scan(&at, &thread, &owner); err != nil {
+		var at, order, thread, owner string
+		if err := rows.Scan(&at, &order, &thread, &owner); err != nil {
 			return time.Time{}, err
 		}
 		admitted++
 		if admitted > limit {
-			if oldest.IsZero() {
-				oldest = b.w.end
-			}
-			return oldest, rows.Err()
+			return horizon, rows.Err()
 		}
-		t := trendTime(at)
-		if !t.IsZero() && (oldest.IsZero() || t.Before(oldest)) {
-			oldest = t
+		if t := trendTime(order); !t.IsZero() {
+			horizon = t
 		}
 		if b.reader.Visible != nil && !b.reader.Visible(thread, owner) {
 			continue
 		}
-		*out = append(*out, t)
+		*out = append(*out, trendTime(at))
 	}
 	return time.Time{}, rows.Err()
 }
@@ -497,27 +560,34 @@ func (b *trendsBuild) trendRuns() ([]trendRun, time.Time, error) {
 	return out, time.Time{}, rows.Err()
 }
 
-// trendLoops admits the most recently annotated loops with a cadence through
-// idx_brief_loop_annotated_recent.
-func (b *trendsBuild) trendLoops() ([]trendLoop, error) {
+// trendLoops admits the most recently annotated loops through
+// idx_brief_loop_annotated_recent. As with promises the view is unscoped, so
+// the cap counts every admitted row and visibility is a flag.
+func (b *trendsBuild) trendLoops() ([]trendLoop, bool, error) {
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	args := append([]any{trendsLoopCap}, predArgs...)
-	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT c.id,COALESCE(c.handle,''),c.created_at,COALESCE(json_extract(m.metadata_json,'$.cadence.every_seconds'),0),COALESCE(c.thread_id,''),`+b.cardOwner()+`
+	args := append([]any{trendsLoopCap + 1}, predArgs...)
+	rows, err := b.s.db.QueryContext(b.groupingContext(), `SELECT CASE WHEN c.id IS NOT NULL AND COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND c.column_key NOT IN ('done','cancelled') AND `+pred+` THEN 1 ELSE 0 END,
+	 COALESCE(c.id,''),COALESCE(c.handle,''),COALESCE(c.created_at,''),COALESCE(json_extract(m.metadata_json,'$.cadence.every_seconds'),0),COALESCE(c.thread_id,''),`+b.cardOwner()+`
 	 FROM (SELECT card_id FROM work_grouping_brief_positions WHERE loop_annotated=1 ORDER BY loop_annotated_at DESC,card_id LIMIT ?) admitted
-	 CROSS JOIN cards c ON c.id=admitted.card_id LEFT JOIN work_metadata m ON m.card_id=c.id
-	 WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND c.column_key NOT IN ('done','cancelled') AND `+pred, args...)
+	 LEFT JOIN cards c ON c.id=admitted.card_id LEFT JOIN work_metadata m ON m.card_id=c.id`, args...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 	out := []trendLoop{}
+	admitted := 0
 	for rows.Next() {
+		var visible bool
 		var id, handle, created, thread, owner string
 		var every float64
-		if err = rows.Scan(&id, &handle, &created, &every, &thread, &owner); err != nil {
-			return nil, err
+		if err = rows.Scan(&visible, &id, &handle, &created, &every, &thread, &owner); err != nil {
+			return nil, false, err
 		}
-		if every <= 0 || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
+		admitted++
+		if admitted > trendsLoopCap {
+			return out, true, rows.Err()
+		}
+		if !visible || every <= 0 || (b.reader.Visible != nil && !b.reader.Visible(thread, owner)) {
 			continue
 		}
 		l := trendLoop{refs: []string{"card:" + id}, created: trendTime(created), every: time.Duration(every) * time.Second}
@@ -526,7 +596,7 @@ func (b *trendsBuild) trendLoops() ([]trendLoop, error) {
 		}
 		out = append(out, l)
 	}
-	return out, rows.Err()
+	return out, false, rows.Err()
 }
 
 // --- panels ---
@@ -579,21 +649,24 @@ func (b *trendsBuild) panel(id, title, unit, direction string, value, previous *
 	return map[string]any{"id": id, "title": title, "unit": unit, "direction": direction, "value": value, "previous": previous, "truncated": truncated, "series": out, "rows": []map[string]any{}}
 }
 
-func (b *trendsBuild) askFlowPanel(asks []trendAsk, horizon time.Time) map[string]any {
+// askFlowPanel counts asks raised and withdrawn (from the asks raised in the
+// window) beside answers given (by answer time). Each series is null before
+// its own family's horizon.
+func (b *trendsBuild) askFlowPanel(asks []trendAsk, horizon time.Time, answers []trendAnswer, answersHorizon time.Time) map[string]any {
 	var opened, answered, withdrawn []time.Time
 	for _, a := range asks {
 		opened = append(opened, a.created)
-		switch a.state {
-		case "answered":
-			answered = append(answered, a.answered)
-		case "withdrawn":
+		if a.state == "withdrawn" {
 			withdrawn = append(withdrawn, a.answered)
 		}
 	}
+	for _, a := range answers {
+		answered = append(answered, a.answered)
+	}
 	o := b.counts("opened", "Raised", opened, horizon)
-	a := b.counts("answered", "Answered", answered, horizon)
+	a := b.counts("answered", "Answered", answered, answersHorizon)
 	w := b.counts("withdrawn", "Withdrawn or retired", withdrawn, horizon)
-	p := b.panel("asks_flow", "Asks raised vs answered", "count", "up_good", b.periodSum(a, 1), b.periodSum(a, 0), !horizon.IsZero(), o, a, w)
+	p := b.panel("asks_flow", "Asks raised vs answered", "count", "up_good", b.periodSum(a, 1), b.periodSum(a, 0), !horizon.IsZero() || !answersHorizon.IsZero(), o, a, w)
 	p["raised"], p["raised_previous"] = b.periodSum(o, 1), b.periodSum(o, 0)
 	return p
 }
@@ -610,11 +683,11 @@ func median(values []float64) *float64 {
 	return num((values[m-1] + values[m]) / 2)
 }
 
-func (b *trendsBuild) answerTimePanel(asks []trendAsk, horizon time.Time) map[string]any {
+func (b *trendsBuild) answerTimePanel(answers []trendAnswer, horizon time.Time) map[string]any {
 	per := make([][]float64, 2*b.w.n)
 	periods := [2][]float64{}
-	for _, a := range asks {
-		if a.state != "answered" || a.answered.IsZero() || a.answered.Before(a.created) {
+	for _, a := range answers {
+		if a.answered.IsZero() || a.created.IsZero() || a.answered.Before(a.created) {
 			continue
 		}
 		i := b.w.bucket(a.answered)
@@ -637,13 +710,27 @@ func (b *trendsBuild) answerTimePanel(asks []trendAsk, horizon time.Time) map[st
 }
 
 // backlogPanel rebuilds open asks at each bucket end: asks open now that were
-// raised by then, plus admitted asks raised by then and resolved later.
-func (b *trendsBuild) backlogPanel(asks []trendAsk, horizon time.Time, open []time.Time, openTruncated bool) map[string]any {
+// raised by then, plus asks raised by then and answered or withdrawn later.
+// Answers are read by answer time, so an old ask answered inside the window
+// still counts as open before its answer. Withdrawals are known only for asks
+// raised inside the window.
+func (b *trendsBuild) backlogPanel(asks []trendAsk, horizon time.Time, answers []trendAnswer, answersHorizon time.Time, open []time.Time, openTruncated bool) map[string]any {
+	resolved := []trendAnswer{}
+	for _, a := range asks {
+		if a.state == "withdrawn" {
+			resolved = append(resolved, trendAnswer{created: a.created, answered: a.answered})
+		}
+	}
+	resolved = append(resolved, answers...)
+	known := horizon
+	if answersHorizon.After(known) {
+		known = answersHorizon
+	}
 	s := b.newSeries("open", "Open asks")
 	if !openTruncated {
 		for i := range s.points {
 			end := b.w.bucketEnd(i)
-			if !b.w.complete(i, horizon) {
+			if !b.w.complete(i, known) {
 				continue
 			}
 			n := 0.0
@@ -652,8 +739,8 @@ func (b *trendsBuild) backlogPanel(asks []trendAsk, horizon time.Time, open []ti
 					n++
 				}
 			}
-			for _, a := range asks {
-				if a.state != "open" && !a.created.After(end) && a.answered.After(end) {
+			for _, a := range resolved {
+				if !a.created.IsZero() && !a.created.After(end) && a.answered.After(end) {
 					n++
 				}
 			}
@@ -665,13 +752,16 @@ func (b *trendsBuild) backlogPanel(asks []trendAsk, horizon time.Time, open []ti
 		value = num(float64(len(open)))
 		previous = s.points[b.w.n-1]
 	}
-	return b.panel("ask_backlog", "Open asks over time", "count", "down_good", value, previous, openTruncated || !horizon.IsZero(), s)
+	return b.panel("ask_backlog", "Open asks over time", "count", "down_good", value, previous, openTruncated || !known.IsZero(), s)
 }
 
-func (b *trendsBuild) promisesPanel(promises []trendPromise, horizon time.Time) map[string]any {
+// promisesPanel buckets each promise by when it fell due. With more open
+// promises than the read admits, the ones after openCutoff are missing, so
+// those buckets are unknown.
+func (b *trendsBuild) promisesPanel(promises []trendPromise, horizon, openCutoff time.Time) map[string]any {
 	kept, missed := b.newSeries("kept", "Kept"), b.newSeries("missed", "Missed")
 	for i := range kept.points {
-		if b.w.complete(i, horizon) {
+		if b.w.complete(i, horizon) && (openCutoff.IsZero() || !b.w.bucketEnd(i).After(openCutoff)) {
 			kept.points[i], missed.points[i] = num(0), num(0)
 		}
 	}
@@ -696,7 +786,7 @@ func (b *trendsBuild) promisesPanel(promises []trendPromise, horizon time.Time) 
 		}
 		return num(100 * *k / (*k + *m))
 	}
-	p := b.panel("promises", "Promises kept", "percent", "up_good", rate(1), rate(0), !horizon.IsZero(), kept, missed)
+	p := b.panel("promises", "Promises kept", "percent", "up_good", rate(1), rate(0), !horizon.IsZero() || !openCutoff.IsZero(), kept, missed)
 	p["due"] = func() *float64 {
 		k, m := b.periodSum(kept, 1), b.periodSum(missed, 1)
 		if k == nil || m == nil {

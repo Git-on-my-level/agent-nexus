@@ -1393,9 +1393,10 @@ watch_trends:
     - Computed at read time from stored asks, cards, promises and run receipts. Core runs no models and fetches nothing external.
     - One group per request, so each request stays within the ordinary read budget. decisions covers asks; initiatives covers promises and work started vs finished; loops covers run receipts, loop reporting and the most active agents.
     - The read covers two periods (previous and current). 7d and 30d use daily buckets; 90d uses 13 weekly buckets. value and previous summarize each period.
-    - Each record family is one indexed newest-first seek with a fixed cap (asks 110, open asks 90, open promises 55, closed promises 35, created cards 20 per lifecycle index, done cards 40, runs 170, loops 25). Visibility filters run before counting; a hidden record never changes a count.
+    - Each record family is one indexed newest-first seek with a fixed cap (asks raised 80, answers 60, open asks 70, open promises 55, closed promises 35, created cards 20 per lifecycle index, done cards 40, runs 170, loops 25). Visibility filters run before counting; a hidden record never changes a count.
     - When a cap is reached the panel is truncated and buckets older than the oldest admitted record are null, never zero.
-    - Answer time and answered counts cover asks raised inside the read window. Promises are judged against each initiative's current promise.
+    - Answered counts and answer time are measured by when the answer was given, including answers to asks raised before the window. Withdrawals count only for asks raised inside the window. Promises are judged against each initiative's current promise.
+    - Promise and loop admission caps count records the reader cannot see, so a window full of hidden records reads as truncated rather than empty.
     - Loop health applies the brief's rule (reported within two cadences) at each bucket end; a bucket whose lookback precedes the read is null.
     - Results are cached per caller, authorization epoch, group and range for up to 60 seconds.
 overview_changes:
