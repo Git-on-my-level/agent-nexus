@@ -81,7 +81,7 @@ func TestAwaitRetirementDoesNotAcknowledgeAnswerDelivery(t *testing.T) {
 			fmt.Fprint(w, `{"id":"await-sub"}`)
 		case "/stream/asks/ask-1":
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprint(w, "event: outcome\ndata: {\"status\":\"withdrawn_as_stale\"}\n\n")
+			fmt.Fprint(w, "event: outcome\ndata: {\"status\":\"withdrawn_as_stale\",\"response\":{\"reason\":\"expired\"}}\n\n")
 		default:
 			t.Errorf("retirement touched answer delivery: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)

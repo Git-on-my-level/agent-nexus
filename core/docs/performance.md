@@ -2279,6 +2279,10 @@ resolves one ask and subject by the existing ID/handle indexes, checks current
 authority by principal primary key, and seeks the canonical resolution and
 actor/key replay receipt by their unique indexes. Evidence admission performs
 at most 32 indexed point checks (HTTP(S) evidence is validated without fetching).
+Requester notification admission additionally checks at most 32 evidence refs,
+the reason and the final notice under the recipient policy in the same transaction.
+It uses the existing exact/prose reference indexes; private evidence and audit refs
+are omitted from the notice. Work is bounded by those inputs and their ancestry.
 It appends one audit event and notification and inserts/deletes one resolution.
 Undo updates only that ask's `ask_subjects`, `brief_asks` and `ask_deadlines`
 primary-key rows. It never loads ask history or workspace rosters.

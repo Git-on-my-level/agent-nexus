@@ -176,3 +176,82 @@ func TestUnrevisedAskPresentationPreservesPayload(t *testing.T) {
 		t.Fatalf("unrevised payload changed: %#v", payload)
 	}
 }
+
+func TestAskRetirementNoticeDoesNotInheritPrivateEvidence(t *testing.T) {
+	s, ws, card, ask := askDeliveryFixture(t)
+	ctx := context.Background()
+	if _, err := ws.DB().Exec(`INSERT INTO agents(id,username,actor_id,metadata_json,created_at,updated_at) VALUES('curator','curator','curator','{"auth_admin":true}','now','now')`); err != nil {
+		t.Fatal(err)
+	}
+	curator := auth.Principal{AgentID: "curator", ActorID: "curator", PrincipalKind: "agent"}
+	board, err := s.CreateBoard(ctx, curator.ActorID, map[string]any{"title": "Curator evidence"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, curator.ActorID, anyStringValue(board["thread_id"]), map[string]any{"pm_actor_id": curator.ActorID}, nil); err != nil {
+		t.Fatal(err)
+	}
+	privateRef := anyStringValue(board["ref"])
+	requesterCtx := WithAccessScope(ctx, AccessScope{ActorID: "requester"})
+	if s.CanAccessResource(requesterCtx, "board", privateRef) {
+		t.Fatal("evidence fixture must be private to curator")
+	}
+	curatorCtx := WithAccessScope(ctx, AccessScope{ActorID: curator.ActorID})
+	for _, reason := range []string{"Old rollout is no longer relevant", "See " + privateRef} {
+		retired, err := s.RetireAsk(curatorCtx, curator, anyStringValue(ask["ref"]), "retire-"+reason, "retire-"+reason, reason, []string{privateRef, anyStringValue(card["ref"])}, false, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		notice, err := s.GetEvent(requesterCtx, strings.TrimPrefix(anyStringValue(retired["notification_event_ref"]), "event:"))
+		if err != nil {
+			t.Fatalf("requester cannot read notification: %v", err)
+		}
+		p := asMapValue(notice["payload"])
+		encoded, _ := json.Marshal(notice)
+		if p["recipient_actor_id"] != "requester" || !strings.Contains(strings.ToLower(anyStringValue(p["text"])), "evidence not visible to you") || strings.Contains(string(encoded), privateRef) || !strings.Contains(string(encoded), anyStringValue(card["ref"])) {
+			t.Fatalf("private evidence leaked or visible evidence lost: %s", encoded)
+		}
+		if reason == "Old rollout is no longer relevant" && !strings.Contains(anyStringValue(p["text"]), reason) {
+			t.Fatal("notification lost retirement reason")
+		}
+		if s.CanAccessResource(requesterCtx, "event", anyStringValue(retired["retirement_event_ref"])) {
+			t.Fatal("private audit evidence became public")
+		}
+		reopened, err := s.RetireAsk(curatorCtx, curator, anyStringValue(ask["ref"]), "undo-"+reason, "undo-"+reason, "", nil, true, anyStringValue(retired["retirement_event_ref"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = s.GetEvent(requesterCtx, strings.TrimPrefix(anyStringValue(reopened["notification_event_ref"]), "event:")); err != nil {
+			t.Fatalf("requester cannot read undo notification: %v", err)
+		}
+	}
+}
+
+func TestAskRetirementReasonCannotChangeStatus(t *testing.T) {
+	s, ws, card, ask := askDeliveryFixture(t)
+	ctx := context.Background()
+	principal := seedAskReviewRequester(t, ws)
+	for _, reason := range []string{"open", "answered", "needs_context", "withdrawn", "withdrawn_as_stale", "expired", "resolved", "rejected"} {
+		t.Run(reason, func(t *testing.T) {
+			retired, err := s.RetireAsk(ctx, principal, anyStringValue(ask["ref"]), reason, reason, reason, []string{anyStringValue(card["ref"])}, false, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := s.AskOutcome(WithAccessScope(ctx, AccessScope{ActorID: principal.ActorID}), anyStringValue(ask["ref"]))
+			if err != nil || out["status"] != "withdrawn_as_stale" || asMapValue(out["response"])["reason"] != reason {
+				t.Fatalf("reason changed status: %#v %v", out, err)
+			}
+			if _, err = s.RetireAsk(ctx, principal, anyStringValue(ask["ref"]), "undo-"+reason, "undo-"+reason, "", nil, true, anyStringValue(retired["retirement_event_ref"])); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	// Even an ordinary withdrawal's free text cannot fabricate an expiry.
+	if _, err := s.AppendHumanAttentionWithdrawal(ctx, principal.ActorID, anyStringValue(ask["id"]), map[string]any{"payload": map[string]any{"reason": "expired"}}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := s.AskOutcome(ctx, anyStringValue(ask["ref"]))
+	if err != nil || out["status"] != "withdrawn" {
+		t.Fatalf("free-text withdrawal fabricated expiry: %#v %v", out, err)
+	}
+}

@@ -172,9 +172,44 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		}
 		// A durable message informs the requester without scheduling execution.
 		// In particular, this must not acknowledge a per-ask resume registration.
-		notification, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": "message_posted", "thread_id": thread, "summary": summary, "refs": append(append([]string{}, refs...), "event:"+anyStringValue(event.Body["id"])), "payload": map[string]any{"text": "For " + requester + ": " + summary, "recipient_actor_id": requester, "request_event_ref": "event:" + resolved.ID, "retirement_event_ref": "event:" + retirementID}})
+		// The audit may inherit curator-only evidence. The notice must inherit
+		// the ask/card instead, without linking back to that private audit.
+		recipientCtx := WithRequestAccessScope(ctx, AccessScope{ActorID: requester})
+		noticeRefs := []string{"event:" + resolved.ID, subject}
+		noticeSummary := summary
+		readable, err := tx.ReadableValues(recipientCtx, summary)
 		if err != nil {
 			return err
+		}
+		if !readable {
+			noticeSummary = "Ask retired as stale (reason not visible to you)"
+		}
+		visibleEvidence := []string{}
+		hiddenEvidence := false
+		for _, ref := range evidence {
+			readable, err := tx.ReadableValues(recipientCtx, ref)
+			if err != nil {
+				return err
+			}
+			if readable {
+				visibleEvidence = append(visibleEvidence, ref)
+				noticeRefs = append(noticeRefs, ref)
+			} else {
+				hiddenEvidence = true
+			}
+		}
+		text := "For " + requester + ": " + noticeSummary
+		if hiddenEvidence {
+			text += "\nEvidence not visible to you."
+		}
+		notification, err := prepareEventForInsert(principal.ActorID, map[string]any{"type": "message_posted", "thread_id": thread, "summary": noticeSummary, "refs": noticeRefs, "payload": map[string]any{"text": text, "recipient_actor_id": requester, "request_event_ref": "event:" + resolved.ID, "status": status, "evidence": visibleEvidence}})
+		if err != nil {
+			return err
+		}
+		if readable, err := tx.ReadableValues(recipientCtx, notification.Body); err != nil {
+			return err
+		} else if !readable {
+			return ErrNotFound
 		}
 		result = map[string]any{"ask_id": "event:" + resolved.ID, "status": status, "event": event.Body, "retirement_event_ref": "event:" + retirementID, "notified_actor_id": requester, "notification_event_ref": "event:" + anyStringValue(notification.Body["id"])}
 		encoded, _ := json.Marshal(result)

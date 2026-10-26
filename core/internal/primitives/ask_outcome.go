@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 )
 
 // WithAskDeliveryPolicy configures generic routing. Empty order uses owner,
@@ -65,12 +66,17 @@ func (s *Store) AskOutcome(ctx context.Context, ref string) (map[string]any, err
 		if eventType == AskRetiredEventType {
 			out["status"] = "withdrawn_as_stale"
 			out["retirement_event_ref"] = "event:" + resolutionID
-		}
-		if response["outcome"] == "needs_context" {
+		} else if response["outcome"] == "needs_context" {
 			out["status"] = "needs_context"
 		}
-		if response["reason"] == "expired" {
-			out["status"] = "expired"
+		// Expiry comes from the request's structured deadline at the time of
+		// withdrawal, never from a caller's free-text reason.
+		if eventType == "human_attention_withdrawn" && resolutionType == "withdrawn" {
+			expires, expiryErr := time.Parse(time.RFC3339Nano, anyStringValue(ask["expires_at"]))
+			resolvedAt, timeErr := time.Parse(time.RFC3339Nano, at)
+			if expiryErr == nil && timeErr == nil && !resolvedAt.Before(expires) {
+				out["status"] = "expired"
+			}
 		}
 		var resultRaw string
 		if e := s.db.QueryRowContext(ctx, `SELECT response_json FROM human_attention_response_claims WHERE request_event_id=?`, id).Scan(&resultRaw); e == nil {
