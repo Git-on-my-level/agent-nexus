@@ -114,3 +114,72 @@ func TestWatchExplicitInitiativesSurviveDigestRouting(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchExplicitInitiativesExcludeInactiveBoards(t *testing.T) {
+	for _, lifecycle := range []string{"archived", "trashed"} {
+		t.Run(lifecycle, func(t *testing.T) {
+			ctx := context.Background()
+			ws, err := initializeTestWorkspace(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ws.Close()
+			s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+			create := func(title string) (map[string]any, map[string]any) {
+				t.Helper()
+				board, err := s.CreateBoard(ctx, "writer", map[string]any{"title": title, "role": "initiatives"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				card, err := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": title + " outcome"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = ws.DB().Exec(`UPDATE cards SET assignee=NULL WHERE id=?`, card["id"]); err != nil {
+					t.Fatal(err)
+				}
+				return board, card
+			}
+			_, active := create("Active")
+			inactiveBoard, inactive := create("Inactive")
+			if lifecycle == "archived" {
+				_, err = s.ArchiveBoard(ctx, "writer", workString(inactiveBoard["id"]))
+			} else {
+				_, err = s.TrashBoard(ctx, "writer", workString(inactiveBoard["id"]), "Obsolete")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Only the board is inactive: card lifecycle filtering cannot hide it.
+			var inactiveCards int
+			if err = ws.DB().QueryRow(`SELECT count(*) FROM cards WHERE id=? AND (COALESCE(archived_at,'')<>'' OR COALESCE(trashed_at,'')<>'')`, inactive["id"]).Scan(&inactiveCards); err != nil {
+				t.Fatal(err)
+			}
+			if inactiveCards != 0 {
+				t.Fatal("expected the card itself to remain active")
+			}
+			for drained := false; !drained; {
+				drained, err = s.RefreshBriefInitiatives(ctx, 200)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, kind := range []string{"human", "agent"} {
+				readCtx := WithRequestAccessScope(ctx, AccessScope{ActorID: "viewer"})
+				brief, err := s.Brief(readCtx, BriefReader{ActorID: "viewer", Kind: kind}, time.Now())
+				if err != nil {
+					t.Fatal(err)
+				}
+				items := brief["initiatives"].([]map[string]any)
+				for _, item := range items {
+					if item["ref"] == inactive["ref"] {
+						t.Fatalf("%s: card on %s initiatives board is visible", kind, lifecycle)
+					}
+				}
+				if len(items) != 1 || items[0]["ref"] != active["ref"] {
+					t.Fatalf("%s: want only the active board's outcome, got %v", kind, items)
+				}
+			}
+		})
+	}
+}
