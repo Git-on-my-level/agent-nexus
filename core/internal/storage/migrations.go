@@ -1191,8 +1191,8 @@ var migrations = []migration{
 	}},
 	{Version: 123, AfterApply: installAskPresentationHeads},
 	{Version: 124, AfterApply: installAskRetirementDeliveryPolicy},
-	// Watch trends admit each record family by privacy scope, so a reader's
-	// window never contains, or examines, records in another owner's scope.
+	// Watch trends bound each record family's read through identity/time
+	// positions; canonical hydrated rows keep their own authorization.
 	{Version: 125, AfterApply: installWatchTrendPositions},
 }
 

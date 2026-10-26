@@ -14,8 +14,8 @@ import (
 
 // Watch trends: whether the workspace is getting better or worse, computed at
 // read time from records core already keeps. HTTP readers must first prove full
-// visibility in the calculation's read snapshot. Every family then uses capped
-// indexed position seeks and hydration across all partitions. A family reports
+// visibility in the calculation's read snapshot. Every family then uses one
+// capped indexed position seek and hydrates canonical rows. A family reports
 // where its history stops: older buckets are null rather than a guessed zero.
 const (
 	trendsAskCap      = 80
@@ -117,8 +117,9 @@ type trendsBuild struct {
 	w trendWindow
 }
 
-// WatchTrends returns one group of watch_trends.v1 for the reader over days
-// (7, 30 or 90).
+// WatchTrends returns one group of watch_trends.v1 over days (7, 30 or 90).
+// Scoped callers must first prove full visibility in the calculation's read
+// snapshot; any denied resource rejects the whole read.
 func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
 	// A separate callback could hide contributors beyond the canonical scope.
 	if reader.Visible != nil {
@@ -141,6 +142,9 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 			if active || ledger < 1 {
 				return c, ErrForbidden
 			}
+			if hook, ok := c.Value(watchTrendsProofHookKey{}).(func(context.Context)); ok {
+				hook(c)
+			}
 			// This snapshot has no inaccessible resources. Only this admitted
 			// calculation may use unscoped relations; no capability escapes it.
 			return resourceaccess.WithoutPolicy(context.WithValue(c, accessScopeKey{}, struct{}{})), nil
@@ -149,23 +153,26 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 			return nil, err
 		}
 		defer finish()
-		return s.buildWatchTrends(read, BriefReader{}, group, days, now)
+		return s.buildWatchTrends(read, group, days, now)
 	}
-	return s.buildWatchTrends(ctx, reader, group, days, now)
+	return s.buildWatchTrends(ctx, group, days, now)
 }
 
-// buildWatchTrends is an internal calculation, not a scoped read API. Some
-// implementation tests exercise scoped calculations to retain regression
-// coverage, but those tests do not confer eligibility on scoped callers.
-func (s *Store) buildWatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
-	// Under a canonical access scope the PM-private rule is already part of
-	// every scoped relation (another owner's PM thread is a denial root), so
-	// the per-row owner lookups would only repeat it. The one scope broader
-	// than the rule is the PM reading as itself; that keeps the explicit rule.
-	if scope, ok := accessScopeFrom(ctx); ok && scope.ActorID != "" && scope.ActorID != scope.PMActorID {
-		reader.Visible = nil
-	}
-	b := &trendsBuild{briefBuild: &briefBuild{s: s, ctx: ctx, reader: reader, now: now.UTC(), actors: map[string]bool{}}, w: newTrendWindow(days, now)}
+type watchTrendsProofHookKey struct{}
+
+// WatchTrendsProofHook returns a context whose hook runs inside the pinned read
+// snapshot immediately after the full-visibility proof succeeds and before any
+// aggregate read. It exists so tests can inject a concurrent transfer between
+// proof and calculation; production callers never set it.
+func WatchTrendsProofHook(ctx context.Context, hook func(context.Context)) context.Context {
+	return context.WithValue(ctx, watchTrendsProofHookKey{}, hook)
+}
+
+// buildWatchTrends is the admitted unscoped calculation, not a read API: it may
+// examine every record, so only WatchTrends after full-visibility admission
+// (or an equivalently authorized internal caller) may reach it.
+func (s *Store) buildWatchTrends(ctx context.Context, group string, days int, now time.Time) (map[string]any, error) {
+	b := &trendsBuild{briefBuild: &briefBuild{s: s, ctx: ctx, now: now.UTC(), actors: map[string]bool{}}, w: newTrendWindow(days, now)}
 	var panels []map[string]any
 	var err error
 	switch group {
@@ -265,116 +272,79 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 	return append(panels, active), nil
 }
 
-// Every capped family is read through watch_trend_positions, one seek per
-// privacy scope the reader belongs to (the public scope and its own), newest
-// (or soonest) first. The canonical scoped relation and the PM-private
-// predicate are joined inside each LIMIT, so the cap counts records the reader
-// can see and nothing else: the response, including truncation and every
-// null bucket, is the same whether or not records it cannot see exist.
-// All inherited ownership sources participate in partitioning. Conflicting
-// owners and unconditional denials live in an unservable partition.
+// Every capped family is read through watch_trend_positions as one indexed
+// seek: newest first (soonest for open promises), bounded to the cap before
+// hydration joins canonical rows. Position rows carry identity and time only;
+// lifecycle, board role and thread eligibility are flags on each admitted row,
+// so joins cannot walk past missing or ineligible records to fill the cap.
 
-// trendScopes are the privacy scopes a reader admits from.
-func (b *trendsBuild) trendScopes() []string {
-	id := stripActor(b.reader.ActorID)
-	if scope, ok := accessScopeFrom(b.ctx); ok {
-		id = scope.ActorID
+// admitTrendRows bounds physical positions before joins and lifecycle
+// eligibility, then runs query over the capped page. Old unanswerable asks
+// (for example after their thread is removed) must not make hydration walk an
+// arbitrary tail before filling the cap. params is kind, an optional lower
+// time bound, and the page cap (limit+1); all callers match that shape. Every
+// row's first two columns are at_key and id; all columns scan as text.
+// truncated reports that a further position exists beyond the cap.
+func (b *trendsBuild) admitTrendRows(ctx context.Context, query string, limit int, ascending bool, params ...any) ([][]string, bool, error) {
+	if len(params) != 2 && len(params) != 3 {
+		return nil, false, workInvalid("invalid trend seek")
 	}
-	if id == "" {
-		return []string{""}
+	page := `SELECT * FROM watch_trend_positions WHERE kind=?`
+	if len(params) == 3 {
+		page += ` AND at_key>=anx_timestamp_key(?)`
 	}
-	return []string{"", id}
-}
-
-// admitScoped runs query once per scope with args(scope) and merges the
-// results by (at_key, id), keeping the first limit. Every row's first two
-// columns are at_key and id; all columns scan as text. truncated reports that
-// a further visible record exists beyond the window.
-func (b *trendsBuild) admitScoped(ctx context.Context, query string, limit int, ascending bool, args func(scope string) []any) ([][]string, bool, error) {
+	direction := "DESC"
+	if ascending {
+		direction = "ASC"
+	}
+	page += ` ORDER BY at_key ` + direction + `,id ` + direction + ` LIMIT ?`
+	var count int
+	if err := b.s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+page+`)`, params...).Scan(&count); err != nil {
+		return nil, false, err
+	}
+	// Name the bounded temporary page explicitly in query plans; only the
+	// capped index seek above reads the business position table.
+	query = trendPositionAlias.ReplaceAllString(query, "bounded_trend_page.")
+	query = strings.Replace(query, "FROM watch_trend_positions p ", "FROM _watch_page bounded_trend_page ", 1)
+	query = `WITH _watch_page AS MATERIALIZED (` + page + `) ` + query
+	params = append(append([]any{}, params...), params...)
+	rows, err := b.s.db.QueryContext(ctx, query, params...)
+	if err != nil {
+		return nil, false, err
+	}
+	cols, err := rows.Columns()
+	if err != nil {
+		rows.Close()
+		return nil, false, err
+	}
 	merged := [][]string{}
-	pageTruncated := false
-	scopes := b.trendScopes()
-	_, scoped := accessScopeFrom(b.ctx)
-	unrestricted := !scoped && b.reader.Visible == nil
-	if unrestricted {
-		// One cap across all partitions; never enumerate private owners.
-		query = strings.Replace(query, " AND p.scope=?", "", 1)
-		scopes = []string{""}
-	}
-	for _, scope := range scopes {
-		params := args(scope)
-		if unrestricted {
-			params = append(params[:1], params[2:]...)
-			// Bound physical positions before joins/lifecycle eligibility. Old
-			// unanswerable asks (for example after their thread is removed) must
-			// not make hydration walk an arbitrary tail before filling the cap.
-			// All current callers have kind, optional lower time bound, and cap.
-			if len(params) != 2 && len(params) != 3 {
-				return nil, false, workInvalid("invalid unrestricted trend seek")
-			}
-			page := `SELECT * FROM watch_trend_positions WHERE kind=?`
-			if len(params) == 3 {
-				page += ` AND at_key>=anx_timestamp_key(?)`
-			}
-			direction := "DESC"
-			if ascending {
-				direction = "ASC"
-			}
-			page += ` ORDER BY at_key ` + direction + `,id ` + direction + ` LIMIT ?`
-			var count int
-			if err := b.s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+page+`)`, params...).Scan(&count); err != nil {
-				return nil, false, err
-			}
-			pageTruncated = count > limit
-			// Name the bounded temporary page explicitly in query plans; only
-			// the capped index seek above reads the business position table.
-			query = trendPositionAlias.ReplaceAllString(query, "bounded_trend_page.")
-			query = strings.Replace(query, "FROM watch_trend_positions p ", "FROM _watch_page bounded_trend_page ", 1)
-			query = `WITH _watch_page AS MATERIALIZED (` + page + `) ` + query
-			params = append(append([]any{}, params...), params...)
+	for rows.Next() {
+		vals := make([]sql.NullString, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
 		}
-		rows, err := b.s.db.QueryContext(ctx, query, params...)
-		if err != nil {
-			return nil, false, err
-		}
-		cols, err := rows.Columns()
-		if err != nil {
+		if err = rows.Scan(ptrs...); err != nil {
 			rows.Close()
 			return nil, false, err
 		}
-		for rows.Next() {
-			vals := make([]sql.NullString, len(cols))
-			ptrs := make([]any, len(cols))
-			for i := range vals {
-				ptrs[i] = &vals[i]
-			}
-			if err = rows.Scan(ptrs...); err != nil {
-				rows.Close()
-				return nil, false, err
-			}
-			row := make([]string, len(cols))
-			for i, v := range vals {
-				row[i] = v.String
-			}
-			merged = append(merged, row)
+		row := make([]string, len(cols))
+		for i, v := range vals {
+			row[i] = v.String
 		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, false, err
-		}
+		merged = append(merged, row)
 	}
-	sort.SliceStable(merged, func(i, j int) bool {
-		a, c := merged[i], merged[j]
-		if a[0] != c[0] {
-			return (a[0] < c[0]) == ascending
-		}
-		return (a[1] < c[1]) == ascending
-	})
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, false, err
+	}
 	if len(merged) > limit {
 		return merged[:limit], true, nil
 	}
-	return merged, pageTruncated, nil
+	// A full page stays truncated even when hydration drops rows: the records
+	// left out could change any bucket either way.
+	return merged, count > limit, nil
 }
 
 var trendPositionAlias = regexp.MustCompile(`\bp\.`)
@@ -391,19 +361,15 @@ func trendHorizon(truncated bool, last time.Time, end time.Time) time.Time {
 	return last
 }
 
-// The position seek shared by every family: one scope, a time bound, newest
-// first.
-const trendPositionsDesc = ` WHERE p.kind=? AND p.scope=? AND p.at_key>=anx_timestamp_key(?) AND `
+// The position seek shared by every family: a time bound, newest first.
+const trendPositionsDesc = ` WHERE p.kind=? AND p.at_key>=anx_timestamp_key(?) AND `
 
 // trendAsks admits asks raised since the previous period began.
 func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
-	pred, predArgs := b.askThreadOwnerSQL()
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,a.requester,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END,CASE WHEN response.id IS NOT NULL THEN COALESCE(a.answered_at,'') ELSE '' END
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,e.ts,a.requester,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END,CASE WHEN response.id IS NOT NULL THEN COALESCE(a.answered_at,'') ELSE '' END
 	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id CROSS JOIN brief_asks a ON a.ask_id=p.id `+briefAnswerableAskJoin+` LEFT JOIN events response ON response.id=a.response_event_id AND COALESCE(response.trashed_at,'')=''`+
-		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAskCap, false,
-		func(scope string) []any {
-			return append(append([]any{"ask", scope, loopTS(b.w.start())}, predArgs...), trendsAskCap+1)
-		})
+		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAskCap, false,
+		"ask", loopTS(b.w.start()), trendsAskCap+1)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -422,14 +388,11 @@ func (b *trendsBuild) trendAsks() ([]trendAsk, time.Time, error) {
 // answers by when they happened keeps both periods comparable: an answer late
 // in the window to an old ask counts, in its own period.
 func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
-	pred, predArgs := b.askThreadOwnerSQL()
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,'')
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(r.resolution_type,''),COALESCE(a.created_at,''),COALESCE(r.created_at,'')
 	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id `+briefAnswerableAskJoin+`
 	 LEFT JOIN human_attention_request_resolutions r ON r.resolution_event_id=e.id LEFT JOIN brief_asks a ON a.ask_id=r.request_event_id`+
-		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAnswerCap, false,
-		func(scope string) []any {
-			return append(append([]any{"answer", scope, loopTS(b.w.start())}, predArgs...), trendsAnswerCap+1)
-		})
+		trendPositionsDesc+`COALESCE(e.trashed_at,'')='' ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsAnswerCap, false,
+		"answer", loopTS(b.w.start()), trendsAnswerCap+1)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -450,14 +413,11 @@ func (b *trendsBuild) trendAnswers() ([]trendAnswer, time.Time, error) {
 // state using only visible responses. If history is capped, backlog is unknown.
 // Filtering resolved asks before LIMIT would permit unbounded history walks.
 func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
-	pred, predArgs := b.askThreadOwnerSQL()
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,a.created_at,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,a.created_at,CASE WHEN response.id IS NULL THEN 'open' ELSE a.state END
 	 FROM watch_trend_positions p CROSS JOIN brief_asks a ON a.ask_id=p.id CROSS JOIN events e ON e.id=p.id `+briefAnswerableAskJoin+`
 	 LEFT JOIN events response ON response.id=a.response_event_id AND COALESCE(response.trashed_at,'')=''
-	 WHERE p.kind=? AND p.scope=? AND COALESCE(e.trashed_at,'')='' AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsOpenAskCap, false,
-		func(scope string) []any {
-			return append(append([]any{"open_ask", scope}, predArgs...), trendsOpenAskCap+1)
-		})
+	 WHERE p.kind=? AND COALESCE(e.trashed_at,'')='' ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsOpenAskCap, false,
+		"open_ask", trendsOpenAskCap+1)
 	if err != nil {
 		return nil, false, err
 	}
@@ -470,23 +430,9 @@ func (b *trendsBuild) trendOpenAsks() ([]time.Time, bool, error) {
 	return out, truncated, nil
 }
 
-// trendDoneAt seeks each readable completion partition independently and
-// authorizes before taking its newest event. Hidden completions cannot displace
-// a visible completion or make the seek walk an arbitrarily large denied tail.
-func (b *trendsBuild) trendDoneAt() string {
-	if _, scoped := accessScopeFrom(b.ctx); !scoped && b.reader.Visible == nil {
-		return `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM watch_trend_positions position CROSS JOIN events e ON e.id=position.id WHERE position.kind='done_event' AND position.card_id=+c.id AND COALESCE(e.trashed_at,'')='' ORDER BY position.at_key DESC,position.id DESC LIMIT 1) END`
-	}
-
-	seeks := []string{}
-	for _, scope := range b.trendScopes() {
-		quoted := "'" + strings.ReplaceAll(scope, "'", "''") + "'"
-		seeks = append(seeks, `SELECT * FROM (SELECT position.at_key,position.id,e.ts FROM watch_trend_positions position CROSS JOIN events e ON e.id=position.id
-   WHERE position.kind='done_event' AND position.scope=`+quoted+` AND position.card_id=+c.id AND COALESCE(e.trashed_at,'')=''
-   ORDER BY position.at_key DESC,position.id DESC LIMIT 1)`)
-	}
-	return `CASE WHEN c.column_key='done' THEN (SELECT ts FROM (` + strings.Join(seeks, ` UNION ALL `) + `) ORDER BY at_key DESC,id DESC LIMIT 1) END`
-}
+// trendDoneAt is the per-card completion seek: the card's newest Done
+// lifecycle event, bounded by the partial completion position index.
+const trendDoneAt = `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM watch_trend_positions position CROSS JOIN events e ON e.id=position.id WHERE position.kind='done_event' AND position.card_id=+c.id AND COALESCE(e.trashed_at,'')='' ORDER BY position.at_key DESC,position.id DESC LIMIT 1) END`
 
 // trendPromises admits initiatives with a promise: open ones by soonest
 // promise (the overdue first), and closed ones whose promise fell in the
@@ -495,33 +441,26 @@ func (b *trendsBuild) trendDoneAt() string {
 func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, error) {
 	out := []trendPromise{}
 	var horizon, openCutoff time.Time
-	hasParent := workHasParentSQL("c")
-	if _, scoped := accessScopeFrom(b.ctx); !scoped && b.reader.Visible == nil {
-		// Conservatively omit any linked child, including one whose parents
-		// have closed. Walking arbitrarily many closed parents to prove absence
-		// would break the read budget. Each incoming-ref probe stops at one row.
-		hasParent = `(EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1))`
-	}
+	// Conservatively omit any linked child, including one whose parents have
+	// closed. Walking arbitrarily many closed parents to prove absence would
+	// break the read budget. Each incoming-ref probe stops at one row.
+	hasParent := `(EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1))`
 	for _, open := range []bool{true, false} {
-		pred, predArgs := b.pmOwnerSQL("c.thread_id")
 		limit, kind, bound, order := trendsPromiseCap, "promise_closed", ` AND p.at_key>=anx_timestamp_key(?)`, `DESC`
 		if open {
 			limit, kind, bound, order = trendsOpenPromCap, "promise_open", ``, `ASC`
 		}
-		rows, truncated, err := b.admitScoped(b.groupingContext(), `SELECT p.at_key,p.id,
+		args := []any{kind}
+		if !open {
+			args = append(args, loopTS(b.w.start()))
+		}
+		rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,
 		 CASE WHEN COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
 		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1) OR EXISTS(SELECT 1 FROM boards WHERE id=c.board_id AND role='initiatives' LIMIT 1))
 		  AND NOT `+hasParent+` THEN 1 ELSE 0 END,
-		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+b.trendDoneAt()+`,'')
+		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+trendDoneAt+`,'')
 		 FROM watch_trend_positions p CROSS JOIN brief_initiatives bi ON bi.card_id=p.id CROSS JOIN cards c ON c.id=p.id
-		 WHERE p.kind=? AND p.scope=?`+bound+` AND `+pred+` ORDER BY p.at_key `+order+`,p.id `+order+` LIMIT ?`, limit, open,
-			func(scope string) []any {
-				args := []any{kind, scope}
-				if !open {
-					args = append(args, loopTS(b.w.start()))
-				}
-				return append(append(args, predArgs...), limit+1)
-			})
+		 WHERE p.kind=?`+bound+` ORDER BY p.at_key `+order+`,p.id `+order+` LIMIT ?`, limit, open, append(args, limit+1)...)
 		if err != nil {
 			return nil, time.Time{}, time.Time{}, err
 		}
@@ -552,13 +491,10 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 // position's order (orderExpr), and returns timeExpr for each card. The
 // horizon is the last card's order time: every card not read sorts before it.
 func (b *trendsBuild) trendCardTimes(kind, timeExpr, orderExpr string, limit int) ([]time.Time, time.Time, error) {
-	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	rows, truncated, err := b.admitScoped(b.groupingContext(), `SELECT p.at_key,p.id,`+timeExpr+`,`+orderExpr+`
-	 FROM watch_trend_positions p CROSS JOIN cards c ON c.id=p.id`+trendPositionsDesc+`COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND `+pred+`
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,`+timeExpr+`,`+orderExpr+`
+	 FROM watch_trend_positions p CROSS JOIN cards c ON c.id=p.id`+trendPositionsDesc+`COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
 	 ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, limit, false,
-		func(scope string) []any {
-			return append(append([]any{kind, scope, loopTS(b.w.start())}, predArgs...), limit+1)
-		})
+		kind, loopTS(b.w.start()), limit+1)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -580,18 +516,15 @@ func (b *trendsBuild) trendCreated() ([]time.Time, time.Time, error) {
 // bounds the done time from above, so the window is ordered by it; the
 // lifecycle index supplies the exact time.
 func (b *trendsBuild) trendDone() ([]time.Time, time.Time, error) {
-	return b.trendCardTimes("card_done", `COALESCE(`+b.trendDoneAt()+`,c.updated_at)`, "c.updated_at", trendsDoneCap)
+	return b.trendCardTimes("card_done", `COALESCE(`+trendDoneAt+`,c.updated_at)`, "c.updated_at", trendsDoneCap)
 }
 
 // trendRuns admits run receipts in the window, newest first.
 func (b *trendsBuild) trendRuns() ([]trendRun, time.Time, error) {
-	pred, predArgs := b.pmOwnerSQL("e.thread_id")
-	rows, truncated, err := b.admitScoped(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(json_extract(e.payload_json,'$.subject_ref'),''),COALESCE(e.actor_id,''),COALESCE(json_extract(e.payload_json,'$.payload.outcome'),'')
-	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id`+trendPositionsDesc+`COALESCE(e.trashed_at,'')='' AND `+pred+`
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,e.ts,COALESCE(json_extract(e.payload_json,'$.subject_ref'),''),COALESCE(e.actor_id,''),COALESCE(json_extract(e.payload_json,'$.payload.outcome'),'')
+	 FROM watch_trend_positions p CROSS JOIN events e ON e.id=p.id`+trendPositionsDesc+`COALESCE(e.trashed_at,'')=''
 	 ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsRunCap, false,
-		func(scope string) []any {
-			return append(append([]any{"run", scope, loopTS(b.w.start())}, predArgs...), trendsRunCap+1)
-		})
+		"run", loopTS(b.w.start()), trendsRunCap+1)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -608,15 +541,12 @@ func (b *trendsBuild) trendRuns() ([]trendRun, time.Time, error) {
 // trendLoops admits the most recently annotated loops; lifecycle and cadence
 // are flags on each admitted row.
 func (b *trendsBuild) trendLoops() ([]trendLoop, bool, error) {
-	pred, predArgs := b.pmOwnerSQL("c.thread_id")
-	rows, truncated, err := b.admitScoped(b.groupingContext(), `SELECT p.at_key,p.id,
+	rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,
 	 CASE WHEN COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND c.column_key NOT IN ('done','cancelled') THEN 1 ELSE 0 END,
 	 COALESCE(c.handle,''),c.created_at,CAST(COALESCE(json_extract(m.metadata_json,'$.cadence.every_seconds'),0) AS TEXT)
 	 FROM watch_trend_positions p CROSS JOIN cards c ON c.id=p.id LEFT JOIN work_metadata m ON m.card_id=c.id
-	 WHERE p.kind=? AND p.scope=? AND `+pred+` ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsLoopCap, false,
-		func(scope string) []any {
-			return append(append([]any{"loop", scope}, predArgs...), trendsLoopCap+1)
-		})
+	 WHERE p.kind=? ORDER BY p.at_key DESC,p.id DESC LIMIT ?`, trendsLoopCap, false,
+		"loop", trendsLoopCap+1)
 	if err != nil {
 		return nil, false, err
 	}

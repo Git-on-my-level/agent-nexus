@@ -116,15 +116,15 @@ func seedWatchTrendsInheritedScale(t *testing.T, db *sql.DB, board, privateBoard
 			exec(n+`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) SELECT @prefix||@family||i,@type,@stamp,'agent-hidden',`+eventThread+`,`+eventRefs+`,json_object('payload',`+payload+`) FROM n WHERE i<@count`, sql.Named("prefix", prefix), sql.Named("family", family), sql.Named("type", eventType), sql.Named("stamp", stamp), sql.Named("thread", thread), sql.Named("subject", publicRef), sql.Named("private", privateRef), sql.Named("count", count))
 		}
 		exec(n+`INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) SELECT @prefix||'ask'||i,@prefix||'answer'||i,'answered','owner',@stamp FROM n WHERE i<2000`, sql.Named("prefix", prefix), sql.Named("stamp", stamp))
-		// Check the routing invariant as well as measuring it. All fixture rows
-		// must leave the public partition, for every kind (not only raw events).
+		// Check the position inventory as well as measuring it: every family
+		// must hold its seeded rows for the capped seeks to be exercised.
 		for kind, min := range map[string]int{"ask": 4000, "answer": 2000, "run": 2000, "open_ask": 4000, "card": 4000, "card_done": 2000, "promise_open": 2000, "promise_closed": 2000, "loop": 4000, "done_event": 2000} {
-			var total, public int
-			if err := tx.QueryRow(`SELECT count(*),COALESCE(sum(scope=''),0) FROM watch_trend_positions WHERE kind=? AND id>=? AND id<?`, kind, prefix, prefix+"~").Scan(&total, &public); err != nil {
+			var total int
+			if err := tx.QueryRow(`SELECT count(*) FROM watch_trend_positions WHERE kind=? AND id>=? AND id<?`, kind, prefix, prefix+"~").Scan(&total); err != nil {
 				t.Fatal(err)
 			}
-			if total < min || public != 0 {
-				t.Fatalf("%s %s: total=%d (want >=%d), public=%d", mechanism, kind, total, min, public)
+			if total < min {
+				t.Fatalf("%s %s: total=%d (want >=%d)", mechanism, kind, total, min)
 			}
 		}
 	}

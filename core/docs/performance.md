@@ -2396,25 +2396,29 @@ The coordinator explicitly required this residual assessment before enabling it.
 
 No scoped aggregate is served: canonical promise/ask projections can incorporate
 invisible contributors. Once admission proves full visibility, every contributor
-is readable in that snapshot. The unscoped calculation counts a capped position page, then materializes the
-same capped page before joining records. Both seeks use `(kind,at_key,id)`
-across all partitions; joins cannot walk past missing/ineligible records to fill
-the cap. A bounded temporary-page scan is permitted; no business-table full scan
-is introduced. A full page remains truncated even when hydration drops rows. Role eligibility uses one indexed existence seek
-and a board primary-key lookup per candidate, without listing role boards.
-Promise panels conservatively omit any child with an incoming plan reference,
-including closed parents: two indexed one-row probes replace an unbounded walk
-of ineligible historical parents. This can undercount top-level promises.
+is readable in that snapshot. The unscoped calculation counts a capped position
+page, then materializes the same capped page before joining records. Both seeks
+use the `(kind,at_key,id)` position index; joins cannot walk past
+missing/ineligible records to fill the cap. A bounded temporary-page scan is
+permitted; no business-table full scan is introduced. A full page remains
+truncated even when hydration drops rows. Role eligibility uses one indexed
+existence seek and a board primary-key lookup per candidate, without listing
+role boards. Promise panels conservatively omit any child with an incoming plan
+reference, including closed parents: two indexed one-row probes replace an
+unbounded walk of ineligible historical parents. This can undercount top-level
+promises.
 
-Migration 125 retains identity/time positions. Partitions now use the canonical
-inherited-owner index (exact/compact ledgers conservatively unioned), covering
-thread, board, blocks, arbitrary refs, metadata, evidence, prose, tombstones and
-unconditional denial. Public is `''`, one text owner is that owner's partition,
-and conflicting owners/unconditional denial use NULL. Membership insert/delete
-rekeys synchronously. Canonical row authorization remains necessary. Completion
-positions add a card-specific index and authorize before choosing the latest
-completion. Unrestricted reads use `(kind,at_key,id)` and
-`(kind,card_id,at_key,id)` indexes across all partitions without listing owners.
+Migration 125 maintains identity/time positions only: `(kind,at_key,id)` plus a
+Done-specific partial `(kind,card_id,at_key,id)` index. The abandoned per-reader
+privacy partitions were removed before release (migration 125 is unreleased and
+edited in place): no scope column, no scope indexes, and no owner-change or
+resolution re-key triggers run on canonical writes. Removing that partition
+maintenance cut synchronous write cost: on a 300-card board with one ask each,
+alternating a board's PM owner 20 times cost ~65.4M SQLite VM steps before and
+~14.0M after (the remainder is canonical admission-owner maintenance, not
+trends), and run-event inserts dropped from ~25.1k to ~24.0k VM steps each.
+Canonical row authorization remains necessary. Completion positions keep the
+card-specific partial index for the latest-completion seek.
 
 The internal calculation retains bounded-history regression coverage. Backlog
 admits a capped history of asks before resolving their visible responses; a capped
@@ -2437,7 +2441,10 @@ For both statuses, queries stay <=100, rows <=1,024, VM steps
 Focused HTTP tests compare complete responses across hidden writes and both
 sides of board/PM-thread ownership transfers. The former owner immediately receives 403 and the successor receives 200 when
 the transfer also removes their last denial. Adding the first hidden resource
-returns 403 on the next request; removing its privacy restores 200.
+returns 403 on the next request; removing its privacy restores 200. A
+primitives regression test injects a transfer through a proof-scoped hook
+between the eligibility probe and the aggregate reads, failing if the proof ever
+leaves the calculation's read snapshot.
 
 ```sh
 ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceWatchTrendsBudget$' -count=1 -v -parallel=2 -timeout=60m
