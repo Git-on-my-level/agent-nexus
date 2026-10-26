@@ -394,6 +394,14 @@ func TestWatchTrendsRankingsNeedACompleteCurrentPeriod(t *testing.T) {
 	}
 }
 
+// watchTrendsProofHook returns a context whose hook runs inside the pinned read
+// snapshot immediately after the full-visibility proof succeeds and before any
+// aggregate read, so a test can inject a concurrent transfer between proof and
+// calculation.
+func watchTrendsProofHook(ctx context.Context, hook func(context.Context)) context.Context {
+	return context.WithValue(ctx, watchTrendsProofHookKey{}, hook)
+}
+
 // The eligibility proof and the aggregate reads must share one read snapshot:
 // a transfer committed between them cannot leak into a response the proof
 // admitted. The proof hook injects exactly that transfer on a second
@@ -412,7 +420,7 @@ func TestWatchTrendsProofSharesTheCalculationSnapshot(t *testing.T) {
 	}
 	defer writer.Close()
 	hooked := false
-	ctx := WatchTrendsProofHook(WithAccessScope(f.ctx, AccessScope{ActorID: "viewer"}), func(context.Context) {
+	ctx := watchTrendsProofHook(WithAccessScope(f.ctx, AccessScope{ActorID: "viewer"}), func(context.Context) {
 		hooked = true
 		tx, err := writer.Begin()
 		if err != nil {

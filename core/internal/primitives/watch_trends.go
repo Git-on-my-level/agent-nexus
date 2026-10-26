@@ -158,15 +158,10 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 	return s.buildWatchTrends(ctx, group, days, now)
 }
 
+// watchTrendsProofHookKey addresses a test-only hook that runs inside the
+// pinned read snapshot after the full-visibility proof; only in-package
+// tests set it.
 type watchTrendsProofHookKey struct{}
-
-// WatchTrendsProofHook returns a context whose hook runs inside the pinned read
-// snapshot immediately after the full-visibility proof succeeds and before any
-// aggregate read. It exists so tests can inject a concurrent transfer between
-// proof and calculation; production callers never set it.
-func WatchTrendsProofHook(ctx context.Context, hook func(context.Context)) context.Context {
-	return context.WithValue(ctx, watchTrendsProofHookKey{}, hook)
-}
 
 // buildWatchTrends is the admitted unscoped calculation, not a read API: it may
 // examine every record, so only WatchTrends after full-visibility admission
