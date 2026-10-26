@@ -258,7 +258,7 @@ func (a *App) Run(args []string) int {
 		} else if nextErr != nil {
 			runErr = nextErr
 		}
-		runErr = a.withWorkspaceHint(context.Background(), resolved, normalizedArgs, runErr)
+		runErr = a.withWorkspaceHint(resolved, runErr)
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
 	if (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {

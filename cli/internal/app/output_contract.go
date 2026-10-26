@@ -527,14 +527,26 @@ func normalizeActorArgs(args []string, cfg config.Resolved) ([]string, error) {
 	return out, nil
 }
 
-func deriveErrorActions(command string, err *errnorm.Error) []output.NextAction {
+func deriveErrorActions(command string, err *errnorm.Error) (actions []output.NextAction) {
 	if err == nil {
 		return []output.NextAction{}
 	}
-	if details, ok := err.Details.(map[string]any); ok {
-		if argv := exactArgv(details["workspace_next_argv"]); len(argv) > 0 {
-			return []output.NextAction{action("Retry in matching workspace", argv...)}
+	defer func() {
+		if details, ok := err.Details.(map[string]any); ok && details["workspace_source"] != nil {
+			argv := []string{"anx"}
+			if dir := anyString(details["workspace_config_dir"]); dir != "" {
+				argv = append(argv, "--config-dir", dir)
+			}
+			argv = append(argv, "config", "workspaces")
+			actions = append(actions, action("List workspaces; retry with --workspace <alias>", argv...))
 		}
+	}()
+	if details, ok := err.Details.(map[string]any); ok && details["workspace_source"] != nil {
+		// Routing appends a quoted alias; resource-repair heuristics must only
+		// inspect the original failure when choosing a search query.
+		original := *err
+		original.Message = anyString(details["workspace_original_message"])
+		err = &original
 	}
 	if strings.HasPrefix(command, "plan ") && (err.Code == "not_found" || err.Code == "invalid_request" || err.Code == "conflict") {
 		if details, ok := err.Details.(map[string]any); ok {

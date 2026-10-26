@@ -60,23 +60,6 @@ func TestAskMissingSubjectExplainsWorkspaceBoundary(t *testing.T) {
 	}
 }
 
-func TestAskWorkspaceHintNamesAliasWithoutBorrowingCredentials(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer workspace-b-token" {
-			t.Error("borrowed another workspace's credentials")
-		}
-		fmt.Fprint(w, `{"card":{"ref":"card:ship"}}`)
-	}))
-	defer server.Close()
-	a, cfg := hintFixture(t, server.URL, nil)
-	err := missingCard()
-	errnorm.AnnotateDetail(err, "ask_subject", "card")
-	got := errnorm.Normalize(a.withWorkspaceHint(context.Background(), cfg, []string{"ask", "Ship?", "--subject-ref", "card:ship"}, err))
-	if !strings.Contains(got.Message, "asks attach to a card in the same workspace") || !strings.Contains(got.Message, "--workspace b") {
-		t.Fatal(got)
-	}
-}
-
 func TestMissingCurrentCardNamesWorkspaceRepair(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"agent":{"id":"worker","actor_id":"own"}}`)
