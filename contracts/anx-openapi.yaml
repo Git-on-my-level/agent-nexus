@@ -5961,8 +5961,8 @@ paths:
         Three indexed root-owner existence seeks establish full visibility before aggregate reads.
         Restricted responses are byte-invariant across hidden writes while any denial remains.
         The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped
-        indexed positions across all partitions. Scoped aggregates remain unsupported because hidden
-        contributors can change canonical derived state.
+        indexed seeks over a single unpartitioned positions table. Scoped aggregates remain unsupported
+        because hidden contributors can change canonical derived state.
       x-anx-cli-path: watch trends
       x-anx-why: See trends over time that the current-state views cannot show.
       x-anx-input-mode: none

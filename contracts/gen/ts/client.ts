@@ -15165,7 +15165,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "projection",
-    "agent_notes": "Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed positions across all partitions. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.",
+    "agent_notes": "Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed seeks over a single unpartitioned positions table. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.",
     "go_method": "WatchTrends",
     "ts_method": "watchTrends"
   },
