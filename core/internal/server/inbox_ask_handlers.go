@@ -220,7 +220,7 @@ func handleRespondInboxItem(w http.ResponseWriter, r *http.Request, opts handler
 					return
 				}
 			}
-			writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
+			writeError(w, http.StatusNotFound, "not_found", "Inbox item not found; your response can be retried")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load inbox item")
@@ -470,6 +470,45 @@ func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inbox
 		if !errors.Is(err, primitives.ErrNotFound) {
 			return primitives.DerivedInboxItem{}, err
 		}
+	}
+	// Decide is backed by canonical ask facts, not the asynchronous inbox
+	// projection. Recover a single ask from its immutable identity when that
+	// cache is absent. Never infer identity from presentation/audit events.
+	for _, candidate := range inboxItemIDVariants(strings.TrimSpace(inboxItemID)) {
+		if !strings.HasPrefix(candidate, "inbox:") {
+			continue
+		}
+		sourceID := candidate[strings.LastIndex(candidate, ":")+1:]
+		if sourceID == "" {
+			continue
+		}
+		event, err := store.GetEvent(ctx, sourceID)
+		if errors.Is(err, primitives.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return primitives.DerivedInboxItem{}, err
+		}
+		payload, _ := event["payload"].(map[string]any)
+		// Filed batches must still use their atomic batch admission path.
+		if event["type"] != humanAttentionRequestedEventType || anyString(event["trashed_at"]) != "" || anyString(event["archived_at"]) != "" || anyString(payload["batch_id"]) != "" {
+			continue
+		}
+		item, ok := deriveHumanAttentionInboxItem(event)
+		if !ok || item.ID != candidate {
+			continue // Validate every segment; a guessed suffix is not an alias.
+		}
+		if _, err := store.GetThread(ctx, anyString(item.Data["thread_id"])); err != nil {
+			if errors.Is(err, primitives.ErrNotFound) {
+				continue
+			}
+			return primitives.DerivedInboxItem{}, err
+		}
+		// Keep the same audience check even while no projection exists.
+		if recipient := anyString(payload["recipient_actor_id"]); recipient != "" {
+			item.Data["recipient_actor_id"] = recipient
+		}
+		return primitives.DerivedInboxItem{ID: item.ID, ThreadID: anyString(item.Data["thread_id"]), Category: item.Category, SourceEventID: sourceID, Data: item.Data}, nil
 	}
 	return primitives.DerivedInboxItem{}, primitives.ErrNotFound
 }
@@ -903,7 +942,7 @@ func handleRespondCurationBatch(w http.ResponseWriter, r *http.Request, opts han
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check batch response state")
 			return
 		}
-		writeError(w, http.StatusNotFound, "not_found", "Ask is no longer open")
+		writeError(w, http.StatusNotFound, "not_found", "Inbox item not found; your response can be retried")
 		return
 	}
 	answerRefs := normalizeStringSlice(req.RelatedRefs)

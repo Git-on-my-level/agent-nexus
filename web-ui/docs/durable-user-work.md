@@ -916,3 +916,13 @@ journal scan is O(device records), with no workspace server scan. Existing Inbox
 point/list requests and authorization paths are unchanged. Recovery does not add
 server polling; it sends due persisted requests and uses normal refresh listeners
 after confirmation.
+
+### Missing inbox projections and saved answers
+
+Decide and the saved-response panel retain Retry and Edit for unknown 404s and
+other failures. Only the server's explicit `409 conflict` / `Ask is no longer
+open` resolution disables retry and offers Copy and Discard. Older saved 404
+failures remain retryable after upgrading: recovery retains their original item
+ID, text, body and idempotency key. `durable-decide.spec.js` covers reloading a
+failed 404 and retrying it from the unsent panel without retyping;
+`inboxTriage.test.js` covers the exact persisted request and resolution marker.

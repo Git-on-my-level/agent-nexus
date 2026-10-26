@@ -397,6 +397,37 @@ describe("inbox response queue", () => {
     notify_mode: "original",
   };
 
+  it.each([
+    [404, "not_found", "Ask is no longer open", false],
+    [409, "conflict", "An unrelated conflict", false],
+    [409, "idempotency_conflict", "Ask is no longer open", false],
+    [409, "conflict", "Ask is no longer open", true],
+  ])(
+    "keeps failed %s responses and only marks explicit resolutions closed",
+    async (status, code, message, closed) => {
+      client.respondInboxItem.mockRejectedValueOnce(
+        Object.assign(new Error("send failed"), {
+          status,
+          body: { error: { code, message } },
+        }),
+      );
+      queueInboxResponse({ itemId: "inbox:a", request, message: "A" });
+      await flushInboxResponse();
+      const original = client.respondInboxItem.mock.calls[0][1];
+      expect(get(inboxResponseFailures)["inbox:a"].closed).toBe(closed);
+      expect(get(inboxUnsentResponses)[0].request).toEqual(original);
+      resetInboxResponseQueue();
+      await recoverInboxResponses();
+      expect(get(inboxUnsentResponses)[0].request).toEqual(original);
+      await retryInboxResponse("inbox:a");
+      expect(client.respondInboxItem).toHaveBeenLastCalledWith(
+        "inbox:a",
+        original,
+      );
+      expect(get(inboxUnsentResponses)).toEqual([]);
+    },
+  );
+
   it("commits the exact request once the undo window closes", async () => {
     queueInboxResponse({ itemId: "inbox:a", request, message: "Sent to Omar" });
     expect(client.respondInboxItem).not.toHaveBeenCalled();

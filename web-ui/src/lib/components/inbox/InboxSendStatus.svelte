@@ -22,8 +22,8 @@
   let text = $derived(
     record?.request.response_text || failure?.response_text || "",
   );
-  // Core no longer has this item (404): no retry or edit can succeed.
-  let gone = $derived(failure?.status === 404);
+  // Missing projections and other errors retain retry/edit actions.
+  let gone = $derived(failure?.closed === true);
   let copied = $state(false);
   let copyError = $state("");
   async function copy() {

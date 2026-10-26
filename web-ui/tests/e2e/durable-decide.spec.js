@@ -236,7 +236,7 @@ test("definitive failures keep editable text without automatic retry", async ({
   expect(attempts).toBe(1);
 });
 
-test("an answer to a question that no longer exists offers Copy and Discard, not Retry", async ({
+test("an explicitly resolved ask offers Copy and Discard, not Retry", async ({
   page,
   context,
 }) => {
@@ -245,8 +245,8 @@ test("an answer to a question that no longer exists offers Copy and Discard, not
     attempts += 1;
     return json(
       route,
-      { error: { code: "not_found", message: "inbox item not found" } },
-      404,
+      { error: { code: "conflict", message: "Ask is no longer open" } },
+      409,
     );
   });
   await begin(page);
@@ -357,5 +357,40 @@ test("a proposal tap is persisted before it is sent and reuses its key", async (
   await expect.poll(() => bodies.length).toBe(2);
   expect(bodies[1]).toEqual(bodies[0]);
   expect(bodies[0]).toMatchObject({ response_text: "Use the Monday window." });
+  await expect.poll(async () => (await records(page)).length).toBe(0);
+});
+
+test("a saved 404 answer retries after reload without retyping or changing its key", async ({
+  page,
+  context,
+}) => {
+  const bodies = [];
+  await setup(context, (route) => {
+    bodies.push(route.request().postDataJSON());
+    if (bodies.length === 1)
+      return json(
+        route,
+        { error: { code: "not_found", message: "inbox item not found" } },
+        404,
+      );
+    return json(route, { event: { id: "saved-answer" } }, 201);
+  });
+  await begin(page);
+  await sendReply(page);
+  await flush(page);
+  await expect(page.locator(`${ROW} [data-decision-gone]`)).toHaveCount(0);
+  await expect(
+    page
+      .locator(`${ROW} [data-decision-failed]`)
+      .getByRole("button", { name: "Retry", exact: true }),
+  ).toBeVisible();
+  expect((await records(page))[0].value.request.response_text).toBe(TEXT);
+  await page.reload();
+  const chip = page.locator("[data-unsent-indicator]");
+  await chip.locator("summary").click();
+  await chip.getByRole("button", { name: "Retry send", exact: true }).click();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(bodies[1].response_text).toBe(TEXT);
   await expect.poll(async () => (await records(page)).length).toBe(0);
 });
