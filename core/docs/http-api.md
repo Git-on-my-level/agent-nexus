@@ -6,6 +6,13 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 ## Conventions
 
+- Card echoes from patch, revision, move, archive, trash, restore and removal
+  include `parent_ref` and `rollup` from the same acting-viewer enrichment as
+  `GET /cards/{card_id}`. The reload reads only the current card, without revision
+  history, and borrows the mutation transaction when present. If reload or
+  enrichment fails, these grouping fields are omitted and a successful mutation
+  remains successful. Other card fields, board maps (including concurrency
+  tokens), revision objects and lifecycle metadata keep their existing shapes.
 - Card moves that exhaust SQLite writer admission return `503 busy` with
   `error.recoverable: true`, `Retry-After: 1`, and a correlated `X-Request-ID`.
   Wait and read back before retrying. Every uncertain commit or post-commit

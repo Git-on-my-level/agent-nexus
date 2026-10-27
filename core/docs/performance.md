@@ -1,5 +1,34 @@
 # Performance guardrails
 
+## Card mutation grouping echoes
+
+Patch, revision, move and lifecycle echoes reload one scoped current card row
+through `GetBoardCardCurrent`, then use GET's existing acting-viewer plan and
+hierarchy enrichment. Only `parent_ref` and `rollup` are copied into the original
+card response; other mutation fields and sibling objects retain their existing
+representations. Reload/enrichment errors omit grouping without failing a
+successful mutation. The read borrows an enclosing mutation transaction.
+
+The selector seeks the card primary key, placement through
+`idx_ref_edges_work_placement(target_id,source_type,edge_type)` and the board
+primary key. Parentage uses `idx_brief_plan_refs_target`; existing plan and
+hierarchy enrichment admits at most 200 steps. Work grows with the selected
+card's admitted plan/references and indexed ancestry, independent of its revision
+history and unrelated workspace records. No full-board or revision-history read
+is added to the echo.
+
+`TestPerformanceCardMutationProjectionHistoryBudget` compares the current-card
+projection with GET and enforces `testdata/card_mutation_projection_budget.json`:
+12 queries, 32 returned rows and 50,000 VM steps. It exercises owner and partial
+visibility with 4,096 unrelated records at both 1 and 1,025 revisions, requires
+the indexed current-row placement seek and rejects history materialization. No
+existing budget or query-plan allowance is widened.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server \
+  -run '^TestPerformanceCardMutationProjectionHistoryBudget$' -count=1 -v -timeout=8m
+```
+
 ## Explicit initiative visibility
 
 Brief's explicit-board selection uses one board primary-key existence probe

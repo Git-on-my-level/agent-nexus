@@ -1048,7 +1048,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 			return
 		}
-		writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": currentBoard, "card": publicCardView(beforeCard)}))
+		writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": currentBoard, "card": cardMutationEchoView(r.Context(), r, opts, beforeCard)}))
 		return
 	}
 
@@ -1080,7 +1080,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 	}
 
-	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card)}))
+	writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"board": result.Board, "card": cardMutationEchoView(r.Context(), r, opts, result.Card)}))
 }
 
 func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {
@@ -1243,7 +1243,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 				return nil, err
 			}
 		}
-		return map[string]any{"board": result.Board, "card": publicCardView(result.Card)}, nil
+		return map[string]any{"board": result.Board, "card": cardMutationEchoView(ctx, r, opts, result.Card)}, nil
 	})
 	if err != nil {
 		switch {
@@ -1324,7 +1324,7 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"board":             result.Board,
-		"card":              publicCardView(result.Card),
+		"card":              cardMutationEchoView(r.Context(), r, opts, result.Card),
 		"removed_thread_id": result.RemovedThreadID,
 	})
 }
@@ -1410,7 +1410,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		if strings.TrimSpace(req.Reason) == "" {
 			emitCardLifecycleEventBestEffort(ctx, opts, actorID, event)
 		}
-		return map[string]any{"board": result.Board, "card": publicCardView(result.Card)}, nil
+		return map[string]any{"board": result.Board, "card": cardMutationEchoView(ctx, r, opts, result.Card)}, nil
 	})
 
 	if err != nil {
@@ -1494,7 +1494,7 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if result.Card == nil || result.Card["_mutation_applied"] != false {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardTrashedEvent(result.Board, result.Card))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": cardMutationEchoView(r.Context(), r, opts, result.Card)})
 }
 
 func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardID string, visibility ...func(string, string) bool) (map[string]any, error) {
