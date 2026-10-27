@@ -1205,7 +1205,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Reposition a card within a board column using the card's first-class identity.
+- Why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
 - Concepts: `cards`, `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Output: Returns `{ card }`.

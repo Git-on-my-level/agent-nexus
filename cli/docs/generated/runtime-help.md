@@ -241,7 +241,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards revise` (local-helper): Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
 - `threads message` (local-helper): Escape hatch: post a message directly to a backing thread.
 - `threads reply` (local-helper): Escape hatch: reply to an existing message on a backing thread.
-- `cards move` (local-helper): Move a card to another board column using Card workflow language.
+- `cards move` (local-helper): Move a card to a column or another board.
 - `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
 - `cards resolve` (local-helper): Resolve a card into the done column with optional free-text evidence.
 - `cards reopen` (local-helper): Move a resolved card back into active workflow.
@@ -539,7 +539,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
-- Use anx initiative promote <card> --reason text and initiative retire <card> --reason text [--under card:parent]. Initiative-board cards stay top-level; incoming plan links are dependencies. Retire before group/fold.
+- Use anx initiative promote <card> --reason text and initiative retire <card> --reason text [--under card:parent]. New plan links to top-level initiative-board cards are dependencies; never use them to nest an initiative. Legacy grouping is preserved. Retire before group/fold.
 - Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
@@ -8808,7 +8808,7 @@ Global flags:
 
 ## `cards move`
 
-Move a card to another board column using Card workflow language.
+Move a card to a column or another board.
 
 ```text
 Generated Help: cards move
@@ -8819,7 +8819,7 @@ Generated Help: cards move
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Reposition a card within a board column using the card's first-class identity.
+- Why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
@@ -8834,21 +8834,21 @@ Inputs:
   - body `actor_id` (string)
   - body `after_card_id` (string)
   - body `before_card_id` (string)
+  - body `board_ref` (string)
   - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   - body `reason` (string)
   - body `request_key` (string)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
-  - body `to_board` (string)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review; resolution: done
 
 Local Help: cards move
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Move a card to another board column using Card workflow language.
+- Summary: Move a card to a column or another board.
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
-- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- JSON body: `{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards move card:implement-login --column review`
   - `anx cards move card:implement-login --column blocked --if-board-updated-at <updated-at>`
@@ -8856,6 +8856,8 @@ Local Help: cards move
 Flags:
   <ref>                        Card ref, handle, or id to move.
   --column <key>               Target board column.
+  --board <ref>                Destination board; atomically moves primary membership.
+  --reason <text>              Audit reason for a board membership change.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
   --dry-run                    Validate and render the request without sending it.
@@ -8945,7 +8947,7 @@ Local Help: cards reopen
 - Side effect class: `remote_coordination_write`
 - Summary: Move a resolved card back into active workflow.
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
-- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- JSON body: `{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards reopen card:implement-login`
   - `anx cards reopen card:implement-login --column backlog`

@@ -497,7 +497,7 @@
   ],
   "initiative_budget": {
     "count": 6,
-    "target": 15,
+    "target": 5,
     "truncated": false
   },
   "next_actions": [],
@@ -512,5 +512,50 @@
       "title": "Run awaiting an owner",
       "reason": "awaiting_owner"
     }
-  ]
+  ],
+  "over_target": {
+    "count": 6,
+    "target": 5,
+    "truncated": false,
+    "next_actions": [
+      {
+        "command_id": "ask",
+        "argv": [
+          "anx",
+          "ask",
+          "Initiatives exceed the target: fold this initiative or keep it?",
+          "--subject-ref",
+          "card:battery-measurement",
+          "--recommend",
+          "Retire and fold this initiative into an existing initiative; keep it if it needs a separate outcome."
+        ],
+        "mutates": true,
+        "side_effect_class": "remote_coordination_write"
+      }
+    ]
+  },
+  "initiative_changes": {
+    "items": [
+      {
+        "ref": "event:initiative-added",
+        "ts": "2026-10-15T09:00:00Z",
+        "type": "initiative_promoted",
+        "actor_id": "codex",
+        "payload": {
+          "subject_ref": "card:battery-measurement",
+          "title": "Battery measurement",
+          "reason": "Independent outcome",
+          "before": {
+            "board_ref": "board:tasks",
+            "initiative": false
+          },
+          "after": {
+            "board_ref": "board:initiatives",
+            "initiative": true
+          }
+        }
+      }
+    ],
+    "truncated": false
+  }
 }

@@ -21,7 +21,7 @@ Evidence resets clock; promise moves remain visible.
 Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
 Group: `anx work create --under card:P` / `anx work group card:C --under card:P`; run label `anx.card.<initiative>` defaults parent (`--top-level` opts out). `likely_home` never blocks. `anx work fold` preserves refs/asks; `work unfold` reverses.
-`anx initiative promote <card> --reason "why"`; `anx initiative retire <card> --reason "why" [--under card:P] [--to-board board:tasks]`. Board membership declares roots; plan links are dependencies. Retire before group/fold.
+`anx initiative promote <card> --reason "why"`; `anx initiative retire <card> --reason "why" [--under card:P] [--to-board board:tasks]`. Links to top-level initiatives mean dependencies, never nesting. Retire before group/fold.
 
 ## Write for a busy boss
 

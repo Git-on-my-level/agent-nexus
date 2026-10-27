@@ -95,6 +95,9 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 		if err != nil {
 			return err
 		}
+		if err = protectNewInitiativeLinks(ctx, tx, cardID, p); err != nil {
+			return err
+		}
 		data, _ := json.Marshal(p)
 		if _, err = tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, cardID, string(data), now); err != nil {
 			return err

@@ -179,6 +179,10 @@ func testWatchTrendsMechanismBudget(t *testing.T, mechanism string) {
 				t.Fatal(err)
 			}
 		}
+		// Exercise declared roots as well as the legacy default-zero corpus.
+		if _, err := db.Exec(`UPDATE cards SET initiative_root=1 WHERE board_id=?`, anyString(board["id"])); err != nil {
+			t.Fatal(err)
+		}
 		// Fanout adversaries for the enabled path: role-board enumeration and
 		// walking closed parents must not hide behind an otherwise small corpus.
 		if _, err := db.Exec(`WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i+1<2000)

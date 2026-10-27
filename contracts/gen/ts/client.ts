@@ -5100,7 +5100,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/cards/{card_id}/move",
     "operation_id": "moveCard",
     "summary": "Move card",
-    "why": "Reposition a card within a board column using the card's first-class identity.",
+    "why": "Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -5156,6 +5156,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "board_ref",
+          "type": "string"
+        },
+        {
           "name": "if_version",
           "type": "integer"
         },
@@ -5177,10 +5181,6 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "resolution_refs",
           "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "to_board",
-          "type": "string"
         }
       ]
     },

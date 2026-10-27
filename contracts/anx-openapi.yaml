@@ -5547,7 +5547,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.move
       x-anx-cli-path: cards move
-      x-anx-why: Reposition a card within a board column using the card's first-class identity.
+      x-anx-why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
@@ -13965,7 +13965,7 @@ components:
     MoveCardInput:
       type: object
       properties:
-        to_board: {type: string, description: Optional destination board; changes primary membership atomically. Entering or leaving initiatives emits an initiative_moved audit event.}
+        board_ref: {type: string, description: Optional destination board ref. Changes primary membership atomically while preserving card identity and thread; omission or the current board keeps membership. Both boards must be accessible and the destination active. Entering or leaving initiatives emits an initiative_moved audit event.}
         reason: {type: string, maxLength: 2000, description: Optional move audit reason. Empty means no reason supplied.}
 
         request_key:
@@ -13994,7 +13994,7 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
-          description: Parent board optimistic concurrency token; required for moves that update column/rank (matches core).
+          description: Source board optimistic concurrency token; required for column/rank and cross-board moves. Destination placement anchors must belong to the destination.
       required: [column_key, if_board_updated_at]
 
     EventCreateInput:

@@ -64,7 +64,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	// deliberately a physical routing cohort before scoped hydration, never an
 	// all-workspace similarity or denial scan. Routing keys never leave this query.
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,
-	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),`+workDeclaredRootSQL("c")+`
+	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),(c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))
 	 FROM (`+recent+`) recent
 	 CROSS JOIN cards c ON c.id=recent.id CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE b.archived_at IS NULL AND b.trashed_at IS NULL AND NOT `+workHasParentSQL("c")+`

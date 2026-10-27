@@ -439,7 +439,11 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 	// Conservatively omit any linked child, including one whose parents have
 	// closed. Walking arbitrarily many closed parents to prove absence would
 	// break the read budget. Each incoming-ref probe stops at one row.
-	hasParent := `(EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1))`
+	// Trends may span thousands of designated boards; this bounded point
+	// cohort checks the containing board by primary key rather than building
+	// the workspace role set used by batched hierarchy statements.
+	declaredRoot := `(c.initiative_root=1 AND EXISTS(SELECT 1 FROM boards root_board WHERE root_board.id=c.board_id AND root_board.role='initiatives' AND root_board.archived_at IS NULL AND root_board.trashed_at IS NULL))`
+	hasParent := `(NOT ` + declaredRoot + ` AND (EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1)))`
 	for _, open := range []bool{true, false} {
 		limit, kind, bound, order := trendsPromiseCap, "promise_closed", ` AND p.at_key>=anx_timestamp_key(?)`, `DESC`
 		if open {

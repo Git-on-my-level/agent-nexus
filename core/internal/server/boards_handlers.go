@@ -1105,7 +1105,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	var req struct {
-		ToBoard          string   `json:"to_board"`
+		BoardRef         string   `json:"board_ref"`
 		Reason           string   `json:"reason"`
 		ActorID          string   `json:"actor_id"`
 		RequestKey       string   `json:"request_key"`
@@ -1179,6 +1179,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		return
 	}
 
+	mutationBoardID := boardID // Canonical-route replay is independent of the card's new board.
 	beforeCard, err := loadBoardCardForEvent(r.Context(), opts, boardID, cardKey)
 	if err != nil {
 		if writeStoreContentionError(w, r, err) {
@@ -1201,14 +1202,14 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 		BoardID string
 		CardID  string
 		Request any
-	}{boardID, cardKey, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+	}{mutationBoardID, cardKey, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
 		// Capture lifecycle before-state under the same write lock as the move.
 		beforeCard, err := loadBoardCardForEvent(ctx, opts, boardID, cardKey)
 		if err != nil {
 			return nil, err
 		}
 		result, err := opts.primitiveStore.MoveBoardCard(ctx, actorID, boardID, cardKey, primitives.MoveBoardCardInput{
-			ToBoard: req.ToBoard, Reason: req.Reason,
+			BoardRef: req.BoardRef, Reason: req.Reason,
 			ColumnKey:        strings.TrimSpace(req.ColumnKey),
 			BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
 			AfterCardID:      strings.TrimSpace(req.AfterCardID),
@@ -1225,12 +1226,16 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 				return nil
 			}
 			_, err := opts.primitiveStore.AppendEvent(ctx, actorID, event)
-			if strings.TrimSpace(req.RequestKey) != "" {
+			if strings.TrimSpace(req.RequestKey) != "" || strings.TrimSpace(req.BoardRef) != "" {
 				return err
 			}
-			return nil // Legacy unkeyed lifecycle notifications remain best effort.
+			return nil // Legacy unkeyed column notifications remain best effort.
 		}
-		if err := emit(buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID)); err != nil {
+		movedEvent := buildCardMovedEvent(result.Board, beforeCard, result.Card, req.BeforeCardID, req.AfterCardID, req.BeforeThreadID, req.AfterThreadID)
+		if reason := strings.TrimSpace(req.Reason); reason != "" {
+			movedEvent["payload"].(map[string]any)["reason"] = reason
+		}
+		if err := emit(movedEvent); err != nil {
 			return nil, err
 		}
 		if anyString(result.Card["updated_at"]) != anyString(beforeCard["updated_at"]) || anyString(result.Card["version"]) != anyString(beforeCard["version"]) {
@@ -2019,7 +2024,14 @@ func buildCardMovedEvent(board, previousCard, updatedCard map[string]any, before
 		"before_thread_id": nullableStringValue(strings.TrimSpace(beforeThreadID)),
 		"after_thread_id":  nullableStringValue(strings.TrimSpace(afterThreadID)),
 	}
-	return buildCardLifecycleEvent("card_moved", board, updatedCard, payload, "Card moved: "+cardDisplayName(updatedCard))
+	event := buildCardLifecycleEvent("card_moved", board, updatedCard, payload, "Card moved: "+cardDisplayName(updatedCard))
+	if source := anyString(previousCard["board_id"]); source != "" && source != anyString(board["id"]) {
+		payload["before"] = map[string]any{"board_ref": "board:" + source, "column_key": previousCard["column_key"]}
+		payload["after"] = map[string]any{"board_ref": "board:" + anyString(board["id"]), "column_key": updatedCard["column_key"]}
+		refs, _ := event["refs"].([]string)
+		event["refs"] = append(refs, "board:"+source)
+	}
+	return event
 }
 
 func buildCardLifecycleEvent(eventType string, board, card map[string]any, payload map[string]any, summary string) map[string]any {

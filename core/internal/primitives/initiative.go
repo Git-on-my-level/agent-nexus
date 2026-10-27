@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"agent-nexus-core/internal/plans"
 )
 
 func nullableInitiativeTarget(v sql.NullInt64) any {
@@ -40,7 +42,7 @@ func (e *InitiativeGroupingError) Error() string {
 func (e *InitiativeGroupingError) Is(target error) bool { return target == ErrInvalidWorkRequest }
 func refuseInitiativeGrouping(ctx context.Context, tx *accessTx, c boardCardRow) error {
 	var root bool
-	if err := tx.QueryRowContext(ctx, `SELECT `+workDeclaredRootSQL("c")+` FROM cards c WHERE c.id=?`, c.CardID).Scan(&root); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards b WHERE b.id=c.board_id AND b.role='initiatives' AND b.archived_at IS NULL AND b.trashed_at IS NULL) FROM cards c WHERE c.id=?`, c.CardID).Scan(&root); err != nil {
 		return err
 	}
 	if root {
@@ -68,7 +70,7 @@ func (s *Store) InitiativeBudget(ctx context.Context) (map[string]any, error) {
 		return nil, err
 	}
 	var count, physical int
-	err = s.db.QueryRowContext(ctx, `WITH positions AS MATERIALIZED (SELECT id FROM initiative_card_positions LIMIT 201) SELECT (SELECT count(*) FROM positions),(SELECT count(*) FROM positions p CROSS JOIN cards c ON c.id=p.id)`).Scan(&physical, &count)
+	err = s.db.QueryRowContext(ctx, `WITH positions AS MATERIALIZED (SELECT id FROM initiative_card_positions LIMIT 201) SELECT (SELECT count(*) FROM positions),(SELECT count(*) FROM positions p CROSS JOIN cards c ON c.id=p.id LEFT JOIN brief_initiatives bi ON bi.card_id=c.id WHERE NOT `+workHasParentSQL("c")+` AND COALESCE(bi.loop_annotated,0)=0 AND COALESCE(bi.loop_last_run_at,'')<?)`, loopTS(time.Now().UTC().Add(-loopWindow))).Scan(&physical, &count)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +128,7 @@ func (s *Store) moveInitiativeCardTx(ctx context.Context, tx *accessTx, actor st
 	if _, err = tx.ExecContext(ctx, `DELETE FROM ref_edges WHERE source_type='board' AND source_id=? AND target_type='card' AND target_id=? AND edge_type=?`, c.BoardID, c.CardID, refEdgeTypeBoardCard); err != nil {
 		return c, nil, err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE cards SET board_id=?,rank=?,updated_at=?,updated_by=? WHERE id=?`, destination.ID, rank, time.Now().UTC().Format(time.RFC3339Nano), actor, c.CardID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE cards SET board_id=?,rank=?,initiative_root=?,updated_at=?,updated_by=? WHERE id=?`, destination.ID, rank, destination.Role == "initiatives", time.Now().UTC().Format(time.RFC3339Nano), actor, c.CardID); err != nil {
 		return c, nil, err
 	}
 	if err = upsertBoardCardRefEdge(ctx, tx, destination.ID, c.CardID, c.ColumnKey, rank); err != nil {
@@ -148,6 +150,10 @@ func (s *Store) moveInitiativeCardTx(ctx context.Context, tx *accessTx, actor st
 	if before.Role == "initiatives" || destination.Role == "initiatives" {
 		event, err = insertInitiativeChange(ctx, tx, actor, kind, reason, c, before, destination)
 	}
+	if err != nil {
+		return c, nil, err
+	}
+	c, err = s.loadBoardCardByIdentifier(ctx, tx, destination.ID, c.CardID, true)
 	return c, event, err
 }
 func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, toBoard, under string) (map[string]any, error) {
@@ -172,6 +178,7 @@ func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, t
 			return err
 		}
 		var destination boardRow
+		var underID string
 		if verb == "promote" {
 			if c.ColumnKey == "done" || c.ColumnKey == "cancelled" {
 				return workInvalid("reopen the card before promoting it")
@@ -193,7 +200,12 @@ func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, t
 				if e != nil {
 					return e
 				}
-				if parent.CardID == c.CardID || b.Role != "initiatives" || b.ArchivedAt.Valid || b.TrashedAt.Valid {
+				var hasParent bool
+				if e = tx.QueryRowContext(ctx, `SELECT `+workHasParentSQL("c")+` FROM cards c WHERE c.id=?`, parent.CardID).Scan(&hasParent); e != nil {
+					return e
+				}
+				underID = parent.CardID
+				if hasParent || parent.ColumnKey == "done" || parent.ColumnKey == "cancelled" || parent.CardID == c.CardID || b.Role != "initiatives" || b.ArchivedAt.Valid || b.TrashedAt.Valid {
 					return workInvalid("under must name another active initiative")
 				}
 			}
@@ -234,6 +246,15 @@ func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, t
 				return err
 			}
 		}
+		if underID != "" {
+			var actual sql.NullString
+			if err = tx.QueryRowContext(ctx, `SELECT `+workParentSQL("c")+` FROM cards c WHERE c.id=?`, c.CardID).Scan(&actual); err != nil {
+				return err
+			}
+			if actual.String != underID {
+				return workInvalid("existing earlier plan links would select another parent; resolve those links before retiring with --under")
+			}
+		}
 		metadata, e := groupingMetadata(ctx, tx, c.CardID)
 		if e != nil {
 			return e
@@ -243,6 +264,10 @@ func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, t
 		}
 		work, err := s.GetWork(ctx, c.CardID)
 		if err != nil {
+			return err
+		}
+		viewer, human := hierarchyViewer(ctx)
+		if err = s.EnrichWorkHierarchy(ctx, []map[string]any{work}, viewer, human, time.Now()); err != nil {
 			return err
 		}
 		out = map[string]any{"work": work, "event": event}
@@ -321,4 +346,52 @@ func (s *Store) createImplicitInitiativeChild(ctx context.Context, actor, parent
 		return err
 	})
 	return out, err
+}
+
+// Capture only new links, before replacing the plan. Existing grouped members
+// are deliberately left alone: upgrading a workspace must not promote its old
+// children. Exact target lookups and the incoming-ref index bound this write to
+// the submitted plan, without a startup scan or a read-time graph rebuild.
+// The keys-only canonical guard also preserves parents hidden from this writer;
+// all target hydration and mutation still use the scoped cards relation.
+func protectNewInitiativeLinks(ctx context.Context, tx *accessTx, parentID string, p plans.Plan) error {
+	refs := []string{}
+	for _, step := range p.Steps {
+		if strings.HasPrefix(step.Ref, "card:") {
+			refs = append(refs, step.Ref)
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	raw, _ := json.Marshal(refs)
+	rows, err := tx.QueryContext(ctx, `WITH refs AS MATERIALIZED (SELECT DISTINCT value AS ref FROM json_each(?)),
+ targets AS MATERIALIZED (
+ SELECT c.id,r.ref FROM refs r CROSS JOIN cards c ON c.id=substr(r.ref,6)
+ UNION SELECT c.id,r.ref FROM refs r CROSS JOIN cards c ON c.handle=substr(r.ref,6))
+ SELECT DISTINCT c.id FROM targets t CROSS JOIN cards c ON c.id=t.id
+ WHERE c.id<>? AND c.initiative_root=0 AND c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)
+ AND c.archived_at IS NULL AND c.trashed_at IS NULL
+ AND NOT EXISTS(SELECT 1 FROM brief_plan_refs old WHERE old.card_id=? AND old.ref=t.ref)
+ AND NOT EXISTS(SELECT 1 FROM initiative_legacy_parent_positions legacy WHERE legacy.id=c.id)`, string(raw), parentID, parentID)
+	if err != nil {
+		return err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(ids) == 0 {
+		return err
+	}
+	keys, _ := json.Marshal(ids)
+	_, err = tx.ExecContext(ctx, `UPDATE cards SET initiative_root=1 WHERE id IN (SELECT value FROM json_each(?))`, string(keys))
+	return err
 }

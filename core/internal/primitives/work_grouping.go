@@ -21,9 +21,10 @@ const workParentSources = ` FROM brief_plan_refs link INDEXED BY idx_brief_plan_
 	 CROSS JOIN cards parent ON parent.id=link.card_id
 	 CROSS JOIN boards parent_board ON parent_board.id=parent.board_id `
 
-// Membership on an active initiatives board declares a root, independently of plans.
+// Protect explicit declarations and roots captured before a new incoming plan link.
+// Unmarked legacy members retain their pre-upgrade parentage.
 func workDeclaredRootSQL(child string) string {
-	return `(` + child + `.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))`
+	return `(` + child + `.initiative_root=1 AND ` + child + `.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))`
 }
 
 func workParentEligible(child string) string {
@@ -481,6 +482,9 @@ func (s *Store) groupWorkTx(ctx context.Context, tx *accessTx, actor string, chi
 }
 
 func (s *Store) saveGroupingPlan(ctx context.Context, tx *accessTx, actor string, parent boardCardRow, p plans.Plan) error {
+	if err := protectNewInitiativeLinks(ctx, tx, parent.CardID, p); err != nil {
+		return err
+	}
 	raw, _ := json.Marshal(p)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?) ON CONFLICT(card_id) DO UPDATE SET body_json=excluded.body_json,updated_at=excluded.updated_at`, parent.CardID, string(raw), now); err != nil {

@@ -164,3 +164,39 @@ func TestInitiativeCLICommandsAndOrientTarget(t *testing.T) {
 		t.Fatal(text)
 	}
 }
+
+func TestCardsMoveBoardFlagAndSourceConcurrency(t *testing.T) {
+	calls := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "GET /cards/card:launch":
+			fmt.Fprint(w, `{"card":{"id":"launch","board_ref":"board:source","version":7}}`)
+		case "GET /boards/source":
+			fmt.Fprint(w, `{"board":{"id":"source","updated_at":"2026-10-27T00:00:00Z"}}`)
+		case "POST /cards/card:launch/move":
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["board_ref"] != "board:destination" || body["if_board_updated_at"] != "2026-10-27T00:00:00Z" || body["reason"] != "Curate outcomes" {
+				t.Error(body)
+			}
+			fmt.Fprint(w, `{"board":{"id":"destination"},"card":{"ref":"card:launch","board_ref":"board:destination"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+	cfg := config.Resolved{BaseURL: server.URL, ActorID: "writer", AccessToken: "fixture"}
+	id, body, _, _, err := a.parseCardMoveInput(context.Background(), []string{"card:launch", "--board", "board:destination", "--column", "ready", "--reason", "Curate outcomes"}, cfg, "cards move")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.invokeTypedJSON(context.Background(), cfg, "cards move", "cards.move", map[string]string{"card_id": id}, nil, body); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 {
+		t.Fatal(calls)
+	}
+}

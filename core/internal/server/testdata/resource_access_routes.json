@@ -488,7 +488,8 @@
   {
     "method": "GET",
     "path": "/brief",
-    "policy": "collection"
+    "policy": "collection",
+    "reason": "Includes initiative membership changes hydrated through scoped events; before and after boards, card, thread and authored refs all constrain visibility."
   },
   {
     "method": "GET",

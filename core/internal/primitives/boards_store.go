@@ -254,8 +254,8 @@ type UpdateBoardCardInput struct {
 }
 
 type MoveBoardCardInput struct {
-	ToBoard string
-	Reason  string
+	BoardRef string
+	Reason   string
 	// IfWorkVersion binds PM authorization to the canonical work revision.
 	IfWorkVersion    *int64
 	ColumnKey        string
@@ -2545,8 +2545,8 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		}
 		return BoardCardMutationResult{}, err
 	}
-	if input.ToBoard != "" {
-		resolved, e := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "board", Ref: input.ToBoard})
+	if strings.TrimSpace(input.BoardRef) != "" {
+		resolved, e := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "board", Ref: input.BoardRef})
 		if e != nil {
 			_ = tx.Rollback()
 			return BoardCardMutationResult{}, e
@@ -2556,10 +2556,12 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			_ = tx.Rollback()
 			return BoardCardMutationResult{}, e
 		}
-		cardRow, _, e = s.moveInitiativeCardTx(ctx, tx, actorID, cardRow, destination, "initiative_moved", strings.TrimSpace(input.Reason))
-		if e != nil {
-			_ = tx.Rollback()
-			return BoardCardMutationResult{}, e
+		if destination.ID != cardRow.BoardID {
+			cardRow, _, e = s.moveInitiativeCardTx(ctx, tx, actorID, cardRow, destination, "initiative_moved", strings.TrimSpace(input.Reason))
+			if e != nil {
+				_ = tx.Rollback()
+				return BoardCardMutationResult{}, e
+			}
 		}
 		boardID = destination.ID
 		boardRow = destination

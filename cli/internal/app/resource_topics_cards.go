@@ -942,10 +942,10 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 	leadingCardID, args := popLeadingPositional(args)
 	fs := newSilentFlagSet(commandName)
 	var cardIDFlag, columnFlag, ifBoardUpdatedAtFlag, actorIDFlag, fromFileFlag trackedString
-	var toBoard, reason trackedString
+	var destinationBoard, reason trackedString
 	var dryRunFlag trackedBool
 	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
-	fs.Var(&toBoard, "to-board", "Destination board ref; changes primary membership")
+	fs.Var(&destinationBoard, "board", "Destination board ref; changes primary membership")
 	fs.Var(&reason, "reason", "Audit reason for board membership change")
 	fs.Var(&columnFlag, "column", "Target board column key")
 	fs.Var(&ifBoardUpdatedAtFlag, "if-board-updated-at", "Board updated_at concurrency token; use boards get for the parent board when omitted")
@@ -979,8 +979,8 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 			return "", nil, false, nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
 		}
 		var flagOverwrites map[string]any
-		if toBoard.set {
-			bodyMap["to_board"] = toBoard.value
+		if destinationBoard.set {
+			bodyMap["board_ref"] = destinationBoard.value
 		}
 		if reason.set {
 			bodyMap["reason"] = reason.value
@@ -1016,8 +1016,8 @@ func (a *App) parseCardMoveInput(ctx context.Context, args []string, cfg config.
 		return "", nil, false, nil, errnorm.Usage("invalid_request", "`--column` is required for `anx cards move`")
 	}
 	body := map[string]any{"column_key": column}
-	if toBoard.set {
-		body["to_board"] = toBoard.value
+	if destinationBoard.set {
+		body["board_ref"] = destinationBoard.value
 	}
 	if reason.set {
 		body["reason"] = reason.value

@@ -633,7 +633,7 @@ resources:
       ref: { type: typed_ref, required: true, ref: identity_concepts.ResourceRef }
       handle: { type: string, required: true, ref: identity_concepts.ResourceHandle }
       id: { type: string, required: false, ref: identity_concepts.InternalResourceUUID }
-      role: { type: string, required: false, description: "Open board role; active initiatives-board membership declares top-level initiatives, regardless of incoming plan links. Empty clears; patch omission preserves." }
+      role: { type: string, required: false, description: "Open board role; Initiatives-board membership declares roots on promotion or entry. Existing grouping is preserved on upgrade; new plan links to currently top-level members are dependencies. Empty clears; patch omission preserves." }
       initiative_target: { type: integer, required: false, description: "Optional nonnegative advisory target on an initiatives-role board. Agent-settable; null clears, omission preserves. Exceeding it never blocks promotion." }
       title: { type: string, required: true }
       summary:
@@ -1362,7 +1362,7 @@ initiative_overview:
   geometry_max_nodes: 24
   fields: [plan_state, plan_health, plan_resolution_truncated, next_step, plan_step_digest, status_mismatch, possibly_moot, geometry]
   semantics:
-    - Cards on an active initiatives-role board are always roots; incoming plan refs are dependencies, never parentage. Their own plans still define children outside initiatives boards. Group and fold refuse these roots with a retire-first action. initiative promote and retire atomically move membership and append actor/reason/before/after audit events; agents have the same authority as humans.
+    - Promotion and entry onto an active initiatives-role board declare roots. Upgrade preserves existing parentage, including grouped cards on that board. A new plan reference to a currently top-level member protects its root status before committing the plan; existing links keep their grouping semantics. Its own plan still defines children. Group and fold refuse cards on the initiatives board with a retire-first action. initiative promote and retire atomically move membership and append actor/reason/before/after audit events; agents have the same authority as humans.
     - Brief includes initiative_changes (up to 50 readable events from 200 recent indexed positions, no refill), initiative_budget and optional over_target with an ask next action. Counts are visible lower bounds when truncated. Plain cross-board moves emit the same auditable membership changes. No server-created asks.
     - If any board has role initiatives, only its cards appear as initiatives. Other active cards remain in work. Without a designated board, Overview keeps the existing selection and returns initiatives.hint suggesting the role.
     - Overview uses the same principal-scoped batch plan computation as card reads and live reports, never one query per initiative.

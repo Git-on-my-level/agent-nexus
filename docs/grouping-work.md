@@ -322,10 +322,15 @@ hierarchy enrichment. `POST /work` and `PATCH /work/{card_ref}` accept the
 
 ## Initiative board authority
 
-Active `initiatives` board membership declares a card top-level. An incoming
-plan link to such a card is a dependency; it never changes `parent_ref`, removes
-it from brief, or includes it in another card's child/workstream rollup. Its own
-plan continues to define children on other boards. When creating with `--under`
+Promotion or entry onto an active `initiatives` board declares a root. Upgrade
+preserves existing grouping, including children sharing the initiatives board:
+no migration promotes them. Before committing a NEW plan reference to a currently
+top-level member, core records its root protection atomically. That reference is
+a dependency; it cannot demote the initiative or add it to another rollup.
+Existing references retain their grouping semantics, including edits which keep
+those references. A hidden existing parent also prevents protection; a writer
+cannot accidentally promote someone else's grouped card. The initiative's own
+plan continues to define its children. When creating with `--under`
 an initiative and no board, core chooses the oldest active non-initiatives board
 (or creates Tasks). A canonical related reference retains the parent
 visibility; allocation, child and plan link commit together. Other parents keep
@@ -339,7 +344,7 @@ Explicit
 anx initiative promote card:launch --reason "An independent outcome"
 anx initiative retire card:launch --reason "Consolidate delivery" --under card:delivery
 anx initiative retire card:launch --reason "Keep as ordinary work" --to-board board:tasks
-anx cards move card:launch --column ready --to-board board:initiatives --reason "Independent outcome"
+anx cards move card:launch --column ready --board board:initiatives --reason "Independent outcome"
 ```
 
 Promote uses the oldest visible active initiatives-role board (creation time,
@@ -347,6 +352,8 @@ then ID). Retire defaults to the oldest visible active non-initiatives board,
 creating Tasks if none exists. An explicit destination must be active and must
 not have the initiatives role. `--under` requires another active, open initiative;
 the move, plan update, and audit event commit together or roll back together.
+An earlier existing parent link that would defeat `--under` causes a clear
+rejection, preserving the initiative until the links are resolved.
 Both agents and humans can act. Native cards retain their ref, thread, content,
 and evidence. Source-owned cards must use their source workflow. Repeating a
 request with the same `request_key` returns its original receipt; retain the key
@@ -356,10 +363,18 @@ Boards expose optional integer `initiative_target` (nonnegative; null clears;
 patch omission preserves), writable through `anx boards patch --from-file` like
 other metadata. The oldest visible active initiatives board supplies the target;
 unset uses advisory default 15. Explicit-board counts cover active nonterminal
-cards including loops, from at most 201 physical identities before scoped
-hydration. They are lower bounds when truncated; scoped counts conservatively
+top-level non-loop cards, from at most 201 physical identities before scoped
+hydration and indexed parent/loop filtering. Legacy grouped members and loops
+do not inflate this budget. They are lower bounds when truncated; scoped counts conservatively
 always mark truncated. Counts replace the legacy recent-root budget when an
 active initiatives board exists. No count or target blocks a write.
+
+`cards.move` accepts `board_ref` (`anx cards move --board`), the source board's
+`if_board_updated_at` and optional work `if_version`. Omission or the current
+board performs a column move. Cross-board moves authorize source, destination
+and placement anchors in the same transaction, preserve identity and thread,
+and audit before/after membership. Retire uses that same membership mutation.
+DELETE of a board card still archives; it is not an unpin operation.
 
 For the Watch UI pass, `GET /brief` provides:
 
