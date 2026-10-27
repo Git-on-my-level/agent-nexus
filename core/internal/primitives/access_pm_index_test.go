@@ -12,6 +12,7 @@ import (
 )
 
 func TestResourceAccessPMWriteIndex(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {

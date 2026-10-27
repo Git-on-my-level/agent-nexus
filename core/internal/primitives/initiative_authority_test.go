@@ -276,6 +276,7 @@ func TestInitiativeImplicitChildrenKeepHierarchyAndPrivacy(t *testing.T) {
 // Shape a released workspace like the curated board: five real initiatives,
 // eighty grouped work cards and twenty-one loops sharing one primary board.
 func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	ws, err := initializeTestWorkspace(ctx, dir)

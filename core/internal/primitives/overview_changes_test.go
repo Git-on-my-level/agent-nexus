@@ -16,6 +16,9 @@ import (
 )
 
 func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -158,10 +161,18 @@ func TestOverviewDigestNetTransitionsVisibilityAndBounds(t *testing.T) {
 		t.Fatalf("workspace leak: %+v %v", d, err)
 	}
 	// More candidates than the read/output caps are explicitly truncated.
+	answerTx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer answerTx.Rollback()
 	for i := 0; i < 205; i++ {
-		if _, err = db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id) VALUES(?,'human_attention_responded',?,'actor',?)`, fmt.Sprintf("answer-%03d", i), now.Add(time.Minute).Format(time.RFC3339Nano), board["thread_id"]); err != nil {
+		if _, err = answerTx.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id) VALUES(?,'human_attention_responded',?,'actor',?)`, fmt.Sprintf("answer-%03d", i), now.Add(time.Minute).Format(time.RFC3339Nano), board["thread_id"]); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err = answerTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	counter.Reset()
 	d, err = s.LoadOverviewChanges(primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "reader"}), "alice", visible, now.Add(2*time.Hour))

@@ -13,6 +13,10 @@ import (
 )
 
 func TestAttentionPagesStayBoundedWithTenThousandUnrelatedRecords(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
+	t.Parallel()
 	ctx := context.Background()
 	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
 	if err != nil {

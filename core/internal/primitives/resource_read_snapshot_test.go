@@ -17,6 +17,7 @@ import (
 // Compare ordered results with the old pinned JSON policy and fresh canonical
 // graph, rather than reimplementing the authorization rules in the test.
 func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {

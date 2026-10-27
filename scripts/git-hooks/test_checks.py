@@ -15,6 +15,7 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location("checks", Path(__file__).with_name("checks.py"))
 checks = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checks)
+FAST_TIER_GO_TIMEOUT = checks.FAST_TIER_GO_TIMEOUT
 PUSH_HOOK = Path(__file__).with_name("pre-push").resolve()
 
 
@@ -172,9 +173,9 @@ class RepoTest(unittest.TestCase):
         with patch.object(checks, "run") as run, patch.object(checks, "start", start):
             checks.fast_tests({"tests/channels/telegram.go"}, "abc123")
         runs = [(call.args, call.kwargs.get("cwd")) for call in run.call_args_list]
-        self.assertIn((("go", "test", "-short", "./internal/pm"), self.root / "core"), runs)
-        self.assertIn((("go", "test", "-short", "./."), self.root / "tests" / "channels"), runs)
-        self.assertEqual(started.argv, ("go", "test", "-short", "./internal/server"))
+        self.assertIn((("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/pm"), self.root / "core"), runs)
+        self.assertIn((("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./."), self.root / "tests" / "channels"), runs)
+        self.assertEqual(started.argv, ("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/server"))
 
     def test_commit_time_vet_covers_local_modules_and_their_dependents(self):
         self.write_local_module_fixture()
@@ -213,16 +214,16 @@ class RepoTest(unittest.TestCase):
 
     def test_fast_commands_exclude_browsers_and_real_binary_integration(self):
         commands = self.fast_commands({"core/a.go", "cli/a.go", "mcp/a.go", "web-ui/a.js"})
-        self.assertEqual(commands.count(("go", "test", "-short", "./.")), 3)
+        self.assertEqual(commands.count(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./.")), 3)
         self.assertIn(("pnpm", "-C", "web-ui", "run", "test:unit"), commands)
         self.assertFalse(any("playwright" in str(c) or "integration" in str(c) for c in commands))
 
     def test_shared_and_unattributable_changes_still_run_whole_modules(self):
         for path in ("core/go.mod", "core/scripts/dev", "Makefile"):
-            self.assertIn(("go", "test", "-short", "./..."), self.fast_commands({path}),
+            self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./..."), self.fast_commands({path}),
                           f"{path} must widen to the whole module")
         # Selected for a reason outside the module (VERSION feeds cli's build info).
-        self.assertIn(("go", "test", "-short", "./..."), self.fast_commands({"VERSION"}))
+        self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./..."), self.fast_commands({"VERSION"}))
 
     def test_module_docs_run_no_suite(self):
         self.write_go_module()
@@ -288,14 +289,14 @@ class RepoTest(unittest.TestCase):
                 patch.object(checks, "go_package_graph", self.root_package_graph), \
                 patch.object(sys, "argv", ["checks.py", "fast"]):
             checks.main()
-            self.assertIn(("go", "test", "-short", "./."),
+            self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./."),
                           [call.args for call in run.call_args_list])
-            self.assertNotIn(("go", "test", "-short", "./..."),
+            self.assertNotIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./..."),
                              [call.args for call in run.call_args_list])
             run.reset_mock()
             with patch.dict(os.environ, {"ANX_PREPUSH_FULL": "1"}):
                 checks.main()
-        self.assertIn(("go", "test", "-short", "./..."),
+        self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./..."),
                       [call.args for call in run.call_args_list])
 
     def test_heavy_phases_run_under_a_host_slot(self):
@@ -310,7 +311,7 @@ class RepoTest(unittest.TestCase):
         for call in run.call_args_list:
             (slotted if call.kwargs.get("slot") == "tests" else unslotted).append(call.args)
         # Go tests, Vitest phases and the e2e lifecycle take a slot...
-        self.assertIn(("go", "test", "-short", "./internal/leaf"), slotted)
+        self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/leaf"), slotted)
         self.assertTrue(any(argv[:3] == ("pnpm", "-C", "web-ui") and "vitest" in argv
                             for argv in slotted))
         self.assertIn(("bash", "scripts/tests/test_e2e_smoke_lifecycle.sh"), slotted)
@@ -407,8 +408,8 @@ class RepoTest(unittest.TestCase):
                 patch("sys.stdout", new_callable=io.StringIO) as out:
             checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
         self.assertEqual([call.args for call in run.call_args_list],
-                         [("go", "test", "-short", "./internal/leaf")])
-        self.assertEqual(started.argv, ("go", "test", "-short", "./internal/mid", "./internal/top"))
+                         [("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/leaf")])
+        self.assertEqual(started.argv, ("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/mid", "./internal/top"))
         self.assertIn("ok  \tdependents", out.getvalue())
 
     def test_a_pinned_package_parallelism_serializes_the_phases(self):
@@ -421,8 +422,8 @@ class RepoTest(unittest.TestCase):
                 patch("sys.stdout", new_callable=io.StringIO):
             checks.go_fast_tests("core", {"core/internal/leaf/leaf.go"}, False)
         self.assertEqual([call.args for call in run.call_args_list],
-                         [("go", "test", "-short", "./internal/leaf"),
-                          ("go", "test", "-short", "./internal/mid", "./internal/top")])
+                         [("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/leaf"),
+                          ("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/mid", "./internal/top")])
         self.assertIsNone(started.argv)
         for flags, expected in (("-p=1", "1"), ("-p 4", "4"), ("-mod=readonly -p=2", "2"),
                                 ("-mod=readonly", None), ("", None)):
@@ -555,7 +556,7 @@ class RepoTest(unittest.TestCase):
         self.bump_version("v0.1.1")
         changed = checks.changed_paths("fast")
         self.assertFalse(checks.release_bump_only(changed, base))
-        self.assertIn(("go", "test", "-short", "./."), self.fast_commands(changed, base))
+        self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./."), self.fast_commands(changed, base))
         # A base at HEAD leaves the walk no commit to clear.
         head = self.git("rev-parse", "HEAD").decode().strip()
         self.assertFalse(checks.release_bump_only({"VERSION"}, head))

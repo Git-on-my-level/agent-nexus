@@ -12,8 +12,11 @@ import (
 
 func TestEventPageBatchesPublicRefsOnSingleConnection(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// Workspace setup is shared fixture infrastructure whose wall time tracks
+	// host load; the package timeout is its hang guard. Measuring it under a
+	// fixed short deadline made this test fail with "deadline exceeded" under
+	// load before the bounded work under test ever ran.
+	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -30,8 +33,14 @@ func TestEventPageBatchesPublicRefsOnSingleConnection(t *testing.T) {
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
 	defer db.Close()
 	s := NewTestStore(db, ws.Layout().ArtifactContentDir)
+	// The measured work is two indexed pages over 21 events; the counter
+	// assertions below bound hydration deterministically. This deadline is
+	// only a hang guard for that bounded work, sized far above it instead of
+	// doubling as a wall-clock speed claim on a loaded host.
+	pageCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
 	counter.Reset()
-	page, err := s.ListEventsPage(ctx, EventListFilter{Limit: 20})
+	page, err := s.ListEventsPage(pageCtx, EventListFilter{Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,10 +57,10 @@ func TestEventPageBatchesPublicRefsOnSingleConnection(t *testing.T) {
 		t.Fatalf("unbounded hydration: queries=%d rows=%d", counter.Count(), counter.ReturnedRows())
 	}
 	// The presentation cache cannot survive a page, including a renamed handle.
-	if _, err := db.ExecContext(ctx, `UPDATE cards SET handle='renamed' WHERE id='target'`); err != nil {
+	if _, err := db.ExecContext(pageCtx, `UPDATE cards SET handle='renamed' WHERE id='target'`); err != nil {
 		t.Fatal(err)
 	}
-	page, err = s.ListEventsPage(ctx, EventListFilter{Limit: 20, Cursor: page.NextCursor})
+	page, err = s.ListEventsPage(pageCtx, EventListFilter{Limit: 20, Cursor: page.NextCursor})
 	if err != nil || len(page.Events) != 1 || page.Events[0]["payload"].(map[string]any)["target_ref"] != "card:renamed" {
 		t.Fatalf("stale page handles: %+v %v", page, err)
 	}

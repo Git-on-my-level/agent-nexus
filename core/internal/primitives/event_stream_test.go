@@ -190,10 +190,18 @@ func TestEventStreamBatchesRevisionRefs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	revisionTx, err := ws.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer revisionTx.Rollback()
 	for i := 0; i < 200; i++ {
-		if _, err := ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES(?,'message_posted','2026-01-01T00:00:00Z','actor','["document_revision:dr","card_revision:cr","document_revision:missing"]','{"payload":{"revision_ref":"document_revision:dr"}}')`, fmt.Sprintf("%04d", i)); err != nil {
+		if _, err := revisionTx.Exec(`INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES(?,'message_posted','2026-01-01T00:00:00Z','actor','["document_revision:dr","card_revision:cr","document_revision:missing"]','{"payload":{"revision_ref":"document_revision:dr"}}')`, fmt.Sprintf("%04d", i)); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := revisionTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	db, counter := testsql.Open("file:" + ws.Layout().DatabasePath)
 	defer db.Close()

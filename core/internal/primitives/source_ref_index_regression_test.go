@@ -13,6 +13,9 @@ import (
 )
 
 func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -48,10 +51,18 @@ func TestIndexedAliasesAreGenericAndBounded(t *testing.T) {
 		t.Fatalf("unknown=%v err=%v", unknown, err)
 	}
 	// An indexed lookup must not decode unrelated workspace evidence.
+	indexTx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer indexTx.Rollback()
 	for i := 0; i < 1000; i++ {
-		if _, err = s.db.ExecContext(ctx, `INSERT INTO work_evidence_index(card_id,lookup_key,evidence_id) VALUES(?,?,(SELECT id FROM work_evidence_records WHERE card_id=? LIMIT 1))`, card["id"], fmt.Sprintf("unrelated-%d", i), card["id"]); err != nil {
+		if _, err = indexTx.ExecContext(ctx, `INSERT INTO work_evidence_index(card_id,lookup_key,evidence_id) VALUES(?,?,(SELECT id FROM work_evidence_records WHERE card_id=? LIMIT 1))`, card["id"], fmt.Sprintf("unrelated-%d", i), card["id"]); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err = indexTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	items, err := s.ResolveRefs(ctx, []string{"custom-reference"}, nil, time.Now())
 	if err != nil || items[0].Title != "Public source" {

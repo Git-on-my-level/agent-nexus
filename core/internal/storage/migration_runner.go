@@ -88,21 +88,6 @@ func applyMigrationToLedger(ctx context.Context, db *sql.DB, m migration, ledger
 	}
 }
 
-func verifyRecordedMigration(ctx context.Context, db *sql.DB, m migration) error {
-	if m.Verify == nil {
-		return nil
-	}
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := m.Verify(ctx, tx); err != nil {
-		return fmt.Errorf("recorded migration %d: %w", m.Version, err)
-	}
-	return nil
-}
-
 // A recorded 116 is usable only with all required admission tables, including
 // page routing and the required compact mirror. Never hide an unexecuted step
 // behind an advanced ledger; a previously malformed preview fails at startup.

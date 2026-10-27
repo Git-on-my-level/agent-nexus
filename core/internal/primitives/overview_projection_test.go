@@ -22,6 +22,9 @@ func (b *countingReportBackend) Read(ctx context.Context, hash string) ([]byte, 
 }
 
 func TestOverviewDefersReportSelectorBlobReads(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())

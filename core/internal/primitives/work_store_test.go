@@ -715,11 +715,49 @@ func TestCreateWorkWithoutBoardRefReusesExistingBoard(t *testing.T) {
 	}
 }
 
+// preBeginBusyOrLocked reports a raw SQLite BUSY/LOCKED result, excluding
+// MutationOutcomeUnknown. Store mutations leave pre-BEGIN failures raw --
+// nothing can have committed -- and wrap everything after BEGIN IMMEDIATE in
+// MutationOutcomeUnknown; the server answers the raw form with a recoverable
+// 503 "busy" that clients retry. This mirrors that classification, matching
+// on coded results instead of error text.
+func preBeginBusyOrLocked(err error) bool {
+	var unknown *primitives.MutationOutcomeUnknown
+	if errors.As(err, &unknown) {
+		return false
+	}
+	var coded interface{ Code() int }
+	if !errors.As(err, &coded) {
+		return false
+	}
+	code := coded.Code() & 255
+	return code == 5 || code == 6
+}
+
+// createWorkUntilAdmitted retries work.create across pre-BEGIN BUSY/LOCKED
+// results the way the retrying HTTP client the server contract documents does.
+// Concurrent writers queue on the production busy_timeout, and on a host whose
+// load stretches that queue past the wait, the raw BUSY is the designed
+// recoverable outcome, not a convergence failure. Post-BEGIN outcomes stay
+// fatal: an unknown result must never be blindly retried.
+func createWorkUntilAdmitted(ctx context.Context, s *primitives.Store, input map[string]any, deadline time.Time) (map[string]any, error) {
+	for {
+		w, err := s.CreateWork(ctx, "actor-1", "", input)
+		if err == nil || !preBeginBusyOrLocked(err) || time.Now().After(deadline) {
+			return w, err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
 	t.Parallel()
 	s := newEmptyWorkTestStore(t)
 	ctx := context.Background()
 	const n = 12
+	// Bound the retry window generously: the queue drains as soon as the host
+	// schedules the writers, and a genuinely stuck writer must still fail.
+	admitBy := time.Now().Add(2 * time.Minute)
 	type result struct {
 		boardID string
 		err     error
@@ -730,7 +768,7 @@ func TestCreateWorkWithoutBoardRefConcurrent(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func(i int) {
 			defer wg.Done()
-			w, err := s.CreateWork(ctx, "actor-1", "", map[string]any{"title": fmt.Sprintf("Concurrent %d", i), "source": map[string]any{"authority": "nexus"}})
+			w, err := createWorkUntilAdmitted(ctx, s, map[string]any{"title": fmt.Sprintf("Concurrent %d", i), "source": map[string]any{"authority": "nexus"}}, admitBy)
 			if err != nil {
 				results <- result{err: err}
 				return

@@ -96,6 +96,9 @@ func TestWorkListNewestUpdatedFirstAndStableCursor(t *testing.T) {
 }
 
 func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -134,17 +137,27 @@ func TestWorkListPaginationAdvancesPastAccessFilteredPages(t *testing.T) {
 	// Create 1,010 newer PM-private cards that exceed the 20-pass filter budget at limit=2.
 	privateIDs := map[string]bool{}
 	privateTimestamps := map[string]bool{}
+	// Seed the rejected prefix in one transaction: identical rows and trigger
+	// work, without 1,010 per-statement WAL commits.
+	seedTx, err := ws.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer seedTx.Rollback()
 	for i := 0; i < 1010; i++ {
 		cardID := fmt.Sprintf("private-card-%04d", i)
 		at := base.Add(time.Hour + time.Duration(i)*time.Second).Format(time.RFC3339Nano)
 		privateIDs[cardID] = true
 		privateTimestamps[at] = true
-		if _, err := ws.DB().Exec(
+		if _, err := seedTx.Exec(
 			`INSERT INTO cards(id,handle,board_id,rank,title,summary,column_key,thread_id,created_at,created_by,updated_at,updated_by) VALUES(?,?,?,'',?,'','backlog',?,?,?,?,'other-owner')`,
 			cardID, cardID, privateBoard["id"], cardID, privateBoard["thread_id"], at, "other-owner", at,
 		); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := seedTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 
 	visibleForReader := func(_ string, privateOwner string) bool {

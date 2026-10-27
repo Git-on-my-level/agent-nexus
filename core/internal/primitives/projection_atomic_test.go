@@ -14,6 +14,7 @@ import (
 // The trigger failures run after canonical SQL has executed. The deferred FK
 // variant rejects COMMIT itself, after both dirty tables have been written.
 func TestProjectionInvalidationCanonicalCommitBoundary(t *testing.T) {
+	t.Parallel()
 	for _, boundary := range []string{"queue", "generation", "commit"} {
 		t.Run(boundary, func(t *testing.T) {
 			for _, operation := range []string{"event", "topic_create", "topic_patch", "topic_archive", "document_create", "document_update", "document_patch", "document_archive", "document_unarchive", "document_trash", "document_restore", "board_create", "board_update", "board_archive", "board_unarchive", "board_trash", "board_restore", "card_create", "card_update", "card_archive", "work"} {

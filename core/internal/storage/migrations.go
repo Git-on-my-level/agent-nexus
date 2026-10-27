@@ -2924,11 +2924,30 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	// Verify every recorded postcondition against one read snapshot, matching
+	// applyWorkspaceMigrations' fenced loader: one BEGIN/COMMIT round trip
+	// instead of one per migration, and a consistent view instead of one
+	// snapshot per verify.
+	if anyRecorded(migrations, appliedVersions) {
+		tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return err
+		}
+		for _, m := range migrations {
+			if !appliedVersions[m.Version] || m.Verify == nil {
+				continue
+			}
+			if err := m.Verify(ctx, tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("recorded migration %d: %w", m.Version, err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
 	for _, m := range migrations {
 		if appliedVersions[m.Version] {
-			if err := verifyRecordedMigration(ctx, db, m); err != nil {
-				return err
-			}
 			continue
 		}
 
@@ -2938,6 +2957,15 @@ func applyMigrations(ctx context.Context, db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func anyRecorded(all []migration, applied map[int]bool) bool {
+	for _, m := range all {
+		if applied[m.Version] {
+			return true
+		}
+	}
+	return false
 }
 
 func applyMigration(ctx context.Context, db *sql.DB, m migration) error {

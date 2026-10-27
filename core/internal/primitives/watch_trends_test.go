@@ -221,6 +221,9 @@ func TestWatchTrendsComputesFlowsAndDeltas(t *testing.T) {
 // A capped family reports truncation and leaves buckets past its horizon null
 // instead of claiming zero.
 func TestWatchTrendsMarksCappedHistoryUnknown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	f := newTrendsFixture(t)
 	work := f.card("Busy", "", nil)
@@ -331,6 +334,9 @@ func (f *trendsFixture) rawEvents(work map[string]any, prefix, kind string, n in
 // When the answer cap cuts into the current period, that period has no
 // median: the answers left out could move it either way.
 func TestWatchTrendsAnswerTimeUnknownWhenCurrentPeriodIsCapped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	f := newTrendsFixture(t)
 	work := f.card("Busy", "", nil)
@@ -353,6 +359,9 @@ func TestWatchTrendsAnswerTimeUnknownWhenCurrentPeriodIsCapped(t *testing.T) {
 
 // With more loops than the read admits, every reporting share is unknown.
 func TestWatchTrendsLoopHealthUnknownWhenLoopsAreCapped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	f := newTrendsFixture(t)
 	for i := 0; i <= trendsLoopCap; i++ {
@@ -375,6 +384,9 @@ func TestWatchTrendsLoopHealthUnknownWhenLoopsAreCapped(t *testing.T) {
 
 // A ranking is only offered for a period the read covered in full.
 func TestWatchTrendsRankingsNeedACompleteCurrentPeriod(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	f := newTrendsFixture(t)
 	work := f.card("Busy", "", nil)
