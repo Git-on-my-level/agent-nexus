@@ -96,6 +96,9 @@ enums:
       - card_created
       - card_updated
       - card_moved
+      - initiative_promoted
+      - initiative_retired
+      - initiative_moved
       - card_archived
       - card_trashed
       - card_resolved
