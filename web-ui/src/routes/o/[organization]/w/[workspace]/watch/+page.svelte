@@ -3,9 +3,11 @@
    * Watch: where things stand, at a glance. Read-only — every action lives in
    * Decide, and the header links there when something is waiting.
    *
-   * Tabs, left to right: Initiatives (where Watch lands), Loops, then the
-   * pinned dashboard and any dashboard opened from "More dashboards". The
-   * first two are built from the brief; dashboards are report documents.
+   * Tabs, left to right: Initiatives (where Watch lands), Loops, Trends,
+   * then the reader's pinned dashboards and any dashboard opened from "More
+   * dashboards". The first two are built from the brief; Trends reads
+   * `watch_trends.v1` (change over time, which no other view shows);
+   * dashboards are report documents.
    * Initiatives and Loops share one row layout (`CollectionTable`), so every
    * tab reads the same way. Initiatives also lay out as the swimlane board
    * (`?view=lanes`), with the Ungrouped tray and the budget chip.
@@ -17,6 +19,7 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   import { patchSearchParams } from "$lib/urlState.js";
+  import { TREND_RANGES, trendRange } from "$lib/watchTrends.js";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
   import {
     countWaitingDecisions,
@@ -56,6 +59,7 @@
   import InitiativeRollupList from "$lib/components/watch/InitiativeRollupList.svelte";
   import LoopCard from "$lib/components/loops/LoopCard.svelte";
   import CollectionTable from "$lib/components/collection/CollectionTable.svelte";
+  import TrendsView from "$lib/components/watch/TrendsView.svelte";
 
   const store = briefStore();
   let brief = $derived($store.data);
@@ -79,6 +83,7 @@
   let params = $derived($page.url.searchParams);
   let tab = $derived(watchView(params).tab);
   let layout = $derived(watchView(params).layout);
+  let trendDays = $derived(trendRange(params));
   function navigate(patch) {
     const next = patchSearchParams(params, { layout: "", ...patch });
     const query = next.toString();
@@ -93,6 +98,7 @@
       tab: next === "initiatives" ? "" : next,
       dashboard: next === "dashboard" ? dashboard : "",
       view: "",
+      range: next === "trends" ? params.get("range") || "" : "",
     });
   }
 
@@ -126,8 +132,10 @@
 
   // Dashboards: each of the reader's pins is a tab; any other opens as a tab
   // from the "More dashboards" menu. Pins are per person; with none, core
-  // answers with the workspace default (`source: "workspace_default"`), which
-  // shows as a tab but is not the reader's pin to unpin or count.
+  // answers with the workspace default (`source: "workspace_default"`). That
+  // default is no longer a standing tab — it repeated Initiatives, Loops and
+  // Decide, and Trends now holds the place — but `?tab=dashboard` still opens
+  // it, as a tab that is not the reader's pin to unpin or count.
   let dashboards = $state(null);
   let dashboardsFailed = $state(false);
   let loadingMore = $state(false);
@@ -177,13 +185,15 @@
         ? [dashboards.pinned_ref]
         : [],
   );
-  let tabRefs = $derived(pinnedRefs.length ? pinnedRefs : defaultRefs);
   let pinnedReports = $derived(
-    tabRefs
+    pinnedRefs
       .map((ref) => reports.find((entry) => entry.ref === ref))
       .filter(Boolean),
   );
   let pinnedReport = $derived(pinnedReports[0] ?? null);
+  let defaultReport = $derived(
+    reports.find((entry) => defaultRefs.includes(entry.ref)) ?? null,
+  );
   let wantedDashboard = $derived(params.get("dashboard") || "");
   let selectedReport = $derived(
     reports.find(
@@ -193,6 +203,7 @@
         entry.requested_as === wantedDashboard,
     ) ||
       pinnedReport ||
+      defaultReport ||
       reports[0] ||
       null,
   );
@@ -277,6 +288,13 @@
             select: () => selectTab("loops"),
           }
         : null,
+      {
+        key: "trends",
+        label: "Trends",
+        badge: 0,
+        active: tab === "trends",
+        select: () => selectTab("trends"),
+      },
       ...pinnedReports.map((report) => ({
         key: `dashboard:${report.id}`,
         label: report.title || "Dashboard",
@@ -384,6 +402,7 @@
       </div>
       <div class="flex flex-wrap items-center gap-2">
         {#if tab === "initiatives"}{@render initiativeActions()}{/if}
+        {#if tab === "trends"}{@render rangeToggle()}{/if}
         {#if waitingDecisions > 0}
           <a
             class="decide-link"
@@ -536,6 +555,8 @@
     {:else}
       <SkeletonList rows={4} />
     {/if}
+  {:else if tab === "trends"}
+    <TrendsView days={trendDays} />
   {:else if layout === "lanes"}
     <!-- The board reads the same brief and draws its own loading, error
          and empty states: Ungrouped cards can wait with no initiative yet. -->
@@ -628,6 +649,30 @@
     ["list", "List"],
     ["board", "Board"],
   ])}
+{/snippet}
+
+{#snippet rangeToggle()}
+  <div
+    class="inline-flex rounded-md border border-line bg-bg-soft p-0.5"
+    role="group"
+    aria-label="Period"
+    data-watch-trend-range
+  >
+    {#each TREND_RANGES as days (days)}
+      <button
+        type="button"
+        class="rounded px-3 py-1 text-meta font-medium transition-colors max-md:min-h-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent {trendDays ===
+        days
+          ? 'bg-panel-hover text-fg shadow-sm'
+          : 'text-fg-muted hover:text-fg'}"
+        aria-pressed={trendDays === days}
+        aria-label="{days}d — last {days} days"
+        data-watch-trend-days={days}
+        onclick={() => navigate({ range: days === 30 ? "" : `${days}d` })}
+        >{days}d</button
+      >
+    {/each}
+  </div>
 {/snippet}
 
 {#snippet layoutToggle(options)}

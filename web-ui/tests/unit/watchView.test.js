@@ -46,6 +46,13 @@ describe("watchView", () => {
     });
   });
 
+  it("opens Trends, which has no layout", () => {
+    expect(view("tab=trends&view=lanes")).toEqual({
+      tab: "trends",
+      layout: "list",
+    });
+  });
+
   it("has no layout on a dashboard", () => {
     expect(view("tab=dashboard&view=lanes").layout).toBe("list");
   });

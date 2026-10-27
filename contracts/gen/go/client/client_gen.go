@@ -3339,6 +3339,16 @@ var CommandRegistry = []CommandSpec{
 		Concepts:  []string{"ops", "quotas"},
 	},
 	{
+		CommandID: "watch.trends",
+		CLIPath:   "watch trends",
+		Group:     "watch",
+		Method:    "GET",
+		Path:      "/watch/trends",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"home", "inbox", "cards"},
+	},
+	{
 		CommandID: "work.capabilities",
 		CLIPath:   "work capabilities",
 		Group:     "work",
@@ -4639,6 +4649,10 @@ func (c *Client) TopicsWorkspace(ctx context.Context, pathParams map[string]stri
 
 func (c *Client) UsageSummaryV1(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "usage.summary.v1", nil, opts)
+}
+
+func (c *Client) WatchTrends(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "watch.trends", nil, opts)
 }
 
 func (c *Client) WorkCapabilities(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

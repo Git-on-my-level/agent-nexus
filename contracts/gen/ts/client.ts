@@ -15137,6 +15137,39 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "usageSummaryV1"
   },
   {
+    "command_id": "watch.trends",
+    "cli_path": "watch trends",
+    "group": "watch",
+    "method": "GET",
+    "path": "/watch/trends",
+    "operation_id": "getWatchTrends",
+    "summary": "Read whether the workspace is getting better or worse over 7, 30 or 90 days",
+    "description": "One group of trends per request. decisions: asks raised vs answered, time to answer, open-ask backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise and work started vs finished. loops: loop runs, loops reporting on time and the most active agents. Each panel compares the current period with the one before it. Readers whose current access scope denies no workspace resource receive unscoped aggregates. Every other reader receives a fixed 403 restricted_trends response. Eligibility is checked fresh in the aggregate's read snapshot; there is no response or permission cache and no special role. Transfers, grants and revocations apply on the next request. The 200-versus-403 outcome reveals whether any inaccessible resource exists, without identifying it.",
+    "why": "See trends over time that the current-state views cannot show.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_request",
+      "restricted_trends",
+      "unavailable"
+    ],
+    "concepts": [
+      "home",
+      "inbox",
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed seeks over a single unpartitioned positions table. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.",
+    "go_method": "WatchTrends",
+    "ts_method": "watchTrends"
+  },
+  {
     "command_id": "work.capabilities",
     "cli_path": "work capabilities",
     "group": "work",
@@ -17546,6 +17579,10 @@ export class AnxClient {
 
   usageSummaryV1(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("usage.summary.v1", {}, options);
+  }
+
+  watchTrends(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("watch.trends", {}, options);
   }
 
   workCapabilities(options: RequestOptions = {}): Promise<InvokeResult> {

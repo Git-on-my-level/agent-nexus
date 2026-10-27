@@ -1191,6 +1191,9 @@ var migrations = []migration{
 	}},
 	{Version: 123, AfterApply: installAskPresentationHeads},
 	{Version: 124, AfterApply: installAskRetirementDeliveryPolicy},
+	// Watch trends bound each record family's read through identity/time
+	// positions; canonical hydrated rows keep their own authorization.
+	{Version: 125, AfterApply: installWatchTrendPositions},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

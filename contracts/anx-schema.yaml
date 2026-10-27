@@ -1385,6 +1385,21 @@ overview_brief:
     - at_risk reports only past_promise rows with a computed reason, longest past first; a row without a computed reason is omitted.
     - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
     - initiatives orders by the shared promise order (past_promise, no_promise, moving, digest, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
+watch_trends:
+  route: GET /watch/trends
+  groups: [decisions, initiatives, loops]
+  ranges: [7d, 30d, 90d]
+  semantics:
+    - Computed at read time from stored asks, cards, promises and run receipts. Core runs no models and fetches nothing external.
+    - One group per request, so each request stays within the ordinary read budget. decisions covers asks; initiatives covers promises and work started vs finished; loops covers run receipts, loop reporting and the most active agents.
+    - The read covers two periods (previous and current). 7d and 30d use daily buckets; 90d uses 13 weekly buckets. value and previous summarize each period.
+    - Each record family is one indexed newest-first seek with a fixed cap (asks raised 80, answers 60, open asks 70, open promises 55, closed promises 35, created cards 40, done cards 40, runs 170, loops 25). The seek is bounded before hydration; a full page stays truncated even when hydration drops ineligible rows.
+    - When a cap is reached the panel is truncated and buckets older than the oldest admitted record are null, never zero.
+    - Answered counts and answer time are measured by when the answer was given, including answers to asks raised before the window. Withdrawals count only for asks raised inside the window. Promises are judged against each initiative's current promise.
+    - Admission is snapshot-bound: the caller's effective access scope must deny no workspace resource, proven by indexed root-owner existence seeks inside the same read-only snapshot that computes the aggregates. Any viewer with a denied resource receives the fixed 403 restricted_trends response, byte-identical for every restricted caller of that group and range. Scoped aggregates are never served; canonical projections can incorporate invisible contributors.
+    - A period missing records has no summary: answer time, loop health, rankings and other shares are null or empty rather than computed from the part that was read.
+    - Loop health applies the brief's rule (reported within two cadences) at each bucket end; a bucket whose lookback precedes the read is null.
+    - No cache of any kind: every request recomputes eligibility and aggregates in a fresh snapshot (Cache-Control no-store on both statuses). Transfers, grants and revocations apply on the next request. The 200-versus-403 outcome itself discloses whether the caller is denied any resource in the workspace, without identifying it.
 overview_changes:
   route: GET /overview/changes
   max_items: 100

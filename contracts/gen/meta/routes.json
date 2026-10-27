@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 263,
+  "route_count": 264,
   "routes": [
     {
       "method": "GET",
@@ -1221,6 +1221,11 @@
       "method": "GET",
       "path": "/version",
       "access_class": "always_public"
+    },
+    {
+      "method": "GET",
+      "path": "/watch/trends",
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "GET",

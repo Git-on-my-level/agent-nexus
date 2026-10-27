@@ -157,6 +157,17 @@ initiative. Rows that need the reader start open. Their plan steps wait for
 a tap, so opening the page reads nothing per row. A row the reader opens
 reads its card once, through `workCache`.
 
+Trends (`?tab=trends`, `&range=7d|90d`; 30 days by default) answers "is the
+workspace getting better or worse?" with what no other view shows: change
+over time. It reads `watch_trends.v1` as three independent requests
+(decisions, initiatives, loops), each with its own loading, failure and Retry.
+Each card shows the current value, the change from the previous period
+(green when it moved the good way), one plain sentence computed from those two
+numbers, and a sparkline; a capped read says "Recent only" and draws unknown
+history as a gap. The workspace default dashboard is no longer a standing tab
+(it repeated Initiatives, Loops and Decide); it stays in "More dashboards" and
+`?tab=dashboard` still opens it. Pinned dashboards remain tabs.
+
 Lanes (`?view=lanes`; old `?view=board` and `?layout=board` links land
 there) is the swimlane board. It has a 260px initiative column, then Not
 started, In progress, Blocked / needs you and Done this week. A lane's

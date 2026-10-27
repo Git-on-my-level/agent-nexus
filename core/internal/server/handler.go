@@ -2207,6 +2207,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 	}, func(w http.ResponseWriter, r *http.Request) { handleAttentionFeedback(w, r, opts) })
 	registerRoute("/brief", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetBriefV1(w, r, opts) })
+	registerRoute("/watch/trends", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetWatchTrends(w, r, opts) })
 	registerRoute("/overview", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleGetOverview(w, r, opts) })
 	registerRoute("/overview/changes", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleOverviewChanges(w, r, opts) })
 	registerRoute("/workspace/dashboard/pins", func(r *http.Request) routeAccessRequirement {

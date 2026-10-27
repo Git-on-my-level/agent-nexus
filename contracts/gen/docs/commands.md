@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `281`
+- Commands: `282`
 
 ## `actors.create`
 
@@ -3398,6 +3398,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `ops`, `quotas`
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns v1 usage summary JSON.
+
+## `watch.trends`
+
+- CLI path: `watch trends`
+- HTTP: `GET /watch/trends`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: See trends over time that the current-state views cannot show.
+- Concepts: `home`, `inbox`, `cards`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `restricted_trends`, `unavailable`
+- Output: Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.
+- Agent notes: Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed seeks over a single unpartitioned positions table. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.
 
 ## `work.capabilities`
 

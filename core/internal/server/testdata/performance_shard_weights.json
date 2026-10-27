@@ -440,6 +440,18 @@
     "milliseconds": 64
   },
   {
+    "key": "GET /watch/trends [decisions]",
+    "milliseconds": 8000
+  },
+  {
+    "key": "GET /watch/trends [initiatives]",
+    "milliseconds": 8000
+  },
+  {
+    "key": "GET /watch/trends [loops]",
+    "milliseconds": 8000
+  },
+  {
     "key": "GET /work",
     "milliseconds": 6228
   },

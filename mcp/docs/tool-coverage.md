@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 281
+- Command count: 282
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -52,6 +52,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | threads | 5 |
 | topics | 10 |
 | usage | 1 |
+| watch | 1 |
 | work | 16 |
 | workspace | 4 |
 
@@ -59,7 +60,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 94 |
+| exposed_read | 95 |
 | exposed_write | 80 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
@@ -73,8 +74,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 174 | exposed_read + exposed_write + adapted |
-| hosted default | 68 | explicit read-only private-app allowlist |
+| standalone default | 175 | exposed_read + exposed_write + adapted |
+| hosted default | 69 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 65 | not represented as direct MCP tools in v1 |
@@ -345,6 +346,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | topics.unarchive | topics | POST | /topics/{topic_id}/unarchive | exposed_write | ordinary reversible topic lifecycle write |
 | topics.workspace | topics | GET | /topics/{topic_id}/workspace | exposed_read | bounded topic workspace projection |
 | usage.summary.v1 | usage | GET | /v1/usage/summary | gated_admin | versioned usage summary is quota/billing telemetry |
+| watch.trends | watch | GET | /watch/trends | exposed_read | Principal-scoped bounded trends over stored records; read only. |
 | work.capabilities | work | GET | /work/capabilities | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.create | work | POST | /work | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.fold | work | POST | /work/{card_ref}/fold | exposed_write | Transfer references and archive with a reversible scoped snapshot. |

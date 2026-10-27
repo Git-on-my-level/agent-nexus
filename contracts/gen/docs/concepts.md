@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `81`
+- Commands: `82`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -204,6 +204,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `runs.upsert`
   - `sessions.get`
   - `sessions.register`
+  - `watch.trends`
   - `work.capabilities`
   - `work.create`
   - `work.fold`
@@ -363,13 +364,14 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home`
 
-- Commands: `7`
+- Commands: `8`
 - Command IDs:
   - `brief.get`
   - `home.read`
   - `home.unread`
   - `overview.changes`
   - `overview.get`
+  - `watch.trends`
   - `workspace.dashboard.list`
   - `workspace.dashboard.set`
 
@@ -404,7 +406,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `29`
+- Commands: `30`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -435,6 +437,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `inbox.summary`
   - `notifications.settings.get`
   - `notifications.settings.set`
+  - `watch.trends`
 
 ## `inspection`
 
