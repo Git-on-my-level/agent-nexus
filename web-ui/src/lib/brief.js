@@ -376,12 +376,16 @@ function normalizeRollup(raw) {
   };
 }
 
-/** `initiative_budget`, or null from a core that predates it. */
+/**
+ * `initiative_budget`, or null from a core that predates it. A target of 0
+ * is real (fold the whole set); only an absent target keeps the legacy
+ * default of 15 that a core predating per-board targets implied.
+ */
 function normalizeBudget(raw) {
   if (!raw || typeof raw !== "object") return null;
   return {
     count: count(raw.count),
-    target: count(raw.target) || 15,
+    target: raw.target == null ? 15 : count(raw.target),
     truncated: Boolean(raw.truncated),
   };
 }

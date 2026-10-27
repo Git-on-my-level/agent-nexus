@@ -60,6 +60,7 @@
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import SwimlaneBoard from "$lib/components/work/SwimlaneBoard.svelte";
+  import InitiativeChanges from "$lib/components/watch/InitiativeChanges.svelte";
   import InitiativeDetails from "$lib/components/watch/InitiativeDetails.svelte";
   import InitiativeRollupList from "$lib/components/watch/InitiativeRollupList.svelte";
   import LoopCard from "$lib/components/loops/LoopCard.svelte";
@@ -621,6 +622,13 @@
         >
       </p>
     </div>
+    <!-- The set can be empty because its last initiative was just retired;
+         the recent changes still read, exactly as they do beside the list. -->
+    <InitiativeChanges
+      changes={brief.initiativeChanges}
+      {now}
+      hrefFor={childInitiativeHref}
+    />
   {:else if rollup.length}
     <InitiativeRollupList
       rows={rollup}

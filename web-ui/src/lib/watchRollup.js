@@ -503,16 +503,17 @@ export function needsYouItems(lane, index) {
 
 /**
  * "Initiatives: 6 of 15", "6+ of 15" when the count is a lower bound, or
- * "Initiatives: 6" with no target. Without a budget from core, the rows on
- * screen are the count.
+ * "Initiatives: 6" with no target. A target of 0 is real and reads "of 0".
+ * Without a budget from core, the rows on screen are the count.
  */
 export function budgetIndicator(budget, rows = []) {
   const count = budget ? budget.count : rows.length;
   const plus = budget?.truncated ? "+" : "";
-  const target = budget?.target > 0 ? budget.target : 0;
+  const target = budget?.target;
+  const hasTarget = target != null;
   return {
-    text: `Initiatives: ${count}${plus}${target ? ` of ${target}` : ""}`,
-    label: target
+    text: `Initiatives: ${count}${plus}${hasTarget ? ` of ${target}` : ""}`,
+    label: hasTarget
       ? `${plus ? "At least " : ""}${count} initiatives against a target of ${target}`
       : `${plus ? "At least " : ""}${count} initiatives`,
     title: plus

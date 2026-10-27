@@ -65,6 +65,7 @@ describe("initiative set normalization", () => {
 
   it("degrades for a core that predates the fields", () => {
     const brief = normalizeBrief({});
+    expect(brief.initiativeBudget).toBeNull();
     expect(brief.overTarget).toBeNull();
     expect(brief.initiativeChanges).toEqual({ items: [], truncated: false });
   });
@@ -99,10 +100,29 @@ describe("budgetIndicator", () => {
     expect(out.title).toMatch(/At least this many/);
   });
 
-  it("shows just the count with no target or no budget", () => {
+  it("treats a target of 0 as a real target", () => {
+    const budget = normalizeBrief({
+      initiative_budget: { count: 2, target: 0, truncated: false },
+    }).initiativeBudget;
+    expect(budget).toEqual({ count: 2, target: 0, truncated: false });
+    const indicator = budgetIndicator(budget);
+    expect(indicator.text).toBe("Initiatives: 2 of 0");
+    expect(indicator.label).toBe("2 initiatives against a target of 0");
+    // The chip and the over-target line state the same target.
+    const over = normalizeBrief({
+      over_target: { count: 2, target: 0, truncated: false, next_actions: [] },
+    }).overTarget;
+    expect(overTargetLine(over)).toBe("2 initiatives against a target of 0.");
+  });
+
+  it("keeps the legacy default of 15 only for an absent target", () => {
     expect(
-      budgetIndicator({ count: 4, target: 0, truncated: false }).text,
-    ).toBe("Initiatives: 4");
+      normalizeBrief({ initiative_budget: { count: 3, truncated: false } })
+        .initiativeBudget,
+    ).toEqual({ count: 3, target: 15, truncated: false });
+  });
+
+  it("shows just the count with no budget", () => {
     expect(budgetIndicator(null, [{}, {}]).text).toBe("Initiatives: 2");
   });
 });

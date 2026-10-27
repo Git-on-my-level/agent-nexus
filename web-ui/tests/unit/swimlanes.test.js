@@ -397,6 +397,12 @@ describe("tray and budget", () => {
     );
     expect(overBudget({ count: 15, target: 15 })).toBe(false);
     expect(overBudget({ count: 16, target: 15 })).toBe(true);
+    // A target of 0 is real: any initiative is over it, none is not.
+    expect(budgetLabel({ count: 2, target: 0, truncated: false })).toBe(
+      "Initiatives 2/0",
+    );
+    expect(overBudget({ count: 1, target: 0 })).toBe(true);
+    expect(overBudget({ count: 0, target: 0 })).toBe(false);
     expect(budgetLabel(null)).toBe("");
   });
 });
