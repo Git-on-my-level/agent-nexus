@@ -16,6 +16,11 @@
    * "proposed" tag. Its outcome, when core sends one that says more than the
    * title, reads under it.
    *
+   * The header counts initiatives against the board's target. Over target,
+   * a quiet line says so and links the reader's open ask about it, if an
+   * agent has asked one; Watch offers no way to change the set. Below it,
+   * `InitiativeChanges` lists who recently added, retired or moved one.
+   *
    * Everything shown is in the brief except a row's plan steps, which
    * `InitiativeDetails` reads only when the reader opens that row.
    */
@@ -28,15 +33,18 @@
   import {
     BUCKETS,
     bucketCounts,
+    budgetIndicator,
     childSegments,
     childrenLine,
     kidRows,
     nextCell,
     nextLine,
     outcomeLine,
+    overTargetLine,
     promisesCell,
     segmentsLabel,
   } from "$lib/watchRollup.js";
+  import InitiativeChanges from "./InitiativeChanges.svelte";
   import InitiativeDetails from "./InitiativeDetails.svelte";
 
   let {
@@ -47,6 +55,14 @@
     hrefFor,
     /** `(row) => href` into Decide for that initiative. */
     decideHref,
+    /** `brief.initiativeBudget`; null from a core that predates it. */
+    budget = null,
+    /** `brief.overTarget`; null within target. */
+    overTarget = null,
+    /** Href of the reader's open ask about the count, or "". */
+    overTargetHref = "",
+    /** `brief.initiativeChanges`. */
+    changes = { items: [], truncated: false },
   } = $props();
 
   // Open by the reader, or closed by the reader from a default-open row.
@@ -88,6 +104,7 @@
   // A refresh can empty the picked bucket; never hide every row for it.
   let filter = $derived(counts[picked] ? picked : "");
   let showDone = $state(false);
+  let indicator = $derived(budgetIndicator(budget, rows));
   let open = $derived(
     rows.filter((row) =>
       filter ? row.bucket === filter : row.bucket !== "done",
@@ -380,9 +397,36 @@
     </div>
     <span class="flex-1"></span>
     <span class="text-micro text-fg-muted"
-      >Sorted by what needs you · children fold into their initiative</span
+      ><span
+        class="font-medium {overTarget ? 'text-warn-text' : 'text-fg'}"
+        title={indicator.title || undefined}
+        aria-label={indicator.label}
+        data-source={budget ? "computed:initiative_budget" : undefined}
+        data-initiative-budget>{indicator.text}</span
+      ><span aria-hidden="true" class="mx-1 text-fg-subtle">·</span>Sorted by
+      what needs you · children fold into their initiative</span
     >
   </div>
+
+  {#if overTarget}
+    <p
+      class="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-md border border-line bg-panel px-3 py-2 text-micro text-fg-muted"
+      data-source="computed:over_target"
+      data-over-target
+    >
+      <span class="font-medium text-warn-text">Over target</span>
+      <span>{overTargetLine(overTarget)}</span>
+      {#if overTargetHref}
+        <a
+          class="text-accent-text hover:underline"
+          href={overTargetHref}
+          data-over-target-ask>Fold or keep? Decide →</a
+        >
+      {/if}
+    </p>
+  {/if}
+
+  <InitiativeChanges {changes} {now} {hrefFor} />
 
   <section
     class="overflow-hidden rounded-md border border-line bg-panel"

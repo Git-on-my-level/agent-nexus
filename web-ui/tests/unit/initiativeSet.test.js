@@ -1,0 +1,202 @@
+import { describe, expect, it } from "vitest";
+
+import briefFixture from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
+import { normalizeBrief } from "../../src/lib/brief.js";
+import {
+  budgetIndicator,
+  changeLine,
+  changeVerb,
+  changesStartOpen,
+  overTargetAsk,
+  overTargetLine,
+} from "../../src/lib/watchRollup.js";
+
+const NOW = Date.parse("2026-10-24T12:00:00Z");
+const membership = (initiative, board = "board:tasks") => ({
+  board_ref: board,
+  initiative,
+});
+const change = (type, before, after, extra = {}) => ({
+  ref: `event:${type}`,
+  ts: "2026-10-24T09:00:00Z",
+  type,
+  actor_id: "codex",
+  payload: {
+    subject_ref: "card:battery",
+    title: "Battery measurement",
+    reason: "Independent outcome",
+    before,
+    after,
+  },
+  ...extra,
+});
+const normalized = (raw) =>
+  normalizeBrief({ initiative_changes: { items: [raw], truncated: false } })
+    .initiativeChanges.items[0];
+
+describe("initiative set normalization", () => {
+  it("reads the shared fixture's budget, over-target facts and changes", () => {
+    const brief = normalizeBrief(briefFixture);
+    expect(brief.initiativeBudget).toEqual({
+      count: 6,
+      target: 5,
+      truncated: false,
+    });
+    expect(brief.overTarget).toEqual({
+      count: 6,
+      target: 5,
+      truncated: false,
+      ask: "Initiatives exceed the target: fold this initiative or keep it?",
+    });
+    expect(brief.initiativeChanges.items).toEqual([
+      {
+        ref: "event:initiative-added",
+        ts: "2026-10-15T09:00:00Z",
+        type: "initiative_promoted",
+        actorId: "codex",
+        subjectRef: "card:battery-measurement",
+        title: "Battery measurement",
+        reason: "Independent outcome",
+        before: { boardRef: "board:tasks", initiative: false },
+        after: { boardRef: "board:initiatives", initiative: true },
+      },
+    ]);
+  });
+
+  it("degrades for a core that predates the fields", () => {
+    const brief = normalizeBrief({});
+    expect(brief.overTarget).toBeNull();
+    expect(brief.initiativeChanges).toEqual({ items: [], truncated: false });
+  });
+
+  it("keeps an unknown change type readable and drops rows with no subject", () => {
+    expect(normalized(change("initiative_split", {}, {})).type).toBe("unknown");
+    expect(
+      normalizeBrief({
+        initiative_changes: {
+          items: [{ ref: "event:x", type: "initiative_promoted", payload: {} }],
+        },
+      }).initiativeChanges.items,
+    ).toEqual([]);
+  });
+});
+
+describe("budgetIndicator", () => {
+  it("counts against the target", () => {
+    expect(budgetIndicator({ count: 6, target: 15, truncated: false })).toEqual(
+      {
+        text: "Initiatives: 6 of 15",
+        label: "6 initiatives against a target of 15",
+        title: "",
+      },
+    );
+  });
+
+  it("marks a lower bound", () => {
+    const out = budgetIndicator({ count: 17, target: 15, truncated: true });
+    expect(out.text).toBe("Initiatives: 17+ of 15");
+    expect(out.label).toBe("At least 17 initiatives against a target of 15");
+    expect(out.title).toMatch(/At least this many/);
+  });
+
+  it("shows just the count with no target or no budget", () => {
+    expect(
+      budgetIndicator({ count: 4, target: 0, truncated: false }).text,
+    ).toBe("Initiatives: 4");
+    expect(budgetIndicator(null, [{}, {}]).text).toBe("Initiatives: 2");
+  });
+});
+
+describe("over target", () => {
+  const over = {
+    count: 6,
+    target: 5,
+    truncated: false,
+    ask: "Initiatives exceed the target: fold this initiative or keep it?",
+  };
+
+  it("states the facts", () => {
+    expect(overTargetLine(over)).toBe("6 initiatives against a target of 5.");
+    expect(overTargetLine({ ...over, truncated: true })).toBe(
+      "At least 6 initiatives against a target of 5.",
+    );
+    expect(overTargetLine(null)).toBe("");
+  });
+
+  it("finds the open ask by its question, not by its subject", () => {
+    const decisions = [
+      {
+        kind: "ask",
+        title: "Merge battery-v2 calibration?",
+        subject: { ref: "card:battery" },
+      },
+      { kind: "ask", title: over.ask, inboxItemId: "ask-7" },
+    ];
+    expect(overTargetAsk(over, decisions)?.inboxItemId).toBe("ask-7");
+    expect(overTargetAsk(over, decisions.slice(0, 1))).toBeNull();
+    expect(overTargetAsk({ ...over, ask: "" }, decisions)).toBeNull();
+    expect(overTargetAsk(null, decisions)).toBeNull();
+  });
+});
+
+describe("change lines", () => {
+  it("names each kind of membership change", () => {
+    const verb = (type, before, after) =>
+      changeVerb(normalized(change(type, before, after)));
+    expect(
+      verb("initiative_promoted", membership(false), membership(true)),
+    ).toBe("Added");
+    expect(
+      verb("initiative_retired", membership(true), membership(false)),
+    ).toBe("Retired");
+    expect(verb("initiative_moved", membership(false), membership(true))).toBe(
+      "Moved in",
+    );
+    expect(verb("initiative_moved", membership(true), membership(false))).toBe(
+      "Moved out",
+    );
+    expect(verb("initiative_moved", membership(true), membership(true))).toBe(
+      "Moved",
+    );
+    expect(verb("initiative_split", {}, {})).toBe("Changed");
+  });
+
+  it("reads actor, reason and time", () => {
+    const row = normalized(
+      change("initiative_promoted", membership(false), membership(true)),
+    );
+    expect(changeLine(row, (id) => `agent ${id}`, NOW)).toEqual({
+      verb: "Added",
+      title: "Battery measurement",
+      actor: "agent codex",
+      reason: "Independent outcome",
+      time: "3h ago",
+    });
+  });
+
+  it("leaves an empty reason empty and names a missing actor", () => {
+    const row = normalized(
+      change("initiative_retired", membership(true), membership(false), {
+        actor_id: "",
+        payload: {
+          subject_ref: "card:battery",
+          title: "",
+          reason: "",
+          before: membership(true),
+          after: membership(false),
+        },
+      }),
+    );
+    const line = changeLine(row, (id) => id, NOW);
+    expect(line.reason).toBe("");
+    expect(line.actor).toBe("unknown");
+    expect(line.title).toBe("card:battery");
+  });
+
+  it("starts open only while the newest change is under a week old", () => {
+    const at = (ts) => ({ items: [{ ts }], truncated: false });
+    expect(changesStartOpen(at("2026-10-20T12:00:00Z"), NOW)).toBe(true);
+    expect(changesStartOpen(at("2026-10-15T09:00:00Z"), NOW)).toBe(false);
+    expect(changesStartOpen({ items: [], truncated: false }, NOW)).toBe(false);
+  });
+});

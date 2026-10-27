@@ -145,4 +145,151 @@ describe("InitiativeRollupList", () => {
         el.dataset.source.replace(/^computed:/, ""),
       );
   });
+
+  describe("initiative set", () => {
+    const changeRow = (n, ts, type = "initiative_promoted") => ({
+      ref: `event:c${n}`,
+      ts,
+      type,
+      actor_id: "codex",
+      payload: {
+        subject_ref: `card:c${n}`,
+        title: `Card ${n}`,
+        reason: n === 1 ? "Independent outcome" : "",
+        before: { board_ref: "board:tasks", initiative: false },
+        after: { board_ref: "board:initiatives", initiative: true },
+      },
+    });
+    const setProps = (brief) => {
+      const b = normalizeBrief(brief);
+      return {
+        ...props,
+        budget: b.initiativeBudget,
+        overTarget: b.overTarget,
+        changes: b.initiativeChanges,
+      };
+    };
+
+    it("counts initiatives against the target in the header, quietly", () => {
+      const { container } = render(
+        InitiativeRollupList,
+        setProps({
+          initiative_budget: { count: 7, target: 15, truncated: false },
+        }),
+      );
+      const chip = container.querySelector("[data-initiative-budget]");
+      expect(chip.textContent.trim()).toBe("Initiatives: 7 of 15");
+      expect(chip.getAttribute("aria-label")).toBe(
+        "7 initiatives against a target of 15",
+      );
+      expect(container.querySelector("[data-over-target]")).toBeNull();
+      expect(container.querySelector("[data-initiative-changes]")).toBeNull();
+    });
+
+    it("states the facts over target and links only an open ask", async () => {
+      const brief = {
+        initiative_budget: { count: 17, target: 15, truncated: true },
+        over_target: {
+          count: 17,
+          target: 15,
+          truncated: true,
+          next_actions: [
+            { command_id: "ask", argv: ["anx", "ask", "Fold or keep?"] },
+          ],
+        },
+      };
+      const { container, rerender } = render(
+        InitiativeRollupList,
+        setProps(brief),
+      );
+      const line = container.querySelector("[data-over-target]");
+      expect(line.textContent.replace(/\s+/g, " ").trim()).toBe(
+        "Over target At least 17 initiatives against a target of 15.",
+      );
+      expect(container.querySelector("[data-over-target-ask]")).toBeNull();
+      expect(line.querySelector("button")).toBeNull();
+      await rerender({ ...setProps(brief), overTargetHref: "/decide/ask-7" });
+      expect(
+        container.querySelector("[data-over-target-ask]").getAttribute("href"),
+      ).toBe("/decide/ask-7");
+    });
+
+    it("lists recent changes open, with links, reasons and a truncation note", async () => {
+      const items = Array.from({ length: 7 }, (_, i) =>
+        changeRow(i + 1, "2026-10-24T09:00:00Z"),
+      );
+      const { container } = render(
+        InitiativeRollupList,
+        setProps({ initiative_changes: { items, truncated: true } }),
+      );
+      const strip = container.querySelector("[data-initiative-changes]");
+      const toggle = strip.querySelector("[data-initiative-changes-toggle]");
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(toggle.textContent).toContain("(7+)");
+      const rowsShown = strip.querySelectorAll("[data-initiative-change]");
+      expect(rowsShown).toHaveLength(5);
+      expect(rowsShown[0].textContent.replace(/\s+/g, " ").trim()).toBe(
+        "Added Card 1 — by codex: Independent outcome,·3h ago",
+      );
+      expect(rowsShown[1].textContent.replace(/\s+/g, " ").trim()).toBe(
+        "Added Card 2 — by codex,·3h ago",
+      );
+      expect(rowsShown[0].querySelector("a").getAttribute("href")).toBe(
+        "/i/card:c1",
+      );
+      expect(
+        strip.querySelector("[data-initiative-changes-truncated]"),
+      ).not.toBeNull();
+      await fireEvent.click(
+        strip.querySelector("[data-initiative-changes-more]"),
+      );
+      expect(strip.querySelectorAll("[data-initiative-change]")).toHaveLength(
+        7,
+      );
+    });
+
+    it("starts closed when the newest change is over a week old", async () => {
+      const { container } = render(
+        InitiativeRollupList,
+        setProps({
+          initiative_changes: {
+            items: [changeRow(1, "2026-10-10T09:00:00Z", "initiative_retired")],
+            truncated: false,
+          },
+        }),
+      );
+      const strip = container.querySelector("[data-initiative-changes]");
+      expect(strip.dataset.open).toBe("false");
+      expect(strip.querySelector("[data-initiative-change]")).toBeNull();
+      await fireEvent.click(
+        strip.querySelector("[data-initiative-changes-toggle]"),
+      );
+      expect(
+        strip.querySelector("[data-initiative-change]").textContent,
+      ).toMatch(/^\s*Retired/);
+    });
+
+    it("tags the new pieces with brief fields (I1)", () => {
+      const { container } = render(
+        InitiativeRollupList,
+        setProps({
+          initiative_budget: { count: 17, target: 15, truncated: false },
+          over_target: {
+            count: 17,
+            target: 15,
+            truncated: false,
+            next_actions: [],
+          },
+          initiative_changes: {
+            items: [changeRow(1, "2026-10-24T09:00:00Z")],
+            truncated: false,
+          },
+        }),
+      );
+      for (const el of container.querySelectorAll("[data-source]"))
+        expect(BRIEF_COMPUTED_FIELDS).toContain(
+          el.dataset.source.replace(/^computed:/, ""),
+        );
+    });
+  });
 });

@@ -31,7 +31,12 @@
     collectionFromLoops,
     collectionFromDailyDigest,
   } from "$lib/collection.js";
-  import { bucketCounts, rollupRows, rollupSummary } from "$lib/watchRollup.js";
+  import {
+    bucketCounts,
+    overTargetAsk,
+    rollupRows,
+    rollupSummary,
+  } from "$lib/watchRollup.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import {
@@ -127,6 +132,7 @@
     loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
   );
   let initiativeAttention = $derived(bucketCounts(rollup).needs_you);
+  let countAsk = $derived(overTargetAsk(brief?.overTarget, brief?.decisions));
   let loopAttention = $derived(attentionCount(loopCollection));
   let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
 
@@ -621,6 +627,12 @@
       {now}
       hrefFor={childInitiativeHref}
       {decideHref}
+      budget={brief.initiativeBudget}
+      overTarget={brief.overTarget}
+      overTargetHref={countAsk
+        ? workspaceHref(`/decide/${encodeURIComponent(countAsk.inboxItemId)}`)
+        : ""}
+      changes={brief.initiativeChanges}
     />
   {/if}
   {#if tab === "initiatives" && brief && digestCollection.counts.digest}

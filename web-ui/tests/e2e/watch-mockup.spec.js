@@ -1,7 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { expectCleanLayout } from "../helpers/layoutAudit.js";
-import { mockupBrief, mockupUngrouped } from "../fixtures/watchMockupSeed.js";
+import {
+  initiativeSetBrief,
+  mockupBrief,
+  mockupUngrouped,
+} from "../fixtures/watchMockupSeed.js";
 
 /**
  * Watch against the approved mockups (`Rollup`, `Board`, `BoardPhone`),
@@ -127,6 +131,60 @@ for (const [name, viewport] of [
       await expect(outcome.locator("[data-rollup-children]")).toHaveText(
         "no children yet",
       );
+    });
+
+    test(`over target, recent initiative changes read without chores (${name})`, async ({
+      page,
+      context,
+    }) => {
+      await setup(page, context, initiativeSetBrief(NOW));
+      await page.goto(WATCH);
+      const list = page.locator("[data-rollup-list]");
+      await expect(list.locator("[data-initiative-budget]")).toHaveText(
+        "Initiatives: 7 of 5",
+      );
+      const over = list.locator("[data-over-target]");
+      await expect(over).toContainText(
+        "Over target 7 initiatives against a target of 5.",
+      );
+      await expect(over.locator("[data-over-target-ask]")).toHaveAttribute(
+        "href",
+        "/o/local/w/local/decide/ask-count",
+      );
+      // A reading surface: nothing in the header changes the set.
+      await expect(over.locator("button")).toHaveCount(0);
+
+      const changes = list.locator("[data-initiative-changes]");
+      const rows = changes.locator("[data-initiative-change]");
+      await expect(rows).toHaveCount(3);
+      await expect(rows.nth(0)).toContainText(
+        "Added Security & trust — by lead: Separate outcome with its own owner",
+      );
+      await expect(rows.nth(1)).toContainText(
+        "Retired Legacy onboarding flow — by lead",
+      );
+      await expect(rows.nth(2)).toContainText("Moved in Unit economics");
+      await expect(rows.nth(0).getByRole("link")).toHaveAttribute(
+        "href",
+        "/o/local/w/local/initiatives/security",
+      );
+      const toggle = changes.getByRole("button", {
+        name: /Recent changes to initiatives/,
+      });
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
+      await toggle.focus();
+      await page.keyboard.press("Enter");
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect(rows).toHaveCount(0);
+      await page.keyboard.press("Enter");
+      await expect(rows).toHaveCount(3);
+
+      await shot(page, `impl-initiative-set-${name}`);
+      await expectCleanLayout(page, `watch initiative set ${name}`);
+      const axe = await new AxeBuilder({ page })
+        .include("[data-rollup-list]")
+        .analyze();
+      expect(axe.violations).toEqual([]);
     });
 
     test(`the list reads like the Rollup mockup (${name})`, async ({
