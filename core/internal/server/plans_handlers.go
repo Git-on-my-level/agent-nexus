@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -52,17 +53,7 @@ func requirePlanCardAccess(w http.ResponseWriter, r *http.Request, opts handlerO
 }
 
 func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, cards []map[string]any) bool {
-	store, ok := opts.primitiveStore.(planStore)
-	if !ok {
-		return true
-	}
-	ctx := r.Context()
-	viewer, human := workRequestViewer(r)
-	ctx = primitives.WithWorkHierarchyViewer(ctx, viewer, human)
-	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
-		ctx = primitives.WithLegacyCardPlans(ctx)
-	}
-	if err := store.EnrichCardPlans(ctx, cards, planVisibility(r, opts), time.Now().UTC()); err != nil {
+	if err := enrichCardsWithContext(r.Context(), r, opts, cards); err != nil {
 		workStoreError(w, r, err)
 		return false
 	}
@@ -72,6 +63,50 @@ func enrichPlans(w http.ResponseWriter, r *http.Request, opts handlerOptions, ca
 		}
 	}
 	return true
+}
+
+// enrichCardsWithContext is the projection core shared by card reads and
+// mutation echoes: plan enrichment plus the work-hierarchy grouping fields
+// (parent_ref, rollup). ctx may carry a mutation transaction; its snapshot is
+// then borrowed so the echo matches what a read of the same commit returns.
+func enrichCardsWithContext(ctx context.Context, r *http.Request, opts handlerOptions, cards []map[string]any) error {
+	store, ok := opts.primitiveStore.(planStore)
+	if !ok {
+		return nil
+	}
+	viewer, human := workRequestViewer(r)
+	ctx = primitives.WithWorkHierarchyViewer(ctx, viewer, human)
+	if r.URL.Query().Get("summary") != "1" && !strings.HasSuffix(r.URL.Path, "/plan") {
+		ctx = primitives.WithLegacyCardPlans(ctx)
+	}
+	return store.EnrichCardPlans(ctx, cards, planVisibility(r.WithContext(ctx), opts), time.Now().UTC())
+}
+
+// mutatedCardView projects a mutated card through the same projection as
+// GET /cards/{id}, so mutation responses report the same grouping fields a
+// fresh read returns. cardID is the canonical card id from the store result.
+func mutatedCardView(ctx context.Context, r *http.Request, opts handlerOptions, cardID string) (map[string]any, error) {
+	card, err := opts.primitiveStore.GetBoardCard(ctx, "", cardID)
+	if err != nil {
+		return nil, err
+	}
+	if err := enrichCardsWithContext(ctx, r, opts, []map[string]any{card}); err != nil {
+		return nil, err
+	}
+	return publicCardView(card), nil
+}
+
+// cardMutationEchoView is mutatedCardView for a mutation that already
+// committed: a projection failure only degrades the echo to the raw store
+// view, never to an error response the client would retry against committed
+// state.
+func cardMutationEchoView(r *http.Request, opts handlerOptions, card map[string]any) map[string]any {
+	view, err := mutatedCardView(r.Context(), r, opts, anyString(card["id"]))
+	if err != nil {
+		log.Printf("anx-core: card mutation echo projection failed card_id=%s error_type=%T", anyString(card["id"]), err)
+		return publicCardView(card)
+	}
+	return view
 }
 
 const summaryCandidateLimit = 50

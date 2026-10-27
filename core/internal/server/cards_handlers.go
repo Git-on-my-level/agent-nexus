@@ -488,7 +488,11 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		if err != nil {
 			return nil, err
 		}
-		return hygiene.attach(map[string]any{"board": result.Board, "card": publicCardView(result.Card), "revision": revision}), nil
+		cardView, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"board": result.Board, "card": cardView, "revision": revision}), nil
 	})
 	if err != nil {
 		switch {
@@ -602,7 +606,11 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 				enqueueCardAssigneeWakeBestEffort(ctx, opts, actorID, beforeCard, result.Card, result.Board, stored)
 			}
 		}
-		return hygiene.attach(map[string]any{"card": publicCardView(result.Card)}), nil
+		cardView, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		if err != nil {
+			return nil, err
+		}
+		return hygiene.attach(map[string]any{"card": cardView}), nil
 	})
 	if err != nil {
 		if writeStoreContentionError(w, r, err) {
@@ -705,7 +713,7 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": publicCardView(result.Card)})
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": cardMutationEchoView(r, opts, result.Card)})
 }
 
 func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {
