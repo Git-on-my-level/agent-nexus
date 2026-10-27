@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -246,4 +247,28 @@ func TestGroupingBatchCreateAtomicAndReplay(t *testing.T) {
 		t.Fatal("failed batch changed parent plan")
 	}
 	workGetJSON(t, h.baseURL+"/work/card:batch-rollback-a", 404)
+}
+
+func TestInitiativeLifecycleWireReplayAndRefusal(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Launch"}`, 201)["work"].(map[string]any)
+	b := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Initiatives","role":"initiatives","initiative_target":0}}`, 201)["board"].(map[string]any)
+	body := `{"actor_id":"grouper","request_key":"promote-once","reason":"New independent outcome"}`
+	first := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
+	again := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
+	if first["event"].(map[string]any)["id"] != again["event"].(map[string]any)["id"] || first["over_target"] == nil || first["work"].(map[string]any)["board_ref"] != b["ref"] {
+		t.Fatalf("first=%v replay=%v", first, again)
+	}
+	for _, verb := range []string{"group", "fold"} {
+		key := "under"
+		if verb == "fold" {
+			key = "into"
+		}
+		errBody := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/"+verb, fmt.Sprintf(`{"actor_id":"grouper",%q:%q}`, key, c["ref"]), 400)
+		if !strings.Contains(fmt.Sprint(errBody), "anx initiative retire") {
+			t.Fatal(errBody)
+		}
+	}
+	workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/retire", `{"actor_id":"grouper","request_key":"retire-once","reason":"Fold scope"}`, 200)
 }

@@ -410,6 +410,14 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 			if boardID == "" {
 				return nil, workInvalid("parent must belong to an active board")
 			}
+			board, err := s.getBoardRow(ctx, boardID)
+			if err != nil {
+				return nil, err
+			}
+			if board.Role == "initiatives" && !board.ArchivedAt.Valid && !board.TrashedAt.Valid {
+				return s.createImplicitInitiativeChild(ctx, actorID, parent.ID, input)
+			}
+
 		} else {
 			resolved, err := s.ensureDefaultBoard(ctx, actorID)
 			if err != nil {

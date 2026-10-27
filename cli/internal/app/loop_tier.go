@@ -503,7 +503,18 @@ func renderOrientText(brief map[string]any, identity string) string {
 		if asBool(budget["truncated"]) {
 			suffix = "+"
 		}
-		fmt.Fprintf(&b, "initiatives %d%s/15\n", intValue(budget["count"]), suffix)
+		fmt.Fprintf(&b, "initiatives %d%s/%d\n", intValue(budget["count"]), suffix, intValue(budget["target"]))
+	}
+	if fact := asMap(brief["over_target"]); fact != nil {
+		fmt.Fprintf(&b, "over_target count=%d target=%d\n", intValue(fact["count"]), intValue(fact["target"]))
+		for _, raw := range asSlice(fact["next_actions"]) {
+			argv := stringList(asMap(raw)["argv"])
+			quoted := []string{}
+			for _, v := range argv {
+				quoted = append(quoted, strconv.Quote(v))
+			}
+			fmt.Fprintf(&b, "next %s\n", strings.Join(quoted, " "))
+		}
 	}
 	for _, raw := range asSlice(brief["loops"]) {
 		item := asMap(raw)

@@ -134,6 +134,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
+- `initiative promote` (command): <card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+- `initiative retire` (command): <card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
 - `pm connect` (command): Register a local PM connection with bounded runner and host labels.
 - `pm context` (command): Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
 - `pm disconnect` (command): Reset workspace PM onboarding after explicit uninstall.
@@ -537,6 +539,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
+- Use anx initiative promote <card> --reason text and initiative retire <card> --reason text [--under card:parent]. Initiative-board cards stay top-level; incoming plan links are dependencies. Retire before group/fold.
 - Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
@@ -4219,6 +4222,92 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
+## `initiative promote`
+
+<card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+
+```text
+Generated Help: initiative promote
+
+- Command ID: `initiative.promote`
+- CLI path: `initiative promote`
+- HTTP: `POST /work/{card_ref}/promote`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Output: Returns initiative membership, work and advisory facts.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Adjacent commands: `initiative retire`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+  - body `to_board` (string)
+  - body `under` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+
+Usage: anx initiative promote <ref> (or --card-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `initiative retire`
+
+<card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
+
+```text
+Generated Help: initiative retire
+
+- Command ID: `initiative.retire`
+- CLI path: `initiative retire`
+- HTTP: `POST /work/{card_ref}/retire`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Output: Returns initiative membership, work and advisory facts.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Adjacent commands: `initiative promote`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+  - body `to_board` (string)
+  - body `under` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
+
+Usage: anx initiative retire <ref> (or --card-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
 ## `pm connect`
 
 Register a local PM connection with bounded runner and host labels.
@@ -5574,7 +5663,7 @@ Generated Help: work group
 - Output: Returns `WorkResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated; ordinary plan links; no automatic choice.
+- Agent notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
 - Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
@@ -7657,6 +7746,7 @@ Inputs:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   Optional:
   - body `patch.document_refs` (list<any>)
+  - body `patch.initiative_target` (integer)
   - body `patch.pinned_refs` (list<any>)
   - body `patch.primary_topic_ref` (string)
   - body `patch.provenance.by_field` (object)
@@ -7718,6 +7808,7 @@ Inputs:
   Optional:
   - body `board.column_schema` (object)
   - body `board.id` (string)
+  - body `board.initiative_target` (integer)
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
@@ -8744,9 +8835,11 @@ Inputs:
   - body `after_card_id` (string)
   - body `before_card_id` (string)
   - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
   - body `request_key` (string)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
+  - body `to_board` (string)
   Enum values: column_key: backlog, blocked, done, in_progress, ready, review; resolution: done
 
 Local Help: cards move

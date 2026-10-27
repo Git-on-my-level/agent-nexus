@@ -2160,6 +2160,30 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},
 	},
 	{
+		CommandID:  "initiative.promote",
+		CLIPath:    "initiative promote",
+		Group:      "initiative",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/promote",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"initiative.retire"},
+	},
+	{
+		CommandID:  "initiative.retire",
+		CLIPath:    "initiative retire",
+		Group:      "initiative",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/retire",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "evidence"},
+		Adjacent:   []string{"initiative.promote"},
+	},
+	{
 		CommandID: "integrations.bind",
 		CLIPath:   "integrations bind",
 		Group:     "integrations",
@@ -4313,6 +4337,14 @@ func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Re
 
 func (c *Client) InboxSummary(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.summary", nil, opts)
+}
+
+func (c *Client) InitiativePromote(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "initiative.promote", pathParams, opts)
+}
+
+func (c *Client) InitiativeRetire(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "initiative.retire", pathParams, opts)
 }
 
 func (c *Client) LeaseAcquire(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

@@ -1051,6 +1051,7 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		},
 		"cards revise": {"card-id": valueFlag, "body-file": valueFlag, "from-file": valueFlag},
 		"cards move": {
+			"to-board": valueFlag, "reason": valueFlag,
 			"card-id":             valueFlag,
 			"column":              valueFlag,
 			"if-board-updated-at": valueFlag,

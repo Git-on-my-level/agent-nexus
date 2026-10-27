@@ -1105,6 +1105,8 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	var req struct {
+		ToBoard          string   `json:"to_board"`
+		Reason           string   `json:"reason"`
 		ActorID          string   `json:"actor_id"`
 		RequestKey       string   `json:"request_key"`
 		IfWorkVersion    *int64   `json:"if_version"`
@@ -1206,6 +1208,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 			return nil, err
 		}
 		result, err := opts.primitiveStore.MoveBoardCard(ctx, actorID, boardID, cardKey, primitives.MoveBoardCardInput{
+			ToBoard: req.ToBoard, Reason: req.Reason,
 			ColumnKey:        strings.TrimSpace(req.ColumnKey),
 			BeforeCardID:     strings.TrimSpace(req.BeforeCardID),
 			AfterCardID:      strings.TrimSpace(req.AfterCardID),

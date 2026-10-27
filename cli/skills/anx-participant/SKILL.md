@@ -5,7 +5,7 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v34.
+Skill contract: anx.participant.v35.
 
 ## Daily loop
 
@@ -21,6 +21,7 @@ Evidence resets the clock; moving promises alone remains visible.
 Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
 Label agentctl runs `anx.card.<initiative>` and cards land under it. `--under` overrides; `--top-level` opts out. Group: `anx work create --under card:P` or `anx work group card:C --under card:P`.
+Declare initiatives with `anx initiative promote <card> --reason "why"`; retire with `anx initiative retire <card> --reason "why" [--to-board board:tasks] [--under card:parent]` before grouping or folding. Initiative-board membership is authoritative: incoming plan links are dependencies and never nest an initiative.
 `likely_home` never blocks. `anx work fold` preserves refs/asks; `work unfold` reverses it.
 
 ## Write for a busy boss

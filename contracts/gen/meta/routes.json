@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 264,
+  "route_count": 266,
   "routes": [
     {
       "method": "GET",
@@ -1288,6 +1288,11 @@
       "access_class": "authenticated_principal_surface"
     },
     {
+      "method": "POST",
+      "path": "/work/{card_ref}/promote",
+      "access_class": "workspace_business_surface"
+    },
+    {
       "method": "GET",
       "path": "/work/{card_ref}/refresh",
       "access_class": "workspace_business_surface"
@@ -1295,6 +1300,11 @@
     {
       "method": "POST",
       "path": "/work/{card_ref}/refresh",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/retire",
       "access_class": "workspace_business_surface"
     },
     {

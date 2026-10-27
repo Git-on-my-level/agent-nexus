@@ -27,6 +27,8 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
+	"initiative promote":         {path: "/work/{id}/promote", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links."},
+	"initiative retire":          {path: "/work/{id}/retire", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding."},
 	"work cadence":               {method: "PATCH", summary: "Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear."},
 	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear."},
 	"work receipt":               {method: "POST", summary: "Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay."},
@@ -87,6 +89,7 @@ type parsedWorkCommand struct {
 	name, id, fromFile             string
 	under, into, after, requestKey string
 	handle                         string
+	reason, toBoard                string
 	topLevel                       bool
 	leaseToken                     string
 	runnerID                       string
@@ -130,6 +133,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
 	var id, fromFile, leaseToken, runnerID, handle, under, into, after, requestKey trackedString
+	var reason, toBoard trackedString
 	var limit trackedInt
 	var topLevel trackedBool
 
@@ -140,6 +144,13 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	if spec.body || spec.optionalBody {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
 	}
+	if out.name == "initiative retire" {
+		fs.Var(&under, "under", "Group atomically under another initiative")
+		fs.Var(&toBoard, "to-board", "Non-initiatives destination board")
+	}
+	if strings.HasPrefix(out.name, "initiative ") {
+		fs.Var(&reason, "reason", "Required audit reason")
+	}
 	if out.name == "work create" || out.name == "work group" {
 		fs.Var(&under, "under", "Parent card ref; adds a plan step atomically")
 		fs.Var(&after, "after", "Preceding plan step id")
@@ -148,7 +159,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		fs.Var(&into, "into", "Parent card ref")
 		fs.Var(&after, "after", "Preceding plan step id")
 	}
-	if out.name == "work create" || out.name == "work group" || out.name == "work fold" || out.name == "work unfold" {
+	if out.name == "work create" || out.name == "work group" || out.name == "work fold" || out.name == "work unfold" || strings.HasPrefix(out.name, "initiative ") {
 		fs.Var(&requestKey, "request-key", "Retain the original key and body until confirmed")
 	}
 	if out.name == "work create" {
@@ -234,6 +245,10 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 			return out, err
 		}
 		out.handle = handle.value
+	}
+	out.reason, out.toBoard = strings.TrimSpace(reason.value), strings.TrimSpace(toBoard.value)
+	if strings.HasPrefix(out.name, "initiative ") && (out.reason == "" || len([]rune(out.reason)) > 2000) {
+		return out, errnorm.Usage("invalid_request", "--reason (1..2000 characters) is required")
 	}
 	out.topLevel = topLevel.value
 	if topLevel.value && under.set {
@@ -345,7 +360,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		body = map[string]any{}
 	}
 	if object, ok := body.(map[string]any); ok {
-		for key, value := range map[string]string{"under": parsed.under, "into": parsed.into, "after": parsed.after, "request_key": parsed.requestKey} {
+		for key, value := range map[string]string{"under": parsed.under, "into": parsed.into, "after": parsed.after, "request_key": parsed.requestKey, "reason": parsed.reason, "to_board": parsed.toBoard} {
 			if value != "" {
 				object[key] = value
 			}
@@ -376,7 +391,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		started = time.Now().UTC()
 	}
 	ctx = runcontext.WithTopLevel(ctx, parsed.topLevel)
-	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work group" || parsed.name == "work fold" || parsed.name == "work unfold") {
+	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work group" || parsed.name == "work fold" || parsed.name == "work unfold" || strings.HasPrefix(parsed.name, "initiative ")) {
 		if err := ensureGroupingRequestKey(object); err != nil {
 			return nil, parsed.name, err
 		}

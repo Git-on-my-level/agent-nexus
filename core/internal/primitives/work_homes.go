@@ -41,6 +41,7 @@ type homeCandidate struct {
 	family                                                           string
 	createdBy                                                        string
 	version                                                          int64
+	declaredRoot                                                     bool
 }
 
 func recentHomeCandidates(ctx context.Context, q briefQueryer, at ...time.Time) ([]homeCandidate, error) {
@@ -63,7 +64,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	// deliberately a physical routing cohort before scoped hydration, never an
 	// all-workspace similarity or denial scan. Routing keys never leave this query.
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,
-	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0)
+	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),`+workDeclaredRootSQL("c")+`
 	 FROM (`+recent+`) recent
 	 CROSS JOIN cards c ON c.id=recent.id CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE b.archived_at IS NULL AND b.trashed_at IS NULL AND NOT `+workHasParentSQL("c")+`
@@ -77,7 +78,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	out := []homeCandidate{}
 	for rows.Next() {
 		var c homeCandidate
-		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata, &c.phase, &c.createdBy, &c.version); err != nil {
+		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata, &c.phase, &c.createdBy, &c.version, &c.declaredRoot); err != nil {
 			return nil, err
 		}
 		out = append(out, prepareHomeCandidate(c))
@@ -248,6 +249,30 @@ func homeCandidatesFor(ctx context.Context, q briefQueryer, card map[string]any,
 
 func decorateCreatedCard(ctx context.Context, q briefQueryer, card, m map[string]any) error {
 	card["parent_ref"] = nil
+
+	var declared bool
+	rows, err := q.QueryContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE id=? AND role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`, workString(card["board_id"]))
+	if err != nil {
+		return err
+	}
+	if rows.Next() {
+		err = rows.Scan(&declared)
+	}
+	closeErr := rows.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+
+	if declared {
+		card["likely_home"] = []LikelyHome{}
+		return nil
+	}
 	if under := workString(m["under"]); under != "" {
 		card["parent_ref"] = under
 		card["likely_home"] = []LikelyHome{}
@@ -300,7 +325,7 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	for _, c := range base {
 		var metadata map[string]any
 		_ = json.Unmarshal([]byte(c.metadata), &metadata)
-		if metadata["top_level"] != true {
+		if !c.declaredRoot && metadata["top_level"] != true {
 			eligible = append(eligible, c)
 		}
 	}
@@ -329,6 +354,10 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	if err != nil {
 		return nil, false, err
 	}
+	var declared bool
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`).Scan(&declared); err != nil {
+		return nil, false, err
+	}
 	out := []map[string]any{}
 	actors := &briefBuild{s: s, ctx: ctx, actors: map[string]bool{}}
 	for _, c := range candidates {
@@ -341,7 +370,11 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 		homes := likelyHomes(inputs[i], all)
 		actions := GroupingNextActions(c.ref, homes, "group")
 		body := map[string]any{"if_version": c.version, "patch": map[string]any{"top_level": true}}
-		actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.patch", "argv": []string{"anx", "work", "patch", c.ref, "--from-file", "-"}, "stdin": body, "mutates": true, "side_effect_class": "remote_coordination_write"})
+		if declared {
+			actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "initiative.promote", "argv": []string{"anx", "initiative", "promote", c.ref, "--reason", "An independent outcome"}, "mutates": true, "side_effect_class": "remote_coordination_write"})
+		} else {
+			actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.patch", "argv": []string{"anx", "work", "patch", c.ref, "--from-file", "-"}, "stdin": body, "mutates": true, "side_effect_class": "remote_coordination_write"})
+		}
 		// OSS cannot inspect another deployment's permissions. This is a human
 		// command template only, never an executable agent action or permission grant.
 		actions = append(actions, map[string]any{"label": "Move to another workspace", "command_template": "anx move card " + c.ref + " --to <workspace-alias>", "requires_human": true, "requires_destination": true, "mutates": true, "side_effect_class": "remote_coordination_write"})

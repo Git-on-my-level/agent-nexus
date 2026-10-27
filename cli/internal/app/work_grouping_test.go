@@ -123,3 +123,44 @@ func TestGroupingAskAutoSubjectRetainsCoreHome(t *testing.T) {
 		t.Fatalf("lost group action: %s", actions)
 	}
 }
+
+func TestInitiativeCLICommandsAndOrientTarget(t *testing.T) {
+	for _, verb := range []string{"promote", "retire"} {
+		args := []string{"initiative", verb, "card:launch", "--reason", "Independent scope", "--request-key", "stable"}
+		if verb == "retire" {
+			args = append(args, "--to-board", "board:tasks", "--under", "card:parent")
+		}
+		parsed, err := parseWorkCommand(args)
+		if err != nil || parsed.reason != "Independent scope" {
+			t.Fatalf("parsed=%v err=%v", parsed, err)
+		}
+		calls := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if r.Method != "POST" || r.URL.Path != "/work/card:launch/"+verb || body["reason"] != "Independent scope" || body["request_key"] != "stable" {
+				t.Errorf("request=%s %s body=%v", r.Method, r.URL, body)
+			}
+			if verb == "retire" && (body["to_board"] != "board:tasks" || body["under"] != "card:parent") {
+				t.Error(body)
+			}
+			fmt.Fprint(w, `{"work":{"ref":"card:launch"},"initiative_budget":{"count":2,"target":1,"truncated":true}}`)
+		}))
+		a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+		_, _, err = a.runWorkCommand(context.Background(), args, config.Resolved{BaseURL: server.URL, ActorID: "writer", AccessToken: "test"})
+		server.Close()
+		if err != nil || calls != 1 {
+			t.Fatalf("calls=%d err=%v", calls, err)
+		}
+	}
+	for _, args := range [][]string{{"initiative", "promote", "card:c"}, {"initiative", "retire", "card:c", "--reason", ""}, {"initiative", "promote", "card:c", "--reason", "why", "--under", "card:p"}} {
+		if _, err := parseWorkCommand(args); err == nil {
+			t.Fatalf("accepted %v", args)
+		}
+	}
+	text := renderOrientText(map[string]any{"initiative_budget": map[string]any{"count": 3, "target": 2}, "over_target": map[string]any{"count": 3, "target": 2, "next_actions": []any{map[string]any{"argv": []string{"anx", "ask", "Fold or keep?", "--subject-ref", "card:launch", "--recommend", "Fold into parent"}}}}}, "")
+	if !strings.Contains(text, "initiatives 3/2") || !strings.Contains(text, "over_target") || !strings.Contains(text, `"Fold or keep?"`) {
+		t.Fatal(text)
+	}
+}

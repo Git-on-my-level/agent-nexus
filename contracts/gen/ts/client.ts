@@ -3818,6 +3818,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "board.initiative_target",
+          "type": "integer"
+        },
+        {
           "name": "board.primary_topic_ref",
           "type": "string"
         },
@@ -3988,6 +3992,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.document_refs",
           "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "patch.initiative_target",
+          "type": "integer"
         },
         {
           "name": "patch.pinned_refs",
@@ -5152,6 +5160,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "integer"
         },
         {
+          "name": "reason",
+          "type": "string"
+        },
+        {
           "name": "request_key",
           "type": "string"
         },
@@ -5165,6 +5177,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "resolution_refs",
           "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "to_board",
+          "type": "string"
         }
       ]
     },
@@ -9748,6 +9764,130 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "InboxSummary",
     "ts_method": "inboxSummary"
+  },
+  {
+    "command_id": "initiative.promote",
+    "cli_path": "initiative promote",
+    "group": "initiative",
+    "method": "POST",
+    "path": "/work/{card_ref}/promote",
+    "operation_id": "initiativePromote",
+    "summary": "Promote an initiative by explicit board membership",
+    "why": "Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns initiative membership, work and advisory facts.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Agents and humans may act. Atomic membership and audit event; retain request_key for replay.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
+          "name": "to_board",
+          "type": "string"
+        },
+        {
+          "name": "under",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "initiative.retire"
+    ],
+    "go_method": "InitiativePromote",
+    "ts_method": "initiativePromote"
+  },
+  {
+    "command_id": "initiative.retire",
+    "cli_path": "initiative retire",
+    "group": "initiative",
+    "method": "POST",
+    "path": "/work/{card_ref}/retire",
+    "operation_id": "initiativeRetire",
+    "summary": "Retire an initiative by explicit board membership",
+    "why": "Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns initiative membership, work and advisory facts.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "work_unavailable"
+    ],
+    "concepts": [
+      "cards",
+      "evidence"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Agents and humans may act. Atomic membership and audit event; retain request_key for replay.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "reason",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
+          "name": "to_board",
+          "type": "string"
+        },
+        {
+          "name": "under",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "initiative.promote"
+    ],
+    "go_method": "InitiativeRetire",
+    "ts_method": "initiativeRetire"
   },
   {
     "command_id": "integrations.bind",
@@ -15243,7 +15383,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+    "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
     "body_schema": {
       "required": [
         {
@@ -15606,7 +15746,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace authenticated; ordinary plan links; no automatic choice.",
+    "agent_notes": "Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire \u003ccard\u003e --reason ...; no automatic choice.",
     "body_schema": {
       "required": [
         {
@@ -17243,6 +17383,14 @@ export class AnxClient {
 
   inboxSummary(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("inbox.summary", {}, options);
+  }
+
+  initiativePromote(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("initiative.promote", pathParams, options);
+  }
+
+  initiativeRetire(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("initiative.retire", pathParams, options);
   }
 
   leaseAcquire(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

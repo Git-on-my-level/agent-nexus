@@ -58,8 +58,15 @@ func TestWatchExplicitInitiativesSurviveDigestRouting(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE work_tracking SET reminder_event_id='sent' WHERE card_id=?`, reminded["id"]); err != nil {
 		t.Fatal(err)
 	}
-	// Explicit selection must still honor hierarchy, loop and lifecycle rules.
-	create("Child", map[string]any{"under": unowned["ref"]})
+	// Children live off the declaration board; selection still honors rollups,
+	// loop and lifecycle rules.
+	tasks, e := s.CreateBoard(ctx, "writer", map[string]any{"title": "Tasks"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.CreateWork(ctx, "writer", workString(tasks["id"]), map[string]any{"title": "Child", "under": unowned["ref"]}); e != nil {
+		t.Fatal(e)
+	}
 	create("Recurring check", map[string]any{"cadence": map[string]any{"every_seconds": 3600}})
 	archived := create("Archived outcome", nil)
 	if _, err = s.ArchiveBoardCard(ctx, "writer", "", workString(archived["id"]), RemoveBoardCardInput{}); err != nil {

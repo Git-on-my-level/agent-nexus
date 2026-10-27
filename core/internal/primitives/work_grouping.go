@@ -21,18 +21,23 @@ const workParentSources = ` FROM brief_plan_refs link INDEXED BY idx_brief_plan_
 	 CROSS JOIN cards parent ON parent.id=link.card_id
 	 CROSS JOIN boards parent_board ON parent_board.id=parent.board_id `
 
+// Membership on an active initiatives board declares a root, independently of plans.
+func workDeclaredRootSQL(child string) string {
+	return `(` + child + `.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))`
+}
+
 func workParentEligible(child string) string {
 	return `parent.id<>` + child + `.id AND parent.archived_at IS NULL AND parent.trashed_at IS NULL AND parent.column_key NOT IN ('done','cancelled') AND parent_board.archived_at IS NULL AND parent_board.trashed_at IS NULL`
 }
 func workParentSQL(child string) string {
-	return `(SELECT parent.id` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle) AND ` + workParentEligible(child) + ` ORDER BY parent.created_at,parent.id LIMIT 1)`
+	return `(SELECT parent.id` + workParentSources + ` WHERE NOT ` + workDeclaredRootSQL(child) + ` AND link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle) AND ` + workParentEligible(child) + ` ORDER BY parent.created_at,parent.id LIMIT 1)`
 }
 
 // The current parent was admitted by the surrounding scoped query. Only an
 // older eligible alternative can displace it; do not hydrate/sort the current
 // parent again for every child. Incoming links remain scoped plan relations.
 func noEarlierWorkParentSQL(child, current string) string {
-	return `NOT EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle)
+	return `(NOT ` + workDeclaredRootSQL(child) + `) AND NOT EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle)
  AND link.card_id<>` + current + `.id AND ` + workParentEligible(child) + `
  AND (parent.created_at<` + current + `.created_at OR (parent.created_at=` + current + `.created_at AND parent.id<` + current + `.id)))`
 }
@@ -43,7 +48,7 @@ func workHasParentSQL(child string) string {
 	probe := func(key string) string {
 		return `EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref='card:'||` + child + `.` + key + ` AND ` + workParentEligible(child) + ` LIMIT 1)`
 	}
-	return `(` + probe("id") + ` OR ` + probe("handle") + `)`
+	return `(CASE WHEN ` + workDeclaredRootSQL(child) + ` THEN 0 ELSE (` + probe("id") + ` OR ` + probe("handle") + `) END)`
 }
 
 type WorkChild struct {
@@ -373,6 +378,9 @@ func (s *Store) loadGroupingCard(ctx context.Context, tx *accessTx, ref string) 
 // groupWorkTx is used by BOTH create paths and work.group, inside the card's
 // own transaction. It never calls a second HTTP mutation or accepts a lost link.
 func (s *Store) groupWorkTx(ctx context.Context, tx *accessTx, actor string, child boardCardRow, under, after, due string) (string, error) {
+	if err := refuseInitiativeGrouping(ctx, tx, child); err != nil {
+		return "", err
+	}
 	parent, err := s.loadGroupingCard(ctx, tx, under)
 	if err != nil {
 		return "", err
@@ -404,7 +412,7 @@ func (s *Store) groupWorkTx(ctx context.Context, tx *accessTx, actor string, chi
 		encoded, _ := json.Marshal(ancestors)
 		rows, e := tx.QueryContext(ctx, `SELECT DISTINCT p.id FROM json_each(?) requested CROSS JOIN cards c ON c.id=requested.value
 		 CROSS JOIN brief_plan_refs r ON r.ref IN ('card:'||c.id,'card:'||c.handle) JOIN cards p ON p.id=r.card_id JOIN card_plans cp ON cp.card_id=p.id
-		 WHERE p.archived_at IS NULL AND p.trashed_at IS NULL AND p.column_key NOT IN ('done','cancelled') LIMIT 201`, string(encoded))
+		 WHERE NOT `+workDeclaredRootSQL("c")+` AND p.archived_at IS NULL AND p.trashed_at IS NULL AND p.column_key NOT IN ('done','cancelled') LIMIT 201`, string(encoded))
 		if e != nil {
 			return "", e
 		}
