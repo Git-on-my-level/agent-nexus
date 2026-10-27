@@ -5504,7 +5504,7 @@ Generated Help: work create
 - Output: Returns `WorkResponse`.
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
