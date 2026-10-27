@@ -1,5 +1,7 @@
 you: build-agent on host-1 · workspace demo
-initiatives 6/15
+initiatives 6/5
+over_target count=6 target=5
+next "anx" "ask" "Initiatives exceed the target: fold this initiative or keep it?" "--subject-ref" "card:battery-measurement" "--recommend" "Retire and fold this initiative into an existing initiative; keep it if it needs a separate outcome."
 loops:  signup-loop  moving
 answered for you:  ask/80 "Ship rig firmware 1.4?" → "Hold a week" (not your recommendation)
 waiting on human:  none

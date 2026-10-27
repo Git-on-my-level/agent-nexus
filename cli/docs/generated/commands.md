@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `282`
+- Commands: `284`
 
 ## `actors.create`
 
@@ -1205,7 +1205,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Reposition a card within a board column using the card's first-class identity.
+- Why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
 - Concepts: `cards`, `boards`, `write`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Output: Returns `{ card }`.
@@ -2174,6 +2174,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
+
+## `initiative.promote`
+
+- CLI path: `initiative promote`
+- HTTP: `POST /work/{card_ref}/promote`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns initiative membership, work and advisory facts.
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+
+## `initiative.retire`
+
+- CLI path: `initiative retire`
+- HTTP: `POST /work/{card_ref}/retire`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Output: Returns initiative membership, work and advisory facts.
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
 
 ## `integrations.bind`
 
@@ -3436,7 +3462,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
 ## `work.fold`
 
@@ -3475,7 +3501,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
-- Agent notes: Workspace authenticated; ordinary plan links; no automatic choice.
+- Agent notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
 
 ## `work.list`
 

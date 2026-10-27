@@ -2451,3 +2451,53 @@ ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server -run '^TestPerformanceW
 go test -C core ./internal/primitives -run '^TestWatchTrends' -count=1
 go test -C core ./internal/server -run '^TestWatchTrends' -count=1
 ```
+
+## Initiative membership and recent changes
+
+Migration 126 adds nullable board configuration, a default-zero card root
+protection bit, a partial event index and keys-only routing views. No historical data backfill runs. Initiative hierarchy
+computes the active role set once per bounded parent/child statement using
+`idx_boards_role`; work in that set grows with designated boards, while
+indexed incoming plan refs and 200-card/200-step limits are preserved. The uncorrelated root set is reused for parent-existence pairs and child
+admission rather than probing a board for every incoming parent link.
+
+`GET /brief` adds one initiative-change query. The partial
+`idx_events_initiative_changes` admits at most 200 recent event identities before
+scoped canonical `events` hydration, with at most 50 output rows and no denied
+refill. Its only full-scan steps are the bounded 200-row ephemeral routing window;
+it never scans unrelated event history. Configuration is selected by indexed
+board role and a deterministic creation-time/ID tie-break. Explicit-board counts
+admit 201 physical card identities via `idx_report_cards_board_active`, then
+hydrate through scoped `cards`, with indexed incoming-parent probes and brief
+loop flags excluding legacy children and loops; unrelated cards are never read. Counts and
+truncation reveal only visible facts. No budget or plan exception is widened.
+
+Plan writes resolve at most the submitted plan's card refs through primary-key
+and handle indexes, then probe `idx_brief_plan_refs_target` for new targets. The
+keys-only `initiative_legacy_parent_positions` guard prevents a hidden existing
+parent from being displaced; target hydration and updates remain scoped. It is
+never serialized or used to count hidden parents. Retained refs do not change
+legacy grouping, and writes atomically set protection before replacing a plan.
+Explicit board entry sets protection; exit clears it. Hierarchy reads test this
+scalar bit before the active-role set. The bounded Trends promise cohort
+uses a board primary-key check for protected roots, preserving its existing
+2,000-role-board fanout gate instead of enumerating that role set. No graph backfill or workspace-wide
+classification runs on upgrade or in a read.
+
+Creation hints add one board primary-key role lookup before offering grouping;
+the Ungrouped tray adds one indexed role-existence lookup for its promotion
+action and excludes declared roots within its existing bounded cohort. These
+checks do not hydrate board collections or refill candidates. The existing
+homes query/row/VM budget remains unchanged.
+
+The new `initiative_changes` and `initiative_target` entries in
+`primitives/testdata/work_grouping_budget.json` enforce queries, rows, 50,000 VM
+steps and finite ephemeral scan bounds. `TestInitiativeReadsBudget` includes
+4,096 unrelated event rows. Existing grouping and Watch workstream scale gates
+continue to use their unchanged budgets. The full HTTP brief retains its existing
+route budget; these component measurements do not claim complete HTTP admission.
+
+```sh
+./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run 'Test(InitiativeReadsBudget|GroupingReadsBoundedWithTenThousandUnrelatedCards|GroupingUngroupedBoundedBehindTenThousandDeniedCards|WatchWorkstreamRollupBudget)$' -count=1 -v -timeout=5m
+```

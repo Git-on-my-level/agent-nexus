@@ -254,6 +254,8 @@ type UpdateBoardCardInput struct {
 }
 
 type MoveBoardCardInput struct {
+	BoardRef string
+	Reason   string
 	// IfWorkVersion binds PM authorization to the canonical work revision.
 	IfWorkVersion    *int64
 	ColumnKey        string
@@ -793,6 +795,7 @@ type boardRow struct {
 	Title            string
 	Summary          string
 	Role             string
+	InitiativeTarget sql.NullInt64
 	OwnersJSON       string
 	ThreadID         string
 	RefsJSON         string
@@ -928,6 +931,10 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	if err != nil {
 		return nil, fmt.Errorf("marshal board column schema: %w", err)
 	}
+	target, err := normalizeInitiativeTarget(board, sql.NullInt64{})
+	if err != nil {
+		return nil, err
+	}
 	role, err := normalizeBoardRole(board, "")
 	if err != nil {
 		return nil, err
@@ -955,14 +962,15 @@ func (s *Store) CreateBoard(ctx context.Context, actorID string, board map[strin
 	_, err = tx.ExecContext(
 		ctx,
 		`INSERT INTO boards(
-			id, handle, title, summary, role, owners_json, thread_id, refs_json,
+			id, handle, title, summary, role, initiative_target, owners_json, thread_id, refs_json,
 			column_schema_json, created_at, created_by, updated_at, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		boardID,
 		boardHandle,
 		title,
 		summary,
 		role,
+		nullableInitiativeTarget(target),
 		string(ownersJSON),
 		threadID,
 		string(refsJSON),
@@ -1303,6 +1311,10 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 		return nil, err
 	}
 
+	nextTarget, err := normalizeInitiativeTarget(patch, currentRow.InitiativeTarget)
+	if err != nil {
+		return nil, err
+	}
 	nextRole, err := normalizeBoardRole(patch, currentRow.Role)
 	if err != nil {
 		return nil, err
@@ -1394,13 +1406,14 @@ func (s *Store) UpdateBoard(ctx context.Context, actorID, boardID string, patch 
 	}
 
 	query := `UPDATE boards
-		SET title = ?, summary = ?, role = ?, owners_json = ?, refs_json = ?,
+		SET title = ?, summary = ?, role = ?, initiative_target = ?, owners_json = ?, refs_json = ?,
 		    column_schema_json = ?, updated_at = ?, updated_by = ?
 		WHERE id = ?`
 	args := []any{
 		nextTitle,
 		nextSummary,
 		nextRole,
+		nullableInitiativeTarget(nextTarget),
 		string(ownersJSON),
 		string(refsJSON),
 		string(columnSchemaJSON),
@@ -2429,6 +2442,10 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 	if strings.TrimSpace(actorID) == "" {
 		return BoardCardMutationResult{}, invalidBoardRequest("actorID is required")
 	}
+	if len([]rune(input.Reason)) > 2000 {
+		return BoardCardMutationResult{}, invalidBoardRequest("reason must be at most 2000 characters")
+	}
+
 	columnKey := strings.TrimSpace(input.ColumnKey)
 	if columnKey == "" {
 		return BoardCardMutationResult{}, invalidBoardRequest("column_key is required")
@@ -2528,6 +2545,28 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 		}
 		return BoardCardMutationResult{}, err
 	}
+	if strings.TrimSpace(input.BoardRef) != "" {
+		resolved, e := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "board", Ref: input.BoardRef})
+		if e != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, e
+		}
+		destination, e := loadBoardRow(ctx, tx, resolved.ID)
+		if e != nil {
+			_ = tx.Rollback()
+			return BoardCardMutationResult{}, e
+		}
+		if destination.ID != cardRow.BoardID {
+			cardRow, _, e = s.moveInitiativeCardTx(ctx, tx, actorID, cardRow, destination, "initiative_moved", strings.TrimSpace(input.Reason))
+			if e != nil {
+				_ = tx.Rollback()
+				return BoardCardMutationResult{}, e
+			}
+		}
+		boardID = destination.ID
+		boardRow = destination
+	}
+
 	beforeCardID, afterCardID, err := resolveBoardPlacementAnchors(ctx, tx, boardID, input.BeforeCardID, input.AfterCardID)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
@@ -3729,7 +3768,7 @@ func parseBoardCardRowDueAt(card boardCardRow) (time.Time, bool) {
 }
 
 func buildListBoardsQuery(filter BoardListFilter) (string, []any) {
-	query := `SELECT id, handle, title, summary, role, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+	query := `SELECT id, handle, title, summary, role, initiative_target, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		FROM boards
 		WHERE 1=1`
 	args := make([]any, 0, 8)
@@ -4162,7 +4201,7 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 	row := boardRow{}
 	err := rower.QueryRowContext(
 		ctx,
-		`SELECT id, handle, title, summary, role, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
+		`SELECT id, handle, title, summary, role, initiative_target, owners_json, thread_id, refs_json, column_schema_json, created_at, created_by, updated_at, updated_by, archived_at, archived_by, trashed_at, trashed_by, trash_reason
 		   FROM boards
 		  WHERE id = ?`,
 		strings.TrimSpace(boardID),
@@ -4172,6 +4211,7 @@ func loadBoardRow(ctx context.Context, rower queryRower, boardID string) (boardR
 		&row.Title,
 		&row.Summary,
 		&row.Role,
+		&row.InitiativeTarget,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -4203,6 +4243,7 @@ func scanBoardRow(scanner interface{ Scan(dest ...any) error }) (boardRow, error
 		&row.Title,
 		&row.Summary,
 		&row.Role,
+		&row.InitiativeTarget,
 		&row.OwnersJSON,
 		&row.ThreadID,
 		&row.RefsJSON,
@@ -4911,21 +4952,22 @@ func (r boardRow) boardToMapWithRefData(typedRefs, cardRefs []string) (map[strin
 	}
 	handle := firstNonEmpty(strings.TrimSpace(r.Handle.String), r.ID)
 	m := map[string]any{
-		"id":            r.ID,
-		"ref":           "board:" + handle,
-		"handle":        handle,
-		"title":         r.Title,
-		"summary":       strings.TrimSpace(r.Summary),
-		"role":          r.Role,
-		"state":         canonicalLifecycleState(r.ArchivedAt, r.TrashedAt),
-		"thread_id":     r.ThreadID,
-		"refs":          typedRefs,
-		"card_refs":     cardRefs,
-		"column_schema": columnSchema,
-		"created_at":    r.CreatedAt,
-		"created_by":    r.CreatedBy,
-		"updated_at":    r.UpdatedAt,
-		"updated_by":    r.UpdatedBy,
+		"id":                r.ID,
+		"ref":               "board:" + handle,
+		"handle":            handle,
+		"title":             r.Title,
+		"summary":           strings.TrimSpace(r.Summary),
+		"role":              r.Role,
+		"initiative_target": nullableInitiativeTarget(r.InitiativeTarget),
+		"state":             canonicalLifecycleState(r.ArchivedAt, r.TrashedAt),
+		"thread_id":         r.ThreadID,
+		"refs":              typedRefs,
+		"card_refs":         cardRefs,
+		"column_schema":     columnSchema,
+		"created_at":        r.CreatedAt,
+		"created_by":        r.CreatedBy,
+		"updated_at":        r.UpdatedAt,
+		"updated_by":        r.UpdatedBy,
 	}
 	owners, err := decodeStoredJSONList(r.OwnersJSON, "board.owners")
 	if err != nil {
@@ -5623,7 +5665,7 @@ func (s *Store) GetBoardSummariesVisible(ctx context.Context, ids []string, visi
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(encoded))
+	rows, err := s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,initiative_target,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(encoded))
 	if err != nil {
 		return nil, err
 	}

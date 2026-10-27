@@ -560,7 +560,17 @@ type notificationTestAgent struct {
 	Host        notificationHostKey
 }
 
+// notificationHosts shares one enrolled host across the agents a test seeds
+// through one auth store. It must key on the store — never on the httptest
+// server URL: the kernel re-hands a closed test server's port to a later
+// env's server, and a URL key would then pair that env's fresh database with
+// a stale host, failing IssueHostAgentToken with key_mismatch.
 var notificationHosts sync.Map
+
+type notificationHostCacheKey struct {
+	store *auth.Store
+	slug  string
+}
 
 type notificationHostKey struct {
 	ID      string
@@ -575,7 +585,7 @@ func seedNotificationTestAgent(t *testing.T, env authIntegrationEnv, username st
 		t.Fatalf("test handle must be name.host: %s", username)
 	}
 	name, slug := parts[0], parts[1]
-	lookup := env.server.URL + "/" + slug
+	lookup := notificationHostCacheKey{store: env.authStore, slug: slug}
 	value, ok := notificationHosts.Load(lookup)
 	var host notificationHostKey
 	if ok {

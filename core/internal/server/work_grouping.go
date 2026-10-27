@@ -10,6 +10,7 @@ import (
 )
 
 type workGroupingStore interface {
+	ChangeInitiative(context.Context, string, string, string, string, string, string) (map[string]any, error)
 	GroupWork(context.Context, string, string, string, string) (map[string]any, error)
 	FoldWork(context.Context, string, string, string, string) (map[string]any, error)
 	UnfoldWork(context.Context, string, string) (map[string]any, error)
@@ -42,7 +43,7 @@ func cardCreationResponse(board, card map[string]any) map[string]any {
 }
 func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOptions, path string) bool {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if path != "/ungrouped" && (len(parts) != 2 || (parts[1] != "group" && parts[1] != "fold" && parts[1] != "unfold")) {
+	if path != "/ungrouped" && (len(parts) != 2 || (parts[1] != "group" && parts[1] != "fold" && parts[1] != "unfold" && parts[1] != "promote" && parts[1] != "retire")) {
 		return false
 	}
 	store, ok := opts.primitiveStore.(workGroupingStore)
@@ -88,7 +89,7 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return true
 	}
-	for _, key := range []string{"under", "into", "after", "request_key"} {
+	for _, key := range []string{"under", "into", "after", "request_key", "reason", "to_board"} {
 		if value, exists := raw[key]; exists {
 			if _, ok := value.(string); !ok {
 				writeError(w, 400, "invalid_request", key+" must be a string")
@@ -105,6 +106,8 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		var item map[string]any
 		var err error
 		switch verb {
+		case "promote", "retire":
+			return store.ChangeInitiative(ctx, actor, id, verb, anyString(raw["reason"]), anyString(raw["to_board"]), anyString(raw["under"]))
 		case "group":
 			item, err = store.GroupWork(ctx, actor, id, anyString(raw["under"]), anyString(raw["after"]))
 		case "fold":

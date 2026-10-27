@@ -127,6 +127,9 @@ func (s *Store) FoldWork(ctx context.Context, actor, id, into, after string) (ma
 		if err = ensureBoardCardMutable(child); err != nil {
 			return err
 		}
+		if err := refuseInitiativeGrouping(ctx, tx, child); err != nil {
+			return err
+		}
 		parent, err := s.loadGroupingCard(ctx, tx, into)
 		if err != nil {
 			return err

@@ -500,3 +500,94 @@ export function needsYouItems(lane, index) {
       })),
   ];
 }
+
+/**
+ * "Initiatives: 6 of 15", "6+ of 15" when the count is a lower bound, or
+ * "Initiatives: 6" with no target. A target of 0 is real and reads "of 0".
+ * Without a budget from core, the rows on screen are the count.
+ */
+export function budgetIndicator(budget, rows = []) {
+  const count = budget ? budget.count : rows.length;
+  const plus = budget?.truncated ? "+" : "";
+  const target = budget?.target;
+  const hasTarget = target != null;
+  return {
+    text: `Initiatives: ${count}${plus}${hasTarget ? ` of ${target}` : ""}`,
+    label: hasTarget
+      ? `${plus ? "At least " : ""}${count} initiatives against a target of ${target}`
+      : `${plus ? "At least " : ""}${count} initiatives`,
+    title: plus
+      ? "At least this many. Some initiatives may be outside your view."
+      : "",
+  };
+}
+
+/** "6 initiatives against a target of 5." */
+export function overTargetLine(over) {
+  if (!over) return "";
+  return `${over.truncated ? "At least " : ""}${over.count} initiatives against a target of ${over.target}.`;
+}
+
+/**
+ * The reader's open ask about the initiative count: the question core
+ * recommends, once an agent has asked it. Every brief decision is already
+ * open, so among several matches — the same fixed question re-asked — the
+ * newest one wins. Core's recommended argv must name the initiative, and
+ * only an ask about that card links: a title alone, or a same-titled ask
+ * about another subject, is not this link.
+ */
+export function overTargetAsk(over, decisions = []) {
+  const question = over?.ask?.trim().toLowerCase();
+  const subjectRef = over?.subjectRef?.trim();
+  if (!question || !subjectRef) return null;
+  const matches = decisions.filter(
+    (d) =>
+      d.kind === "ask" &&
+      d.title.trim().toLowerCase() === question &&
+      d.subject?.ref === subjectRef,
+  );
+  if (matches.length === 0) return null;
+  const askedAt = (d) => Date.parse(d.createdAt ?? "");
+  return matches.reduce((newest, d) =>
+    (askedAt(d) || 0) > (askedAt(newest) || 0) ? d : newest,
+  );
+}
+
+/** Verb for one membership change, from its type and before/after. */
+export function changeVerb(change) {
+  if (change.type === "initiative_promoted") return "Added";
+  if (change.type === "initiative_retired") return "Retired";
+  if (change.type === "initiative_moved") {
+    if (change.after.initiative && !change.before.initiative) return "Moved in";
+    if (change.before.initiative && !change.after.initiative)
+      return "Moved out";
+    return "Moved";
+  }
+  return "Changed";
+}
+
+/**
+ * "Added <title> — by <actor>: <reason> · <time>" as parts, so the title can
+ * be a link. `reason` is empty when none was supplied.
+ */
+export function changeLine(change, actorLabel = (id) => id, now = Date.now()) {
+  return {
+    verb: changeVerb(change),
+    title: change.title,
+    actor: (change.actorId && actorLabel(change.actorId)) || "unknown",
+    reason: change.reason,
+    time: formatAgo(change.ts, now),
+  };
+}
+
+export const CHANGES_FRESH_DAYS = 7;
+export const CHANGES_PREVIEW = 5;
+
+/** Open by default only while the newest change is under a week old. */
+export function changesStartOpen(changes, now = Date.now()) {
+  const newest = Math.max(
+    ...(changes?.items ?? []).map((c) => Date.parse(c.ts) || 0),
+    0,
+  );
+  return newest > 0 && now - newest < CHANGES_FRESH_DAYS * 86_400_000;
+}

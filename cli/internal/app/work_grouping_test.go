@@ -123,3 +123,80 @@ func TestGroupingAskAutoSubjectRetainsCoreHome(t *testing.T) {
 		t.Fatalf("lost group action: %s", actions)
 	}
 }
+
+func TestInitiativeCLICommandsAndOrientTarget(t *testing.T) {
+	for _, verb := range []string{"promote", "retire"} {
+		args := []string{"initiative", verb, "card:launch", "--reason", "Independent scope", "--request-key", "stable"}
+		if verb == "retire" {
+			args = append(args, "--to-board", "board:tasks", "--under", "card:parent")
+		}
+		parsed, err := parseWorkCommand(args)
+		if err != nil || parsed.reason != "Independent scope" {
+			t.Fatalf("parsed=%v err=%v", parsed, err)
+		}
+		calls := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if r.Method != "POST" || r.URL.Path != "/work/card:launch/"+verb || body["reason"] != "Independent scope" || body["request_key"] != "stable" {
+				t.Errorf("request=%s %s body=%v", r.Method, r.URL, body)
+			}
+			if verb == "retire" && (body["to_board"] != "board:tasks" || body["under"] != "card:parent") {
+				t.Error(body)
+			}
+			fmt.Fprint(w, `{"work":{"ref":"card:launch"},"initiative_budget":{"count":2,"target":1,"truncated":true}}`)
+		}))
+		a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+		_, _, err = a.runWorkCommand(context.Background(), args, config.Resolved{BaseURL: server.URL, ActorID: "writer", AccessToken: "test"})
+		server.Close()
+		if err != nil || calls != 1 {
+			t.Fatalf("calls=%d err=%v", calls, err)
+		}
+	}
+	for _, args := range [][]string{{"initiative", "promote", "card:c"}, {"initiative", "retire", "card:c", "--reason", ""}, {"initiative", "promote", "card:c", "--reason", "why", "--under", "card:p"}} {
+		if _, err := parseWorkCommand(args); err == nil {
+			t.Fatalf("accepted %v", args)
+		}
+	}
+	text := renderOrientText(map[string]any{"initiative_budget": map[string]any{"count": 3, "target": 2}, "over_target": map[string]any{"count": 3, "target": 2, "next_actions": []any{map[string]any{"argv": []string{"anx", "ask", "Fold or keep?", "--subject-ref", "card:launch", "--recommend", "Fold into parent"}}}}}, "")
+	if !strings.Contains(text, "initiatives 3/2") || !strings.Contains(text, "over_target") || !strings.Contains(text, `"Fold or keep?"`) {
+		t.Fatal(text)
+	}
+}
+
+func TestCardsMoveBoardFlagAndSourceConcurrency(t *testing.T) {
+	calls := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		switch r.Method + " " + r.URL.Path {
+		case "GET /cards/card:launch":
+			fmt.Fprint(w, `{"card":{"id":"launch","board_ref":"board:source","version":7}}`)
+		case "GET /boards/source":
+			fmt.Fprint(w, `{"board":{"id":"source","updated_at":"2026-10-27T00:00:00Z"}}`)
+		case "POST /cards/card:launch/move":
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if body["board_ref"] != "board:destination" || body["if_board_updated_at"] != "2026-10-27T00:00:00Z" || body["reason"] != "Curate outcomes" {
+				t.Error(body)
+			}
+			fmt.Fprint(w, `{"board":{"id":"destination"},"card":{"ref":"card:launch","board_ref":"board:destination"}}`)
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+	cfg := config.Resolved{BaseURL: server.URL, ActorID: "writer", AccessToken: "fixture"}
+	id, body, _, _, err := a.parseCardMoveInput(context.Background(), []string{"card:launch", "--board", "board:destination", "--column", "ready", "--reason", "Curate outcomes"}, cfg, "cards move")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.invokeTypedJSON(context.Background(), cfg, "cards move", "cards.move", map[string]string{"card_id": id}, nil, body); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 {
+		t.Fatal(calls)
+	}
+}

@@ -31,7 +31,12 @@
     collectionFromLoops,
     collectionFromDailyDigest,
   } from "$lib/collection.js";
-  import { bucketCounts, rollupRows, rollupSummary } from "$lib/watchRollup.js";
+  import {
+    bucketCounts,
+    overTargetAsk,
+    rollupRows,
+    rollupSummary,
+  } from "$lib/watchRollup.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import {
@@ -55,6 +60,7 @@
   import DashboardPicker from "$lib/components/overview/DashboardPicker.svelte";
   import VisualReport from "$lib/components/reports/VisualReport.svelte";
   import SwimlaneBoard from "$lib/components/work/SwimlaneBoard.svelte";
+  import InitiativeChanges from "$lib/components/watch/InitiativeChanges.svelte";
   import InitiativeDetails from "$lib/components/watch/InitiativeDetails.svelte";
   import InitiativeRollupList from "$lib/components/watch/InitiativeRollupList.svelte";
   import LoopCard from "$lib/components/loops/LoopCard.svelte";
@@ -127,6 +133,7 @@
     loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
   );
   let initiativeAttention = $derived(bucketCounts(rollup).needs_you);
+  let countAsk = $derived(overTargetAsk(brief?.overTarget, brief?.decisions));
   let loopAttention = $derived(attentionCount(loopCollection));
   let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
 
@@ -601,26 +608,42 @@
         actions={loopActions}
       />
     {/if}
-  {:else if !rollup.length && !digestCollection.counts.digest}
-    <div
-      class="rounded-md border border-dashed border-line px-4 py-8 text-center"
-      data-watch-empty
-    >
-      <p class="text-meta text-fg">No initiatives yet.</p>
-      <p class="mt-1 text-micro text-fg-muted">
-        Initiatives appear here once an agent or a person files one.
-        <a
-          class="text-accent-text hover:underline"
-          href={workspaceHref("/initiatives/new")}>Create one</a
-        >
-      </p>
-    </div>
-  {:else if rollup.length}
+  {:else if !rollup.length}
+    {#if !digestCollection.counts.digest}
+      <div
+        class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+        data-watch-empty
+      >
+        <p class="text-meta text-fg">No initiatives yet.</p>
+        <p class="mt-1 text-micro text-fg-muted">
+          Initiatives appear here once an agent or a person files one.
+          <a
+            class="text-accent-text hover:underline"
+            href={workspaceHref("/initiatives/new")}>Create one</a
+          >
+        </p>
+      </div>
+    {/if}
+    <!-- The set can be empty because its last initiative was just retired,
+         or trimmed to digest-only work; the recent changes still read in
+         every empty-set case, exactly as they do beside the list. -->
+    <InitiativeChanges
+      changes={brief.initiativeChanges}
+      {now}
+      hrefFor={childInitiativeHref}
+    />
+  {:else}
     <InitiativeRollupList
       rows={rollup}
       {now}
       hrefFor={childInitiativeHref}
       {decideHref}
+      budget={brief.initiativeBudget}
+      overTarget={brief.overTarget}
+      overTargetHref={countAsk
+        ? workspaceHref(`/decide/${encodeURIComponent(countAsk.inboxItemId)}`)
+        : ""}
+      changes={brief.initiativeChanges}
     />
   {/if}
   {#if tab === "initiatives" && brief && digestCollection.counts.digest}

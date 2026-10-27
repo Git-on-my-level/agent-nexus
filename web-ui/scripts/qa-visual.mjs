@@ -34,6 +34,7 @@ import {
 } from "../tests/fixtures/qa-seed.js";
 import briefFixture from "../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import {
+  initiativeSetBrief,
   mockupBrief,
   mockupUngrouped,
 } from "../tests/fixtures/watchMockupSeed.js";
@@ -118,6 +119,18 @@ export const QA_SCENES = [
     waitFor: async (page) => {
       await page.waitForSelector(
         "[data-collection-row='card:capture'] [data-rollup-kid='card:speaker-id']",
+      );
+    },
+  },
+  {
+    name: "workspace-watch-initiative-set",
+    path: "/o/local/w/local/watch",
+    workspaceMode: "workspace-default",
+    briefState: "initiative-set",
+    waitFor: async (page) => {
+      await page.waitForSelector("[data-over-target-ask]");
+      await page.waitForSelector(
+        "[data-initiative-change='initiative_retired']",
       );
     },
   },
@@ -1464,6 +1477,8 @@ function qaBrief(scenario) {
     generated_at: QA_FIXED_NOW_ISO,
   };
   if (scenario.briefState === "mockup") return mockupBrief(QA_FIXED_NOW_ISO);
+  if (scenario.briefState === "initiative-set")
+    return initiativeSetBrief(QA_FIXED_NOW_ISO);
   if (scenario.briefState === "lanes")
     return {
       ...body,

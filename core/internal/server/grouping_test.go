@@ -3,6 +3,9 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -246,4 +249,112 @@ func TestGroupingBatchCreateAtomicAndReplay(t *testing.T) {
 		t.Fatal("failed batch changed parent plan")
 	}
 	workGetJSON(t, h.baseURL+"/work/card:batch-rollback-a", 404)
+}
+
+func TestInitiativeLifecycleWireReplayAndRefusal(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Launch"}`, 201)["work"].(map[string]any)
+	b := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Initiatives","role":"initiatives","initiative_target":0}}`, 201)["board"].(map[string]any)
+	body := `{"actor_id":"grouper","request_key":"promote-once","reason":"New independent outcome"}`
+	first := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
+	again := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
+	if first["event"].(map[string]any)["id"] != again["event"].(map[string]any)["id"] || first["over_target"] == nil || first["work"].(map[string]any)["board_ref"] != b["ref"] {
+		t.Fatalf("first=%v replay=%v", first, again)
+	}
+	for _, verb := range []string{"group", "fold"} {
+		key := "under"
+		if verb == "fold" {
+			key = "into"
+		}
+		errBody := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/"+verb, fmt.Sprintf(`{"actor_id":"grouper",%q:%q}`, key, c["ref"]), 400)
+		if !strings.Contains(fmt.Sprint(errBody), "anx initiative retire") {
+			t.Fatal(errBody)
+		}
+	}
+	workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/retire", `{"actor_id":"grouper","request_key":"retire-once","reason":"Fold scope"}`, 200)
+}
+
+func TestCardsMoveBoardRefIsAtomicAndReplaySafe(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Curate"}`, 201)["work"].(map[string]any)
+	anchor := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"grouper","title":"Source anchor","board_ref":%q}`, c["board_ref"]), 201)["work"].(map[string]any)
+	beforeCard := workGetJSON(t, h.baseURL+"/cards/"+asString(c["ref"]), 200)["card"].(map[string]any)
+	source := workGetJSON(t, h.baseURL+"/boards/"+asString(c["board_ref"]), 200)["board"].(map[string]any)
+	dest := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Destination"}}`, 201)["board"].(map[string]any)
+	url := h.baseURL + "/cards/" + asString(c["ref"]) + "/move"
+	body := map[string]any{"actor_id": "grouper", "board_ref": dest["ref"], "column_key": "ready", "if_board_updated_at": source["updated_at"], "if_version": c["version"], "reason": "Board curation", "request_key": "cross-board"}
+	send := func(status int) map[string]any {
+		raw, _ := json.Marshal(body)
+		return workPostJSON(t, url, string(raw), status)
+	}
+	body["if_board_updated_at"] = "2000-01-01T00:00:00Z"
+	send(409)
+	body["if_board_updated_at"] = source["updated_at"]
+	body["if_version"] = 999
+	send(409)
+	body["if_version"] = c["version"]
+	body["before_card_id"] = anchor["ref"]
+	send(400) // source-board anchor is not in destination
+	delete(body, "before_card_id")
+	moved := send(200)
+	replay := send(200)
+	for _, result := range []map[string]any{moved, replay} {
+		card := result["card"].(map[string]any)
+		if card["board_ref"] != dest["ref"] || card["ref"] != c["ref"] || card["thread_id"] != beforeCard["thread_id"] {
+			t.Fatal(result)
+		}
+	}
+	var count int
+	if err := h.workspace.DB().QueryRow(`SELECT count(*) FROM events WHERE type='card_moved' AND json_extract(payload_json,'$.payload.before.board_ref')=? AND json_extract(payload_json,'$.payload.after.board_ref')=?`, "board:"+asString(source["id"]), "board:"+asString(dest["id"])).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("audit count=%d err=%v", count, err)
+	}
+	// Explicitly specifying the current board remains a normal column move.
+	body["request_key"] = "same-board"
+	body["if_board_updated_at"] = moved["board"].(map[string]any)["updated_at"]
+	delete(body, "if_version")
+	body["column_key"] = "review"
+	send(200)
+}
+
+func TestBoardInitiativeTargetGetAndPatch(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	b := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Outcomes","role":"initiatives","initiative_target":5}}`, 201)["board"].(map[string]any)
+	url := h.baseURL + "/boards/" + asString(b["ref"])
+	patch := func(value any, status int) {
+		t.Helper()
+		current := workGetJSON(t, url, 200)["board"].(map[string]any)
+		raw, _ := json.Marshal(map[string]any{"actor_id": "grouper", "if_updated_at": current["updated_at"], "patch": map[string]any{"initiative_target": value}})
+		req, _ := http.NewRequest("PATCH", url, strings.NewReader(string(raw)))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != status {
+			t.Fatalf("patch=%d %s", res.StatusCode, data)
+		}
+	}
+	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != float64(5) {
+		t.Fatal(got)
+	}
+	patch(3, 200)
+	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != float64(3) {
+		t.Fatal(got)
+	}
+	patch(1000000, 200)
+	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != float64(1000000) {
+		t.Fatal(got)
+	}
+	patch("4", 400)
+	patch(-1, 400)
+	patch(1.5, 400)
+	patch(nil, 200)
+	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != nil {
+		t.Fatal(got)
+	}
 }

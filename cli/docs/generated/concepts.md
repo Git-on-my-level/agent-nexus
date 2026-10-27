@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `82`
+- Commands: `84`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -166,6 +166,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
+  - `initiative.promote`
+  - `initiative.retire`
   - `lease.acquire`
   - `lease.release`
   - `lease.renew`
@@ -308,8 +310,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `42`
+- Commands: `44`
 - Command IDs:
+  - `initiative.promote`
+  - `initiative.retire`
   - `pm.actions.acknowledge`
   - `pm.actions.get`
   - `pm.actions.list`

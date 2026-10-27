@@ -663,8 +663,8 @@ var localHelperTopics = []localHelperTopic{
 	},
 	{
 		Path:        "cards move",
-		Summary:     "Move a card to another board column using Card workflow language.",
-		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
+		Summary:     "Move a card to a column or another board.",
+		JSONShape:   "`{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.",
 		Composition: "Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.",
 		Examples: []string{
 			"anx cards move card:implement-login --column review",
@@ -673,6 +673,8 @@ var localHelperTopics = []localHelperTopic{
 		Flags: []localHelperFlag{
 			{Name: "<ref>", Description: "Card ref, handle, or id to move."},
 			{Name: "--column <key>", Description: "Target board column."},
+			{Name: "--board <ref>", Description: "Destination board; atomically moves primary membership."},
+			{Name: "--reason <text>", Description: "Audit reason for a board membership change."},
 			{Name: "--if-board-updated-at <timestamp>", Description: "Board optimistic concurrency token; discovered when omitted."},
 			{Name: "--from-file <path>", Description: "Advanced JSON move request body from file."},
 			{Name: "--dry-run", Description: "Validate and render the request without sending it."},
@@ -723,7 +725,7 @@ var localHelperTopics = []localHelperTopic{
 	{
 		Path:        "cards reopen",
 		Summary:     "Move a resolved card back into active workflow.",
-		JSONShape:   "`{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.",
+		JSONShape:   "`{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.",
 		Composition: "Builds a focused `cards.move` request. The default reopened column is `ready`.",
 		Examples: []string{
 			"anx cards reopen card:implement-login",

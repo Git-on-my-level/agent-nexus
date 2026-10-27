@@ -37,7 +37,7 @@ func commandSideEffectClass(command string) string {
 	if command == "pm card" || command == "pm context" || command == "pm status" || command == "pm presence" {
 		return "read_only"
 	}
-	if command == "work group" || command == "work fold" || command == "work unfold" {
+	if command == "work group" || command == "work fold" || command == "work unfold" || strings.HasPrefix(command, "initiative ") {
 		return "remote_coordination_write"
 	}
 	if command == "work ungrouped" {
@@ -244,6 +244,15 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		return []output.NextAction{}
 	}
 	var actions []output.NextAction
+	if fact := asMap(root["over_target"]); fact != nil {
+		for _, raw := range asSlice(fact["next_actions"]) {
+			argv := stringList(asMap(raw)["argv"])
+			if len(argv) > 0 {
+				actions = append(actions, action("Decide whether to fold or keep", argv...))
+			}
+		}
+	}
+
 	if command == "work create" || command == "cards create" {
 		item := asMap(root["work"])
 		if item == nil {
@@ -537,6 +546,16 @@ func deriveErrorActions(command string, err *errnorm.Error) (actions []output.Ne
 	if err == nil {
 		return []output.NextAction{}
 	}
+	if (command == "work group" || command == "work fold") && err.Code == "invalid_request" {
+		details, _ := err.Details.(map[string]any)
+		parsed := asMap(details["parsed"])
+		apiError := asMap(parsed["error"])
+		apiDetails := asMap(apiError["details"])
+		if ref := anyString(apiDetails["initiative_ref"]); strings.HasPrefix(ref, "card:") {
+			return []output.NextAction{action("Retire before grouping", "anx", "initiative", "retire", ref, "--reason", "Consolidate initiative scope")}
+		}
+	}
+
 	defer func() {
 		if details, ok := err.Details.(map[string]any); ok && details["workspace_source"] != nil {
 			argv := []string{"anx"}

@@ -209,6 +209,8 @@ export declare class AnxClient {
     inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxSummary(options?: RequestOptions): Promise<InvokeResult>;
+    initiativePromote(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    initiativeRetire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseAcquire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseRenew(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

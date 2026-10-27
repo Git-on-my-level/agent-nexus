@@ -118,7 +118,7 @@ func (s *Store) TopicWorkspaceResources(ctx context.Context, topicID, primaryThr
 	if err != nil {
 		return out, err
 	}
-	rows, err = s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(boardJSON))
+	rows, err = s.db.QueryContext(ctx, `SELECT id,handle,title,summary,role,initiative_target,owners_json,thread_id,refs_json,column_schema_json,created_at,created_by,updated_at,updated_by,archived_at,archived_by,trashed_at,trashed_by,trash_reason FROM boards WHERE id IN (SELECT value FROM json_each(?))`, string(boardJSON))
 	if err != nil {
 		return out, err
 	}

@@ -95,6 +95,9 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 		if err != nil {
 			return err
 		}
+		if err = protectNewInitiativeLinks(ctx, tx, cardID, p); err != nil {
+			return err
+		}
 		data, _ := json.Marshal(p)
 		if _, err = tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, cardID, string(data), now); err != nil {
 			return err
@@ -410,6 +413,14 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 			if boardID == "" {
 				return nil, workInvalid("parent must belong to an active board")
 			}
+			board, err := s.getBoardRow(ctx, boardID)
+			if err != nil {
+				return nil, err
+			}
+			if board.Role == "initiatives" && !board.ArchivedAt.Valid && !board.TrashedAt.Valid {
+				return s.createImplicitInitiativeChild(ctx, actorID, parent.ID, input)
+			}
+
 		} else {
 			resolved, err := s.ensureDefaultBoard(ctx, actorID)
 			if err != nil {

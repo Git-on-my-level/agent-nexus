@@ -63,6 +63,50 @@ test("empty visual QA scene clears the digest as well as initiatives", async ({
   );
 });
 
+test("the empty state still reads recent changes to the initiative set", async ({
+  page,
+  context,
+}) => {
+  // The set can be empty because its last initiative was just retired; who
+  // retired it and why still reads beside the empty state.
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      initiatives: [],
+      loops: [],
+      daily_digest: [],
+      generated_at: new Date().toISOString(),
+      initiative_budget: { count: 0, target: 5, truncated: false },
+      over_target: null,
+      initiative_changes: {
+        items: [
+          {
+            ref: "event:retired-last",
+            ts: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+            type: "initiative_retired",
+            actor_id: "agent:codex",
+            payload: {
+              subject_ref: "card:observability",
+              title: "Observability",
+              reason: "Outcome reached",
+              before: { board_ref: "board:initiatives", initiative: true },
+              after: { board_ref: "board:tasks", initiative: false },
+            },
+          },
+        ],
+        truncated: false,
+      },
+    }),
+  );
+  await page.goto(WATCH);
+  await expect(page.locator("[data-watch-empty]")).toBeVisible();
+  const changes = page.locator("[data-initiative-changes]");
+  await expect(changes).toBeVisible();
+  await expect(changes).toContainText("Retired");
+  await expect(changes).toContainText("Observability");
+  await expect(page.locator("[data-rollup-list]")).toHaveCount(0);
+});
+
 test("digest-only work stays visible in the Initiatives list", async ({
   page,
   context,
@@ -94,6 +138,55 @@ test("digest-only work stays visible in the Initiatives list", async ({
     ).toBeVisible();
   }
   await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+});
+
+test("recent changes read beside digest-only work with no initiatives", async ({
+  page,
+  context,
+}) => {
+  // The rollup is empty but the digest is not, so neither the empty state
+  // nor the rollup list draws; the changes feed must still read, once.
+  await setup(context, (route) =>
+    json(route, {
+      ...brief,
+      initiatives: [],
+      loops: [],
+      generated_at: new Date().toISOString(),
+      initiative_budget: { count: 0, target: 5, truncated: false },
+      over_target: null,
+      initiative_changes: {
+        items: [
+          {
+            ref: "event:retired-into-digest",
+            ts: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+            type: "initiative_retired",
+            actor_id: "agent:codex",
+            payload: {
+              subject_ref: "card:observability",
+              title: "Observability",
+              reason: "Outcome reached",
+              before: { board_ref: "board:initiatives", initiative: true },
+              after: { board_ref: "board:tasks", initiative: false },
+            },
+          },
+        ],
+        truncated: false,
+      },
+    }),
+  );
+  await page.goto(WATCH);
+  await expect(
+    page.getByRole("heading", {
+      name: `Needs an owner's look (${brief.daily_digest.length})`,
+    }),
+  ).toBeVisible();
+  await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+  await expect(page.locator("[data-rollup-list]")).toHaveCount(0);
+  const changes = page.locator("[data-initiative-changes]");
+  await expect(changes).toBeVisible();
+  await expect(changes).toHaveCount(1);
+  await expect(changes).toContainText("Retired");
+  await expect(changes).toContainText("Observability");
 });
 
 for (const layout of ["list", "lanes"]) {
@@ -294,11 +387,13 @@ test.describe("lanes", () => {
       ),
     ).toBeVisible();
     // The tray and the budget chip come with it; Decide stays in the header.
+    // The chip carries the board's target (the fixture's 5), not the legacy
+    // default, so it reads over target and offers folds.
     await expect(board.locator("[data-swimlane-tray]")).toContainText(
       "Fleet alert routing",
     );
     await expect(board.locator("[data-initiative-budget]")).toHaveText(
-      "Initiatives 6/15",
+      "Initiatives 6/5 · suggest folds",
     );
     await expect(page.locator("[data-watch-decide-link]")).toHaveCount(1);
     await expect(board.getByText(/in Decide →/)).toHaveCount(0);

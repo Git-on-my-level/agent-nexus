@@ -134,6 +134,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
+- `initiative promote` (command): <card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+- `initiative retire` (command): <card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
 - `pm connect` (command): Register a local PM connection with bounded runner and host labels.
 - `pm context` (command): Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
 - `pm disconnect` (command): Reset workspace PM onboarding after explicit uninstall.
@@ -239,7 +241,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `cards revise` (local-helper): Revise a card title and/or summary/body from local files without hand-authoring patch JSON.
 - `threads message` (local-helper): Escape hatch: post a message directly to a backing thread.
 - `threads reply` (local-helper): Escape hatch: reply to an existing message on a backing thread.
-- `cards move` (local-helper): Move a card to another board column using Card workflow language.
+- `cards move` (local-helper): Move a card to a column or another board.
 - `cards assign` (local-helper): Replace card assignees with explicit actor refs, or clear them.
 - `cards resolve` (local-helper): Resolve a card into the done column with optional free-text evidence.
 - `cards reopen` (local-helper): Move a resolved card back into active workflow.
@@ -537,6 +539,7 @@ Daily loop
 Runs and output
 
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
+- Use anx initiative promote <card> --reason text and initiative retire <card> --reason text [--under card:parent]. New plan links to top-level initiative-board cards are dependencies; never use them to nest an initiative. Legacy grouping is preserved. Retire before group/fold.
 - Label agentctl runs `anx.card.<initiative>` and cards land under it. An explicit `--under` wins; `--top-level` opts out. The run also links to the card. A completed run does not complete the card.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
@@ -3438,7 +3441,7 @@ Inputs:
   - body `event.provenance.notes` (string)
   - body `event.ref` (typed_ref)
   - body `event.thread_ref` (string)
-  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_lease_acquired, card_lease_expired, card_lease_released, card_lease_renewed, card_moved, card_resolved, card_trashed, card_updated, curation_receipt, curation_suggested, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_reopened, human_attention_requested, human_attention_responded, human_attention_retired, human_attention_retirement_audited, human_attention_revised, human_attention_withdrawn, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
+  Enum values: event.type (strict): agent_notification_dismissed, agent_notification_read, attention_feedback, board_created, board_updated, card_archived, card_created, card_lease_acquired, card_lease_expired, card_lease_released, card_lease_renewed, card_moved, card_resolved, card_trashed, card_updated, curation_receipt, curation_suggested, document_created, document_restored, document_revised, document_trashed, exception_raised, human_attention_reopened, human_attention_requested, human_attention_responded, human_attention_retired, human_attention_retirement_audited, human_attention_revised, human_attention_withdrawn, initiative_moved, initiative_promoted, initiative_retired, message_posted, receipt_added, review_completed, run_recorded, topic_archived, topic_created, topic_restored, topic_trashed, topic_updated
 
 Common authoring types:
   Communication: direct communication or important non-structured information
@@ -4217,6 +4220,92 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta concept ... ; anx --json debug meta concept ... ; anx debug meta concept ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `initiative promote`
+
+<card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+
+```text
+Generated Help: initiative promote
+
+- Command ID: `initiative.promote`
+- CLI path: `initiative promote`
+- HTTP: `POST /work/{card_ref}/promote`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Output: Returns initiative membership, work and advisory facts.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Adjacent commands: `initiative retire`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+  - body `to_board` (string)
+  - body `under` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --reason text: declare an initiative by moving it to the initiatives board. Never nests via incoming plan links.
+
+Usage: anx initiative promote <ref> (or --card-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
+```
+
+## `initiative retire`
+
+<card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
+
+```text
+Generated Help: initiative retire
+
+- Command ID: `initiative.retire`
+- CLI path: `initiative retire`
+- HTTP: `POST /work/{card_ref}/retire`
+- Side effect class: `remote_coordination_write`
+- Stability: `beta`
+- Input mode: `json-body`
+- Why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
+- Output: Returns initiative membership, work and advisory facts.
+- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
+- Concepts: `cards`, `evidence`
+- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Adjacent commands: `initiative promote`
+
+Inputs:
+  Required:
+  - path `card_ref`
+  - body `reason` (string)
+  Optional:
+  - body `actor_id` (string)
+  - body `request_key` (string)
+  - body `to_board` (string)
+  - body `under` (string)
+
+Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
+
+<card> --reason text [--to-board board:ref] [--under card:initiative]: retire before grouping or folding.
+
+Usage: anx initiative retire <ref> (or --card-id <ref>) [--from-file <path|->]
+
+JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
+
+Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
+
+Use --json for one machine-readable envelope.
 ```
 
 ## `pm connect`
@@ -5415,7 +5504,7 @@ Generated Help: work create
 - Output: Returns `WorkResponse`.
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 - Adjacent commands: `work capabilities`, `work fold`, `work get`, `work group`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
@@ -5574,7 +5663,7 @@ Generated Help: work group
 - Output: Returns `WorkResponse`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
-- Agent notes: Workspace authenticated; ordinary plan links; no automatic choice.
+- Agent notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
 - Adjacent commands: `work capabilities`, `work create`, `work fold`, `work get`, `work list`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work unfold`, `work ungrouped`
 
 Inputs:
@@ -7657,6 +7746,7 @@ Inputs:
   - body `if_updated_at` (datetime): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
   Optional:
   - body `patch.document_refs` (list<any>)
+  - body `patch.initiative_target` (integer)
   - body `patch.pinned_refs` (list<any>)
   - body `patch.primary_topic_ref` (string)
   - body `patch.provenance.by_field` (object)
@@ -7718,6 +7808,7 @@ Inputs:
   Optional:
   - body `board.column_schema` (object)
   - body `board.id` (string)
+  - body `board.initiative_target` (integer)
   - body `board.primary_topic_ref` (string)
   - body `board.provenance.by_field` (object)
   - body `board.provenance.notes` (string)
@@ -8717,7 +8808,7 @@ Global flags:
 
 ## `cards move`
 
-Move a card to another board column using Card workflow language.
+Move a card to a column or another board.
 
 ```text
 Generated Help: cards move
@@ -8728,7 +8819,7 @@ Generated Help: cards move
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Reposition a card within a board column using the card's first-class identity.
+- Why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
@@ -8743,7 +8834,9 @@ Inputs:
   - body `actor_id` (string)
   - body `after_card_id` (string)
   - body `before_card_id` (string)
+  - body `board_ref` (string)
   - body `if_version` (integer): Optimistic concurrency token. Read the latest value from the corresponding read command before mutating.
+  - body `reason` (string)
   - body `request_key` (string)
   - body `resolution` (string)
   - body `resolution_refs` (list<any>)
@@ -8753,9 +8846,9 @@ Local Help: cards move
 
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
-- Summary: Move a card to another board column using Card workflow language.
+- Summary: Move a card to a column or another board.
 - Composition: Fetches the card and parent board when needed for optimistic concurrency, then sends `cards.move`.
-- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- JSON body: `{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards move card:implement-login --column review`
   - `anx cards move card:implement-login --column blocked --if-board-updated-at <updated-at>`
@@ -8763,6 +8856,8 @@ Local Help: cards move
 Flags:
   <ref>                        Card ref, handle, or id to move.
   --column <key>               Target board column.
+  --board <ref>                Destination board; atomically moves primary membership.
+  --reason <text>              Audit reason for a board membership change.
   --if-board-updated-at <timestamp> Board optimistic concurrency token; discovered when omitted.
   --from-file <path>           Advanced JSON move request body from file.
   --dry-run                    Validate and render the request without sending it.
@@ -8852,7 +8947,7 @@ Local Help: cards reopen
 - Side effect class: `remote_coordination_write`
 - Summary: Move a resolved card back into active workflow.
 - Composition: Builds a focused `cards.move` request. The default reopened column is `ready`.
-- JSON body: `{ column_key, if_board_updated_at, actor_id? }`; discovers the board concurrency token when omitted.
+- JSON body: `{ column_key, if_board_updated_at, board_ref?, reason?, actor_id? }`; discovers the board concurrency token when omitted.
 - Examples:
   - `anx cards reopen card:implement-login`
   - `anx cards reopen card:implement-login --column backlog`

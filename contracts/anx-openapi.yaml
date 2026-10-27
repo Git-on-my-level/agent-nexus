@@ -2457,7 +2457,7 @@ paths:
       - evidence
       x-anx-stability: beta
       x-anx-agent-notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's
-        oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility. Source-backed fields are read-only outside
+        oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside
         attributed observations; refresh acceptance is not a successful read.
       requestBody:
         required: true
@@ -2474,13 +2474,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkResponse'
+  /work/{card_ref}/promote:
+    post:
+      operationId: initiativePromote
+      summary: Promote an initiative by explicit board membership
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+      x-anx-command-id: initiative.promote
+      x-anx-cli-path: initiative promote
+      x-anx-why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
+      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
+      responses:
+        '200':
+          description: Membership and audit event committed together
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/{card_ref}/retire:
+    post:
+      operationId: initiativeRetire
+      summary: Retire an initiative by explicit board membership
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-agent-notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+      x-anx-command-id: initiative.retire
+      x-anx-cli-path: initiative retire
+      x-anx-why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
+      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
+      responses:
+        '200':
+          description: Membership and audit event committed together
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
   /work/{card_ref}/group:
     post:
       operationId: workGroup
       summary: Add an existing card to a parent plan
       tags: [work]
       x-anx-surface: canonical
-      x-anx-agent-notes: Workspace authenticated; ordinary plan links; no automatic choice.
+      x-anx-agent-notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
       x-anx-command-id: work.group
       x-anx-cli-path: work group
       x-anx-why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
@@ -5485,7 +5547,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.move
       x-anx-cli-path: cards move
-      x-anx-why: Reposition a card within a board column using the card's first-class identity.
+      x-anx-why: Move a card between columns or boards using its first-class identity. board_ref changes primary membership; omission preserves it. The source board token and optional work version fence the atomic move and audit.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card }`."
@@ -13025,6 +13087,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/InternalResourceUUID'
           description: Internal board UUID/debug id; use `ref` or `handle` for public lookup.
+        initiative_target:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Advisory active initiative target; agents may set it. Null clears and patch omission preserves. Used on initiatives-role boards only.
         role:
           type: string
           maxLength: 64
@@ -13674,6 +13741,58 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
+    InitiativeMutationRequest:
+      type: object
+      required: [reason]
+      properties:
+        actor_id: {type: string}
+        request_key: {type: string, description: Retain the key and original body until confirmed.}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        to_board: {type: string, description: Retire destination; defaults to oldest active non-initiatives board or creates Tasks.}
+        under: {type: string, description: Retire only; atomically group under another open initiative. Destination defaults to a non-initiatives board.}
+    InitiativeMutationResponse:
+      type: object
+      required: [work, event, initiative_budget]
+      properties:
+        work: {$ref: '#/components/schemas/Work'}
+        event: {type: object, additionalProperties: true}
+        initiative_budget: {type: object, additionalProperties: true}
+        over_target: {$ref: '#/components/schemas/InitiativeOverTarget'}
+    InitiativeOverTarget:
+      type: object
+      required: [count, target, truncated, next_actions]
+      description: Visible active initiative count exceeds the advisory target. No write is blocked and no ask is created.
+      properties:
+        count: {type: integer}
+        target: {type: integer}
+        truncated: {type: boolean}
+        next_actions: {type: array, items: {type: object, additionalProperties: true}}
+    InitiativeChanges:
+      type: object
+      required: [items, truncated]
+      description: Up to 50 readable membership events from 200 recent indexed positions; no refill through denied rows. Events inherit card, before/after boards and reason references. Always conservatively truncated for scoped readers.
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [ref, ts, type, actor_id, payload]
+            properties:
+              ref: {type: string}
+              ts: {type: string}
+              type: {type: string, enum: [initiative_promoted, initiative_retired, initiative_moved]}
+              actor_id: {type: string}
+              payload:
+                type: object
+                required: [subject_ref, title, reason, before, after]
+                properties:
+                  subject_ref: {type: string}
+                  title: {type: string}
+                  reason: {type: string}
+                  before: {type: object, additionalProperties: true}
+                  after: {type: object, additionalProperties: true}
+        truncated: {type: boolean}
     BoardCreateInput:
       type: object
       properties:
@@ -13683,6 +13802,11 @@ components:
         thread_id:
           type: string
           description: Optional backing thread id for a replay-safe board copy.
+        initiative_target:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Advisory active initiative target; agents may set it. Null clears and patch omission preserves. Used on initiatives-role boards only.
         role:
           type: string
           maxLength: 64
@@ -13712,6 +13836,11 @@ components:
     BoardPatchInput:
       type: object
       properties:
+        initiative_target:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Advisory active initiative target; agents may set it. Null clears and patch omission preserves. Used on initiatives-role boards only.
         role:
           type: string
           maxLength: 64
@@ -13836,6 +13965,9 @@ components:
     MoveCardInput:
       type: object
       properties:
+        board_ref: {type: string, description: Optional destination board ref. Changes primary membership atomically while preserving card identity and thread; omission or the current board keeps membership. Both boards must be accessible and the destination active. Entering or leaving initiatives emits an initiative_moved audit event.}
+        reason: {type: string, maxLength: 2000, description: Optional move audit reason. Empty means no reason supplied.}
+
         request_key:
           type: string
           maxLength: 256
@@ -13862,7 +13994,7 @@ components:
         if_board_updated_at:
           type: string
           format: date-time
-          description: Parent board optimistic concurrency token; required for moves that update column/rank (matches core).
+          description: Source board optimistic concurrency token; required for column/rank and cross-board moves. Destination placement anchors must belong to the destination.
       required: [column_key, if_board_updated_at]
 
     EventCreateInput:
@@ -14266,6 +14398,7 @@ components:
         - $ref: '#/components/schemas/MoveCardInput'
         - type: object
           properties:
+
             actor_id:
               type: string
               description: Optional actor performing the move (may also be supplied via auth headers).
@@ -15315,12 +15448,14 @@ components:
       properties:
         curation_suggestions: {type: array, maxItems: 50, description: "Quiet agent work with apply_argv and dismiss_argv. Empty for human briefs; passive human suggestions live in GET /curation/candidates.", items: {type: object, additionalProperties: true}}
         loops: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/BriefInitiative'}}
+        initiative_changes: {$ref: '#/components/schemas/InitiativeChanges'}
+        over_target: {$ref: '#/components/schemas/InitiativeOverTarget'}
         initiative_budget:
           type: object
           required: [count, target, truncated]
           properties:
             count: {type: integer, description: Visible top-level non-loop cards in a bounded routing cohort or the displayed live brief section. A lower bound if truncated.}
-            target: {type: integer, enum: [15]}
+            target: {type: integer, description: Board initiative_target when set; otherwise advisory default 15.}
             truncated: {type: boolean, description: Always true for principal-scoped counts so hidden candidate-window occupancy cannot be disclosed.}
         next_actions: {type: array, maxItems: 10, items: {type: object, additionalProperties: true}}
         schema: { type: string, enum: [brief.v1] }

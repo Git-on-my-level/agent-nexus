@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 282
+- Command count: 284
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -32,6 +32,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hook | 1 |
 | host | 16 |
 | inbox | 5 |
+| initiative | 2 |
 | integrations | 7 |
 | lease | 4 |
 | meta | 9 |
@@ -61,7 +62,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 95 |
-| exposed_write | 80 |
+| exposed_write | 82 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
@@ -74,7 +75,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 175 | exposed_read + exposed_write + adapted |
+| standalone default | 177 | exposed_read + exposed_write + adapted |
 | hosted default | 69 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -252,6 +253,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
+| initiative.promote | initiative | POST | /work/{card_ref}/promote | exposed_write | Declare initiative board membership with an audit reason and replay safety; agents may act. |
+| initiative.retire | initiative | POST | /work/{card_ref}/retire | exposed_write | Retire membership and optionally group atomically with an audit reason; agents may act. |
 | integrations.bind | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.disable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.enable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |

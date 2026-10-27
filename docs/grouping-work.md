@@ -319,3 +319,83 @@ Changed HTTP behavior: `GET /brief`, `GET /work`, `GET /work/{card_ref}`,
 `GET /work/ungrouped`, and existing card/plan/overview/report surfaces that share
 hierarchy enrichment. `POST /work` and `PATCH /work/{card_ref}` accept the
 `top_level` annotation. No routes are added or removed.
+
+## Initiative board authority
+
+Promotion or entry onto an active `initiatives` board declares a root. Upgrade
+preserves existing grouping, including children sharing the initiatives board:
+no migration promotes them. Before committing a NEW plan reference to a currently
+top-level member, core records its root protection atomically. That reference is
+a dependency; it cannot demote the initiative or add it to another rollup.
+Existing references retain their grouping semantics, including edits which keep
+those references. A hidden existing parent also prevents protection; a writer
+cannot accidentally promote someone else's grouped card. The initiative's own
+plan continues to define its children. When creating with `--under`
+an initiative and no board, core chooses the oldest active non-initiatives board
+(or creates Tasks). A canonical related reference retains the parent
+visibility; allocation, child and plan link commit together. Other parents keep
+the legacy inherited-board default. Without an initiatives-role
+board, the existing oldest-visible-open-parent rule is unchanged. The Ungrouped tray excludes declared initiatives and its Make it an initiative
+action uses promote when an active initiatives board exists.
+Explicit
+`group` and `fold` refuse declared initiatives and return a retire-first action.
+
+```sh
+anx initiative promote card:launch --reason "An independent outcome"
+anx initiative retire card:launch --reason "Consolidate delivery" --under card:delivery
+anx initiative retire card:launch --reason "Keep as ordinary work" --to-board board:tasks
+anx cards move card:launch --column ready --board board:initiatives --reason "Independent outcome"
+```
+
+Promote uses the oldest visible active initiatives-role board (creation time,
+then ID). Retire defaults to the oldest visible active non-initiatives board,
+creating Tasks if none exists. An explicit destination must be active and must
+not have the initiatives role. `--under` requires another active, open initiative;
+the move, plan update, and audit event commit together or roll back together.
+An earlier existing parent link that would defeat `--under` causes a clear
+rejection, preserving the initiative until the links are resolved.
+Both agents and humans can act. Native cards retain their ref, thread, content,
+and evidence. Source-owned cards must use their source workflow. Repeating a
+request with the same `request_key` returns its original receipt; retain the key
+and original body through uncertain outcomes.
+
+Boards expose optional integer `initiative_target` (nonnegative; null clears;
+patch omission preserves), writable through `anx boards patch --from-file` like
+other metadata. The oldest visible active initiatives board supplies the target;
+unset uses advisory default 15. Explicit-board counts cover active nonterminal
+top-level non-loop cards, from at most 201 physical identities before scoped
+hydration and indexed parent/loop filtering. Legacy grouped members and loops
+do not inflate this budget. They are lower bounds when truncated; scoped counts conservatively
+always mark truncated. Counts replace the legacy recent-root budget when an
+active initiatives board exists. No count or target blocks a write.
+
+`cards.move` accepts `board_ref` (`anx cards move --board`), the source board's
+`if_board_updated_at` and optional work `if_version`. Omission or the current
+board performs a column move. Cross-board moves authorize source, destination
+and placement anchors in the same transaction, preserve identity and thread,
+and audit before/after membership. Retire uses that same membership mutation.
+DELETE of a board card still archives; it is not an unpin operation.
+
+For the Watch UI pass, `GET /brief` provides:
+
+- `initiative_budget: {count, target, truncated}`.
+- Optional `over_target: {count, target, truncated, next_actions}`. Each action
+  has `command_id`, `argv`, `mutates`, and `side_effect_class`; it recommends an
+  `anx ask ... --subject-ref card:<ref> --recommend ...` fold-vs-keep decision.
+  Promotion responses include this fact with the newly promoted card as subject.
+  Brief uses the first displayed initiative as subject. ANX creates no ask.
+- `initiative_changes: {items, truncated}`. Up to 50 recent readable events from
+  200 indexed positions, newest first, without refilling through denied rows.
+  Each item has `ref`, `ts`, `type`, `actor_id`, and `payload` containing
+  `subject_ref`, `title`, `reason`, `before`, `after`. Membership snapshots have
+  `board_ref` and `initiative`. Types are `initiative_promoted`,
+  `initiative_retired`, and `initiative_moved` (ordinary cross-board movement).
+  Empty reason means no reason was supplied. Actor identity is explicit; clients
+  can use their existing actor roster for display names. Before/after board refs,
+  the card, thread and authored reason all constrain event visibility, including
+  after a private card moves public. Trashed events are omitted.
+
+New routes: `POST /work/{card_ref}/promote`, `POST /work/{card_ref}/retire`.
+Changed routes include `POST /cards/{card_id}/move` and its board-scoped variant,
+`POST /work/{card_ref}/group|fold`, `GET /brief`, and board reads/writes carrying
+`initiative_target`. All hierarchy-enriched reads share the root rule.

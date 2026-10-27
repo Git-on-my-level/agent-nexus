@@ -932,3 +932,9 @@ commands:
   "work.ungrouped":
     classification: exposed_read
     reason: Bounded visible recent cards with deterministic likely homes.
+  "initiative.promote":
+    classification: exposed_write
+    reason: Declare initiative board membership with an audit reason and replay safety; agents may act.
+  "initiative.retire":
+    classification: exposed_write
+    reason: Retire membership and optionally group atomically with an audit reason; agents may act.

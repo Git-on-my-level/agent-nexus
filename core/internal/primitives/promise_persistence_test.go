@@ -140,6 +140,7 @@ func TestAuthorEditsKeepThePromise(t *testing.T) {
 	if _, err = store.CreateWork(ctx, "agent-1", "", map[string]any{"title": "New linked child", "under": card["ref"]}); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = store.RefreshBriefInitiatives(ctx, 200); err != nil {
 		t.Fatal(err)
 	}

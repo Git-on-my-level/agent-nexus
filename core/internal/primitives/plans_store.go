@@ -750,6 +750,9 @@ func (s *Store) SetCardPlan(ctx context.Context, actor, id, ifUpdatedAt string, 
 			return fmt.Errorf("decode stored plan: %w", err)
 		}
 	}
+	if err = protectNewInitiativeLinks(ctx, tx, row.CardID, p); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err = tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?) ON CONFLICT(card_id) DO UPDATE SET body_json=excluded.body_json,updated_at=excluded.updated_at`, row.CardID, string(data), now); err != nil {
 		return err

@@ -72,10 +72,33 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 		}
 	}
 	budget["count"] = max(budget["count"].(int), visibleOpen)
+	var declared bool
+	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`).Scan(&declared); err != nil {
+		return nil, err
+	}
+	var overTarget map[string]any
+	if declared {
+		budget, err = s.InitiativeBudget(ctx)
+		if err != nil {
+			return nil, err
+		}
+		suggestions = []map[string]any{} // Declared initiatives must be retired before folding.
+		if len(initiatives) > 0 {
+			overTarget = initiativeOverTarget(budget, workString(initiatives[0]["ref"]))
+		}
+	}
+	changes, err := s.InitiativeChanges(ctx, 50)
+	if err != nil {
+		return nil, err
+	}
 	loops, loopsTruncated, err := b.initiativeSection(true)
 	if err != nil {
 		return nil, err
 	}
+	if declared && overTarget == nil && len(loops) > 0 {
+		overTarget = initiativeOverTarget(budget, workString(loops[0]["ref"]))
+	}
+
 	digest, err := s.TrackingDigestPreview(ctx, reader.ActorID)
 	if err != nil {
 		return nil, err
@@ -121,7 +144,7 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 			return nil, err
 		}
 	}
-	return map[string]any{
+	result := map[string]any{
 		"schema":               "brief.v1",
 		"curation_suggestions": curationSuggestions,
 		"generated_at":         now.Format(time.RFC3339),
@@ -131,11 +154,16 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 		"daily_digest":         digest,
 		"loops":                nonNilMaps(loops),
 		"initiative_budget":    budget,
+		"initiative_changes":   changes,
 		"next_actions":         suggestions,
 		"your_asks":            nonNilMaps(yourAsks),
 		"answered_for_you":     nonNilMaps(answered),
 		"truncated":            map[string]bool{"curation_suggestions": curationTruncated, "decisions": decisionsTruncated, "initiatives": initiativesTruncated, "loops": loopsTruncated, "your_asks": yourTruncated, "answered_for_you": answeredTruncated},
-	}, nil
+	}
+	if overTarget != nil {
+		result["over_target"] = overTarget
+	}
+	return result, nil
 }
 
 func nonNilMaps(v []map[string]any) []map[string]any {

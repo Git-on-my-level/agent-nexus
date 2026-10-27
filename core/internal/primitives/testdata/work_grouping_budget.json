@@ -14,5 +14,17 @@
     "max_rows": 500,
     "max_vm_steps": 50000,
     "max_full_scan_steps": 0
+  },
+  "initiative_changes": {
+    "max_queries": 3,
+    "max_rows": 52,
+    "max_vm_steps": 50000,
+    "max_full_scan_steps": 200
+  },
+  "initiative_target": {
+    "max_queries": 5,
+    "max_rows": 202,
+    "max_vm_steps": 50000,
+    "max_full_scan_steps": 400
   }
 }

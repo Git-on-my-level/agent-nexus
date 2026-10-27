@@ -480,3 +480,82 @@ export function mockupUngrouped(now = "2026-10-24T12:00:00Z") {
     },
   ];
 }
+
+/** The ask core recommends when the set is over target. */
+export const OVER_TARGET_ASK =
+  "Initiatives exceed the target: fold this initiative or keep it?";
+
+/**
+ * The mockup brief with the initiative set over a target of 5, an agent's
+ * open ask about it, and recent membership changes of each kind.
+ */
+export function initiativeSetBrief(now = "2026-10-24T12:00:00Z") {
+  const brief = mockupBrief(now);
+  const at = Date.parse(now);
+  const iso = (hours) => new Date(at + hours * 3_600_000).toISOString();
+  const membership = (initiative, board) => ({ board_ref: board, initiative });
+  const change = (n, type, ref, title, reason, hours, into) => ({
+    ref: `event:membership-${n}`,
+    ts: iso(hours),
+    type,
+    actor_id: "actor-lead",
+    payload: {
+      subject_ref: ref,
+      title,
+      reason,
+      before: membership(!into, into ? "board:tasks" : "board:initiatives"),
+      after: membership(into, into ? "board:initiatives" : "board:tasks"),
+    },
+  });
+  brief.initiative_budget = { count: 7, target: 5, truncated: false };
+  brief.over_target = {
+    count: 7,
+    target: 5,
+    truncated: false,
+    next_actions: [
+      {
+        command_id: "ask",
+        argv: ["anx", "ask", OVER_TARGET_ASK, "--subject-ref", "card:capture"],
+        mutates: true,
+        side_effect_class: "remote_coordination_write",
+      },
+    ],
+  };
+  brief.decisions = [
+    ...brief.decisions,
+    ask("ask-count", OVER_TARGET_ASK, "card:capture", "Capture", now),
+  ];
+  brief.initiative_changes = {
+    items: [
+      change(
+        1,
+        "initiative_promoted",
+        "card:security",
+        "Security & trust",
+        "Separate outcome with its own owner",
+        -2,
+        true,
+      ),
+      change(
+        2,
+        "initiative_retired",
+        "card:legacy-onboarding",
+        "Legacy onboarding flow",
+        "",
+        -26,
+        false,
+      ),
+      change(
+        3,
+        "initiative_moved",
+        "card:margin",
+        "Unit economics: margin 50% & revenue per user",
+        "Board cleanup",
+        -50,
+        true,
+      ),
+    ],
+    truncated: false,
+  };
+  return brief;
+}

@@ -101,6 +101,8 @@ export const BRIEF_COMPUTED_FIELDS = new Set([
   "loops.parent_ref",
   "loops.rollup",
   "initiative_budget",
+  "over_target",
+  "initiative_changes",
   "next_actions",
   "initiatives.state",
   "initiatives.placement",
@@ -374,13 +376,81 @@ function normalizeRollup(raw) {
   };
 }
 
-/** `initiative_budget`, or null from a core that predates it. */
+/**
+ * `initiative_budget`, or null from a core that predates it. A target of 0
+ * is real (fold the whole set); only an absent target keeps the legacy
+ * default of 15 that a core predating per-board targets implied.
+ */
 function normalizeBudget(raw) {
   if (!raw || typeof raw !== "object") return null;
   return {
     count: count(raw.count),
-    target: count(raw.target) || 15,
+    target: raw.target == null ? 15 : count(raw.target),
     truncated: Boolean(raw.truncated),
+  };
+}
+
+/**
+ * `over_target`, or null when the count is within target (or core predates
+ * it). `ask` is the question core recommends an agent ask the reader, so a
+ * screen can find that ask once it is open; Watch never sends it. The
+ * recommended argv also names the initiative it is about, so the same
+ * fixed question asked about another card is not that link.
+ */
+function normalizeOverTarget(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const actions = Array.isArray(raw.next_actions) ? raw.next_actions : [];
+  const argv = actions.find((a) => text(a?.command_id) === "ask")?.argv;
+  const at = Array.isArray(argv) ? argv.indexOf("ask") : -1;
+  const subjectAt = Array.isArray(argv) ? argv.indexOf("--subject-ref") : -1;
+  return {
+    count: count(raw.count),
+    target: count(raw.target),
+    truncated: Boolean(raw.truncated),
+    ask: at >= 0 ? text(argv[at + 1]) : "",
+    subjectRef: subjectAt >= 0 ? text(argv[subjectAt + 1]) : "",
+  };
+}
+
+const INITIATIVE_CHANGE_TYPES = [
+  "initiative_promoted",
+  "initiative_retired",
+  "initiative_moved",
+];
+
+function normalizeMembership(raw) {
+  return {
+    boardRef: text(raw?.board_ref),
+    initiative: Boolean(raw?.initiative),
+  };
+}
+
+/** One `initiative_changes.items[]` entry; an unknown type still reads. */
+function normalizeInitiativeChange(raw) {
+  const payload = raw?.payload ?? {};
+  const subjectRef = text(payload.subject_ref);
+  if (!subjectRef) return null;
+  const type = text(raw.type);
+  return {
+    ref: text(raw.ref) || subjectRef,
+    ts: text(raw.ts),
+    type: INITIATIVE_CHANGE_TYPES.includes(type) ? type : "unknown",
+    actorId: text(raw.actor_id),
+    subjectRef,
+    title: text(payload.title) || subjectRef,
+    reason: text(payload.reason),
+    before: normalizeMembership(payload.before),
+    after: normalizeMembership(payload.after),
+  };
+}
+
+/** `initiative_changes`, newest first as core sends it. */
+function normalizeInitiativeChanges(raw) {
+  return {
+    items: (Array.isArray(raw?.items) ? raw.items : [])
+      .map(normalizeInitiativeChange)
+      .filter(Boolean),
+    truncated: Boolean(raw?.truncated),
   };
 }
 
@@ -501,6 +571,8 @@ export function normalizeBrief(raw) {
       .filter(Boolean)
       .map((row) => ({ ...row, section: "loops" })),
     initiativeBudget: normalizeBudget(brief?.initiative_budget),
+    overTarget: normalizeOverTarget(brief?.over_target),
+    initiativeChanges: normalizeInitiativeChanges(brief?.initiative_changes),
     nextActions: (Array.isArray(brief?.next_actions) ? brief.next_actions : [])
       .map(normalizeNextAction)
       .filter(Boolean),
