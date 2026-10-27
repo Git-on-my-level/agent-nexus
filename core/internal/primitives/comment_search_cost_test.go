@@ -27,12 +27,20 @@ func TestCommentSearchFullWriteCost1000Comments(t *testing.T) {
 	}
 	did, thread := doc["id"].(string), doc["thread_id"].(string)
 	var target string
+	seedTx, err := ws.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer seedTx.Rollback()
 	for i := 0; i < 999; i++ {
 		id := fmt.Sprintf("cost-%04d", i)
 		target = id
-		if _, err = ws.DB().Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,'message_posted','2026-10-01T00:00:00Z','owner',?,'[]','{"payload":{"text":"peer history"}}')`, id, thread); err != nil {
+		if _, err = seedTx.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json) VALUES(?,'message_posted','2026-10-01T00:00:00Z','owner',?,'[]','{"payload":{"text":"peer history"}}')`, id, thread); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err = seedTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	comment, err := s.CreateDocumentComment(ctx, "owner", did, "peer history", "")
 	if err != nil {

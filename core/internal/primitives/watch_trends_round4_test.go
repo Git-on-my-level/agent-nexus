@@ -114,6 +114,9 @@ func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
 }
 
 func TestWatchTrendsBoundsHydrationBeforeEligibility(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	f := newTrendsFixture(t)
 	visible := f.card("Answerable", "", nil)

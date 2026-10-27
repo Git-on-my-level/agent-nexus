@@ -524,6 +524,18 @@ def static_checks(changed, all_files=False):
     route_notice()
 
 
+# Safety net for the fast tier's per-package go test timeout. Go's default is
+# 10 minutes per test binary; on a shared developer machine under parallel
+# agent load, a healthy core suite can be CPU-starved past that even though
+# every test passes (measured: core/internal/primitives at 631s wall with zero
+# failures while the host ran ~30 load average on 18 CPUs). The fast tier's
+# verdict should depend on test outcomes, not on how many neighbors share the
+# machine, so pin a generous explicit ceiling. Individual hung tests still
+# panic at this deadline with their stacks. This is not a license to grow:
+# the idle-machine budget stays 3 minutes per AGENTS.md.
+FAST_TIER_GO_TIMEOUT = "-timeout=20m"
+
+
 def pinned_package_parallelism():
     """An explicit `go test -p` cap from GOFLAGS, if the caller set one.
 
@@ -551,7 +563,7 @@ def go_fast_tests(module, changed, whole_module):
     affected = None if whole_module else go_affected(module, changed)
     if affected is None:
         print(f"{module}: every package (shared root or unattributable change).", flush=True)
-        run("go", "test", "-short", "./...", cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / module, slot="tests")
         return
     selected, dependents = affected
     if not selected and not dependents:
@@ -560,23 +572,23 @@ def go_fast_tests(module, changed, whole_module):
     print(f"{module}: {len(selected)} changed package(s) plus {len(dependents)} dependent(s).",
           flush=True)
     if not selected:
-        run("go", "test", "-short", *dependents, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *dependents, cwd=ROOT / module, slot="tests")
         return
     if not dependents:
-        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *selected, cwd=ROOT / module, slot="tests")
         return
     pinned = pinned_package_parallelism()
     if pinned is not None:
         print(f"{module}: GOFLAGS pins -p={pinned}; running the dependents after the changed "
               "packages rather than beside them.", flush=True)
-        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
-        run("go", "test", "-short", *dependents, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *selected, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *dependents, cwd=ROOT / module, slot="tests")
         return
-    argv = ("go", "test", "-short", *dependents)
+    argv = ("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *dependents)
     print("+ " + " ".join(argv) + "  (dependents, reported after the changed packages)", flush=True)
     later = start(argv, cwd=ROOT / module, slot="tests")
     try:
-        run("go", "test", "-short", *selected, cwd=ROOT / module, slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *selected, cwd=ROOT / module, slot="tests")
         output = finish(later)
     except BaseException:
         end(later)
@@ -657,9 +669,9 @@ def fast_tests(changed, base=None):
                          "core/cmd/route-inventory/")) or p == "scripts/check-enum-conformance.mjs"
            for p in changed):
         contract_drift()
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/gen/go", slot="tests")
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/visualreport", slot="tests")
-        run("go", "test", "-short", "./...", cwd=ROOT / "contracts/markdownhygiene", slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/gen/go", slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/visualreport", slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/markdownhygiene", slot="tests")
         run("node", "scripts/check-visual-report-conformance.mjs")
         run("node", "scripts/check-enum-conformance.mjs")
 

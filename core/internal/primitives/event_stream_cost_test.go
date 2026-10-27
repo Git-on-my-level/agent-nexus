@@ -13,6 +13,10 @@ import (
 )
 
 func TestEventStreamWarmHiddenPageCostIsIndependentOfDenialHistory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
+	t.Parallel()
 	// Cost is measured as SQLite VM steps, which do not vary
 	// with machine load; wall-clock latency belongs to the performance suite.
 	ticks := map[int][]eventStreamTickCost{}

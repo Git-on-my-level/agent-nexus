@@ -29,12 +29,20 @@ func TestPublicRefProjectionBatchesAndRetainsHiddenIDs(t *testing.T) {
 		}
 	}
 	refs := []string{"document:secret", "document:missing"}
+	seedTx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer seedTx.Rollback()
 	for i := 0; i < 450; i++ {
 		id := fmt.Sprintf("public-%d", i)
-		if _, err = db.Exec(`INSERT INTO documents(id,handle,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by) VALUES(?,?,'Public','head',1,'now','owner','now','owner')`, id, "handle-"+id); err != nil {
+		if _, err = seedTx.Exec(`INSERT INTO documents(id,handle,title,head_revision_id,head_revision_number,created_at,created_by,updated_at,updated_by) VALUES(?,?,'Public','head',1,'now','owner','now','owner')`, id, "handle-"+id); err != nil {
 			t.Fatal(err)
 		}
 		refs = append(refs, "document:"+id)
+	}
+	if err = seedTx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 	scope := WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"})
 	scope, finish, err := s.BeginResourceRead(scope)

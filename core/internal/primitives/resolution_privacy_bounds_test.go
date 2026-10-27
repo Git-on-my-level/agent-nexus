@@ -227,6 +227,9 @@ func TestEveryIndexedAliasInputUsesSharedCaps(t *testing.T) {
 }
 
 func TestInboxSummaryCountsAndPagesWithoutLoadingEveryPayload(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())

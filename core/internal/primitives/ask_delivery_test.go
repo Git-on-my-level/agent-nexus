@@ -790,6 +790,9 @@ func TestAskLifecycleProgressesPastPermanentAndTransientCloseQueueFailures(t *te
 }
 
 func TestAskLifecycleAdvancesWithinCardPast200FailingAsksAndHonorsBackoffDeadline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
+	}
 	t.Parallel()
 	s, ws, firstCard, _ := askDeliveryFixture(t)
 	ctx := context.Background()
