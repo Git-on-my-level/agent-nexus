@@ -1762,6 +1762,38 @@ func (s *Store) GetBoardCardCurrent(ctx context.Context, boardID, identifier str
 	return row.toMap()
 }
 
+// CheckCardMutationResponseAccess authorizes sibling records already loaded by
+// a card mutation. These are exact scoped primary-key probes; revision checks
+// never resolve a handle or materialize history. ctx carries the same read/write
+// snapshot used to project the card, so a visible card cannot authorize a board
+// it has since left, or an unrelated revision supplied by a response builder.
+func (s *Store) CheckCardMutationResponseAccess(ctx context.Context, cardID, boardID, revisionID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("primitives store database is not initialized")
+	}
+	if boardID != "" {
+		var id string
+		err := s.db.QueryRowContext(ctx, `SELECT id FROM boards WHERE id = ?`, boardID).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if revisionID != "" {
+		var id string
+		err := s.db.QueryRowContext(ctx, `SELECT revision_id FROM card_revisions WHERE revision_id = ? AND card_id = ?`, revisionID, cardID).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // SoleThreadRefIDFromRefs returns the thread id when refs contains exactly one distinct thread: ref.
 func SoleThreadRefIDFromRefs(refs []string) (string, error) {
 	var out string

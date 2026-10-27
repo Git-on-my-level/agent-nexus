@@ -5325,7 +5325,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5490,7 +5490,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationResponse'
+                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5529,7 +5529,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationResponse'
+                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5568,7 +5568,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5796,7 +5796,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationResponse'
+                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -15280,11 +15280,35 @@ components:
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card]
 
+    MutationIdentity:
+      type: object
+      description: Identity-only echo of a committed mutation when current response visibility cannot be established. Read back if permitted; do not retry the successful mutation.
+      additionalProperties: false
+      properties:
+        id: { $ref: '#/components/schemas/InternalResourceUUID' }
+        ref: { $ref: '#/components/schemas/ResourceRef' }
+        version: { type: integer }
+      required: [id]
+
+    CardMutationResponse:
+      type: object
+      properties:
+        card:
+          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        board:
+          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+      required: [card]
+
     CardWithRevisionResponse:
       type: object
       properties:
-        card: { $ref: '#/components/schemas/Card' }
-        revision: { $ref: '#/components/schemas/CardRevision' }
+        board:
+          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        card:
+          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        revision:
+          oneOf: [{ $ref: '#/components/schemas/CardRevision' }, { $ref: '#/components/schemas/MutationIdentity' }]
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card, revision]
 
@@ -15328,6 +15352,16 @@ components:
       properties:
         board: { $ref: '#/components/schemas/Board' }
         card: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+      required: [board, card]
+
+    BoardCardMutationEchoResponse:
+      type: object
+      properties:
+        board:
+          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        card:
+          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, card]
 

@@ -8,16 +8,26 @@ enrichment. They do not call `ListBoardCardHistory`: revision history is neither
 returned nor materialized. The row selector uses the card primary key,
 `idx_ref_edges_work_placement(target_id,source_type,edge_type)` and the board
 primary key; enrichment retains its existing bounded plan/reference windows.
-Keyed responses borrow the write snapshot. After commit, failed projections log
-only identity/error type and return an identity-only card echo, without a second
-visibility read or stale content.
+The complete response opens one scoped resource-read boundary (borrowing the
+write snapshot for keyed mutations), projects the card, then authorizes each
+optional board and revision sibling with an exact scoped primary-key probe.
+Revision authorization also binds its card ID. These probes do not call the
+handle resolver, whose revision-handle path scans history. They add at most two
+queries and two returned identities, independent of board size and history.
+No board memberships or revision bodies are reloaded. Any failed check after
+commit logs only identity/error type and reduces the whole response to known
+resource identities, omitting ancillary fields and unknown future objects.
 
 `server/testdata/card_mutation_projection_budget.json` bounds the complete
 single-card reload/enrichment at 12 queries, 32 returned rows and 50,000 VM
 steps. The scale regression uses the shared 4,096-record corpus with private
 controls, measures both the owner and a partial-visibility reader, and grows one
 card's history from 1 to 1,025 revisions without changing the budget. It also
-compares the response fields with GET's public card projection. Run it alongside
+compares the response fields with GET's public card projection. The separate
+`server/testdata/card_mutation_response_budget.json` budgets the complete
+response at 16 queries, 32 returned rows and 50,000 VM steps, including explicit
+primary-key plan assertions for both sibling probes. The card-only budget is
+unchanged. Run it alongside
 the existing shared enrichment gate:
 
 ```sh

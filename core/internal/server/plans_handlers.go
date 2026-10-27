@@ -96,32 +96,87 @@ func mutatedCardView(ctx context.Context, r *http.Request, opts handlerOptions, 
 	return publicCardView(card), nil
 }
 
-// cardMutationResponseView keeps projection failures fatal while a keyed
-// mutation can still roll back. Unkeyed writes have already committed, so their
-// response must degrade safely instead of inviting a retry of committed work.
-func cardMutationResponseView(ctx context.Context, r *http.Request, opts handlerOptions, card map[string]any, requestKey string) (map[string]any, error) {
-	if strings.TrimSpace(requestKey) != "" {
-		return mutatedCardView(ctx, r, opts, anyString(card["id"]))
+// cardMutationResponse guards the complete envelope, including siblings of the
+// card. Keyed writes can still roll back; already-committed writes keep their
+// successful status but expose identities only if any projection/check fails.
+func cardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, payload map[string]any, requestKey string) (map[string]any, error) {
+	view, err := projectCardMutationResponse(ctx, r, opts, payload)
+	if err == nil {
+		return view, nil
 	}
-	return cardMutationEchoView(r.WithContext(ctx), opts, card), nil
-}
-
-// cardMutationEchoView is for a mutation that already committed. On projection
-// failure current visibility is unknown: echo only the mutation's identity and
-// version, never stale content, placement or references from its raw result.
-func cardMutationEchoView(r *http.Request, opts handlerOptions, card map[string]any) map[string]any {
-	view, err := mutatedCardView(r.Context(), r, opts, anyString(card["id"]))
-	if err != nil {
-		log.Printf("anx-core: card mutation echo projection failed card_id=%s error_type=%T", anyString(card["id"]), err)
-		echo := make(map[string]any)
-		for _, key := range []string{"id", "ref", "version"} {
-			if value, ok := card[key]; ok {
-				echo[key] = value
+	if strings.TrimSpace(requestKey) != "" {
+		return nil, err
+	}
+	card, _ := payload["card"].(map[string]any)
+	log.Printf("anx-core: card mutation response projection failed card_id=%s error_type=%T", anyString(card["id"]), err)
+	echo := make(map[string]any)
+	// Fail closed for the entire envelope. No content, placement, ancillary
+	// metadata or future response object can escape via a sibling field.
+	for _, key := range []string{"card", "board", "revision"} {
+		record, ok := payload[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		identity := make(map[string]any)
+		for _, field := range []string{"id", "ref", "version"} {
+			if value, ok := record[field]; ok {
+				identity[field] = value
 			}
 		}
-		return echo
+		echo[key] = identity
 	}
-	return view
+	return echo, nil
+}
+
+func cardMutationEcho(r *http.Request, opts handlerOptions, payload map[string]any) map[string]any {
+	echo, _ := cardMutationResponse(r.Context(), r, opts, payload, "")
+	return echo
+}
+
+func projectCardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, payload map[string]any) (map[string]any, error) {
+	for field := range payload {
+		switch field {
+		case "card", "board", "revision", "removed_thread_id", "markdown_hygiene":
+		default:
+			return nil, errors.New("unsupported card mutation response field")
+		}
+	}
+	store, ok := opts.primitiveStore.(interface {
+		BeginResourceRead(context.Context) (context.Context, func(), error)
+		CheckCardMutationResponseAccess(context.Context, string, string, string) error
+	})
+	if !ok {
+		return nil, errors.New("card mutation response scope unavailable")
+	}
+	// The card projection and sibling checks must use the same current read
+	// boundary. In keyed mutations this borrows the existing write snapshot.
+	ctx, closeRead, err := store.BeginResourceRead(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRead()
+	card, _ := payload["card"].(map[string]any)
+	cardID := anyString(card["id"])
+	view, err := mutatedCardView(ctx, r, opts, cardID)
+	if err != nil {
+		return nil, err
+	}
+	board, _ := payload["board"].(map[string]any)
+	revision, _ := payload["revision"].(map[string]any)
+	for _, field := range []string{"board", "revision"} {
+		if value, present := payload[field]; present {
+			record, ok := value.(map[string]any)
+			if !ok || anyString(record["id"]) == "" {
+				return nil, errors.New("card mutation response sibling identity unavailable")
+			}
+		}
+	}
+	if err := store.CheckCardMutationResponseAccess(ctx, cardID, anyString(board["id"]), anyString(revision["id"])); err != nil {
+		return nil, err
+	}
+	out := copyStringAnyMap(payload)
+	out["card"] = view
+	return out, nil
 }
 
 const summaryCandidateLimit = 50

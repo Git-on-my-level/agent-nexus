@@ -89,7 +89,7 @@ func TestCardMutationEchoAfterConcurrentPrivateBoardMove(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/cards/"+anyString(created.Card["id"])+"/restore", nil).WithContext(viewer)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "reader"})
-	assertIdentityOnlyCardEcho(t, cardMutationEchoView(req, handlerOptions{primitiveStore: s}, committed.Card), committed.Card)
+	assertIdentityOnlyCardEcho(t, cardMutationEcho(req, handlerOptions{primitiveStore: s}, map[string]any{"card": committed.Card})["card"].(map[string]any), committed.Card)
 }
 
 func TestCardMutationProjectionFailureCommitBoundary(t *testing.T) {
@@ -191,6 +191,14 @@ func TestCardMutationProjectionFailureCommitBoundary(t *testing.T) {
 							t.Fatal(err)
 						}
 						assertIdentityOnlyCardEcho(t, response["card"].(map[string]any), after)
+						keys := []string{"card", "board"}
+						if mutation == "patch" {
+							keys = []string{"card"}
+						}
+						if mutation == "revise" {
+							keys = append(keys, "revision")
+						}
+						assertIdentityOnlyMutationResponse(t, out, keys)
 					}
 				})
 			}

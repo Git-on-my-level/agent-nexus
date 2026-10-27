@@ -34,6 +34,18 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 	if err := json.Unmarshal(raw, &budget); err != nil {
 		t.Fatal(err)
 	}
+	responseRaw, err := os.ReadFile("testdata/card_mutation_response_budget.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var responseBudget struct {
+		MaxQueries int    `json:"max_queries"`
+		MaxRows    int    `json:"max_rows"`
+		MaxVMSteps uint64 `json:"max_vm_steps"`
+	}
+	if err := json.Unmarshal(responseRaw, &responseBudget); err != nil {
+		t.Fatal(err)
+	}
 	db, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)")
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +111,59 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 				t.Fatal("mutation projection differs from GET card fields")
 			}
 			t.Logf("history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, queries, rows, work.VMSteps)
+			// Measure the full response boundary independently. The original
+			// card-only budget above is unchanged; sibling checks add at most
+			// two exact scoped primary-key probes and never reload history.
+			responseScope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+			responseReq := req.WithContext(responseScope)
+			cacheAuthenticatedPrincipal(responseReq, &auth.Principal{ActorID: actor})
+			capture.Start()
+			response, err := projectCardMutationResponse(responseScope, responseReq, opts, map[string]any{
+				"card":     map[string]any{"id": "scale-card-1"},
+				"board":    map[string]any{"id": "scale-board-0", "ref": "board:scale-board-0"},
+				"revision": map[string]any{"id": "scale-card-revision-1", "ref": "card_revision:scale-card-1-r1"},
+			})
+			responseStatements, responseQueries, responseRows := capture.Stop()
+			responseWork := capture.Work()
+			if err != nil || capture.WorkError() != nil {
+				t.Fatalf("complete response=%v instrumentation=%v", err, capture.WorkError())
+			}
+			if responseQueries > responseBudget.MaxQueries || responseRows > responseBudget.MaxRows || responseWork.VMSteps > responseBudget.MaxVMSteps {
+				t.Errorf("complete response history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, responseQueries, responseRows, responseWork.VMSteps)
+			}
+			if !reflect.DeepEqual(response["card"], view) {
+				t.Fatal("complete response changed card fields")
+			}
+			boardProbe, revisionProbe := false, false
+			for _, statement := range responseStatements {
+				var index string
+				if strings.HasSuffix(statement.SQL, "SELECT id FROM boards WHERE id = ?") {
+					index = "sqlite_autoindex_boards_1"
+					boardProbe = true
+				}
+				if strings.HasSuffix(statement.SQL, "SELECT revision_id FROM card_revisions WHERE revision_id = ? AND card_id = ?") {
+					index = "sqlite_autoindex_card_revisions_1"
+					revisionProbe = true
+				}
+				if strings.Contains(statement.SQL, "ORDER BY cr.revision_number ASC") {
+					t.Error("complete response materialized revision history")
+				}
+				if index == "" {
+					continue
+				}
+				plan, err := perfguard.Explain(ctx, env.workspace.DB(), statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(strings.Join(plan, "\n"), index) {
+					t.Fatalf("sibling probe lost primary-key seek: %v", plan)
+				}
+			}
+			if !boardProbe || !revisionProbe {
+				t.Fatal("sibling identity probes were not exercised")
+			}
+			t.Logf("complete response history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, responseQueries, responseRows, responseWork.VMSteps)
+
 		}
 	}
 }
