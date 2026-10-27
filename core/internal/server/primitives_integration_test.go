@@ -771,7 +771,8 @@ func TestMarkdownHygieneNormalizesTopicDocumentAndCardWrites(t *testing.T) {
 	if err := json.NewDecoder(cardResp.Body).Decode(&cardPayload); err != nil {
 		t.Fatalf("decode card response: %v", err)
 	}
-	assertMarkdownHygienePresent(t, cardPayload, "card.summary")
+	// Card receipts contain scoped resource projections only; normalization
+	// still applies, while mutation-time hygiene metadata is not echoed.
 	if got := anyString(cardPayload["card"].(map[string]any)["summary"]); got != "### Card\n\nA → B" {
 		t.Fatalf("card summary normalized: %q", got)
 	}

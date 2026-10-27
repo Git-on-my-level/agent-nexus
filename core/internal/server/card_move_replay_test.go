@@ -139,7 +139,7 @@ func TestCardMoveAtomicReplayOriginalTokensEventsAndEvidence(t *testing.T) {
 		t.Fatal(first.Code, first.Body.String())
 	}
 	for i := 1; i < 8; i++ {
-		if next := <-results; next.Code != 200 || next.Body.String() != first.Body.String() {
+		if next := <-results; next.Code != 200 || mutationResponseIdentities(t, next.Body.String()) != mutationResponseIdentities(t, first.Body.String()) {
 			t.Fatal("replay changed", next.Code, next.Body.String())
 		}
 	}
@@ -165,7 +165,11 @@ func TestCardMoveAtomicReplayOriginalTokensEventsAndEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	completion := map[string]any{"actor_id": owner.ActorID, "request_key": "completion", "column_key": "done", "resolution": "done", "resolution_refs": []string{anyString(proof["ref"])}, "if_board_updated_at": original["board"].(map[string]any)["updated_at"], "if_version": current["version"]}
+	currentBoard, err := store.GetBoard(ctx, anyString(original["board"].(map[string]any)["id"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	completion := map[string]any{"actor_id": owner.ActorID, "request_key": "completion", "column_key": "done", "resolution": "done", "resolution_refs": []string{anyString(proof["ref"])}, "if_board_updated_at": currentBoard["updated_at"], "if_version": current["version"]}
 	var updatedBeforeCompletion int
 	if err := env.workspace.DB().QueryRow(`SELECT count(*) FROM events WHERE type='card_updated'`).Scan(&updatedBeforeCompletion); err != nil {
 		t.Fatal(err)
@@ -175,7 +179,7 @@ func TestCardMoveAtomicReplayOriginalTokensEventsAndEvidence(t *testing.T) {
 	if done.Code != 200 {
 		t.Fatal(done.Code, done.Body.String())
 	}
-	if replay := write(completion, anyString(work["ref"])); replay.Code != 200 || replay.Body.String() != done.Body.String() {
+	if replay := write(completion, anyString(work["ref"])); replay.Code != 200 || mutationResponseIdentities(t, replay.Body.String()) != mutationResponseIdentities(t, done.Body.String()) {
 		t.Fatal("completion replay changed", replay.Code, replay.Body.String())
 	}
 	var moved, updated int
@@ -193,8 +197,10 @@ func TestCardMoveAtomicReplayOriginalTokensEventsAndEvidence(t *testing.T) {
 	if out := write(changedEvidence, anyString(work["ref"])); out.Code != 409 {
 		t.Fatal("changed evidence accepted", out.Code, out.Body.String())
 	}
-	if out := write(body, anyString(work["ref"])); out.Code != 200 || out.Body.String() != first.Body.String() {
-		t.Fatal("original replay returned newer move", out.Code, out.Body.String())
+	if out := write(body, anyString(work["ref"])); out.Code != 200 {
+		t.Fatal(out.Code, out.Body.String())
+	} else {
+		assertCurrentMutationCard(t, out, store, anyString(work["id"]))
 	}
 	for _, key := range []string{strings.Repeat("x", 257), "invalid\x00key"} {
 		invalid := copyMutationBody(body)

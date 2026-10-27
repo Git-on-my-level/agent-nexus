@@ -96,87 +96,105 @@ func mutatedCardView(ctx context.Context, r *http.Request, opts handlerOptions, 
 	return publicCardView(card), nil
 }
 
-// cardMutationResponse guards the complete envelope, including siblings of the
-// card. Keyed writes can still roll back; already-committed writes keep their
-// successful status but expose identities only if any projection/check fails.
-func cardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, payload map[string]any, requestKey string) (map[string]any, error) {
-	view, err := projectCardMutationResponse(ctx, r, opts, payload)
-	if err == nil {
-		return view, nil
-	}
-	if strings.TrimSpace(requestKey) != "" {
-		return nil, err
-	}
+// cardMutationTarget deliberately carries identities only. Mutation maps and
+// response extras cannot be passed to the response constructor.
+type cardMutationTarget struct {
+	CardID, BoardID, RevisionID string
+	Creation                    bool
+}
+
+func cardMutationReplayTarget(payload map[string]any) cardMutationTarget {
 	card, _ := payload["card"].(map[string]any)
-	log.Printf("anx-core: card mutation response projection failed card_id=%s error_type=%T", anyString(card["id"]), err)
-	echo := make(map[string]any)
-	// Fail closed for the entire envelope. No content, placement, ancillary
-	// metadata or future response object can escape via a sibling field.
-	for _, key := range []string{"card", "board", "revision"} {
-		record, ok := payload[key].(map[string]any)
-		if !ok {
-			continue
+	board, _ := payload["board"].(map[string]any)
+	revision, _ := payload["revision"].(map[string]any)
+	return cardMutationTarget{CardID: anyString(card["id"]), BoardID: anyString(board["id"]), RevisionID: anyString(revision["id"])}
+}
+
+func mutationReference(kind, id string) map[string]any {
+	return map[string]any{"id": id, "ref": kind + ":" + id}
+}
+
+// cardMutationResponse constructs every business field from current scoped
+// reads. An already-committed write succeeds even when a read fails; only that
+// object is reduced to its known identity. Keyed writes can still roll back.
+func cardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, target cardMutationTarget, requestKey string) (map[string]any, error) {
+	response, err := projectCardMutationResponse(ctx, r, opts, target)
+	if err != nil {
+		if strings.TrimSpace(requestKey) != "" {
+			return nil, err
 		}
-		identity := make(map[string]any)
-		for _, field := range []string{"id", "ref", "version"} {
-			if value, ok := record[field]; ok {
-				identity[field] = value
-			}
-		}
-		echo[key] = identity
+		log.Printf("anx-core: card mutation response projection failed card_id=%s error_type=%T", target.CardID, err)
 	}
-	return echo, nil
+	return response, nil
 }
 
-func cardMutationEcho(r *http.Request, opts handlerOptions, payload map[string]any) map[string]any {
-	echo, _ := cardMutationResponse(r.Context(), r, opts, payload, "")
-	return echo
+func cardMutationEcho(r *http.Request, opts handlerOptions, target cardMutationTarget) map[string]any {
+	response, _ := cardMutationResponse(r.Context(), r, opts, target, "")
+	return response
 }
 
-func projectCardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, payload map[string]any) (map[string]any, error) {
-	for field := range payload {
-		switch field {
-		case "card", "board", "revision", "removed_thread_id", "markdown_hygiene":
-		default:
-			return nil, errors.New("unsupported card mutation response field")
-		}
+func projectCardMutationResponse(ctx context.Context, r *http.Request, opts handlerOptions, target cardMutationTarget) (map[string]any, error) {
+	out := map[string]any{"card": mutationReference("card", target.CardID)}
+	if target.BoardID != "" {
+		out["board"] = mutationReference("board", target.BoardID)
+	}
+	if target.RevisionID != "" {
+		out["revision"] = mutationReference("card_revision", target.RevisionID)
 	}
 	store, ok := opts.primitiveStore.(interface {
 		BeginResourceRead(context.Context) (context.Context, func(), error)
-		CheckCardMutationResponseAccess(context.Context, string, string, string) error
+		GetBoardMutationReference(context.Context, string) (map[string]any, error)
+		GetCardRevisionMutationReference(context.Context, string, string) (map[string]any, error)
 	})
 	if !ok {
-		return nil, errors.New("card mutation response scope unavailable")
+		return out, errors.New("card mutation response scope unavailable")
 	}
-	// The card projection and sibling checks must use the same current read
-	// boundary. In keyed mutations this borrows the existing write snapshot.
 	ctx, closeRead, err := store.BeginResourceRead(ctx)
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	defer closeRead()
-	card, _ := payload["card"].(map[string]any)
-	cardID := anyString(card["id"])
-	view, err := mutatedCardView(ctx, r, opts, cardID)
+	var failures []error
+	view, err := mutatedCardView(ctx, r, opts, target.CardID)
 	if err != nil {
-		return nil, err
-	}
-	board, _ := payload["board"].(map[string]any)
-	revision, _ := payload["revision"].(map[string]any)
-	for _, field := range []string{"board", "revision"} {
-		if value, present := payload[field]; present {
-			record, ok := value.(map[string]any)
-			if !ok || anyString(record["id"]) == "" {
-				return nil, errors.New("card mutation response sibling identity unavailable")
+		failures = append(failures, err)
+	} else {
+		out["card"] = view
+		if target.Creation && anyString(view["parent_ref"]) == "" {
+			hints, supported := opts.primitiveStore.(interface {
+				GetCardCreationHints(context.Context, string) ([]primitives.LikelyHome, error)
+			})
+			if supported {
+				homes, hintErr := hints.GetCardCreationHints(ctx, target.CardID)
+				if hintErr != nil {
+					failures = append(failures, hintErr)
+				} else if len(homes) > 0 {
+					out["likely_home"] = homes
+					out["next_actions"] = primitives.GroupingNextActions(anyString(view["ref"]), homes, "group")
+				}
 			}
 		}
 	}
-	if err := store.CheckCardMutationResponseAccess(ctx, cardID, anyString(board["id"]), anyString(revision["id"])); err != nil {
-		return nil, err
+	// Full GET board projections materialize membership; revision GET resolves
+	// historical content. Mutation receipts use bounded reference projections
+	// instead, with no thread, plan, membership, placement or content fields.
+	if target.BoardID != "" {
+		reference, readErr := store.GetBoardMutationReference(ctx, target.BoardID)
+		if readErr != nil {
+			failures = append(failures, readErr)
+		} else {
+			out["board"] = reference
+		}
 	}
-	out := copyStringAnyMap(payload)
-	out["card"] = view
-	return out, nil
+	if target.RevisionID != "" {
+		reference, readErr := store.GetCardRevisionMutationReference(ctx, target.CardID, target.RevisionID)
+		if readErr != nil {
+			failures = append(failures, readErr)
+		} else {
+			out["revision"] = reference
+		}
+	}
+	return out, errors.Join(failures...)
 }
 
 const summaryCandidateLimit = 50

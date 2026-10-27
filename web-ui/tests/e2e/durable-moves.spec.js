@@ -56,7 +56,7 @@ async function prepare(
 }
 const receipt = () => ({
   card: { id: "move" },
-  board: { id: "move", updated_at: "2026-10-13T02:00:00Z" },
+  board: { id: "move", ref: "board:move" },
 });
 async function openPalette(page) {
   await page.keyboard.press("Escape");

@@ -5018,7 +5018,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/BoardCardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -14306,11 +14306,11 @@ components:
     BatchCreateBoardCardsResponse:
       type: object
       properties:
-        board: { $ref: '#/components/schemas/Board' }
+        board: { $ref: '#/components/schemas/MutationIdentity' }
         cards:
           type: array
-          items: { $ref: '#/components/schemas/Card' }
-        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+          items:
+            oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
       required: [board, cards]
 
     PatchCardRequest:
@@ -15282,12 +15282,13 @@ components:
 
     MutationIdentity:
       type: object
-      description: Identity-only echo of a committed mutation when current response visibility cannot be established. Read back if permitted; do not retry the successful mutation.
+      description: Reference receipt for a committed mutation. Boards and revisions use references instead of full mutation-time maps. Cards fall back to id/ref when a fresh viewer-scoped projection is unavailable. Optional version/revision_number values come only from scoped reads. Read back if permitted; do not retry a successful mutation.
       additionalProperties: false
       properties:
         id: { $ref: '#/components/schemas/InternalResourceUUID' }
         ref: { $ref: '#/components/schemas/ResourceRef' }
         version: { type: integer }
+        revision_number: { type: integer }
       required: [id]
 
     CardMutationResponse:
@@ -15296,20 +15297,18 @@ components:
         card:
           oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
         board:
-          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+          $ref: '#/components/schemas/MutationIdentity'
       required: [card]
 
     CardWithRevisionResponse:
       type: object
       properties:
         board:
-          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
+          $ref: '#/components/schemas/MutationIdentity'
         card:
           oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
         revision:
-          oneOf: [{ $ref: '#/components/schemas/CardRevision' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+          $ref: '#/components/schemas/MutationIdentity'
       required: [card, revision]
 
     CardRevisionsResponse:
@@ -15350,19 +15349,20 @@ components:
     BoardCardMutationResponse:
       type: object
       properties:
-        board: { $ref: '#/components/schemas/Board' }
-        card: { $ref: '#/components/schemas/Card' }
-        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
+        board: { $ref: '#/components/schemas/MutationIdentity' }
+        card:
+          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
+        next_actions: {type: array, items: {type: object, additionalProperties: true}}
       required: [board, card]
 
     BoardCardMutationEchoResponse:
       type: object
       properties:
         board:
-          oneOf: [{ $ref: '#/components/schemas/Board' }, { $ref: '#/components/schemas/MutationIdentity' }]
+          $ref: '#/components/schemas/MutationIdentity'
         card:
           oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, card]
 
     RestoreArchivedCardRequest:

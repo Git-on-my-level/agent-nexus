@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -688,7 +689,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	if replayed {
-		writeJSON(w, replayStatus, normalizeBoardCardMutationReplayPayload(replayPayload))
+		writeJSON(w, replayStatus, cardCreationReplayEcho(r, opts, replayPayload))
 		return
 	}
 
@@ -716,7 +717,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeInternalError(w, r, hashErr, "failed to hash card create")
 			return
 		}
-		input.CreateReplay = &primitives.CardCreateReplay{Scope: idempotencyOp, Key: key, Hash: hash, Extras: hygiene.attach(map[string]any{})}
+		input.CreateReplay = &primitives.CardCreateReplay{Scope: idempotencyOp, Key: key, Hash: hash}
 	}
 	result, err := opts.primitiveStore.CreateBoardCard(r.Context(), actorID, boardID, input)
 	if err != nil {
@@ -736,7 +737,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				return
 			}
 			if replayed {
-				writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
+				writeJSON(w, status, cardCreationReplayEcho(r, opts, payload))
 				return
 			}
 			existingCard, loadCardErr := loadExistingBoardCardForCreateReplay(r.Context(), opts, boardID, req.CardID, req.ParentThread, req.ThreadID)
@@ -758,13 +759,13 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 				req.Refs,
 				req.Risk,
 			) {
-				response := hygiene.attach(map[string]any{"board": existingBoard, "card": existingCard})
+				response := cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(existingCard["id"]), BoardID: anyString(existingBoard["id"]), Creation: true})
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, response)
 				if writeIdempotencyError(w, replayErr) {
 					return
 				}
 				if replayErr == nil {
-					writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
+					writeJSON(w, status, cardCreationReplayEcho(r, opts, payload))
 					return
 				}
 			}
@@ -790,11 +791,11 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 	}
 
 	// Atomic creates already persisted the replay. Do not take the writer lock again.
-	if result.ReplayCommitted {
-		writeJSON(w, http.StatusCreated, normalizeBoardCardMutationReplayPayload(hygiene.attach(cardCreationResponse(result.Board, result.Card))))
+	if result.ReplayCommitted || strings.TrimSpace(req.RequestKey) == "" {
+		writeJSON(w, http.StatusCreated, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"]), Creation: true}))
 		return
 	}
-	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, hygiene.attach(cardCreationResponse(result.Board, result.Card)))
+	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, idempotencyOp, actorID, req.RequestKey, replayRequest, http.StatusCreated, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"]), Creation: true}))
 	if writeIdempotencyError(w, err) {
 		return
 	}
@@ -802,7 +803,7 @@ func addBoardCardFromRaw(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		writeInternalError(w, r, err, "failed to persist idempotency replay")
 		return
 	}
-	writeJSON(w, status, normalizeBoardCardMutationReplayPayload(payload))
+	writeJSON(w, status, cardCreationReplayEcho(r, opts, payload))
 }
 
 func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
@@ -903,10 +904,18 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		return
 	}
 	if replayed {
-		writeJSON(w, replayStatus, normalizeBatchBoardCardCreatePayload(replayPayload))
+		writeJSON(w, replayStatus, batchCardCreationReplayEcho(r, opts, replayPayload))
 		return
 	}
 
+	if strings.TrimSpace(batchRequestKey) != "" {
+		hash, err := hashJSONPayload(raw)
+		if err != nil {
+			writeInternalError(w, r, err, "failed to hash card batch")
+			return
+		}
+		inputs[0].CreateReplay = &primitives.CardCreateReplay{Scope: "boards.cards.batch_add", Key: batchRequestKey, Hash: hash}
+	}
 	results, err := opts.primitiveStore.CreateBoardCardsBatch(r.Context(), actorID, boardID, ifBoardTok, inputs)
 	if err != nil {
 		if writeStoreContentionError(w, r, err) {
@@ -937,25 +946,25 @@ func handleBatchAddBoardCards(w http.ResponseWriter, r *http.Request, opts handl
 		}
 	}
 
-	finalBoard := results[len(results)-1].Board
-	cardPayloads := make([]map[string]any, len(results))
+	cardIDs := make([]string, len(results))
 	for i := range results {
-		cardPayloads[i] = results[i].Card
+		cardIDs[i] = anyString(results[i].Card["id"])
 	}
-	response := map[string]any{
-		"board": finalBoard,
-		"cards": cardPayloads,
+	response := batchCardCreationEcho(r, opts, anyString(results[len(results)-1].Board["id"]), cardIDs)
+	if results[0].ReplayCommitted || strings.TrimSpace(batchRequestKey) == "" {
+		writeJSON(w, http.StatusCreated, response)
+		return
 	}
-	response = hygiene.attach(response)
 	status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "boards.cards.batch_add", actorID, batchRequestKey, raw, http.StatusCreated, response)
-	if writeIdempotencyError(w, err) {
-		return
-	}
 	if err != nil {
-		writeInternalError(w, r, err, "failed to persist idempotency replay")
+		// The batch has committed. A competing access change can prevent writing
+		// the receipt; never replace the successful mutation with a projection 500.
+		log.Printf("anx-core: committed card batch receipt failed error_type=%T", err)
+		writeJSON(w, http.StatusCreated, response)
 		return
 	}
-	writeJSON(w, status, normalizeBatchBoardCardCreatePayload(payload))
+	writeJSON(w, status, batchCardCreationReplayEcho(r, opts, payload))
+
 }
 
 func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {
@@ -1048,7 +1057,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 			writeError(w, http.StatusConflict, "conflict", "board has been updated; refresh and retry")
 			return
 		}
-		writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, hygiene.attach(map[string]any{"board": currentBoard, "card": beforeCard})))
+		writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(beforeCard["id"]), BoardID: anyString(currentBoard["id"])}))
 		return
 	}
 
@@ -1080,7 +1089,7 @@ func handleUpdateBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 		}
 	}
 
-	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, hygiene.attach(map[string]any{"board": result.Board, "card": result.Card})))
+	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}))
 }
 
 func handleMoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, cardKey string) {
@@ -1198,11 +1207,13 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	if boardID == "" {
 		boardID = anyString(beforeCard["board_id"])
 	}
+	applied := false
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.move", actorID, req.RequestKey, struct {
 		BoardID string
 		CardID  string
 		Request any
 	}{mutationBoardID, cardKey, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		applied = true
 		// Capture lifecycle before-state under the same write lock as the move.
 		beforeCard, err := loadBoardCardForEvent(ctx, opts, boardID, cardKey)
 		if err != nil {
@@ -1243,7 +1254,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 				return nil, err
 			}
 		}
-		return cardMutationResponse(ctx, r, opts, map[string]any{"board": result.Board, "card": result.Card}, req.RequestKey)
+		return cardMutationResponse(ctx, r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}, req.RequestKey)
 	})
 	if err != nil {
 		switch {
@@ -1262,6 +1273,9 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 	}
 
 	notifyProjectionMaintainer(opts)
+	if !applied {
+		response = cardMutationEcho(r, opts, cardMutationReplayTarget(response))
+	}
 	writeJSON(w, status, response)
 }
 
@@ -1322,11 +1336,7 @@ func handleRemoveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerO
 
 	emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardArchivedEvent(result.Board, result.Card))
 
-	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, map[string]any{
-		"board":             result.Board,
-		"card":              result.Card,
-		"removed_thread_id": result.RemovedThreadID,
-	}))
+	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}))
 }
 
 func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID, identifier string) {
@@ -1392,7 +1402,9 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 	if !ok {
 		return
 	}
+	applied := false
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.archive:"+identifier, actorID, req.RequestKey, req, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		applied = true
 		result, err := opts.primitiveStore.ArchiveBoardCard(ctx, actorID, boardID, identifier, primitives.RemoveBoardCardInput{
 			Reason:                req.Reason,
 			IfLifecycle:           lifecycle,
@@ -1410,7 +1422,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		if strings.TrimSpace(req.Reason) == "" {
 			emitCardLifecycleEventBestEffort(ctx, opts, actorID, event)
 		}
-		return cardMutationResponse(ctx, r, opts, map[string]any{"board": result.Board, "card": result.Card}, req.RequestKey)
+		return cardMutationResponse(ctx, r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}, req.RequestKey)
 	})
 
 	if err != nil {
@@ -1429,6 +1441,9 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 			writeInternalError(w, r, err, "failed to archive board card")
 		}
 		return
+	}
+	if !applied {
+		response = cardMutationEcho(r, opts, cardMutationReplayTarget(response))
 	}
 	writeJSON(w, status, response)
 }
@@ -1494,7 +1509,7 @@ func handleTrashBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if result.Card == nil || result.Card["_mutation_applied"] != false {
 		emitCardLifecycleEventBestEffort(r.Context(), opts, actorID, buildCardTrashedEvent(result.Board, result.Card))
 	}
-	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, map[string]any{"board": result.Board, "card": result.Card}))
+	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}))
 }
 
 func buildBoardWorkspacePayload(ctx context.Context, opts handlerOptions, boardID string, visibility ...func(string, string) bool) (map[string]any, error) {

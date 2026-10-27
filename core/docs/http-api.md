@@ -6,17 +6,29 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 ## Conventions
 
-- Card mutation echoes include the same current card fields and grouping
-  projection as `GET /cards/{id}`. A projection failure inside a keyed mutation
-  rolls back the write and its replay receipt. For already-committed mutations,
-  projection or sibling-visibility failure preserves the successful status and
-  reduces every echoed card, board and revision to `id`, `ref` and optional
-  `version`. Ancillary fields are omitted. Card projection and exact board/revision
-  visibility checks share one scoped read boundary (or the keyed write snapshot),
-  including when a visible card has left a now-private board. Read back for the
-  full projection rather than retrying a successful mutation. Mutation response
-  schemas explicitly permit these identity-only objects; GET schemas still
-  require their complete resource projections.
+- Card mutation responses are constructed from viewer-scoped reads after the
+  mutation, using the same current-card and plan/grouping projection as
+  `GET /cards/{id}`. Constructors accept resource IDs, never mutation maps.
+  Boards and revisions are reference receipts (`id`, canonical-ID `ref`, and
+  scoped `revision_number` when available); their full GET representations are
+  not reloaded into mutation responses. Batch creates return card references
+  from one bounded scoped batch read, with `version` only for visible cards.
+  Read GET endpoints for full board/revision/batch-card representations and
+  fresh concurrency tokens.
+- A failed read reduces only that object to its known `id`/`ref`, without stale
+  fields. Already-committed mutations retain success; keyed mutations whose
+  projection fails inside the writer still roll back with their receipt.
+  Scoped reads share a resource-read snapshot (or borrow the keyed writer).
+  Removal never echoes `removed_thread_id`. Mutation-time hygiene metadata is
+  omitted; Markdown normalization still applies. Creation suggestions are
+  recomputed from current scoped work and the bounded home-candidate cohort.
+- Replays identify the original mutation and do not repeat its side effects,
+  but card/board/revision representations are read in the current viewer scope.
+  Later edits can therefore change a replay's card fields. A revision receipt
+  retains the original revision ID. New single and batch create replay receipts
+  store identities only, atomically with the created records; older stored maps
+  contribute only IDs to the response constructor. GET schemas remain full
+  resource projections, while mutation schemas document reference receipts.
 - Card moves that exhaust SQLite writer admission return `503 busy` with
   `error.recoverable: true`, `Retry-After: 1`, and a correlated `X-Request-ID`.
   Wait and read back before retrying. Every uncertain commit or post-commit

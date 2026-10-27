@@ -2,7 +2,9 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"regexp"
 	"sort"
@@ -64,7 +66,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	// deliberately a physical routing cohort before scoped hydration, never an
 	// all-workspace similarity or denial scan. Routing keys never leave this query.
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,
-	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),(c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))
+	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),(b.role='initiatives')
 	 FROM (`+recent+`) recent
 	 CROSS JOIN cards c ON c.id=recent.id CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE b.archived_at IS NULL AND b.trashed_at IS NULL AND NOT `+workHasParentSQL("c")+`
@@ -403,4 +405,33 @@ func prepareHomeCandidate(c homeCandidate) homeCandidate {
 	c.signals, c.repositories = homeSignals(m)
 	c.family = TitleFamily(c.title)
 	return c
+}
+
+// GetCardCreationHints recomputes creation suggestions from scoped current work
+// and the existing bounded candidate cohort, never mutation-time suggestions.
+// Callers use the fresh GET parent_ref to omit hints for already-grouped work.
+func (s *Store) GetCardCreationHints(ctx context.Context, cardID string) ([]LikelyHome, error) {
+	var id, boardID, title, summary, refsJSON, metadataJSON string
+	err := s.db.QueryRowContext(ctx, `SELECT c.id,c.board_id,c.title,c.summary,c.refs_json,COALESCE(m.metadata_json,'{}')
+ FROM cards c LEFT JOIN work_metadata m ON m.card_id=c.id WHERE c.id=?`, cardID).Scan(&id, &boardID, &title, &summary, &refsJSON, &metadataJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return nil, err
+	}
+	refs, err := decodeStoredJSONList(refsJSON, "card.refs")
+	if err != nil {
+		return nil, err
+	}
+	card := map[string]any{"id": id, "board_id": boardID, "title": title, "summary": summary, "refs": refs}
+	if err := decorateCreatedCard(ctx, s.db, card, metadata); err != nil {
+		return nil, err
+	}
+	homes, _ := card["likely_home"].([]LikelyHome)
+	return homes, nil
 }

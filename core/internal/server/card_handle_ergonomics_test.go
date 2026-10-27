@@ -128,6 +128,14 @@ func TestCardCreateStorageIDAndHandleReplay(t *testing.T) {
 							t.Fatalf("same-body replay changed %s: %#v vs %#v", key, row, replay)
 						}
 					}
+					if route == "batch" {
+						// Batch receipts are scoped references; verify full handle/storage
+						// ergonomics through the GET representation the reference resolves to.
+						if len(row) != 3 || row["version"] == nil {
+							t.Fatalf("unexpected reference receipt: %#v", row)
+						}
+						row = workGetJSON(t, h.baseURL+"/cards/"+asString(row["ref"]), 200)["card"].(map[string]any)
+					}
 					if storageID != "" && row["id"] != storageID {
 						t.Fatalf("storage ID changed: want %q, got %#v", storageID, row)
 					}

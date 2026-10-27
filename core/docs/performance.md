@@ -8,27 +8,36 @@ enrichment. They do not call `ListBoardCardHistory`: revision history is neither
 returned nor materialized. The row selector uses the card primary key,
 `idx_ref_edges_work_placement(target_id,source_type,edge_type)` and the board
 primary key; enrichment retains its existing bounded plan/reference windows.
-The complete response opens one scoped resource-read boundary (borrowing the
-write snapshot for keyed mutations), projects the card, then authorizes each
-optional board and revision sibling with an exact scoped primary-key probe.
-Revision authorization also binds its card ID. These probes do not call the
-handle resolver, whose revision-handle path scans history. They add at most two
-queries and two returned identities, independent of board size and history.
-No board memberships or revision bodies are reloaded. Any failed check after
-commit logs only identity/error type and reduces the whole response to known
-resource identities, omitting ancillary fields and unknown future objects.
+The response constructor accepts IDs only and opens one resource-read boundary
+(borrowing the writer for keyed mutations). Optional board/revision reads build
+reference receipts with exact scoped primary-key queries, not full board maps
+or historical revision bodies. A revision reference binds its card ID and reads
+only identity and revision number. A failed read falls back for that object;
+no raw sibling fields, removed thread IDs or ancillary mutation metadata enter
+the constructor. Replays reconstruct from scoped reads too.
 
-`server/testdata/card_mutation_projection_budget.json` bounds the complete
-single-card reload/enrichment at 12 queries, 32 returned rows and 50,000 VM
-steps. The scale regression uses the shared 4,096-record corpus with private
-controls, measures both the owner and a partial-visibility reader, and grows one
-card's history from 1 to 1,025 revisions without changing the budget. It also
-compares the response fields with GET's public card projection. The separate
-`server/testdata/card_mutation_response_budget.json` budgets the complete
-response at 16 queries, 32 returned rows and 50,000 VM steps, including explicit
-primary-key plan assertions for both sibling probes. The card-only budget is
-unchanged. Run it alongside
-the existing shared enrichment gate:
+Single-card create additionally recomputes hints from current scoped work and
+the existing physical 200-candidate cohort (`work_grouping_card_positions`),
+with existing explicit-related-parent admission bounds. Batch create instead
+uses one scoped `cards.id IN (...)` projection for at most 100 IDs and one board
+primary-key read. It returns references, avoiding per-card query loops and full
+membership/history loads. Work grows with admitted request IDs and bounded
+candidate/card-enrichment windows, not revision history or unrelated workspace
+size. Keyed batch creates persist identity-only receipts with the cards in the
+same write transaction, before response projection; no post-commit writer is
+needed to save the receipt.
+
+Checked-in server budgets (queries / returned rows / VM steps):
+
+- `card_mutation_projection_budget.json`: 12 / 32 / 50,000, unchanged.
+- `card_mutation_response_budget.json`: 16 / 32 / 50,000, unchanged.
+- `card_creation_response_budget.json`: 24 / 256 / 50,000, including fresh hints.
+- `card_batch_response_budget.json`: 4 / 103 / 50,000 (including read-scope epoch rows) for a full 100-card batch.
+
+The shared 4,096-record scale fixture checks owner and partial readers with
+1 and 1,025 revisions, compares single-card fields with GET, and asserts indexed
+current-row, board, revision and batch point lookups. No existing budget or
+query-plan allowance is widened. Run alongside the shared enrichment gate:
 
 ```sh
 cd core

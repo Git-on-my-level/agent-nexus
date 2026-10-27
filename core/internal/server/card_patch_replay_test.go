@@ -84,7 +84,7 @@ func TestCardPatchReplayCommitsAssignmentEventWakeAndReceipt(t *testing.T) {
 		t.Fatal(first.Code, first.Body.String())
 	}
 	for i := 1; i < 8; i++ {
-		if next := <-results; next.Code != 200 || next.Body.String() != first.Body.String() {
+		if next := <-results; next.Code != 200 || mutationResponseIdentities(t, next.Body.String()) != mutationResponseIdentities(t, first.Body.String()) {
 			t.Fatalf("replay changed: %d %s", next.Code, next.Body.String())
 		}
 	}
@@ -109,8 +109,10 @@ func TestCardPatchReplayCommitsAssignmentEventWakeAndReceipt(t *testing.T) {
 	if out := write(later); out.Code != 200 {
 		t.Fatal(out.Code, out.Body.String())
 	}
-	if out := write(body); out.Code != 200 || out.Body.String() != first.Body.String() {
-		t.Fatal("replay returned a newer card projection", out.Code, out.Body.String())
+	if out := write(body); out.Code != 200 {
+		t.Fatal("replay changed status", out.Code, out.Body.String())
+	} else {
+		assertCurrentMutationCard(t, out, store, anyString(work["id"]))
 	}
 	body["patch"] = map[string]any{"assignee_refs": []string{"actor:" + owner.ActorID}}
 	if out := write(body); out.Code != 409 {

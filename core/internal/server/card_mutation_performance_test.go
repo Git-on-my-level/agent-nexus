@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"reflect"
@@ -44,6 +45,22 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 		MaxVMSteps uint64 `json:"max_vm_steps"`
 	}
 	if err := json.Unmarshal(responseRaw, &responseBudget); err != nil {
+		t.Fatal(err)
+	}
+	creationBudgetRaw, err := os.ReadFile("testdata/card_creation_response_budget.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	creationBudget := responseBudget
+	if err := json.Unmarshal(creationBudgetRaw, &creationBudget); err != nil {
+		t.Fatal(err)
+	}
+	batchBudgetRaw, err := os.ReadFile("testdata/card_batch_response_budget.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchBudget := responseBudget
+	if err := json.Unmarshal(batchBudgetRaw, &batchBudget); err != nil {
 		t.Fatal(err)
 	}
 	db, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)")
@@ -118,10 +135,8 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 			responseReq := req.WithContext(responseScope)
 			cacheAuthenticatedPrincipal(responseReq, &auth.Principal{ActorID: actor})
 			capture.Start()
-			response, err := projectCardMutationResponse(responseScope, responseReq, opts, map[string]any{
-				"card":     map[string]any{"id": "scale-card-1"},
-				"board":    map[string]any{"id": "scale-board-0", "ref": "board:scale-board-0"},
-				"revision": map[string]any{"id": "scale-card-revision-1", "ref": "card_revision:scale-card-1-r1"},
+			response, err := projectCardMutationResponse(responseScope, responseReq, opts, cardMutationTarget{
+				CardID: "scale-card-1", BoardID: "scale-board-0", RevisionID: "scale-card-revision-1",
 			})
 			responseStatements, responseQueries, responseRows := capture.Stop()
 			responseWork := capture.Work()
@@ -141,7 +156,7 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 					index = "sqlite_autoindex_boards_1"
 					boardProbe = true
 				}
-				if strings.HasSuffix(statement.SQL, "SELECT revision_id FROM card_revisions WHERE revision_id = ? AND card_id = ?") {
+				if strings.HasSuffix(statement.SQL, "SELECT revision_id, revision_number FROM card_revisions WHERE revision_id = ? AND card_id = ?") {
 					index = "sqlite_autoindex_card_revisions_1"
 					revisionProbe = true
 				}
@@ -163,6 +178,63 @@ func TestPerformanceCardMutationProjectionHistoryBudget(t *testing.T) {
 				t.Fatal("sibling identity probes were not exercised")
 			}
 			t.Logf("complete response history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, responseQueries, responseRows, responseWork.VMSteps)
+			// Creation hints are recomputed through the existing 200-candidate
+			// scoped read, rather than copied from the mutation result.
+			creationScope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+			creationReq := req.WithContext(creationScope)
+			cacheAuthenticatedPrincipal(creationReq, &auth.Principal{ActorID: actor})
+			capture.Start()
+			created, err := projectCardMutationResponse(creationScope, creationReq, opts, cardMutationTarget{CardID: "scale-card-1", BoardID: "scale-board-0", Creation: true})
+			_, creationQueries, creationRows := capture.Stop()
+			creationWork := capture.Work()
+			if err != nil || capture.WorkError() != nil {
+				t.Fatalf("creation=%v instrumentation=%v", err, capture.WorkError())
+			}
+			if creationQueries > creationBudget.MaxQueries || creationRows > creationBudget.MaxRows || creationWork.VMSteps > creationBudget.MaxVMSteps {
+				t.Errorf("creation history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, creationQueries, creationRows, creationWork.VMSteps)
+			}
+			if !reflect.DeepEqual(created["card"], view) {
+				t.Fatal("creation changed GET card fields")
+			}
+			t.Logf("creation history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, creationQueries, creationRows, creationWork.VMSteps)
+
+			ids := make([]string, boardCardsBatchMaxItems)
+			for i := range ids {
+				ids[i] = fmt.Sprintf("scale-card-%d", i+1)
+			}
+			batchScope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: actor})
+			batchReq := req.WithContext(batchScope)
+			capture.Start()
+			batch := batchCardCreationEcho(batchReq, opts, "scale-board-0", ids)
+			batchStatements, batchQueries, batchRows := capture.Stop()
+			batchWork := capture.Work()
+			if capture.WorkError() != nil {
+				t.Fatal(capture.WorkError())
+			}
+			if batchQueries > batchBudget.MaxQueries || batchRows > batchBudget.MaxRows || batchWork.VMSteps > batchBudget.MaxVMSteps {
+				t.Errorf("batch history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, batchQueries, batchRows, batchWork.VMSteps)
+			}
+			if len(batch["cards"].([]map[string]any)) != boardCardsBatchMaxItems {
+				t.Fatal("batch lost reference receipts")
+			}
+			var batchSeek bool
+			for _, statement := range batchStatements {
+				if !strings.Contains(statement.SQL, "SELECT id, version FROM cards WHERE id IN (") {
+					continue
+				}
+				plan, err := perfguard.Explain(ctx, env.workspace.DB(), statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(strings.Join(plan, "\n"), "sqlite_autoindex_cards_1") {
+					t.Fatalf("batch lost primary-key seeks: %v", plan)
+				}
+				batchSeek = true
+			}
+			if !batchSeek {
+				t.Fatal("batch point query was not exercised")
+			}
+			t.Logf("batch history=%d actor=%s SQL=%d rows=%d VM=%d", revisions, actor, batchQueries, batchRows, batchWork.VMSteps)
 
 		}
 	}

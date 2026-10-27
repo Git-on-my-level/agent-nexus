@@ -36,10 +36,7 @@ func (s *failedCardProjectionStore) EnrichCardPlans(context.Context, []map[strin
 
 func assertIdentityOnlyCardEcho(t *testing.T, card, original map[string]any) {
 	t.Helper()
-	want := map[string]any{"id": original["id"], "ref": original["ref"]}
-	if version, ok := original["version"]; ok {
-		want["version"] = version
-	}
+	want := map[string]any{"id": original["id"], "ref": "card:" + anyString(original["id"])}
 	// Compare JSON because handler responses decode integer versions to float64.
 	gotJSON, _ := json.Marshal(card)
 	wantJSON, _ := json.Marshal(want)
@@ -89,7 +86,7 @@ func TestCardMutationEchoAfterConcurrentPrivateBoardMove(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodPost, "/cards/"+anyString(created.Card["id"])+"/restore", nil).WithContext(viewer)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: "reader"})
-	assertIdentityOnlyCardEcho(t, cardMutationEcho(req, handlerOptions{primitiveStore: s}, map[string]any{"card": committed.Card})["card"].(map[string]any), committed.Card)
+	assertIdentityOnlyCardEcho(t, cardMutationEcho(req, handlerOptions{primitiveStore: s}, cardMutationTarget{CardID: anyString(committed.Card["id"])})["card"].(map[string]any), committed.Card)
 }
 
 func TestCardMutationProjectionFailureCommitBoundary(t *testing.T) {
@@ -204,4 +201,42 @@ func TestCardMutationProjectionFailureCommitBoundary(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A replay identifies the original operation but reads the card's current
+// viewer-scoped representation; later edits must not restore stale fields.
+func assertCurrentMutationCard(t *testing.T, out *httptest.ResponseRecorder, store *primitives.Store, id string) {
+	t.Helper()
+	var response map[string]any
+	if err := json.Unmarshal(out.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	card := response["card"].(map[string]any)
+	current, err := store.GetBoardCardCurrent(context.Background(), "", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"id", "title", "summary", "risk", "column_key", "version", "head_revision_ref"} {
+		got, _ := json.Marshal(card[field])
+		want, _ := json.Marshal(current[field])
+		if string(got) != string(want) {
+			t.Errorf("replay %s=%s current=%s", field, got, want)
+		}
+	}
+}
+
+func mutationResponseIdentities(t *testing.T, body string) string {
+	t.Helper()
+	var response map[string]any
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		t.Fatal(err)
+	}
+	identities := map[string]any{}
+	for _, field := range []string{"card", "board", "revision"} {
+		if record, ok := response[field].(map[string]any); ok {
+			identities[field] = record["id"]
+		}
+	}
+	raw, _ := json.Marshal(identities)
+	return string(raw)
 }

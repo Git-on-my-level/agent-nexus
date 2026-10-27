@@ -33,14 +33,6 @@ func groupingWorkResponse(item map[string]any) map[string]any {
 	return out
 }
 
-func cardCreationResponse(board, card map[string]any) map[string]any {
-	out := map[string]any{"board": board, "card": card}
-	if homes, ok := card["likely_home"].([]primitives.LikelyHome); ok {
-		out["likely_home"] = homes
-		out["next_actions"] = primitives.GroupingNextActions(anyString(card["ref"]), homes, "group")
-	}
-	return out
-}
 func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOptions, path string) bool {
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if path != "/ungrouped" && (len(parts) != 2 || (parts[1] != "group" && parts[1] != "fold" && parts[1] != "unfold" && parts[1] != "promote" && parts[1] != "retire")) {

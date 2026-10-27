@@ -1,0 +1,5 @@
+{
+  "max_queries": 4,
+  "max_rows": 103,
+  "max_vm_steps": 50000
+}

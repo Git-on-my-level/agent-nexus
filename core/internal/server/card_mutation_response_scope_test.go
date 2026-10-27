@@ -88,6 +88,19 @@ func (s *mutationResponseRaceStore) CreateCardRevision(ctx context.Context, acto
 	return result, revision, s.after(result, err)
 }
 
+func (s *mutationResponseRaceStore) CreateBoardCard(ctx context.Context, actor, board string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error) {
+	result, err := s.Store.CreateBoardCard(ctx, actor, board, input)
+	return result, s.after(result, err)
+}
+
+func (s *mutationResponseRaceStore) CreateBoardCardsBatch(ctx context.Context, actor, board string, token *string, inputs []primitives.AddBoardCardInput) ([]primitives.BoardCardMutationResult, error) {
+	results, err := s.Store.CreateBoardCardsBatch(ctx, actor, board, token, inputs)
+	if err == nil {
+		err = s.after(results[len(results)-1], nil)
+	}
+	return results, err
+}
+
 func assertIdentityOnlyMutationResponse(t *testing.T, out *httptest.ResponseRecorder, wantKeys []string) {
 	t.Helper()
 	var body map[string]any
@@ -103,7 +116,7 @@ func assertIdentityOnlyMutationResponse(t *testing.T, out *httptest.ResponseReco
 			t.Fatalf("missing %s identity: %s", key, out.Body.String())
 		}
 		for field := range record {
-			if field != "id" && field != "ref" && field != "version" {
+			if field != "id" && field != "ref" && field != "version" && field != "revision_number" {
 				t.Errorf("fallback leaked %s.%s in whole response: %s", key, field, out.Body.String())
 			}
 		}
@@ -250,22 +263,177 @@ func TestCardMutationWholeResponseAfterAccessLoss(t *testing.T) {
 					t.Fatalf("card visibility control: %v", err)
 				}
 			}
-			assertIdentityOnlyMutationResponse(t, out, wantKeys)
+			if name == "board-lost-card-visible" {
+				var response map[string]any
+				if err := json.Unmarshal(out.Body.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				if len(response) != 2 || anyString(response["card"].(map[string]any)["title"]) != "ResponseCardSecret" {
+					t.Fatalf("visible card was not freshly projected: %s", out.Body.String())
+				}
+				board := response["board"].(map[string]any)
+				if len(board) != 2 || board["id"] != boardID {
+					t.Fatalf("hidden board must be reference-only: %s", out.Body.String())
+				}
+			} else {
+				assertIdentityOnlyMutationResponse(t, out, wantKeys)
+			}
 		})
 	}
 }
 
-func TestCardMutationResponseRejectsUnclassifiedObjects(t *testing.T) {
-	payload := map[string]any{
-		"card":              map[string]any{"id": "card-id", "ref": "card:known", "title": "ResponseCardSecret"},
-		"board":             map[string]any{"id": "board-id", "ref": "board:known", "summary": "ResponseSummarySecret"},
-		"revision":          map[string]any{"id": "revision-id", "ref": "card_revision:known-r1", "summary": "ResponseRevisionSummarySecret"},
-		"unclassified":      map[string]any{"text": "ResponseBoardSecret"},
-		"markdown_hygiene":  map[string]any{"text": "ResponseSummarySecret"},
-		"removed_thread_id": "ResponseSummarySecret",
+func TestCardMutationResponseFreshScope(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	reader := seedNotificationTestAgent(t, env, "reader.freshhost")
+	s := env.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	for _, name := range []string{"hidden-sibling", "private-removed-thread", "create", "create-keyed", "board-create", "batch-create", "batch-create-keyed"} {
+		t.Run(name, func(t *testing.T) {
+			board, err := s.CreateBoard(ctx, reader.ActorID, map[string]any{"title": "FreshScopeBoardSecret"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			boardID := anyString(board["id"])
+			work, err := s.CreateWork(ctx, reader.ActorID, boardID, map[string]any{"title": "FreshScopeCardSecret"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := anyString(work["id"])
+			var hidden string
+			var hiddenThread string
+			if name == "hidden-sibling" {
+				sibling, err := s.CreateWork(ctx, reader.ActorID, boardID, map[string]any{"title": "HiddenSiblingSecret"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				hidden, hiddenThread = anyString(sibling["id"]), anyString(sibling["thread_id"])
+			}
+			if name == "private-removed-thread" {
+				thread, err := s.CreateThread(ctx, reader.ActorID, map[string]any{"title": "RemovedThreadSecret"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				hiddenThread = anyString(thread.Thread["id"])
+				hidden = hiddenThread
+				refs := []string{"thread:" + hiddenThread}
+				if _, err = s.UpdateBoardCard(ctx, reader.ActorID, boardID, id, primitives.UpdateBoardCardInput{Refs: &refs}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			spy := &mutationResponseRaceStore{Store: s}
+			spy.afterCommit = func(result primitives.BoardCardMutationResult) error {
+				if name == "private-removed-thread" {
+					// A separate committed writer removes the old reference, so
+					// the card stays visible while the old thread becomes private.
+					if _, err := s.RestoreArchivedBoardCard(ctx, "other-owner", boardID, id, primitives.RemoveBoardCardInput{}); err != nil {
+						return err
+					}
+					refs, parent := []string{}, ""
+					if _, err := s.UpdateBoardCard(ctx, "other-owner", boardID, id, primitives.UpdateBoardCardInput{Refs: &refs, ParentThreadID: &parent}); err != nil {
+						return err
+					}
+					if _, err := s.ArchiveBoardCard(ctx, "other-owner", boardID, id, primitives.RemoveBoardCardInput{}); err != nil {
+						return err
+					}
+				}
+				thread := hiddenThread
+				if thread == "" {
+					thread = anyString(result.Board["thread_id"])
+				}
+				_, err := s.PatchThread(ctx, "other-owner", thread, map[string]any{"pm_actor_id": "other-owner"}, nil)
+				return err
+			}
+			scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID})
+			currentBoard, err := s.GetBoard(ctx, boardID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := map[string]any{"actor_id": reader.ActorID, "column_key": "ready", "if_board_updated_at": currentBoard["updated_at"]}
+			path := "/cards/" + id + "/move"
+			if strings.Contains(name, "create") {
+				path = "/cards"
+				body["board_id"] = boardID
+				body["card"] = map[string]any{"title": "CreatedCardSecret", "summary": "CreatedSummarySecret"}
+				if strings.Contains(name, "keyed") {
+					body["request_key"] = "fresh-" + name
+				}
+				if name == "board-create" {
+					path = "/boards/" + boardID + "/cards"
+				}
+				if strings.HasPrefix(name, "batch") {
+					path = "/boards/" + boardID + "/cards/batch"
+					body["items"] = []any{map[string]any{"card": map[string]any{"title": "CreatedCardSecret"}}, map[string]any{"card": map[string]any{"title": "CreatedSummarySecret"}}}
+				}
+			}
+			method := http.MethodPost
+			if name == "private-removed-thread" {
+				method, path = http.MethodDelete, "/boards/"+boardID+"/cards/"+id
+			}
+			raw, _ := json.Marshal(body)
+			req := httptest.NewRequest(method, path, strings.NewReader(string(raw))).WithContext(scope)
+			cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: reader.ActorID})
+			opts := handlerOptions{primitiveStore: spy, authStore: env.authStore, actorRegistry: env.registry, workspaceID: "ws_main"}
+			out := httptest.NewRecorder()
+			switch {
+			case name == "hidden-sibling":
+				handleMoveCardMutation(out, req, opts, "", id, "card not found")
+			case name == "private-removed-thread":
+				handleRemoveBoardCard(out, req, opts, boardID, id)
+			case strings.HasPrefix(name, "batch"):
+				handleBatchAddBoardCards(out, req, opts, boardID)
+			case name == "board-create":
+				handleAddBoardCard(out, req, opts, boardID)
+			default:
+				addBoardCardFromRaw(out, req, opts, boardID, body, "cards.create")
+			}
+			status := http.StatusOK
+			if strings.Contains(name, "create") {
+				status = http.StatusCreated
+			}
+			if out.Code != status || spy.calls != 1 {
+				t.Fatalf("status=%d hook=%d body=%s", out.Code, spy.calls, out.Body.String())
+			}
+			if name == "batch-create-keyed" {
+				var count int
+				if err := env.workspace.DB().QueryRow(`SELECT count(*) FROM idempotency_replays WHERE request_key=?`, "fresh-"+name).Scan(&count); err != nil || count != 1 {
+					t.Fatalf("committed batch lost receipt: count=%d err=%v", count, err)
+				}
+			}
+			var response map[string]any
+			if err := json.Unmarshal(out.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if name == "hidden-sibling" || name == "private-removed-thread" {
+				// Prove the main card and board remain visible: a fallback due
+				// to losing the whole card must not mask the reported leak.
+				if _, err := s.GetBoardCardCurrent(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID}), "", id); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := s.GetBoard(primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID}), boardID); err != nil {
+					t.Fatal(err)
+				}
+				if hidden != "" && strings.Contains(out.Body.String(), hidden) {
+					t.Errorf("stale hidden resource leaked: %s", out.Body.String())
+				}
+				if _, exists := response["removed_thread_id"]; exists {
+					t.Errorf("removed thread must be omitted: %s", out.Body.String())
+				}
+			} else if strings.HasPrefix(name, "batch") {
+				cards, _ := response["cards"].([]any)
+				if len(cards) != 2 || len(response) != 2 {
+					t.Fatalf("unexpected batch response: %s", out.Body.String())
+				}
+				for _, record := range append(cards, response["board"]) {
+					for field := range record.(map[string]any) {
+						if field != "id" && field != "ref" {
+							t.Errorf("private batch field %s: %s", field, out.Body.String())
+						}
+					}
+				}
+			} else {
+				assertIdentityOnlyMutationResponse(t, out, []string{"card", "board"})
+			}
+		})
 	}
-	req := httptest.NewRequest("POST", "/cards/known/revisions", nil)
-	out := httptest.NewRecorder()
-	writeJSON(out, 201, cardMutationEcho(req, handlerOptions{}, payload))
-	assertIdentityOnlyMutationResponse(t, out, []string{"card", "board", "revision"})
 }
