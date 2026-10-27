@@ -3175,7 +3175,7 @@
     "../server/auth_handlers.go:allowHumanCredentialCeremony": "7a4a781c8a805856cba0907d0fdcae6deec300b20229a4a5bb4cee53878f9db2",
     "../server/auth_handlers.go:authenticatePrincipalFromHeader": "1920687e5f5e6778f62d6600d73dce23784798f1baa84c2a4fd0d78920ba505e",
     "../server/auth_handlers.go:decodeRevokePrincipalRequest": "619723d9fd4660afef042a797996ccdb6f595121f0fb9c42bfe4bced0935ac48",
-    "../server/auth_handlers.go:exchangeWorkspaceGrant": "1b3531374ebe0fd38a4cd01db3a0166f722f1e9211c90ebe9d6a59b1043f5378",
+    "../server/auth_handlers.go:exchangeWorkspaceGrant": "5c145d3ec2137284fb2e6dce986765e076515903f99be8e55790763ae9ae0f4f",
     "../server/auth_handlers.go:handleGetCurrentAgent": "3c7f81394dd819677b13747d267305e32d072905b59800329e7d5e2834711f33",
     "../server/auth_handlers.go:handleIssueAuthToken": "f4e47b84184e13861286c6fa8fbda3d4db4e78704e5b09a5aee9ae87adeb5659",
     "../server/auth_handlers.go:handleRevokePrincipal": "9fff4e5bcc787760406d9782efd782ad93879d047ee729d8eaac284f4706fc76",
