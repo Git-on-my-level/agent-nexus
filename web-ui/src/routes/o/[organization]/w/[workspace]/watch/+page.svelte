@@ -608,28 +608,31 @@
         actions={loopActions}
       />
     {/if}
-  {:else if !rollup.length && !digestCollection.counts.digest}
-    <div
-      class="rounded-md border border-dashed border-line px-4 py-8 text-center"
-      data-watch-empty
-    >
-      <p class="text-meta text-fg">No initiatives yet.</p>
-      <p class="mt-1 text-micro text-fg-muted">
-        Initiatives appear here once an agent or a person files one.
-        <a
-          class="text-accent-text hover:underline"
-          href={workspaceHref("/initiatives/new")}>Create one</a
-        >
-      </p>
-    </div>
-    <!-- The set can be empty because its last initiative was just retired;
-         the recent changes still read, exactly as they do beside the list. -->
+  {:else if !rollup.length}
+    {#if !digestCollection.counts.digest}
+      <div
+        class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+        data-watch-empty
+      >
+        <p class="text-meta text-fg">No initiatives yet.</p>
+        <p class="mt-1 text-micro text-fg-muted">
+          Initiatives appear here once an agent or a person files one.
+          <a
+            class="text-accent-text hover:underline"
+            href={workspaceHref("/initiatives/new")}>Create one</a
+          >
+        </p>
+      </div>
+    {/if}
+    <!-- The set can be empty because its last initiative was just retired,
+         or trimmed to digest-only work; the recent changes still read in
+         every empty-set case, exactly as they do beside the list. -->
     <InitiativeChanges
       changes={brief.initiativeChanges}
       {now}
       hrefFor={childInitiativeHref}
     />
-  {:else if rollup.length}
+  {:else}
     <InitiativeRollupList
       rows={rollup}
       {now}

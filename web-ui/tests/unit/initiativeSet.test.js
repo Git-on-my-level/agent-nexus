@@ -144,7 +144,7 @@ describe("over target", () => {
     expect(overTargetLine(null)).toBe("");
   });
 
-  it("finds the open ask by its question when core named no subject", () => {
+  it("links nothing by title alone when core named no subject", () => {
     const decisions = [
       {
         kind: "ask",
@@ -153,7 +153,9 @@ describe("over target", () => {
       },
       { kind: "ask", title: over.ask, inboxItemId: "ask-7" },
     ];
-    expect(overTargetAsk(over, decisions)?.inboxItemId).toBe("ask-7");
+    // Without the recommended subject an ask cannot be verified as the
+    // count question, so an exact title match still shows no link.
+    expect(overTargetAsk(over, decisions)).toBeNull();
     expect(overTargetAsk(over, decisions.slice(0, 1))).toBeNull();
     expect(overTargetAsk({ ...over, ask: "" }, decisions)).toBeNull();
     expect(overTargetAsk(null, decisions)).toBeNull();
