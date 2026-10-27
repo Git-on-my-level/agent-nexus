@@ -393,18 +393,22 @@ function normalizeBudget(raw) {
 /**
  * `over_target`, or null when the count is within target (or core predates
  * it). `ask` is the question core recommends an agent ask the reader, so a
- * screen can find that ask once it is open; Watch never sends it.
+ * screen can find that ask once it is open; Watch never sends it. The
+ * recommended argv also names the initiative it is about, so the same
+ * fixed question asked about another card is not that link.
  */
 function normalizeOverTarget(raw) {
   if (!raw || typeof raw !== "object") return null;
   const actions = Array.isArray(raw.next_actions) ? raw.next_actions : [];
   const argv = actions.find((a) => text(a?.command_id) === "ask")?.argv;
   const at = Array.isArray(argv) ? argv.indexOf("ask") : -1;
+  const subjectAt = Array.isArray(argv) ? argv.indexOf("--subject-ref") : -1;
   return {
     count: count(raw.count),
     target: count(raw.target),
     truncated: Boolean(raw.truncated),
     ask: at >= 0 ? text(argv[at + 1]) : "",
+    subjectRef: subjectAt >= 0 ? text(argv[subjectAt + 1]) : "",
   };
 }
 

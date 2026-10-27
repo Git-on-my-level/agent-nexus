@@ -397,12 +397,19 @@
     </div>
     <span class="flex-1"></span>
     <span class="text-micro text-fg-muted"
-      ><span
+      ><!--
+        The chip's full sentence and its "+" lower-bound note must read as
+        text: an aria-label on this generic span is not announced. The visible
+        bound stays for sighted readers only.
+      --><span
         class="font-medium {overTarget ? 'text-warn-text' : 'text-fg'}"
         title={indicator.title || undefined}
-        aria-label={indicator.label}
         data-source={budget ? "computed:initiative_budget" : undefined}
-        data-initiative-budget>{indicator.text}</span
+        data-initiative-budget
+        >{#if budget?.truncated}<span aria-hidden="true">{indicator.text}</span
+          ><span class="sr-only"
+            >{indicator.label}. Some initiatives may be outside your view.</span
+          >{:else}{indicator.text}{/if}</span
       ><span aria-hidden="true" class="mx-1 text-fg-subtle">·</span>Sorted by
       what needs you · children fold into their initiative</span
     >

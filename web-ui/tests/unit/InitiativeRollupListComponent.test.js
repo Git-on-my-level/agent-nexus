@@ -179,9 +179,10 @@ describe("InitiativeRollupList", () => {
       );
       const chip = container.querySelector("[data-initiative-budget]");
       expect(chip.textContent.trim()).toBe("Initiatives: 7 of 15");
-      expect(chip.getAttribute("aria-label")).toBe(
-        "7 initiatives against a target of 15",
-      );
+      // The exact count reads as text; an aria-label on a generic span is
+      // not announced.
+      expect(chip.getAttribute("aria-label")).toBeNull();
+      expect(chip.querySelector(".sr-only")).toBeNull();
       expect(container.querySelector("[data-over-target]")).toBeNull();
       expect(container.querySelector("[data-initiative-changes]")).toBeNull();
     });
@@ -205,6 +206,17 @@ describe("InitiativeRollupList", () => {
       const line = container.querySelector("[data-over-target]");
       expect(line.textContent.replace(/\s+/g, " ").trim()).toBe(
         "Over target At least 17 initiatives against a target of 15.",
+      );
+      // The truncated "+" is a sighted lower bound; the announced name is
+      // the full sentence plus the out-of-view note, as text.
+      const chip = container.querySelector("[data-initiative-budget]");
+      expect(chip.querySelector('[aria-hidden="true"]').textContent).toBe(
+        "Initiatives: 17+ of 15",
+      );
+      expect(
+        chip.querySelector(".sr-only").textContent.replace(/\s+/g, " ").trim(),
+      ).toBe(
+        "At least 17 initiatives against a target of 15. Some initiatives may be outside your view.",
       );
       expect(container.querySelector("[data-over-target-ask]")).toBeNull();
       expect(line.querySelector("button")).toBeNull();

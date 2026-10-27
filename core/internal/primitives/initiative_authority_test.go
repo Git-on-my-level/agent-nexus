@@ -289,6 +289,7 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 	}
 	roots := []map[string]any{}
 	children := []map[string]any{}
+	loopCards := []map[string]any{}
 	for i := 0; i < 5; i++ {
 		root, e := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": fmt.Sprintf("Outcome %d", i)})
 		if e != nil {
@@ -304,9 +305,11 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 		}
 	}
 	for i := 0; i < 21; i++ {
-		if _, err = s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": fmt.Sprintf("Loop %d", i), "cadence": map[string]any{"every_seconds": 3600}}); err != nil {
-			t.Fatal(err)
+		loop, e := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": fmt.Sprintf("Loop %d", i), "cadence": map[string]any{"every_seconds": 3600}})
+		if e != nil {
+			t.Fatal(e)
 		}
+		loopCards = append(loopCards, loop)
 	}
 	if _, err = s.UpdateBoard(ctx, "writer", workString(board["id"]), map[string]any{"role": "initiatives"}, nil); err != nil {
 		t.Fatal(err)
@@ -327,17 +330,30 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 		if len(items) != 5 || brief["initiative_budget"].(map[string]any)["count"] != 5 {
 			t.Fatalf("mixed board expanded: roots=%d budget=%v", len(items), brief["initiative_budget"])
 		}
-		want := map[string]bool{}
-		for _, root := range roots {
-			want[workString(root["ref"])] = true
-		}
+		rollups := map[string]*WorkRollup{}
 		for _, item := range items {
-			if !want[workString(item["ref"])] || item["rollup"].(*WorkRollup).Total != 16 {
-				t.Fatalf("hierarchy changed: %v", item)
+			rollups[workString(item["ref"])] = item["rollup"].(*WorkRollup)
+		}
+		// Every root keeps exactly its own sixteen children.
+		for _, root := range roots {
+			ref := workString(root["ref"])
+			r := rollups[ref]
+			if r == nil || r.Total != 16 || len(r.Children) != 16 {
+				t.Fatalf("root %s lost children: %+v", ref, r)
 			}
 		}
-		if len(brief["loops"].([]map[string]any)) == 0 {
-			t.Fatal("loops lost their separate section")
+		sectionLoops := brief["loops"].([]map[string]any)
+		if len(sectionLoops) != len(loopCards) || brief["truncated"].(map[string]bool)["loops"] {
+			t.Fatalf("loop section changed: loops=%d want %d truncated=%v", len(sectionLoops), len(loopCards), brief["truncated"])
+		}
+		seenLoops := map[string]bool{}
+		for _, item := range sectionLoops {
+			seenLoops[workString(item["ref"])] = true
+		}
+		for _, loop := range loopCards {
+			if !seenLoops[workString(loop["ref"])] {
+				t.Fatalf("loop lost from the section: %v", loop["ref"])
+			}
 		}
 	}
 	assertWatch()

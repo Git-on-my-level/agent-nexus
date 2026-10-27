@@ -9835,7 +9835,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/work/{card_ref}/retire",
     "operation_id": "initiativeRetire",
     "summary": "Retire an initiative by explicit board membership",
-    "why": "Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.",
+    "why": "Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"

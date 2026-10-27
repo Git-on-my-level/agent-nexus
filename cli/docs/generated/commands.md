@@ -2195,7 +2195,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns initiative membership, work and advisory facts.

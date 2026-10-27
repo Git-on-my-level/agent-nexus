@@ -47,6 +47,7 @@ describe("initiative set normalization", () => {
       target: 5,
       truncated: false,
       ask: "Initiatives exceed the target: fold this initiative or keep it?",
+      subjectRef: "card:battery-measurement",
     });
     expect(brief.initiativeChanges.items).toEqual([
       {
@@ -143,7 +144,7 @@ describe("over target", () => {
     expect(overTargetLine(null)).toBe("");
   });
 
-  it("finds the open ask by its question, not by its subject", () => {
+  it("finds the open ask by its question when core named no subject", () => {
     const decisions = [
       {
         kind: "ask",
@@ -156,6 +157,41 @@ describe("over target", () => {
     expect(overTargetAsk(over, decisions.slice(0, 1))).toBeNull();
     expect(overTargetAsk({ ...over, ask: "" }, decisions)).toBeNull();
     expect(overTargetAsk(null, decisions)).toBeNull();
+  });
+
+  it("requires the recommended subject, then the newest re-ask", () => {
+    const aboutCard = { ...over, subjectRef: "card:battery-measurement" };
+    const reAsk = (inboxItemId, createdAt, subjectRef) => ({
+      kind: "ask",
+      title: over.ask,
+      createdAt,
+      inboxItemId,
+      subject: { ref: subjectRef },
+    });
+    const otherSubject = reAsk(
+      "ask-other",
+      "2026-10-24T11:00:00Z",
+      "card:calibration",
+    );
+    const older = reAsk(
+      "ask-older",
+      "2026-10-24T10:00:00Z",
+      aboutCard.subjectRef,
+    );
+    const newer = reAsk(
+      "ask-newer",
+      "2026-10-24T11:30:00Z",
+      aboutCard.subjectRef,
+    );
+    // The fixed question asked about another card is not the link.
+    expect(overTargetAsk(aboutCard, [otherSubject])).toBeNull();
+    expect(overTargetAsk(aboutCard, [otherSubject, older])?.inboxItemId).toBe(
+      "ask-older",
+    );
+    // The brief lists decisions by decide-by, not age; the newest re-ask wins.
+    expect(
+      overTargetAsk(aboutCard, [older, newer, otherSubject])?.inboxItemId,
+    ).toBe("ask-newer");
   });
 });
 

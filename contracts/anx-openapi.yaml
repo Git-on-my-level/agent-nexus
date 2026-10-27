@@ -2514,7 +2514,7 @@ paths:
       x-anx-agent-notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
       x-anx-command-id: initiative.retire
       x-anx-cli-path: initiative retire
-      x-anx-why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+      x-anx-why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns initiative membership, work and advisory facts.

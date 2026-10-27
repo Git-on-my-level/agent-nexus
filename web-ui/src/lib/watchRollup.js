@@ -530,16 +530,26 @@ export function overTargetLine(over) {
 
 /**
  * The reader's open ask about the initiative count: the question core
- * recommends, once an agent has asked it. Matched on the question, not the
- * subject, since a card can carry unrelated asks.
+ * recommends, once an agent has asked it. Every brief decision is already
+ * open, so among several matches — the same fixed question re-asked — the
+ * newest one wins. When core's recommended argv named the initiative, the
+ * ask must be about that card: a same-titled ask about another subject is
+ * not this link.
  */
 export function overTargetAsk(over, decisions = []) {
   const question = over?.ask?.trim().toLowerCase();
   if (!question) return null;
-  return (
-    decisions.find(
-      (d) => d.kind === "ask" && d.title.trim().toLowerCase() === question,
-    ) ?? null
+  const subjectRef = over?.subjectRef?.trim();
+  const matches = decisions.filter(
+    (d) =>
+      d.kind === "ask" &&
+      d.title.trim().toLowerCase() === question &&
+      (!subjectRef || d.subject?.ref === subjectRef),
+  );
+  if (matches.length === 0) return null;
+  const askedAt = (d) => Date.parse(d.createdAt ?? "");
+  return matches.reduce((newest, d) =>
+    (askedAt(d) || 0) > (askedAt(newest) || 0) ? d : newest,
   );
 }
 
