@@ -1728,6 +1728,22 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 }
 
 func (s *Store) GetBoardCard(ctx context.Context, boardID, identifier string) (map[string]any, error) {
+	card, err := s.GetBoardCardCurrent(ctx, boardID, identifier)
+	if err != nil {
+		return nil, err
+	}
+	history, err := s.ListBoardCardHistory(ctx, card["id"].(string))
+	if err != nil {
+		return nil, err
+	}
+	card["history"] = history
+	return card, nil
+}
+
+// GetBoardCardCurrent loads the scoped current row, including lifecycle fields,
+// without materializing revision history. Like GetBoardCard, it borrows an
+// enclosing mutation transaction from ctx when present.
+func (s *Store) GetBoardCardCurrent(ctx context.Context, boardID, identifier string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
@@ -1743,16 +1759,7 @@ func (s *Store) GetBoardCard(ctx context.Context, boardID, identifier string) (m
 	if err != nil {
 		return nil, err
 	}
-	card, err := row.toMap()
-	if err != nil {
-		return nil, err
-	}
-	history, err := s.ListBoardCardHistory(ctx, row.CardID)
-	if err != nil {
-		return nil, err
-	}
-	card["history"] = history
-	return card, nil
+	return row.toMap()
 }
 
 // SoleThreadRefIDFromRefs returns the thread id when refs contains exactly one distinct thread: ref.

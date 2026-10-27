@@ -488,7 +488,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		if err != nil {
 			return nil, err
 		}
-		cardView, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		cardView, err := cardMutationResponseView(ctx, r, opts, result.Card, req.RequestKey)
 		if err != nil {
 			return nil, err
 		}
@@ -606,7 +606,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 				enqueueCardAssigneeWakeBestEffort(ctx, opts, actorID, beforeCard, result.Card, result.Board, stored)
 			}
 		}
-		cardView, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		cardView, err := cardMutationResponseView(ctx, r, opts, result.Card, req.RequestKey)
 		if err != nil {
 			return nil, err
 		}

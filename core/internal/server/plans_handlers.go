@@ -86,7 +86,7 @@ func enrichCardsWithContext(ctx context.Context, r *http.Request, opts handlerOp
 // GET /cards/{id}, so mutation responses report the same grouping fields a
 // fresh read returns. cardID is the canonical card id from the store result.
 func mutatedCardView(ctx context.Context, r *http.Request, opts handlerOptions, cardID string) (map[string]any, error) {
-	card, err := opts.primitiveStore.GetBoardCard(ctx, "", cardID)
+	card, err := opts.primitiveStore.GetBoardCardCurrent(ctx, "", cardID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,15 +96,30 @@ func mutatedCardView(ctx context.Context, r *http.Request, opts handlerOptions, 
 	return publicCardView(card), nil
 }
 
-// cardMutationEchoView is mutatedCardView for a mutation that already
-// committed: a projection failure only degrades the echo to the raw store
-// view, never to an error response the client would retry against committed
-// state.
+// cardMutationResponseView keeps projection failures fatal while a keyed
+// mutation can still roll back. Unkeyed writes have already committed, so their
+// response must degrade safely instead of inviting a retry of committed work.
+func cardMutationResponseView(ctx context.Context, r *http.Request, opts handlerOptions, card map[string]any, requestKey string) (map[string]any, error) {
+	if strings.TrimSpace(requestKey) != "" {
+		return mutatedCardView(ctx, r, opts, anyString(card["id"]))
+	}
+	return cardMutationEchoView(r.WithContext(ctx), opts, card), nil
+}
+
+// cardMutationEchoView is for a mutation that already committed. On projection
+// failure current visibility is unknown: echo only the mutation's identity and
+// version, never stale content, placement or references from its raw result.
 func cardMutationEchoView(r *http.Request, opts handlerOptions, card map[string]any) map[string]any {
 	view, err := mutatedCardView(r.Context(), r, opts, anyString(card["id"]))
 	if err != nil {
 		log.Printf("anx-core: card mutation echo projection failed card_id=%s error_type=%T", anyString(card["id"]), err)
-		return publicCardView(card)
+		echo := make(map[string]any)
+		for _, key := range []string{"id", "ref", "version"} {
+			if value, ok := card[key]; ok {
+				echo[key] = value
+			}
+		}
+		return echo
 	}
 	return view
 }

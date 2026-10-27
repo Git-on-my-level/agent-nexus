@@ -6,6 +6,13 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 
 ## Conventions
 
+- Card mutation echoes include the same current card fields and grouping
+  projection as `GET /cards/{id}`. A projection failure inside a keyed mutation
+  rolls back the write and its replay receipt. For already-committed mutations,
+  projection failure preserves the successful status and returns only the
+  mutation's card `id`, `ref` and optional `version`; it never falls back to
+  stale card content or placement when current visibility is unknown. Read back
+  for the full projection rather than retrying a successful mutation.
 - Card moves that exhaust SQLite writer admission return `503 busy` with
   `error.recoverable: true`, `Retry-After: 1`, and a correlated `X-Request-ID`.
   Wait and read back before retrying. Every uncertain commit or post-commit

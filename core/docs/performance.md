@@ -1,5 +1,31 @@
 # Performance guardrails
 
+## Card mutation response projection
+
+Mutation echoes reload one scoped current card row through
+`GetBoardCardCurrent`, then use the existing single-card plan and hierarchy
+enrichment. They do not call `ListBoardCardHistory`: revision history is neither
+returned nor materialized. The row selector uses the card primary key,
+`idx_ref_edges_work_placement(target_id,source_type,edge_type)` and the board
+primary key; enrichment retains its existing bounded plan/reference windows.
+Keyed responses borrow the write snapshot. After commit, failed projections log
+only identity/error type and return an identity-only card echo, without a second
+visibility read or stale content.
+
+`server/testdata/card_mutation_projection_budget.json` bounds the complete
+single-card reload/enrichment at 12 queries, 32 returned rows and 50,000 VM
+steps. The scale regression uses the shared 4,096-record corpus with private
+controls, measures both the owner and a partial-visibility reader, and grows one
+card's history from 1 to 1,025 revisions without changing the budget. It also
+compares the response fields with GET's public card projection. Run it alongside
+the existing shared enrichment gate:
+
+```sh
+cd core
+ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 ./internal/server \
+  -run '^TestPerformance(CardMutationProjectionHistoryBudget|WorkSummaryBudgetAndPlans)$' -count=1 -v
+```
+
 ## Explicit initiative visibility
 
 Brief's explicit-board selection uses one board primary-key existence probe

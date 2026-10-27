@@ -113,6 +113,7 @@ type PrimitiveStore interface {
 	InboxThreadAccessOwners(ctx context.Context, threadID string) ([]string, error)
 	ListBoardCards(ctx context.Context, boardID string) ([]map[string]any, error)
 	GetBoardCard(ctx context.Context, boardID string, identifier string) (map[string]any, error)
+	GetBoardCardCurrent(ctx context.Context, boardID string, identifier string) (map[string]any, error)
 	CreateBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)
 	CreateBoardCardsBatch(ctx context.Context, actorID string, boardID string, ifBoard *string, inputs []primitives.AddBoardCardInput) ([]primitives.BoardCardMutationResult, error)
 	AddBoardCard(ctx context.Context, actorID string, boardID string, input primitives.AddBoardCardInput) (primitives.BoardCardMutationResult, error)

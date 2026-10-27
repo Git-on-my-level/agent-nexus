@@ -1243,7 +1243,7 @@ func handleMoveCardMutation(w http.ResponseWriter, r *http.Request, opts handler
 				return nil, err
 			}
 		}
-		movedCard, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		movedCard, err := cardMutationResponseView(ctx, r, opts, result.Card, req.RequestKey)
 		if err != nil {
 			return nil, err
 		}
@@ -1414,7 +1414,7 @@ func handleArchiveBoardCard(w http.ResponseWriter, r *http.Request, opts handler
 		if strings.TrimSpace(req.Reason) == "" {
 			emitCardLifecycleEventBestEffort(ctx, opts, actorID, event)
 		}
-		archivedCard, err := mutatedCardView(ctx, r, opts, anyString(result.Card["id"]))
+		archivedCard, err := cardMutationResponseView(ctx, r, opts, result.Card, req.RequestKey)
 		if err != nil {
 			return nil, err
 		}
