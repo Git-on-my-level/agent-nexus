@@ -346,6 +346,11 @@ func TestBoardInitiativeTargetGetAndPatch(t *testing.T) {
 	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != float64(3) {
 		t.Fatal(got)
 	}
+	patch(1000000, 200)
+	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != float64(1000000) {
+		t.Fatal(got)
+	}
+	patch("4", 400)
 	patch(-1, 400)
 	patch(1.5, 400)
 	patch(nil, 200)

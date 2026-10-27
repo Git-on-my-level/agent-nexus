@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,8 +25,8 @@ func normalizeInitiativeTarget(m map[string]any, fallback sql.NullInt64) (sql.Nu
 	if v == nil {
 		return sql.NullInt64{}, nil
 	}
-	n, err := strconv.ParseInt(fmt.Sprint(v), 10, 32)
-	if err != nil || n < 0 {
+	n, valid := workInt(v)
+	if !valid || n < 0 {
 		return sql.NullInt64{}, invalidBoardRequest("initiative_target must be a nonnegative integer or null")
 	}
 	return sql.NullInt64{Int64: n, Valid: true}, nil
