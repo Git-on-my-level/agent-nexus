@@ -4278,7 +4278,7 @@ Generated Help: initiative retire
 - Side effect class: `remote_coordination_write`
 - Stability: `beta`
 - Input mode: `json-body`
-- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
 - Output: Returns initiative membership, work and advisory facts.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
