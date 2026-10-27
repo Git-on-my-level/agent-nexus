@@ -209,6 +209,7 @@ type BoardListItem struct {
 
 type CardCreateReplay struct {
 	Scope, Key, Hash string
+	Extras           map[string]any
 }
 
 type AddBoardCardInput struct {
@@ -1761,66 +1762,6 @@ func (s *Store) GetBoardCardCurrent(ctx context.Context, boardID, identifier str
 	return row.toMap()
 }
 
-// GetBoardMutationReference is a scoped point projection for mutation
-// receipts. It intentionally never loads membership or other board fields.
-func (s *Store) GetBoardMutationReference(ctx context.Context, boardID string) (map[string]any, error) {
-	var id string
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM boards WHERE id = ?`, boardID).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": id, "ref": "board:" + id}, nil
-}
-
-// GetCardRevisionMutationReference projects only the scoped revision identity
-// and number. The point lookup binds its card and never resolves history.
-func (s *Store) GetCardRevisionMutationReference(ctx context.Context, cardID, revisionID string) (map[string]any, error) {
-	var id string
-	var number int
-	err := s.db.QueryRowContext(ctx, `SELECT revision_id, revision_number FROM card_revisions WHERE revision_id = ? AND card_id = ?`, revisionID, cardID).Scan(&id, &number)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": id, "ref": "card_revision:" + id, "revision_number": number}, nil
-}
-
-// GetCardsMutationReferences projects a bounded creation batch in one scoped
-// read. Hidden cards are absent; the HTTP constructor retains their known IDs.
-func (s *Store) GetCardsMutationReferences(ctx context.Context, cardIDs []string) (map[string]map[string]any, error) {
-	out := make(map[string]map[string]any)
-	if len(cardIDs) == 0 {
-		return out, nil
-	}
-	if len(cardIDs) > maxBoardCardsBatchSize {
-		return nil, invalidBoardRequest("too many card reference IDs")
-	}
-	args := make([]any, len(cardIDs))
-	for i, id := range cardIDs {
-		args[i] = id
-	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cardIDs)), ",")
-	rows, err := s.db.QueryContext(ctx, `SELECT id, version FROM cards WHERE id IN (`+placeholders+`)`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		var version int
-		if err := rows.Scan(&id, &version); err != nil {
-			return nil, err
-		}
-		out[id] = map[string]any{"id": id, "ref": "card:" + id, "version": version}
-	}
-	return out, rows.Err()
-}
-
 // SoleThreadRefIDFromRefs returns the thread id when refs contains exactly one distinct thread: ref.
 func SoleThreadRefIDFromRefs(refs []string) (string, error) {
 	var out string
@@ -1963,9 +1904,16 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	cardMap["create_surface"] = input.CreateSurface
 
 	if replay := input.CreateReplay; replay != nil {
-		response := map[string]any{
-			"board": map[string]any{"id": boardRow.ID},
-			"card":  map[string]any{"id": cardRow.CardID},
+		response := map[string]any{"board": boardMap, "card": cardMap}
+		if homes, ok := cardMap["likely_home"].([]LikelyHome); ok {
+			response["likely_home"] = homes
+			response["next_actions"] = GroupingNextActions(workString(cardMap["ref"]), homes, "group")
+		}
+
+		for key, value := range replay.Extras {
+			if key != "board" && key != "card" {
+				response[key] = value
+			}
 		}
 		raw, err := json.Marshal(response)
 		if err == nil {
@@ -2121,28 +2069,6 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
-	}
-	// Persist identity-only receipts under the same writer as the entire
-	// batch. A post-commit projection/access failure must not lose its replay.
-	if replay := inputs[0].CreateReplay; replay != nil {
-		cards := make([]map[string]any, len(results))
-		for i := range results {
-			cards[i] = map[string]any{"id": results[i].Card["id"]}
-		}
-		raw, err := json.Marshal(map[string]any{"board": map[string]any{"id": boardID}, "cards": cards})
-		if err == nil {
-			_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES(?,?,?,?,201,?)`, replay.Scope, actorID, replay.Key, replay.Hash, string(raw))
-		}
-		if err != nil {
-			for _, pending := range stagedWrites {
-				_ = pending.Cleanup()
-			}
-			_ = tx.Rollback()
-			return nil, err
-		}
-		for i := range results {
-			results[i].ReplayCommitted = true
-		}
 	}
 	// Promote before committing so committed cards always have their content;
 	// a failed promote rolls the whole batch back.

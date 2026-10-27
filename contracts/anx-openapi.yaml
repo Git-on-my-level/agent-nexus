@@ -5018,7 +5018,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationResponse'
+                $ref: '#/components/schemas/CardResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5325,7 +5325,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardMutationResponse'
+                $ref: '#/components/schemas/CardResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5490,7 +5490,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
+                $ref: '#/components/schemas/BoardCardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5529,7 +5529,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
+                $ref: '#/components/schemas/BoardCardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5568,7 +5568,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardMutationResponse'
+                $ref: '#/components/schemas/CardResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -5796,7 +5796,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BoardCardMutationEchoResponse'
+                $ref: '#/components/schemas/BoardCardMutationResponse'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -14306,11 +14306,11 @@ components:
     BatchCreateBoardCardsResponse:
       type: object
       properties:
-        board: { $ref: '#/components/schemas/MutationIdentity' }
+        board: { $ref: '#/components/schemas/Board' }
         cards:
           type: array
-          items:
-            oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
+          items: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, cards]
 
     PatchCardRequest:
@@ -15280,35 +15280,12 @@ components:
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card]
 
-    MutationIdentity:
-      type: object
-      description: Reference receipt for a committed mutation. Boards and revisions use references instead of full mutation-time maps. Cards fall back to id/ref when a fresh viewer-scoped projection is unavailable. Optional version/revision_number values come only from scoped reads. Read back if permitted; do not retry a successful mutation.
-      additionalProperties: false
-      properties:
-        id: { $ref: '#/components/schemas/InternalResourceUUID' }
-        ref: { $ref: '#/components/schemas/ResourceRef' }
-        version: { type: integer }
-        revision_number: { type: integer }
-      required: [id]
-
-    CardMutationResponse:
-      type: object
-      properties:
-        card:
-          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        board:
-          $ref: '#/components/schemas/MutationIdentity'
-      required: [card]
-
     CardWithRevisionResponse:
       type: object
       properties:
-        board:
-          $ref: '#/components/schemas/MutationIdentity'
-        card:
-          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        revision:
-          $ref: '#/components/schemas/MutationIdentity'
+        card: { $ref: '#/components/schemas/Card' }
+        revision: { $ref: '#/components/schemas/CardRevision' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [card, revision]
 
     CardRevisionsResponse:
@@ -15349,20 +15326,9 @@ components:
     BoardCardMutationResponse:
       type: object
       properties:
-        board: { $ref: '#/components/schemas/MutationIdentity' }
-        card:
-          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
-        likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
-        next_actions: {type: array, items: {type: object, additionalProperties: true}}
-      required: [board, card]
-
-    BoardCardMutationEchoResponse:
-      type: object
-      properties:
-        board:
-          $ref: '#/components/schemas/MutationIdentity'
-        card:
-          oneOf: [{ $ref: '#/components/schemas/Card' }, { $ref: '#/components/schemas/MutationIdentity' }]
+        board: { $ref: '#/components/schemas/Board' }
+        card: { $ref: '#/components/schemas/Card' }
+        markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [board, card]
 
     RestoreArchivedCardRequest:

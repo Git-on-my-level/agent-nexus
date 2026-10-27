@@ -265,9 +265,7 @@ async function send(entry, lease = null) {
       entry.request.id,
       entry.request.body,
     );
-    // A committed move may return scoped reference receipts. Confirmation
-    // needs resource identities; fresh board tokens come from the next read.
-    if (!result.card?.id || !result.board?.id)
+    if (!result.card?.id || !result.board?.updated_at)
       throw new Error("Move receipt is incomplete.");
     return result;
   }

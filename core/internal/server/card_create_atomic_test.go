@@ -84,7 +84,7 @@ func TestCardCreateReplayRespectsRevokedResourceAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	scope := primitives.WithAccessScope(ctx, primitives.AccessScope{ActorID: "owner"})
-	_, err = h.store.CreateBoardCard(scope, "owner", board["id"].(string), primitives.AddBoardCardInput{Title: "Private card", CreateReplay: &primitives.CardCreateReplay{Scope: "cards.create", Key: "one", Hash: "hash"}})
+	_, err = h.store.CreateBoardCard(scope, "owner", board["id"].(string), primitives.AddBoardCardInput{Title: "Private card", CreateReplay: &primitives.CardCreateReplay{Scope: "cards.create", Key: "one", Hash: "hash", Extras: map[string]any{"warnings": []any{map[string]any{"message": "Private card normalized"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,55 +102,6 @@ func TestCardCreateReplayRespectsRevokedResourceAccess(t *testing.T) {
 	}
 	if _, err := h.store.GetIdempotencyReplay(scope, "cards.create", "owner", "one"); !errors.Is(err, primitives.ErrNotFound) {
 		t.Fatalf("revoked replay leaked card/board/warnings: %v", err)
-	}
-}
-
-func TestBatchCardCreateIdentityReplayAtomic(t *testing.T) {
-	h := newProjectionMaintenanceTestServer(t)
-	ctx := context.Background()
-	board, err := h.store.CreateBoard(ctx, "owner", map[string]any{"title": "Batch receipt"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	inputs := []primitives.AddBoardCardInput{
-		{Title: "BatchSecretOne", CreateReplay: &primitives.CardCreateReplay{Scope: "boards.cards.batch_add", Key: "batch-atomic", Hash: "hash"}},
-		{Title: "BatchSecretTwo"},
-	}
-	if _, err := h.workspace.DB().Exec(`CREATE TRIGGER reject_batch_receipt BEFORE INSERT ON idempotency_replays BEGIN SELECT RAISE(ABORT,'batch receipt failed'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := h.store.CreateBoardCardsBatch(ctx, "owner", anyString(board["id"]), nil, inputs); err == nil {
-		t.Fatal("receipt failure was ignored")
-	}
-	var count int
-	if err := h.workspace.DB().QueryRow(`SELECT count(*) FROM cards WHERE board_id=?`, board["id"]).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("receipt failure retained cards: count=%d err=%v", count, err)
-	}
-	if _, err := h.workspace.DB().Exec(`DROP TRIGGER reject_batch_receipt`); err != nil {
-		t.Fatal(err)
-	}
-	results, err := h.store.CreateBoardCardsBatch(ctx, "owner", anyString(board["id"]), nil, inputs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(results) != 2 || !results[0].ReplayCommitted || !results[1].ReplayCommitted {
-		t.Fatal("batch did not atomically record its receipt")
-	}
-	var raw string
-	if err := h.workspace.DB().QueryRow(`SELECT response_json FROM idempotency_replays WHERE request_key='batch-atomic'`).Scan(&raw); err != nil {
-		t.Fatal(err)
-	}
-	var response map[string]any
-	if err := json.Unmarshal([]byte(raw), &response); err != nil {
-		t.Fatal(err)
-	}
-	if len(response) != 2 {
-		t.Fatalf("unexpected stored fields: %s", raw)
-	}
-	for _, record := range append(response["cards"].([]any), response["board"]) {
-		if identity, ok := record.(map[string]any); !ok || len(identity) != 1 || identity["id"] == nil {
-			t.Fatalf("receipt retained mutation fields: %s", raw)
-		}
 	}
 }
 
@@ -182,7 +133,7 @@ func TestCardCreateReplaySurvivesPostCommitFailure(t *testing.T) {
 	}
 	post(500)           // canonical commit succeeded, but the old response persistence failed
 	replay := post(201) // replay precedes the now-stale board precondition
-	if board := replay["board"].(map[string]any); len(board) != 2 || board["id"] == nil || board["ref"] == nil {
+	if replay["board"].(map[string]any)["card_refs_truncated"] != true {
 		t.Fatal("unbounded board echo")
 	}
 	payload["card"].(map[string]any)["title"] = "Changed request"

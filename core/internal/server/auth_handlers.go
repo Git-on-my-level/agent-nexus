@@ -187,16 +187,12 @@ type workspaceGrantExchange struct {
 //     managed agent). Replays are detected first, so a replayed grant never
 //     spends the budget of the principal it names.
 func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handlerOptions, issueRefreshToken *bool, grant workspaceGrantExchange) {
-	now := opts.grantRateLimitNow
-	if now == nil {
-		now = time.Now
-	}
 	addressScope := "anonymous"
 	if host := requestClientHost(r); host != "" {
 		addressScope = "addr:" + host
 	}
 	addressLimiter := opts.workspaceHumanGrantRateLimiter
-	addressReservation, allowed, retryAfter := addressLimiter.reserve("auth", addressScope, now().UTC())
+	addressReservation, allowed, retryAfter := addressLimiter.reserve("auth", addressScope, time.Now().UTC())
 	if !allowed {
 		writeRateLimitedError(w, grant.grantType, retryAfter)
 		return
@@ -225,10 +221,10 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 		writeReplay()
 		return
 	}
-	addressReservation.refund(now().UTC())
+	addressReservation.refund(time.Now().UTC())
 
 	principalScope := workspaceGrantPrincipalScope(grant.grantType, principalKey)
-	principalReservation, allowed, retryAfter := opts.workspaceGrantSubjectRateLimiter.reserve("auth", principalScope, now().UTC())
+	principalReservation, allowed, retryAfter := opts.workspaceGrantSubjectRateLimiter.reserve("auth", principalScope, time.Now().UTC())
 	if !allowed {
 		writeRateLimitedError(w, grant.grantType, retryAfter)
 		return
@@ -247,8 +243,8 @@ func exchangeWorkspaceGrant(w http.ResponseWriter, r *http.Request, opts handler
 		case errors.Is(exchangeErr, auth.ErrExternalGrantReplay):
 			// A concurrent exchange consumed the jti after the check above.
 			// The replay must not cost the principal; charge the address.
-			principalReservation.refund(now().UTC())
-			addressLimiter.allow("auth", addressScope, now().UTC())
+			principalReservation.refund(time.Now().UTC())
+			addressLimiter.allow("auth", addressScope, time.Now().UTC())
 			writeReplay()
 		case errors.Is(exchangeErr, auth.ErrAgentRevoked):
 			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")

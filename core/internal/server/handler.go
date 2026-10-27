@@ -228,9 +228,6 @@ type handlerOptions struct {
 	// workspaceGrantSubjectRateLimiter budgets verified grant exchanges per
 	// principal and grant type.
 	workspaceGrantSubjectRateLimiter *routeRateLimiter
-	// grantRateLimitNow lets tests advance budget time independently of token
-	// exchange I/O. Production uses the wall clock when this is nil.
-	grantRateLimitNow func() time.Time
 	// beforeGrantConsume, when set by tests, runs after a verified grant is
 	// charged and before its jti is consumed.
 	beforeGrantConsume  func()

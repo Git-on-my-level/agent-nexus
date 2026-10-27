@@ -1,48 +1,32 @@
 # Performance guardrails
 
-## Card mutation response projection
+## Card mutation grouping echoes
 
-Mutation echoes reload one scoped current card row through
-`GetBoardCardCurrent`, then use the existing single-card plan and hierarchy
-enrichment. They do not call `ListBoardCardHistory`: revision history is neither
-returned nor materialized. The row selector uses the card primary key,
+Patch, revision, move and lifecycle echoes reload one scoped current card row
+through `GetBoardCardCurrent`, then use GET's existing acting-viewer plan and
+hierarchy enrichment. Only `parent_ref` and `rollup` are copied into the original
+card response; other mutation fields and sibling objects retain their existing
+representations. Reload/enrichment errors omit grouping without failing a
+successful mutation. The read borrows an enclosing mutation transaction.
+
+The selector seeks the card primary key, placement through
 `idx_ref_edges_work_placement(target_id,source_type,edge_type)` and the board
-primary key; enrichment retains its existing bounded plan/reference windows.
-The response constructor accepts IDs only and opens one resource-read boundary
-(borrowing the writer for keyed mutations). Optional board/revision reads build
-reference receipts with exact scoped primary-key queries, not full board maps
-or historical revision bodies. A revision reference binds its card ID and reads
-only identity and revision number. A failed read falls back for that object;
-no raw sibling fields, removed thread IDs or ancillary mutation metadata enter
-the constructor. Replays reconstruct from scoped reads too.
+primary key. Parentage uses `idx_brief_plan_refs_target`; existing plan and
+hierarchy enrichment admits at most 200 steps. Work grows with the selected
+card's admitted plan/references and indexed ancestry, independent of its revision
+history and unrelated workspace records. No full-board or revision-history read
+is added to the echo.
 
-Single-card create additionally recomputes hints from current scoped work and
-the existing physical 200-candidate cohort (`work_grouping_card_positions`),
-with existing explicit-related-parent admission bounds. Batch create instead
-uses one scoped `cards.id IN (...)` projection for at most 100 IDs and one board
-primary-key read. It returns references, avoiding per-card query loops and full
-membership/history loads. Work grows with admitted request IDs and bounded
-candidate/card-enrichment windows, not revision history or unrelated workspace
-size. Keyed batch creates persist identity-only receipts with the cards in the
-same write transaction, before response projection; no post-commit writer is
-needed to save the receipt.
-
-Checked-in server budgets (queries / returned rows / VM steps):
-
-- `card_mutation_projection_budget.json`: 12 / 32 / 50,000, unchanged.
-- `card_mutation_response_budget.json`: 16 / 32 / 50,000, unchanged.
-- `card_creation_response_budget.json`: 24 / 256 / 50,000, including fresh hints.
-- `card_batch_response_budget.json`: 4 / 103 / 50,000 (including read-scope epoch rows) for a full 100-card batch.
-
-The shared 4,096-record scale fixture checks owner and partial readers with
-1 and 1,025 revisions, compares single-card fields with GET, and asserts indexed
-current-row, board, revision and batch point lookups. No existing budget or
-query-plan allowance is widened. Run alongside the shared enrichment gate:
+`TestPerformanceCardMutationProjectionHistoryBudget` compares the current-card
+projection with GET and enforces `testdata/card_mutation_projection_budget.json`:
+12 queries, 32 returned rows and 50,000 VM steps. It exercises owner and partial
+visibility with 4,096 unrelated records at both 1 and 1,025 revisions, requires
+the indexed current-row placement seek and rejects history materialization. No
+existing budget or query-plan allowance is widened.
 
 ```sh
-cd core
-ANX_PERFORMANCE_TEST=1 go test -p=1 -parallel=1 ./internal/server \
-  -run '^TestPerformance(CardMutationProjectionHistoryBudget|WorkSummaryBudgetAndPlans)$' -count=1 -v
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server \
+  -run '^TestPerformanceCardMutationProjectionHistoryBudget$' -count=1 -v -timeout=8m
 ```
 
 ## Explicit initiative visibility

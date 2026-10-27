@@ -1,14 +1,11 @@
 package server
 
 import (
-	"context"
+	"agent-nexus-core/internal/primitives"
 	"errors"
-	"log"
-	"net/http"
 	"strings"
 	"time"
 
-	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 )
 
@@ -149,70 +146,40 @@ func publicCardView(card map[string]any) map[string]any {
 	return canonicalCardView(card)
 }
 
-// Replays contribute identities only; all response content is read again in
-// the current viewer scope. Even older receipts containing raw maps are safe.
-func cardCreationReplayEcho(r *http.Request, opts handlerOptions, payload map[string]any) map[string]any {
-	card, _ := payload["card"].(map[string]any)
-	board, _ := payload["board"].(map[string]any)
-	return cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(card["id"]), BoardID: anyString(board["id"]), Creation: true})
+func normalizeBoardCardMutationReplayPayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	out := make(map[string]any, len(payload))
+	for k, v := range payload {
+		out[k] = v
+	}
+	if c, ok := payload["card"].(map[string]any); ok && c != nil {
+		out["card"] = publicCardView(c)
+	}
+	return out
 }
 
-func batchCardCreationEcho(r *http.Request, opts handlerOptions, boardID string, cardIDs []string) map[string]any {
-	cards := make([]map[string]any, len(cardIDs))
-	for i, id := range cardIDs {
-		cards[i] = mutationReference("card", id)
+func normalizeBatchBoardCardCreatePayload(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
 	}
-	response := map[string]any{"board": mutationReference("board", boardID), "cards": cards}
-	store, ok := opts.primitiveStore.(interface {
-		BeginResourceRead(context.Context) (context.Context, func(), error)
-		GetBoardMutationReference(context.Context, string) (map[string]any, error)
-		GetCardsMutationReferences(context.Context, []string) (map[string]map[string]any, error)
-	})
-	if !ok {
-		return response
+	out := make(map[string]any, len(payload))
+	for k, v := range payload {
+		out[k] = v
 	}
-	ctx, closeRead, err := store.BeginResourceRead(r.Context())
-	if err != nil {
-		log.Printf("anx-core: card batch response projection failed error_type=%T", err)
-		return response
-	}
-	defer closeRead()
-	// There is no bounded full-card GET projection for an entire creation batch.
-	// A single scoped batch read supplies reference receipts without per-card I/O.
-	if references, err := store.GetCardsMutationReferences(ctx, cardIDs); err == nil {
-		for i, id := range cardIDs {
-			if reference, ok := references[id]; ok {
-				cards[i] = reference
+	if raw, ok := payload["cards"].([]any); ok && raw != nil {
+		cards := make([]any, 0, len(raw))
+		for _, item := range raw {
+			if c, ok := item.(map[string]any); ok && c != nil {
+				cards = append(cards, publicCardView(c))
+				continue
 			}
+			cards = append(cards, item)
 		}
-	} else {
-		log.Printf("anx-core: card batch reference projection failed error_type=%T", err)
+		out["cards"] = cards
 	}
-	if board, err := store.GetBoardMutationReference(ctx, boardID); err == nil {
-		response["board"] = board
-	} else {
-		log.Printf("anx-core: card batch board projection failed error_type=%T", err)
-	}
-	return response
-}
-
-func batchCardCreationReplayEcho(r *http.Request, opts handlerOptions, payload map[string]any) map[string]any {
-	board, _ := payload["board"].(map[string]any)
-	ids := []string{}
-	// Fresh handler payloads use []map; durable JSON receipts use []any.
-	switch cards := payload["cards"].(type) {
-	case []map[string]any:
-		for _, card := range cards {
-			ids = append(ids, anyString(card["id"]))
-		}
-	case []any:
-		for _, value := range cards {
-			if card, ok := value.(map[string]any); ok {
-				ids = append(ids, anyString(card["id"]))
-			}
-		}
-	}
-	return batchCardCreationEcho(r, opts, anyString(board["id"]), ids)
+	return out
 }
 
 func publicCardsView(cards []map[string]any) []map[string]any {

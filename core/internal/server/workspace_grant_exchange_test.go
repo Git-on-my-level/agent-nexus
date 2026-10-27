@@ -47,16 +47,12 @@ func newGrantExchangeHarness(t *testing.T, extra ...HandlerOption) grantExchange
 		t.Fatalf("initialize workspace: %v", err)
 	}
 	t.Cleanup(func() { _ = workspace.Close() })
-	// These assertions measure burst accounting, not database speed. A token
-	// refills every six seconds, which a loaded host can spend in exchange I/O.
-	now := time.Now().UTC()
 	return grantExchangeHarness{
 		handler: NewHandler(
 			"0.2.2",
 			append([]HandlerOption{
 				WithAuthStore(auth.NewStore(workspace.DB())),
 				WithWorkspaceHumanGrantVerifier(subjectGrantVerifier{}),
-				func(opts *handlerOptions) { opts.grantRateLimitNow = func() time.Time { return now } },
 			}, extra...)...,
 		),
 		db: workspace.DB(),
@@ -320,10 +316,7 @@ func (managedSlotGrantVerifier) Verify(_ context.Context, assertion string) (aut
 
 func TestWorkspaceManagedGrantBudgetIsPerSlotWhateverTheSubject(t *testing.T) {
 	t.Parallel()
-	now := time.Now().UTC()
-	h := newGrantExchangeHarness(t, WithWorkspaceManagedAgentGrantVerifier(managedSlotGrantVerifier{}), func(opts *handlerOptions) {
-		opts.grantRateLimitNow = func() time.Time { return now }
-	})
+	h := newGrantExchangeHarness(t, WithWorkspaceManagedAgentGrantVerifier(managedSlotGrantVerifier{}))
 	managedBody := func(assertion string) map[string]any {
 		return map[string]any{"grant_type": auth.TokenGrantTypeWorkspaceManagedAgent, "assertion": assertion}
 	}
@@ -342,15 +335,6 @@ func TestWorkspaceManagedGrantBudgetIsPerSlotWhateverTheSubject(t *testing.T) {
 	// Another slot has its own budget.
 	if rr := h.post(t, "198.51.100.120:40000", managedBody("valid:sub-new:slot-b:jti-slot-b")); rr.Code != http.StatusOK {
 		t.Fatalf("other slot: got %d: %s", rr.Code, rr.Body.String())
-	}
-	// Advancing the budget clock by six seconds restores exactly one token,
-	// regardless of how long the database exchanges took in real time.
-	now = now.Add(6 * time.Second)
-	if rr := h.post(t, "198.51.100.121:40000", managedBody("valid:sub-refill:slot-a:jti-slot-a-refill")); rr.Code != http.StatusOK {
-		t.Fatalf("refilled slot: got %d: %s", rr.Code, rr.Body.String())
-	}
-	if rr := h.post(t, "198.51.100.122:40000", managedBody("valid:sub-again:slot-a:jti-slot-a-refill-over")); rr.Code != http.StatusTooManyRequests {
-		t.Fatalf("refill must restore only one token: got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

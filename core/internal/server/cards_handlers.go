@@ -475,12 +475,10 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		summary = strings.TrimSpace(summary)
 		req.Summary = &summary
 	}
-	applied := false
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.revisions.create", actorID, req.RequestKey, struct {
 		CardID  string
 		Request any
 	}{cardID, originalRequest}, http.StatusCreated, func(ctx context.Context) (map[string]any, error) {
-		applied = true
 		result, revision, err := opts.primitiveStore.CreateCardRevision(ctx, actorID, cardID, primitives.CreateCardRevisionInput{
 			Title:            req.Title,
 			Summary:          req.Summary,
@@ -490,7 +488,7 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 		if err != nil {
 			return nil, err
 		}
-		return cardMutationResponse(ctx, r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"]), RevisionID: anyString(revision["id"])}, req.RequestKey)
+		return hygiene.attach(map[string]any{"board": result.Board, "card": cardMutationEchoView(ctx, r, opts, result.Card), "revision": revision}), nil
 	})
 	if err != nil {
 		switch {
@@ -506,9 +504,6 @@ func handleCreateCardRevision(w http.ResponseWriter, r *http.Request, opts handl
 			writeInternalError(w, r, err, "failed to create card revision")
 		}
 		return
-	}
-	if !applied {
-		response = cardMutationEcho(r, opts, cardMutationReplayTarget(response))
 	}
 	writeJSON(w, status, response)
 	notifyProjectionMaintainer(opts)
@@ -586,12 +581,10 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 			return
 		}
 	}
-	applied := false
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "cards.patch", actorID, req.RequestKey, struct {
 		ID   string
 		Body any
 	}{cardID, req}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
-		applied = true
 		result, err := opts.primitiveStore.UpdateBoardCard(ctx, actorID, "", cardID, patchInput)
 		if err != nil {
 			return nil, err
@@ -609,7 +602,7 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 				enqueueCardAssigneeWakeBestEffort(ctx, opts, actorID, beforeCard, result.Card, result.Board, stored)
 			}
 		}
-		return cardMutationResponse(ctx, r, opts, cardMutationTarget{CardID: anyString(result.Card["id"])}, req.RequestKey)
+		return hygiene.attach(map[string]any{"card": cardMutationEchoView(ctx, r, opts, result.Card)}), nil
 	})
 	if err != nil {
 		if writeStoreContentionError(w, r, err) {
@@ -632,9 +625,6 @@ func handlePatchCard(w http.ResponseWriter, r *http.Request, opts handlerOptions
 	}
 
 	notifyProjectionMaintainer(opts)
-	if !applied {
-		response = cardMutationEcho(r, opts, cardMutationReplayTarget(response))
-	}
 	writeJSON(w, status, response)
 }
 
@@ -715,7 +705,7 @@ func handleRestoreArchivedCard(w http.ResponseWriter, r *http.Request, opts hand
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cardMutationEcho(r, opts, cardMutationTarget{CardID: anyString(result.Card["id"]), BoardID: anyString(result.Board["id"])}))
+	writeJSON(w, http.StatusOK, map[string]any{"board": result.Board, "card": cardMutationEchoView(r.Context(), r, opts, result.Card)})
 }
 
 func handlePurgeArchivedCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, cardID string) {

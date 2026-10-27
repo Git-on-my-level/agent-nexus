@@ -167,7 +167,7 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 		}
 		if first == "" {
 			first = out.Body.String()
-		} else if mutationResponseIdentities(t, first) != mutationResponseIdentities(t, out.Body.String()) {
+		} else if first != out.Body.String() {
 			t.Fatal("concurrent receipts differ")
 		}
 	}
@@ -199,17 +199,8 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 	if out := write(newer, anyString(work["ref"])); out.Code != 201 {
 		t.Fatal(out.Code, out.Body.String())
 	}
-	if out := write(body, anyString(work["ref"])); out.Code != 201 {
-		t.Fatal("original receipt status changed", out.Code, out.Body.String())
-	}
-	replayCurrent := write(body, anyString(work["ref"]))
-	assertCurrentMutationCard(t, replayCurrent, store, anyString(work["id"]))
-	var replayBody map[string]any
-	if err := json.Unmarshal(replayCurrent.Body.Bytes(), &replayBody); err != nil {
-		t.Fatal(err)
-	}
-	if replayBody["revision"].(map[string]any)["id"] != receipt["revision"].(map[string]any)["id"] {
-		t.Fatal("replay changed mutation revision identity")
+	if out := write(body, anyString(work["ref"])); out.Code != 201 || out.Body.String() != first {
+		t.Fatal("original receipt advanced", out.Code, out.Body.String())
 	}
 	stale := copyMutationBody(body)
 	stale["request_key"] = "fresh-key-stale-base"
@@ -253,10 +244,8 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 		t.Fatal("legacy revision failed", out.Code, out.Body.String())
 	}
 	primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{MaxArtifacts: 1})(store)
-	if out := write(body, anyString(work["ref"])); out.Code != 201 {
+	if out := write(body, anyString(work["ref"])); out.Code != 201 || out.Body.String() != first {
 		t.Fatal("quota blocked original receipt", out.Code, out.Body.String())
-	} else {
-		assertCurrentMutationCard(t, out, store, anyString(work["id"]))
 	}
 	primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{MaxArtifacts: 1000, MaxBlobBytes: 1 << 30})(store)
 	if _, err := store.PatchThread(ctx, owner.ActorID, anyString(work["thread_id"]), map[string]any{"pm_actor_id": "replacement"}, nil); err != nil {
