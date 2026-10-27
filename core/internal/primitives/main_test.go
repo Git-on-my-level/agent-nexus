@@ -25,9 +25,14 @@ func TestMain(m *testing.M) {
 	if testing.Short() && runtime.GOMAXPROCS(0) > fastTierGOMAXPROCS {
 		// Cap the parallel-test cap too: go test derives its default from the
 		// original GOMAXPROCS before TestMain runs, and 18 concurrently
-		// released tests on fewer Ps reintroduces the scheduling churn.
+		// released tests on fewer Ps reintroduces the scheduling churn. Only
+		// lower it: an explicit smaller -parallel (e.g. 1) stays as requested.
 		if p := flag.Lookup("test.parallel"); p != nil {
-			_ = p.Value.Set(fmt.Sprint(fastTierGOMAXPROCS))
+			if g, ok := p.Value.(flag.Getter); ok {
+				if n, ok := g.Get().(int); ok && n > fastTierGOMAXPROCS {
+					_ = p.Value.Set(fmt.Sprint(fastTierGOMAXPROCS))
+				}
+			}
 		}
 		runtime.GOMAXPROCS(fastTierGOMAXPROCS)
 	}
