@@ -55,3 +55,14 @@ func TestHTTPStatusClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthRejectionHintsSeparateAuthenticationFromAuthorization(t *testing.T) {
+	unauthorized := FromHTTPFailure(401, nil)
+	if !strings.Contains(unauthorized.Hint, "host enrollment") {
+		t.Fatalf("401 should point at enrollment: %q", unauthorized.Hint)
+	}
+	forbidden := FromHTTPFailure(403, nil)
+	if strings.Contains(forbidden.Hint, "enrollment") || !strings.Contains(forbidden.Message, "403") {
+		t.Fatalf("403 must not blame enrollment: %q / %q", forbidden.Message, forbidden.Hint)
+	}
+}

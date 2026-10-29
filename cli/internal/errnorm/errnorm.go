@@ -254,8 +254,15 @@ func FromHTTPFailure(status int, body []byte) *Error {
 		retryable := status >= 500
 		out.Recoverable = &retryable
 		if class == "auth_rejection" {
-			out.Message = fmt.Sprintf("authentication or authorization rejected (HTTP %d)", status)
-			out.Hint = "The server rejected authentication or authorization. Run `anx --as <name> auth whoami` to verify host enrollment and access with an auth-admin."
+			if status == 403 {
+				// Credentials were accepted; this route is outside their access.
+				// Re-enrolling would not help, so don't point there.
+				out.Message = "authorization denied (HTTP 403)"
+				out.Hint = "The server accepted these credentials but denied this route. Run `anx --as <name> auth whoami` to confirm the acting principal, or ask a workspace admin for access."
+			} else {
+				out.Message = fmt.Sprintf("authentication rejected (HTTP %d)", status)
+				out.Hint = "The server rejected authentication. Run `anx --as <name> auth whoami` to verify host enrollment and access with an auth-admin."
+			}
 		} else if status >= 500 {
 			out.Hint = "The server or gateway is unavailable. Retry the read with backoff."
 		}
@@ -284,7 +291,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"outcome_unknown":               {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
-	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx api call --path /readyz` to confirm readiness."},
+	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
 	"human_required":                {Recoverable: false, Hint: "Use the human's own credentials for this action."},
 	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
