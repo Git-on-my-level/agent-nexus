@@ -401,6 +401,20 @@ describe("authSession", () => {
     },
   );
 
+  it("reads { authenticated: false } without an agent field as signed out, not malformed", async () => {
+    const workspaceSlug = `outage-${outageCase++}`;
+    setCurrentWorkspaceSlug(workspaceSlug);
+    const agent = await initializeAuthSession({
+      workspaceSlug,
+      rejectWhenUnavailable: true,
+      fetchFn: async () => Response.json({ authenticated: false }),
+    });
+
+    expect(agent).toBeNull();
+    expect(get(authSessionReady)).toBe(true);
+    setCurrentWorkspaceSlug("alpha");
+  });
+
   it("still reads a definitive 401 as signed out when rejecting outages", async () => {
     const agent = await initializeAuthSession({
       workspaceSlug: "alpha",

@@ -152,19 +152,22 @@ function applySessionEndedByAccountStatus(
 }
 
 /**
- * `/auth/session` success shape: `{ agent: null }` (signed out) or
- * `{ agent: { agent_id, ... } }`. Anything else is a malformed reply and is
- * handled as an outage, never as "signed out".
+ * `/auth/session` success shape: signed out is `{ authenticated: false }`
+ * (with `agent` null or absent); signed in names an agent with a nonempty
+ * string `agent_id`. Anything else (not an object, an empty object,
+ * `authenticated: true` without an agent, a shape-invalid agent) is a
+ * malformed reply and is handled as an outage, never as "signed out".
  */
 function isSessionPayload(payload) {
-  if (!payload || typeof payload !== "object" || !("agent" in payload))
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
     return false;
-  const { agent } = payload;
+  const agent = payload.agent ?? null;
+  if (agent === null)
+    return "authenticated" in payload && payload.authenticated !== true;
   return (
-    agent === null ||
-    (typeof agent === "object" &&
-      typeof agent.agent_id === "string" &&
-      agent.agent_id.trim() !== "")
+    typeof agent === "object" &&
+    typeof agent.agent_id === "string" &&
+    agent.agent_id.trim() !== ""
   );
 }
 
@@ -449,7 +452,7 @@ async function runInitializeAuthSession({
       });
       if (generation !== state.generation) return null;
       if (!isSessionPayload(result)) throw malformedResponseError(200);
-      const nextAgent = result.agent;
+      const nextAgent = result.agent ?? null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
       if (agentChanged && previousAgent) {
         clearWorkspaceViews();

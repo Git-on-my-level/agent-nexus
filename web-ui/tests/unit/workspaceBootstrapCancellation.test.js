@@ -180,3 +180,24 @@ it("does not sign the viewer out when the first session read hits an outage", as
   expect(getHandshake).not.toHaveBeenCalled();
   expect(get(authenticatedAgent)).toBeNull();
 });
+
+it("a local failure after a good handshake (denied storage) reports but still opens the workspace", async () => {
+  select();
+  const onActorError = vi.fn();
+  const result = await hydrateWorkspaceBootstrap({
+    workspaceSlug,
+    organizationSlug: "local",
+    storage,
+    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+    coreClient: { getHandshake: async () => ({ dev_actor_mode: false }) },
+    refreshActors: vi.fn(async () => {
+      throw new Error("Storage denied");
+    }),
+    onActorError,
+  });
+  expect(result).not.toBe(false);
+  expect(onActorError).toHaveBeenCalledWith(
+    "Failed to load actors: Storage denied",
+  );
+  expect(get(devActorModeReady)).toBe(true);
+});

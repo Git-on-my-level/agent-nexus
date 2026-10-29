@@ -486,8 +486,16 @@ export async function hydrateWorkspaceBootstrap({
   if (!isCurrent()) return false;
   replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
 
+  // Only a failure to reach core (the handshake) blocks opening the
+  // workspace. Anything else here, such as denied device storage while an
+  // actor is selected or a dev persona step, is reported and leaves the
+  // workspace usable.
+  let handshakeFailed = false;
   try {
-    const handshake = await coreClient.getHandshake();
+    const handshake = await coreClient.getHandshake().catch((error) => {
+      handshakeFailed = true;
+      throw error;
+    });
     if (!isCurrent()) return false;
     const devActorModeEnabled = handshake.dev_actor_mode === true;
     setDevActorMode(devActorModeEnabled);
@@ -556,15 +564,15 @@ export async function hydrateWorkspaceBootstrap({
     if (!isCurrent()) return false;
     onLoadingActors(false);
     // Keep the previous dev-actor mode, fixture personas and actor list: a
-    // failed handshake is an outage (or a missing workspace), not an empty
-    // workspace.
+    // failure here is not an empty workspace.
     if (isAbortError(error) || signal?.aborted) return false;
     const reason = error instanceof Error ? error.message : String(error);
     onActorError(`Failed to load actors: ${reason}`);
     // The actor gate (where actorError renders) is hidden for a signed-in
-    // viewer, so reject: the shell's activation shows the classified state
-    // ("temporarily unreachable" with Retry, or "not found") to everyone.
-    throw workspaceFailureError(error) ?? error;
+    // viewer, so a failed handshake rejects: the shell's activation shows the
+    // classified state ("temporarily unreachable" with Retry, or "not
+    // found") to everyone.
+    if (handshakeFailed) throw workspaceFailureError(error) ?? error;
   } finally {
     if (isCurrent()) setDevActorModeReady(true);
   }
