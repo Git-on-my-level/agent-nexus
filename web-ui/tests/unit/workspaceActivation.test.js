@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { requestWorkspaceActivation } from "../../src/lib/workspaceActivation.js";
+import { WORKSPACE_UNREACHABLE_MESSAGE } from "../../src/lib/workspaceUnavailable.js";
 it("backs off on 429/503 then returns a successful activation", async () => {
   const fetchFn = vi
     .fn()
@@ -32,7 +33,10 @@ it("bounds retries and respects Retry-After without an unbounded wait", async ()
       fetchFn,
       wait,
     }),
-  ).rejects.toThrow("Please try again");
+  ).rejects.toMatchObject({
+    name: "WorkspaceUnavailableError",
+    message: WORKSPACE_UNREACHABLE_MESSAGE,
+  });
   expect(fetchFn).toHaveBeenCalledTimes(4);
   expect(wait.mock.calls).toEqual([[30000], [30000], [30000]]);
 });
@@ -55,4 +59,36 @@ it("does not retry authorization failures or an obsolete account", async () => {
     }),
   ).toBeNull();
   expect(fetchFn).toHaveBeenCalledTimes(1);
+});
+it("retries network errors and other 5xx answers like an outage", async () => {
+  const fetchFn = vi
+    .fn()
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockResolvedValueOnce(new Response("{}", { status: 502 }))
+    .mockResolvedValueOnce(Response.json({ agent: { agent_id: "human" } }));
+  const wait = vi.fn(async () => {});
+  const onRetry = vi.fn();
+  const result = await requestWorkspaceActivation({
+    url: "/auth/workspace-session",
+    input: {},
+    fetchFn,
+    wait,
+    onRetry,
+  });
+  expect(result.agent.agent_id).toBe("human");
+  expect(onRetry).toHaveBeenCalledTimes(2);
+});
+it("reports a workspace that stays unreachable as unavailable, not as a definitive failure", async () => {
+  const fetchFn = vi.fn(async () => {
+    throw new TypeError("Failed to fetch");
+  });
+  await expect(
+    requestWorkspaceActivation({
+      url: "/auth/workspace-session",
+      input: {},
+      fetchFn,
+      wait: async () => {},
+    }),
+  ).rejects.toMatchObject({ code: "workspace_unavailable" });
+  expect(fetchFn).toHaveBeenCalledTimes(4);
 });

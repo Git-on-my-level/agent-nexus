@@ -114,6 +114,7 @@
     WORKSPACE_BOOTSTRAP_STATES,
   } from "$lib/workspaceBootstrap.js";
   import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
+  import { isWorkspaceUnavailableError } from "$lib/workspaceUnavailable.js";
   import {
     SHELL_REFRESH_MIN_MS,
     clearPmPresence,
@@ -795,9 +796,11 @@
         hydratedWorkspaceSlug = key;
         activationError = "";
       }
-    } catch {
+    } catch (error) {
       if (isCurrent())
-        activationError = "Could not open this workspace. Please try again.";
+        activationError = isWorkspaceUnavailableError(error)
+          ? error.message
+          : "Could not open this workspace. Please try again.";
     } finally {
       clearTimeout(timer);
       if (isCurrent()) activationPending = false;

@@ -3,11 +3,13 @@ import { json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import {
+  classifyWorkspaceSessionFailure,
   clearWorkspaceAuthSession,
   isRetryableWorkspaceAuthSessionError,
   isTerminalAccountSessionFailure,
   loadWorkspaceAuthenticatedAgent,
   resolveWorkspaceSlugFromEvent,
+  WorkspaceSessionFailure,
 } from "$lib/server/authSession";
 import {
   hostedWorkspaceCoreBaseUrl,
@@ -95,7 +97,10 @@ export async function GET(event) {
         },
       );
     }
-    if (error?.status === 401 || error?.status === 403) {
+    if (
+      classifyWorkspaceSessionFailure(error) ===
+      WorkspaceSessionFailure.REJECTED
+    ) {
       clearWorkspaceAuthSession(
         event,
         resolved.organizationSlug,

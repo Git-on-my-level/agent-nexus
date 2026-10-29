@@ -96,3 +96,71 @@ it.each(["success", "failure"])(
     expect(refreshActors).not.toHaveBeenCalled();
   },
 );
+
+it("keeps the previous actor state and reports a failed handshake", async () => {
+  select();
+  setDevActorMode(true);
+  const onActorError = vi.fn();
+  const onDevFixturePersonas = vi.fn();
+  const refreshActors = vi.fn(async () => []);
+  await hydrateWorkspaceBootstrap({
+    workspaceSlug,
+    organizationSlug: "local",
+    storage,
+    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+    coreClient: {
+      getHandshake: async () => {
+        throw new Error("workspace server did not answer");
+      },
+    },
+    refreshActors,
+    onDevFixturePersonas,
+    onActorError,
+  });
+  expect(onActorError).toHaveBeenCalledWith(
+    "Failed to load actors: workspace server did not answer",
+  );
+  // Not silently switched off or emptied.
+  expect(get(devActorMode)).toBe(true);
+  expect(get(devActorModeReady)).toBe(true);
+  expect(onDevFixturePersonas).not.toHaveBeenCalled();
+  setDevActorMode(false);
+});
+
+it("stays quiet when the handshake is aborted", async () => {
+  select();
+  const onActorError = vi.fn();
+  await hydrateWorkspaceBootstrap({
+    workspaceSlug,
+    organizationSlug: "local",
+    storage,
+    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+    coreClient: {
+      getHandshake: async () => {
+        throw new DOMException("aborted", "AbortError");
+      },
+    },
+    refreshActors: vi.fn(async () => []),
+    onActorError,
+  });
+  expect(onActorError).not.toHaveBeenCalled();
+});
+
+it("does not sign the viewer out when the first session read hits an outage", async () => {
+  select();
+  const getHandshake = vi.fn();
+  await expect(
+    hydrateWorkspaceBootstrap({
+      workspaceSlug,
+      organizationSlug: "local",
+      storage,
+      fetchFn: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+      coreClient: { getHandshake },
+      refreshActors: vi.fn(async () => []),
+    }),
+  ).rejects.toMatchObject({ code: "workspace_unavailable" });
+  expect(getHandshake).not.toHaveBeenCalled();
+  expect(get(authenticatedAgent)).toBeNull();
+});

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { sessionFailurePolicyMocks } from "../fixtures/sessionFailurePolicyMock.js";
 
 import { AuthErrorCode } from "../../src/lib/authErrorCodes.js";
 import { CURRENT_VERSION } from "../../src/lib/generated/version.js";
@@ -34,7 +35,7 @@ vi.mock("$lib/server/workspaceResolver.js", () => ({
   resolveWorkspaceInRoute: workspaceResolverMocks.resolveWorkspaceInRoute,
 }));
 
-vi.mock("$lib/server/authSession", () => ({
+vi.mock("$lib/server/authSession", async (importOriginal) => ({
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
   readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
@@ -45,6 +46,7 @@ vi.mock("$lib/server/authSession", () => ({
     authSessionMocks.isRetryableWorkspaceRefreshFailure,
   shouldClearWorkspaceAuthSessionAfterRetryableFailure:
     authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure,
+  ...sessionFailurePolicyMocks(await importOriginal(), authSessionMocks),
 }));
 
 import {
@@ -213,5 +215,80 @@ describe("proxyHostedWorkspaceStreamToCore", () => {
     expect(response.status).toBe(404);
     const body = await readErrorJson(response);
     expect(body.error.code).toBe("stream_bypasses_control_plane");
+  });
+
+  it.each([
+    [
+      "a core 503",
+      Object.assign(new Error("unavailable"), {
+        status: 503,
+        details: { error: { code: "auth_unavailable" } },
+      }),
+    ],
+    ["a network error", new TypeError("fetch failed")],
+  ])(
+    "keeps the session and answers 503 retryable when the refresh hits %s",
+    async (_label, failure) => {
+      authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+      authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+        failure,
+      );
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+      const pathname = "/ws/acme/demo/stream/events";
+
+      const response = await proxyHostedWorkspaceStreamToCore(
+        createEvent(pathname),
+        pathname,
+      );
+
+      expect(response.status).toBe(503);
+      expect((await readErrorJson(response)).error.code).toBe(
+        "auth_session_retryable",
+      );
+      expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("answers 503 retryable without a tokenless request when the pre-refresh hits an outage", async () => {
+    authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+      refreshToken: "refresh-only",
+      accessToken: "",
+    });
+    authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy.mockResolvedValueOnce(
+      "unavailable",
+    );
+    const pathname = "/ws/acme/demo/stream/events";
+
+    const response = await proxyHostedWorkspaceStreamToCore(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(503);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("still clears the session when the refresh is rejected with a real 403", async () => {
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("revoked"), {
+        status: 403,
+        details: { error: { code: "agent_revoked" } },
+      }),
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+    const pathname = "/ws/acme/demo/stream/events";
+
+    const response = await proxyHostedWorkspaceStreamToCore(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(401);
+    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalled();
   });
 });

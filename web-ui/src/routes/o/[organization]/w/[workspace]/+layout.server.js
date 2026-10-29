@@ -280,29 +280,37 @@ export async function load(event) {
 
   const session = await sessionResult;
   /*
-   * On the viewer's own navigation an unreadable session is not an error page:
-   * the shell paints its skeleton and the selection POST establishes it (or
-   * reports the failure with its own Retry). Route-data loads keep failing
-   * loudly, so a broken preload is still visible rather than silently empty.
+   * The passive read is signed out only on an authoritative rejection (it
+   * resolves null then). Any other failure is an outage: the session is kept
+   * and the read is deferred. On the viewer's own navigation that is not an
+   * error page: the shell paints its skeleton and the selection POST
+   * establishes the session (or reports the outage with its own Retry). A
+   * sleeping or unavailable runtime (503) defers route-data loads the same
+   * way; other route-data failures keep failing loudly, so a broken preload is
+   * still visible rather than silently empty.
    */
-  if (session.failure && event.isDataRequest)
-    throw error(
-      session.failure.status || 503,
-      "Could not validate workspace session.",
-    );
+  const failureStatus = Number(session.failure?.status) || 0;
+  if (session.failure && event.isDataRequest && failureStatus !== 503)
+    throw error(failureStatus || 503, "Could not validate workspace session.");
   if (session.failure)
     logServerEvent(
       "workspace.layout.session_read_deferred",
       {
         org: workOrg,
         slug: workSlug,
-        status: session.failure.status ?? 0,
+        status: failureStatus,
+        data_request: Boolean(event.isDataRequest),
       },
       { level: "warn" },
     );
   return {
     ...(provider.mode === "hosted"
-      ? { workspaceSession: { agent: session.agent ?? null } }
+      ? {
+          workspaceSession: {
+            agent: session.agent ?? null,
+            ...(session.failure ? { sessionReadDeferred: true } : {}),
+          },
+        }
       : {}),
     /*
      * `page.data` merges root-first, so this copy of `workspaces` replaces the

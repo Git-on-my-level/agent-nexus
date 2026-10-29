@@ -22,6 +22,12 @@ const authMocks = vi.hoisted(() => ({
   loadWorkspaceAuthenticatedAgent: vi.fn(),
 }));
 
+const logMocks = vi.hoisted(() => ({ logServerEvent: vi.fn() }));
+
+vi.mock("$lib/server/devLog", () => ({
+  logServerEvent: logMocks.logServerEvent,
+}));
+
 vi.mock("$lib/anxCoreClient", () => ({
   createAnxCoreClient: coreMocks.createAnxCoreClient,
   verifyCoreSchemaVersion: coreMocks.verifyCoreSchemaVersion,
@@ -92,8 +98,57 @@ describe("workspace +layout.server.js unreadable session", () => {
 
     const result = await load(hostedEvent());
 
-    expect(result.workspaceSession).toEqual({ agent: null });
+    expect(result.workspaceSession).toEqual({
+      agent: null,
+      sessionReadDeferred: true,
+    });
     expect(result.workspace.slug).toBe("alpha");
+  });
+
+  it("reports and logs a core outage as a deferred read, not as signed out", async () => {
+    authMocks.loadWorkspaceAuthenticatedAgent.mockRejectedValue(
+      coreFailure(503),
+    );
+
+    const result = await load(hostedEvent());
+
+    expect(result.workspaceSession).toEqual({
+      agent: null,
+      sessionReadDeferred: true,
+    });
+    expect(logMocks.logServerEvent).toHaveBeenCalledWith(
+      "workspace.layout.session_read_deferred",
+      expect.objectContaining({ org: "acme", slug: "alpha", status: 503 }),
+      { level: "warn" },
+    );
+  });
+
+  it("defers, rather than fails, a route-data load while the runtime is unavailable", async () => {
+    authMocks.loadWorkspaceAuthenticatedAgent.mockRejectedValue(
+      coreFailure(503),
+    );
+
+    const result = await load(hostedEvent({ isDataRequest: true }));
+
+    expect(result.workspaceSession.sessionReadDeferred).toBe(true);
+    expect(logMocks.logServerEvent).toHaveBeenCalledWith(
+      "workspace.layout.session_read_deferred",
+      expect.objectContaining({ status: 503, data_request: true }),
+      { level: "warn" },
+    );
+  });
+
+  it("does not mark a signed-out read as deferred", async () => {
+    authMocks.loadWorkspaceAuthenticatedAgent.mockResolvedValue(null);
+
+    const result = await load(hostedEvent());
+
+    expect(result.workspaceSession).toEqual({ agent: null });
+    expect(logMocks.logServerEvent).not.toHaveBeenCalledWith(
+      "workspace.layout.session_read_deferred",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("keeps the session read speculative on every load", async () => {

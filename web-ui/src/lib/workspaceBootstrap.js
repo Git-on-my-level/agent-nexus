@@ -1,5 +1,6 @@
 import { buildSignInPath } from "$lib/extensions/launchFlow.js";
 import { requestWorkspaceActivation } from "./workspaceActivation.js";
+import { isAbortError } from "./workspaceUnavailable.js";
 import { get } from "svelte/store";
 
 import { goto } from "$app/navigation";
@@ -479,6 +480,8 @@ export async function hydrateWorkspaceBootstrap({
     signal,
     workspaceSlug,
     authDriver: "layout",
+    // An outage rejects so the shell shows its retryable state, not sign-in.
+    rejectWhenUnavailable: true,
   });
   if (!isCurrent()) return false;
   replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
@@ -549,13 +552,15 @@ export async function hydrateWorkspaceBootstrap({
       onLoadingActors(false);
       replaceActorRegistry([], workspaceSlug);
     }
-  } catch {
+  } catch (error) {
     if (!isCurrent()) return false;
-    setDevActorMode(false);
-    onActorError("");
     onLoadingActors(false);
-    onDevFixturePersonas([]);
-    replaceActorRegistry([], workspaceSlug);
+    // Keep the previous dev-actor mode, fixture personas and actor list: a
+    // failed handshake or directory read is an outage, not an empty workspace.
+    if (!isAbortError(error) && !signal?.aborted) {
+      const reason = error instanceof Error ? error.message : String(error);
+      onActorError(`Failed to load actors: ${reason}`);
+    }
   } finally {
     if (isCurrent()) setDevActorModeReady(true);
   }

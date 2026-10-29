@@ -12,6 +12,7 @@ Environment variables alone do not add account routes or commercial UI to OSS.
 See [UI extensions](ui-extensions.md) for composition and ownership.
 
 Implementation:
+
 - `src/lib/server/outOfWorkspace/index.js`
 - `src/lib/server/outOfWorkspace/local.js`
 
@@ -30,6 +31,7 @@ Workspace callback routes only write `anx_ui_*`; they never clear the CP cookie.
 Canonical callback error codes are surfaced through `src/lib/workspaceCallbackErrorCopy.js`.
 
 Notable route behavior:
+
 - Nested callback (`/o/{org}/w/{workspace}/auth/callback`) always resolves by URL params.
 - Root callback (`/auth/callback`) resolves by `workspace_id` through `event.locals.outOfWorkspace.resolveWorkspaceById`.
 - Root callback unresolved reasons:
@@ -40,6 +42,7 @@ Notable route behavior:
 ## Client session state
 
 `src/lib/authSession.js` owns:
+
 - `authSessionReady`
 - `authenticatedAgent`
 - `sessionEndedByAccountStatus` (terminal session: account disabled or account-status checks failed)
@@ -48,6 +51,13 @@ Notable route behavior:
 ## Known limitation
 
 Refresh replay detection (`REFRESH_REPLAY_WINDOW_MS` in `src/lib/server/authSession.js`) is in-memory per web-ui process.
+
+## When a session is cleared
+
+Every session path (BFF proxy, hosted `/ws` proxy, dev stream proxy, `/auth/session`, layout reads) uses one rule, `classifyWorkspaceSessionFailure` in `src/lib/server/authSession.js`:
+
+- **Cleared** only on an authoritative rejection: core or the control plane answered **401** (`invalid_token`, `session_ended_by_account_status`, `key_mismatch`, ...) or **403** (`agent_revoked`, ...). A 401 `invalid_token` from a refresh while a token was held can be a concurrent rotation, so it is kept once and cleared on the second consecutive occurrence (short-lived `anx_ui_auth_retry_*` cookie).
+- **Kept** on everything else: 5xx (including `auth_session_retryable`), 429, other 4xx, network errors, timeouts, aborts and malformed replies. Proxies answer **503 `auth_session_retryable`** instead of a 401 the browser would read as sign-out; the layout logs `workspace.layout.session_read_deferred` and marks `workspaceSession.sessionReadDeferred`; the shell shows "This workspace is temporarily unreachable" with Retry instead of the sign-in page.
 
 ## Development / Docker
 

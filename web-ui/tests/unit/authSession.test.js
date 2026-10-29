@@ -13,6 +13,11 @@ import {
   sessionEndedByAccountStatus,
 } from "../../src/lib/authSession.js";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths.js";
+import { setCurrentWorkspaceSlug } from "../../src/lib/workspaceContext.js";
+import {
+  WORKSPACE_UNREACHABLE_MESSAGE,
+  isWorkspaceUnavailableError,
+} from "../../src/lib/workspaceUnavailable.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -20,6 +25,8 @@ afterEach(() => {
   clearAuthSession("local");
   clearAuthSession("alpha");
 });
+
+let outageCase = 0;
 
 describe("authSession", () => {
   it("classifies human principals for workspace auth", () => {
@@ -241,7 +248,7 @@ describe("authSession", () => {
     expect(get(authenticatedAgent)).toBeNull();
   });
 
-  it("clears the current agent when retryable session rehydration never recovers", async () => {
+  it("keeps the current agent when retryable session rehydration never recovers", async () => {
     vi.useFakeTimers();
     completeAuthSession(
       { agent_id: "agent-11", actor_id: "actor-11", username: "passkey.user" },
@@ -268,9 +275,72 @@ describe("authSession", () => {
     await vi.runAllTimersAsync();
     const agent = await agentPromise;
 
+    // The server kept the session (503 retryable): an outage, not a sign-out.
+    expect(agent).toMatchObject({ agent_id: "agent-11" });
+    expect(isAuthenticated("alpha")).toBe(true);
+  });
+
+  it.each([
+    [
+      "a retryable auth-session 503",
+      async () =>
+        new Response(
+          JSON.stringify({ error: { code: "auth_session_retryable" } }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        ),
+    ],
+    [
+      "a core outage",
+      async () =>
+        new Response(JSON.stringify({ error: { code: "core_unreachable" } }), {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }),
+    ],
+    [
+      "a network error",
+      async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    ],
+  ])(
+    "rejects as unavailable, not signed out, when the first read hits %s",
+    async (_label, fetchFn) => {
+      vi.useFakeTimers();
+      // A workspace this tab has never read: nothing to preserve.
+      const workspaceSlug = `outage-${outageCase++}`;
+      setCurrentWorkspaceSlug(workspaceSlug);
+      const pending = initializeAuthSession({
+        workspaceSlug,
+        fetchFn,
+        rejectWhenUnavailable: true,
+      });
+      const settled = pending.catch((error) => error);
+      await vi.runAllTimersAsync();
+      const error = await settled;
+
+      expect(isWorkspaceUnavailableError(error)).toBe(true);
+      expect(error.message).toBe(WORKSPACE_UNREACHABLE_MESSAGE);
+      // Not hydrated: the shell must not decide "signed out" from this read.
+      expect(get(authSessionReady)).toBe(false);
+      expect(get(authenticatedAgent)).toBeNull();
+      setCurrentWorkspaceSlug("alpha");
+    },
+  );
+
+  it("still reads a definitive 401 as signed out when rejecting outages", async () => {
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      rejectWhenUnavailable: true,
+      fetchFn: async () =>
+        new Response(JSON.stringify({ error: { code: "auth_required" } }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
     expect(agent).toBeNull();
-    expect(isAuthenticated("alpha")).toBe(false);
-    expect(get(authenticatedAgent)).toBeNull();
+    expect(get(authSessionReady)).toBe(true);
   });
 
   it("dedupes concurrent initializeAuthSession calls (single-flight)", async () => {

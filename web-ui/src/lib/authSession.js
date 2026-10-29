@@ -37,6 +37,7 @@ import {
   currentOrganizationSlug,
 } from "./workspaceContext.js";
 import { APP_BASE_PATH, WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
+import { WorkspaceUnavailableError } from "./workspaceUnavailable.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
@@ -144,13 +145,14 @@ function applySessionEndedByAccountStatus(
   return true;
 }
 
+/**
+ * A failed `/auth/session` read is an outage, not a sign-out, unless the
+ * server answered with a definitive status (401 / 403 / other 4xx). Outages
+ * include the retryable auth-session 503: the server kept the session.
+ */
 function shouldPreserveAuthenticatedAgentOnInitFailure(error) {
   if (!error || typeof error !== "object") {
     return true;
-  }
-
-  if (isRetryableAuthSessionFailure(error)) {
-    return false;
   }
 
   const status = Number(error.status);
@@ -316,6 +318,13 @@ export async function initializeAuthSession({
   organizationSlug = getCurrentOrganizationSlug(),
   /** @type {"layout" | "login" | string | undefined} */
   authDriver,
+  /**
+   * Reject with {@link WorkspaceUnavailableError} when the first read of this
+   * workspace hits an outage, instead of resolving `null` (which the shell
+   * would read as signed out). The shell's activation passes this so it can
+   * show its retryable "temporarily unreachable" state.
+   */
+  rejectWhenUnavailable = false,
 } = {}) {
   signal?.throwIfAborted();
   const slug = String(workspaceSlug ?? "").trim();
@@ -355,6 +364,7 @@ export async function initializeAuthSession({
     workspaceSlug,
     organizationSlug,
     state,
+    rejectWhenUnavailable,
   }).finally(() => {
     signal?.removeEventListener("abort", retire);
     if (state.initInflight === promise) {
@@ -377,6 +387,7 @@ async function runInitializeAuthSession({
   workspaceSlug,
   organizationSlug,
   state,
+  rejectWhenUnavailable,
 }) {
   const generation = state.generation;
   const previousAgent = state.authenticatedAgent;
@@ -453,9 +464,14 @@ async function runInitializeAuthSession({
         continue;
       }
 
-      const nextAgent = shouldPreserveAuthenticatedAgentOnInitFailure(error)
-        ? previousAgent
-        : null;
+      const transient = shouldPreserveAuthenticatedAgentOnInitFailure(error);
+      // First read of this workspace and it hit an outage: there is nothing
+      // to preserve, and `null` would read as signed out. Leave the state
+      // un-hydrated and let the caller show its retryable state.
+      if (transient && !previousAgent && rejectWhenUnavailable) {
+        throw new WorkspaceUnavailableError(error);
+      }
+      const nextAgent = transient ? previousAgent : null;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
       if (agentChanged && previousAgent) {
         clearWorkspaceViews();
