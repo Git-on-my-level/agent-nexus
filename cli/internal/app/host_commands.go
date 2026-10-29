@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -589,13 +590,7 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 	}
 	client, clientErr := httpclient.New(cfg)
 	if clientErr == nil {
-		resp, callErr := client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/readyz"})
-		add("core_health", callErr == nil && resp.StatusCode == 200, func() string {
-			if callErr != nil {
-				return callErr.Error()
-			}
-			return fmt.Sprintf("HTTP %d", resp.StatusCode)
-		}())
+		checks = append(checks, coreHealthDoctorChecks(ctx, client)...)
 	} else {
 		add("core_health", false, clientErr.Error())
 	}
@@ -620,6 +615,43 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 		return nil, versionErr
 	}
 	return &commandResult{Data: data}, nil
+}
+
+// coreHealthDoctorChecks reports liveness and readiness separately. Liveness
+// (/health) is public everywhere and proves the CLI reaches a running core.
+// Readiness (/readyz) checks core dependencies, and a hosted gateway may
+// restrict it to a member session: a 401/403 there is an access boundary of
+// this credential context, not evidence that core is unhealthy.
+func coreHealthDoctorChecks(ctx context.Context, client *httpclient.Client) []doctorCheck {
+	var checks []doctorCheck
+	resp, err := client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/health"})
+	switch {
+	case err != nil:
+		checks = append(checks, doctorCheck{Name: "core_health", OK: false, Status: "fail", Message: "core unreachable: " + err.Error()})
+	case resp.StatusCode != http.StatusOK:
+		checks = append(checks, doctorCheck{Name: "core_health", OK: false, Status: "fail", Message: fmt.Sprintf("liveness HTTP %d", resp.StatusCode)})
+	default:
+		var body struct {
+			OK *bool `json:"ok"`
+		}
+		if json.Unmarshal(resp.Body, &body) != nil || body.OK == nil || !*body.OK {
+			checks = append(checks, doctorCheck{Name: "core_health", OK: false, Status: "fail", Message: "liveness response is not {\"ok\":true}"})
+		} else {
+			checks = append(checks, doctorCheck{Name: "core_health", OK: true, Status: "pass", Message: "core reachable and live"})
+		}
+	}
+	resp, err = client.RawCall(ctx, httpclient.RawRequest{Method: "GET", Path: "/readyz"})
+	switch {
+	case err != nil:
+		checks = append(checks, doctorCheck{Name: "core_readiness", OK: false, Status: "fail", Message: "readiness unreachable: " + err.Error()})
+	case resp.StatusCode == http.StatusOK:
+		checks = append(checks, doctorCheck{Name: "core_readiness", OK: true, Status: "pass", Message: "core dependencies ready"})
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		checks = append(checks, doctorCheck{Name: "core_readiness", OK: true, Status: "restricted", Message: fmt.Sprintf("readiness HTTP %d: not visible to this credential context (hosted gateways restrict it to member sessions); liveness is reported by core_health", resp.StatusCode)})
+	default:
+		checks = append(checks, doctorCheck{Name: "core_readiness", OK: false, Status: "fail", Message: fmt.Sprintf("readiness HTTP %d", resp.StatusCode)})
+	}
+	return checks
 }
 
 func identityResolutionDoctorCheck(name, source string, identityErr error) doctorCheck {

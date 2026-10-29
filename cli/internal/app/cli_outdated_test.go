@@ -93,7 +93,7 @@ func TestDoctorManagedAutoRetriesOnce(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/readyz":
+		case "/health", "/readyz":
 			_, _ = w.Write([]byte(`{"ok":true}`))
 		case "/meta/handshake":
 			_, _ = w.Write([]byte(`{"min_cli_version":"v99.0.0","recommended_cli_version":"v99.1.0"}`))
