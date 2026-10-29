@@ -1,5 +1,6 @@
 import { buildSignInPath } from "$lib/extensions/launchFlow.js";
 import { requestWorkspaceActivation } from "./workspaceActivation.js";
+import { isAbortError, workspaceFailureError } from "./workspaceFailure.js";
 import { get } from "svelte/store";
 
 import { goto } from "$app/navigation";
@@ -479,12 +480,22 @@ export async function hydrateWorkspaceBootstrap({
     signal,
     workspaceSlug,
     authDriver: "layout",
+    // An outage rejects so the shell shows its retryable state, not sign-in.
+    rejectWhenUnavailable: true,
   });
   if (!isCurrent()) return false;
   replacePrincipalRegistry(agent ? [agent] : [], workspaceSlug);
 
+  // Only a failure to reach core (the handshake) blocks opening the
+  // workspace. Anything else here, such as denied device storage while an
+  // actor is selected or a dev persona step, is reported and leaves the
+  // workspace usable.
+  let handshakeFailed = false;
   try {
-    const handshake = await coreClient.getHandshake();
+    const handshake = await coreClient.getHandshake().catch((error) => {
+      handshakeFailed = true;
+      throw error;
+    });
     if (!isCurrent()) return false;
     const devActorModeEnabled = handshake.dev_actor_mode === true;
     setDevActorMode(devActorModeEnabled);
@@ -549,13 +560,19 @@ export async function hydrateWorkspaceBootstrap({
       onLoadingActors(false);
       replaceActorRegistry([], workspaceSlug);
     }
-  } catch {
+  } catch (error) {
     if (!isCurrent()) return false;
-    setDevActorMode(false);
-    onActorError("");
     onLoadingActors(false);
-    onDevFixturePersonas([]);
-    replaceActorRegistry([], workspaceSlug);
+    // Keep the previous dev-actor mode, fixture personas and actor list: a
+    // failure here is not an empty workspace.
+    if (isAbortError(error) || signal?.aborted) return false;
+    const reason = error instanceof Error ? error.message : String(error);
+    onActorError(`Failed to load actors: ${reason}`);
+    // The actor gate (where actorError renders) is hidden for a signed-in
+    // viewer, so a failed handshake rejects: the shell's activation shows the
+    // classified state ("temporarily unreachable" with Retry, or "not
+    // found") to everyone.
+    if (handshakeFailed) throw workspaceFailureError(error) ?? error;
   } finally {
     if (isCurrent()) setDevActorModeReady(true);
   }

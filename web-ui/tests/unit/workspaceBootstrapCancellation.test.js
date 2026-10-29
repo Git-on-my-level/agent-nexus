@@ -96,3 +96,108 @@ it.each(["success", "failure"])(
     expect(refreshActors).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  [
+    "an outage",
+    new Error("workspace server did not answer"),
+    "workspace_unavailable",
+  ],
+  [
+    "a missing workspace",
+    Object.assign(new Error("not found"), { status: 404 }),
+    "workspace_not_found",
+  ],
+])(
+  "a signed-in viewer's failed handshake (%s) rejects for the shell and keeps the actor state",
+  async (_label, failure, code) => {
+    select();
+    setDevActorMode(true);
+    const onActorError = vi.fn();
+    const onDevFixturePersonas = vi.fn();
+    const refreshActors = vi.fn(async () => []);
+    await expect(
+      hydrateWorkspaceBootstrap({
+        workspaceSlug,
+        organizationSlug: "local",
+        storage,
+        fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+        coreClient: {
+          getHandshake: async () => {
+            throw failure;
+          },
+        },
+        refreshActors,
+        onDevFixturePersonas,
+        onActorError,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(onActorError).toHaveBeenCalledWith(
+      `Failed to load actors: ${failure.message}`,
+    );
+    // Not silently switched off or emptied.
+    expect(get(devActorMode)).toBe(true);
+    expect(get(devActorModeReady)).toBe(true);
+    expect(onDevFixturePersonas).not.toHaveBeenCalled();
+    setDevActorMode(false);
+  },
+);
+
+it("stays quiet when the handshake is aborted", async () => {
+  select();
+  const onActorError = vi.fn();
+  await hydrateWorkspaceBootstrap({
+    workspaceSlug,
+    organizationSlug: "local",
+    storage,
+    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+    coreClient: {
+      getHandshake: async () => {
+        throw new DOMException("aborted", "AbortError");
+      },
+    },
+    refreshActors: vi.fn(async () => []),
+    onActorError,
+  });
+  expect(onActorError).not.toHaveBeenCalled();
+});
+
+it("does not sign the viewer out when the first session read hits an outage", async () => {
+  select();
+  const getHandshake = vi.fn();
+  await expect(
+    hydrateWorkspaceBootstrap({
+      workspaceSlug,
+      organizationSlug: "local",
+      storage,
+      fetchFn: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+      coreClient: { getHandshake },
+      refreshActors: vi.fn(async () => []),
+    }),
+  ).rejects.toMatchObject({ code: "workspace_unavailable" });
+  expect(getHandshake).not.toHaveBeenCalled();
+  expect(get(authenticatedAgent)).toBeNull();
+});
+
+it("a local failure after a good handshake (denied storage) reports but still opens the workspace", async () => {
+  select();
+  const onActorError = vi.fn();
+  const result = await hydrateWorkspaceBootstrap({
+    workspaceSlug,
+    organizationSlug: "local",
+    storage,
+    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+    coreClient: { getHandshake: async () => ({ dev_actor_mode: false }) },
+    refreshActors: vi.fn(async () => {
+      throw new Error("Storage denied");
+    }),
+    onActorError,
+  });
+  expect(result).not.toBe(false);
+  expect(onActorError).toHaveBeenCalledWith(
+    "Failed to load actors: Storage denied",
+  );
+  expect(get(devActorModeReady)).toBe(true);
+});

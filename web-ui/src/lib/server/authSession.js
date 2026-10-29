@@ -2,6 +2,12 @@ import { dev } from "$app/environment";
 import { json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import {
+  MALFORMED_RESPONSE_CODE,
+  WORKSPACE_NOT_FOUND_MESSAGE,
+  WorkspaceFailureKind,
+  classifyWorkspaceFailure,
+} from "$lib/workspaceFailure.js";
 import { coreBaseUrlForNodeFetch } from "./coreBaseUrlForNodeFetch.js";
 import { coreEndpointURL } from "./coreEndpoint.js";
 import { buildProxyRequestInit } from "./coreProxy.js";
@@ -225,12 +231,52 @@ async function requestCoreJSON(coreBaseUrl, pathname, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const payload = readJSONPayload(await response.text());
+  const text = await response.text();
+  const payload = readJSONPayload(text);
   if (!response.ok) {
     throw createRequestError(response.status, payload);
   }
+  // An unparseable success is an outage (502), not an empty answer.
+  if (String(text ?? "").trim() && !isJSONText(text)) {
+    throw createMalformedResponseError(pathname);
+  }
 
   return payload;
+}
+
+function isJSONText(text) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function createMalformedResponseError(pathname) {
+  return createRequestError(502, {
+    error: {
+      code: MALFORMED_RESPONSE_CODE,
+      message: `anx-core sent an unreadable reply for ${pathname}.`,
+    },
+  });
+}
+
+/**
+ * `/agents/me` must name an agent. Anything else is malformed and must not
+ * read as "signed out".
+ */
+function requireAgentPayload(payload) {
+  const agent = payload?.agent;
+  if (
+    !agent ||
+    typeof agent !== "object" ||
+    typeof agent.agent_id !== "string" ||
+    !agent.agent_id.trim()
+  ) {
+    throw createMalformedResponseError("/agents/me");
+  }
+  return agent;
 }
 
 function getRefreshDeduplicationKey(
@@ -694,7 +740,12 @@ export async function refreshWorkspaceAuthSession({
  * @param {string} params.coreBaseUrl Base URL for core `/auth/token` (direct core or hosted `/ws/{org}/{ws}` prefix URL)
  * @param {{ accessToken?: string, refreshToken?: string } | null} [params.session] Optional session from a prior {@link getWorkspaceAuthSession} call
  * @param {Record<string, string>} [params.headers] Extra server-side headers for the core hop
- * @returns {Promise<void>}
+ * @returns {Promise<"rejected"|"not_found"|"unavailable"|undefined>} The
+ *   settled failure when the refresh failed (see
+ *   {@link settleWorkspaceSessionFailure}). Proxies still send the request
+ *   without a token when the session was kept: public routes (handshake)
+ *   keep working, and a 401 takes the refresh-and-retry path, which answers
+ *   503 / 404 for a kept session.
  */
 export async function ensureWorkspaceAccessTokenForCoreProxy({
   event,
@@ -730,26 +781,205 @@ export async function ensureWorkspaceAccessTokenForCoreProxy({
       headers,
     });
   } catch (error) {
-    if (
-      isRetryableWorkspaceRefreshFailure(error, {
-        hadAccessToken: false,
-        hadRefreshToken: true,
-      })
-    ) {
-      if (
-        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
-          event,
-          organizationSlug,
-          workspaceSlug,
-        )
-      ) {
-        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-      }
-      return;
-    }
-
-    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+    return settleWorkspaceSessionFailure(
+      event,
+      organizationSlug,
+      workspaceSlug,
+      error,
+      { hadAccessToken: false, hadRefreshToken: true },
+    );
   }
+}
+
+/**
+ * Outcome of a failed workspace session read or refresh
+ * (`classifyWorkspaceFailure` in `$lib/workspaceFailure.js`, shared with the
+ * browser).
+ * - `rejected`: the session was cleared. The server answered 401 / 403.
+ * - `not_found`: the session was kept. The workspace itself is missing (404);
+ *   callers show a definitive "not found" state, and no other workspace's
+ *   session is touched.
+ * - `unavailable`: the session was kept. Nothing authoritative was learned
+ *   (outage, timeout, network error, malformed reply, or a refresh-rotation
+ *   race), so the caller reports a retryable "workspace unavailable" state.
+ */
+export const WorkspaceSessionFailure = WorkspaceFailureKind;
+
+/**
+ * The one rule for every workspace session path: only an authoritative
+ * rejection (HTTP 401 or 403, e.g. `invalid_token`,
+ * `session_ended_by_account_status`, `agent_revoked`) means the session is
+ * gone; a 404 means the workspace is; everything else (5xx including
+ * `auth_session_retryable`, other statuses, network errors, timeouts,
+ * aborts, malformed or shape-invalid successes) is an outage, and an outage
+ * must never sign the viewer out.
+ */
+export const classifyWorkspaceSessionFailure = classifyWorkspaceFailure;
+
+/**
+ * Apply {@link classifyWorkspaceSessionFailure} to a failed refresh: clear the
+ * session on an authoritative rejection, keep it otherwise (not found or
+ * unavailable). A 401
+ * `invalid_token` while the caller still held a token can be a concurrent
+ * refresh rotation, so it keeps the session once and clears it on the second
+ * consecutive occurrence (counted in a short-lived httpOnly cookie).
+ *
+ * @param {import('@sveltejs/kit').RequestEvent} event
+ * @param {string} organizationSlug
+ * @param {string} workspaceSlug
+ * @param {unknown} error
+ * @param {{ hadAccessToken?: boolean, hadRefreshToken?: boolean }} [options]
+ * @returns {"rejected"|"not_found"|"unavailable"}
+ */
+export function settleWorkspaceSessionFailure(
+  event,
+  organizationSlug,
+  workspaceSlug,
+  error,
+  { hadAccessToken = false, hadRefreshToken = false } = {},
+) {
+  const kind = classifyWorkspaceSessionFailure(error);
+  if (kind !== WorkspaceSessionFailure.REJECTED) {
+    return kind;
+  }
+  if (
+    isRetryableWorkspaceRefreshFailure(error, {
+      hadAccessToken,
+      hadRefreshToken,
+    }) &&
+    !shouldClearWorkspaceAuthSessionAfterRetryableFailure(
+      event,
+      organizationSlug,
+      workspaceSlug,
+    )
+  ) {
+    return WorkspaceSessionFailure.UNAVAILABLE;
+  }
+  clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  return WorkspaceSessionFailure.REJECTED;
+}
+
+/**
+ * Proxy reply when the session was kept but no usable access token exists
+ * right now. A 401 here would read as "signed out" in the browser while the
+ * cookies are still valid, so the proxy answers 503 `auth_session_retryable`.
+ *
+ * @param {Record<string, string>} [extraHeaders]
+ */
+export function workspaceSessionUnavailableResponse(extraHeaders = {}) {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: RETRYABLE_AUTH_SESSION_ERROR_CODE,
+        message:
+          "This workspace is temporarily unreachable. You are still signed in. Try again in a moment.",
+      },
+    }),
+    {
+      status: 503,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "retry-after": "2",
+        ...extraHeaders,
+      },
+    },
+  );
+}
+
+/**
+ * Proxy reply when the workspace itself is missing (404 on refresh). The
+ * session is kept; the browser shows its definitive "not found" state.
+ *
+ * @param {Record<string, string>} [extraHeaders]
+ */
+export function workspaceSessionNotFoundResponse(extraHeaders = {}) {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+        message: WORKSPACE_NOT_FOUND_MESSAGE,
+      },
+    }),
+    {
+      status: 404,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        ...extraHeaders,
+      },
+    },
+  );
+}
+
+/**
+ * The proxy reply for a kept session ({@link settleWorkspaceSessionFailure}
+ * returned `not_found` or `unavailable`), or `null` when it was rejected and
+ * the upstream 401 should pass through.
+ *
+ * @param {"rejected"|"not_found"|"unavailable"|undefined} outcome
+ * @param {Record<string, string>} [extraHeaders]
+ */
+export function workspaceSessionFailureResponse(outcome, extraHeaders = {}) {
+  if (outcome === WorkspaceSessionFailure.NOT_FOUND)
+    return workspaceSessionNotFoundResponse(extraHeaders);
+  if (outcome === WorkspaceSessionFailure.UNAVAILABLE)
+    return workspaceSessionUnavailableResponse(extraHeaders);
+  return null;
+}
+
+/**
+ * 403 codes that end the session itself (as opposed to a 403 that only
+ * refuses one action, such as `human_required` or `auth_admin_required`,
+ * which must never sign the viewer out).
+ */
+const SESSION_ENDING_FORBIDDEN_CODES = new Set([
+  "agent_revoked",
+  AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
+  AuthErrorCode.CP_ACCOUNT_INACTIVE,
+]);
+
+/**
+ * Apply the session rule to the final upstream answer of a proxied request
+ * (after any refresh-and-retry): a 401, or a 403 whose code ends the session,
+ * clears it. A kept session never reaches here as a 401: the refresh path
+ * answers 503 / 404 instead (including the first `invalid_token` of a
+ * possible refresh-rotation race).
+ *
+ * @param {import('@sveltejs/kit').RequestEvent} event
+ * @param {string} organizationSlug
+ * @param {string} workspaceSlug
+ * @param {Response} response
+ * @returns {Promise<boolean>} whether the session was cleared
+ */
+export async function settleWorkspaceUpstreamResponse(
+  event,
+  organizationSlug,
+  workspaceSlug,
+  response,
+) {
+  const rejected = await isSessionEndingUpstreamResponse(response);
+  if (rejected)
+    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  return rejected;
+}
+
+/**
+ * A 401, or a 403 whose code ends the session. Reads a 403 body from a clone,
+ * so the response can still be streamed to the browser.
+ *
+ * @param {Response} response
+ */
+export async function isSessionEndingUpstreamResponse(response) {
+  if (response.status === 401) return true;
+  if (response.status !== 403) return false;
+  const payload = readJSONPayload(
+    await response
+      .clone()
+      .text()
+      .catch(() => ""),
+  );
+  return SESSION_ENDING_FORBIDDEN_CODES.has(String(payload?.error?.code ?? ""));
 }
 
 export function isLikelyStaleWorkspaceRefreshFailure(
@@ -806,9 +1036,15 @@ export async function loadWorkspaceAuthenticatedAgent({
         token: accessToken,
         headers,
       });
-      return payload.agent ?? null;
+      return requireAgentPayload(payload);
     } catch (failure) {
-      if (failure?.status === 401 || failure?.status === 503) return null;
+      // Signed out only on an authoritative rejection. An outage rejects so
+      // the caller can report the deferred read instead of "no session".
+      if (
+        classifyWorkspaceSessionFailure(failure) ===
+        WorkspaceSessionFailure.REJECTED
+      )
+        return null;
       throw failure;
     }
   }
@@ -851,7 +1087,7 @@ export async function loadWorkspaceAuthenticatedAgent({
       token,
       headers,
     });
-    return agentResponse.agent ?? null;
+    return requireAgentPayload(agentResponse);
   }
 
   if (accessToken) {
@@ -908,29 +1144,25 @@ export async function loadWorkspaceAuthenticatedAgent({
     if (isTerminalAccountSessionFailure(error)) {
       throw error;
     }
-    if (
-      isRetryableWorkspaceRefreshFailure(error, {
+    const outcome = settleWorkspaceSessionFailure(
+      event,
+      organizationSlug,
+      workspaceSlug,
+      error,
+      {
         hadAccessToken: Boolean(accessToken),
         hadRefreshToken: Boolean(refreshToken),
-      })
-    ) {
-      if (
-        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
-          event,
-          organizationSlug,
-          workspaceSlug,
-        )
-      ) {
-        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-        return null;
-      }
-      throw createRetryableAuthSessionError(error);
-    }
-    if (error?.status === 401) {
-      clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+      },
+    );
+    if (outcome === WorkspaceSessionFailure.REJECTED) {
       return null;
     }
-    throw error;
+    // Kept: an outage keeps its own status (or none, for network errors); a
+    // kept authoritative-looking 401 (refresh-rotation race) becomes 503.
+    throw classifyWorkspaceSessionFailure(error) ===
+      WorkspaceSessionFailure.REJECTED
+      ? createRetryableAuthSessionError(error)
+      : error;
   }
 }
 

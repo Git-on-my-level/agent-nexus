@@ -92,6 +92,7 @@
     stripBasePath,
     stripWorkspacePath,
     WORKSPACE_HEADER,
+    appPath,
     workspacePath,
   } from "$lib/workspacePaths";
   import {
@@ -114,6 +115,8 @@
     WORKSPACE_BOOTSTRAP_STATES,
   } from "$lib/workspaceBootstrap.js";
   import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
+  import { describeActivationFailure } from "$lib/workspaceFailure.js";
+  import WorkspaceActivationAlert from "$lib/components/WorkspaceActivationAlert.svelte";
   import {
     SHELL_REFRESH_MIN_MS,
     clearPmPresence,
@@ -153,6 +156,8 @@
   let newActorName = $state("");
   let hydratedWorkspaceSlug = $state("");
   let activationError = $state("");
+  // The workspace itself is missing: show the way back, not Retry.
+  let activationNotFound = $state(false);
   let activationPending = $state(false);
   const ACTIVATION_DEADLINE_MS = 15_000;
   const hydration = {
@@ -520,6 +525,7 @@
         clearTimeout(hydration.timer);
       }
       activationError = "";
+      activationNotFound = false;
       activationPending = false;
       return;
     }
@@ -759,6 +765,7 @@
       sequence === hydration.sequence &&
       key === `${activeOrganizationSlug}/${activeWorkspaceSlug}`;
     activationError = "";
+    activationNotFound = false;
     activationPending = true;
     hydration.startedAt = Date.now();
     const owned = { personaBusy: false, loadingActors: false };
@@ -795,9 +802,12 @@
         hydratedWorkspaceSlug = key;
         activationError = "";
       }
-    } catch {
-      if (isCurrent())
-        activationError = "Could not open this workspace. Please try again.";
+    } catch (error) {
+      if (isCurrent()) {
+        const failure = describeActivationFailure(error);
+        activationError = failure.message;
+        activationNotFound = failure.notFound;
+      }
     } finally {
       clearTimeout(timer);
       if (isCurrent()) activationPending = false;
@@ -1658,17 +1668,13 @@
               </div>
             {/if}
             {#if activationError}
-              <div class="p-6" role="alert" data-workspace-activation-error>
-                <p>{activationError}</p>
-                <button
-                  class="ui-btn-secondary mt-3"
-                  type="button"
-                  disabled={activationPending}
-                  onclick={() => void activateCurrentWorkspace()}
-                >
-                  {activationPending ? "Retrying…" : "Retry"}
-                </button>
-              </div>
+              <WorkspaceActivationAlert
+                message={activationError}
+                notFound={activationNotFound}
+                pending={activationPending}
+                onRetry={() => void activateCurrentWorkspace()}
+                homeHref={appPath("/")}
+              />
             {:else if !identityReady || workspaceBootstrapPending || shouldRedirectToLogin || hydratedWorkspaceSlug !== `${activeOrganizationSlug}/${activeWorkspaceSlug}`}
               <div aria-label="Loading workspace content" aria-busy="true">
                 <p class="sr-only" role="status">Loading workspace…</p>

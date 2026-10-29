@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { sessionFailurePolicyMocks } from "../fixtures/sessionFailurePolicyMock.js";
 
 import { AuthErrorCode } from "../../src/lib/authErrorCodes.js";
 import { CURRENT_VERSION } from "../../src/lib/generated/version.js";
@@ -57,7 +58,7 @@ vi.mock("$env/dynamic/private", () => ({
   env: envState,
 }));
 
-vi.mock("$lib/server/authSession", () => ({
+vi.mock("$lib/server/authSession", async (importOriginal) => ({
   getWorkspaceAuthSession: authSessionMocks.getWorkspaceAuthSession,
   readWorkspaceRefreshToken: authSessionMocks.readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession: authSessionMocks.refreshWorkspaceAuthSession,
@@ -68,6 +69,7 @@ vi.mock("$lib/server/authSession", () => ({
     authSessionMocks.isRetryableWorkspaceRefreshFailure,
   shouldClearWorkspaceAuthSessionAfterRetryableFailure:
     authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure,
+  ...sessionFailurePolicyMocks(await importOriginal(), authSessionMocks),
 }));
 
 import {
@@ -403,5 +405,195 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
       "Bearer cp-dev-token",
     );
     expect(response.status).toBe(200);
+  });
+
+  it.each([
+    [
+      "a core 503",
+      Object.assign(new Error("unavailable"), {
+        status: 503,
+        details: { error: { code: "auth_unavailable" } },
+      }),
+    ],
+    [
+      "a retryable auth-session 503",
+      Object.assign(new Error("retry shortly"), {
+        status: 503,
+        code: "auth_session_retryable",
+      }),
+    ],
+    ["a network error", new TypeError("fetch failed")],
+  ])(
+    "keeps the session and answers 503 retryable when the refresh hits %s",
+    async (_label, failure) => {
+      envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+      authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+        refreshToken: "refresh",
+        accessToken: "stale",
+      });
+      authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+      authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+        failure,
+      );
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+      const pathname = "/ws/acme/ops/events";
+
+      const response = await proxyToControlPlaneWorkspace(
+        createEvent(pathname),
+        pathname,
+      );
+
+      expect(response.status).toBe(503);
+      expect((await readErrorJson(response)).error.code).toBe(
+        "auth_session_retryable",
+      );
+      expect(response.headers.get("X-ANX-UI-Version")).toBe(CURRENT_VERSION);
+      expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still sends a public request without a token when the pre-refresh kept the session", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+      refreshToken: "refresh-only",
+      accessToken: "",
+    });
+    authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy.mockResolvedValueOnce(
+      "unavailable",
+    );
+    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    const pathname = "/ws/acme/ops/meta/handshake";
+
+    const response = await proxyToControlPlaneWorkspace(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][1].headers.has("authorization")).toBe(
+      false,
+    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "a 403 agent_revoked",
+      () =>
+        new Response(JSON.stringify({ error: { code: "agent_revoked" } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      true,
+    ],
+    [
+      "a 403 that only refuses the action",
+      () =>
+        new Response(JSON.stringify({ error: { code: "human_required" } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      false,
+    ],
+    [
+      "a 401 with no refresh token to try",
+      () => new Response("unauthorized", { status: 401 }),
+      true,
+    ],
+  ])(
+    "applies the session rule to %s straight from upstream",
+    async (_label, reply, cleared) => {
+      envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+      authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+        accessToken: "access",
+      });
+      authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("");
+      globalThis.fetch = vi.fn().mockResolvedValueOnce(reply());
+      const pathname = "/ws/acme/ops/events";
+
+      await proxyToControlPlaneWorkspace(createEvent(pathname), pathname);
+
+      expect(
+        authSessionMocks.refreshWorkspaceAuthSession,
+      ).not.toHaveBeenCalled();
+      if (cleared)
+        expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+          expect.anything(),
+          "acme",
+          "ops",
+        );
+      else
+        expect(
+          authSessionMocks.clearWorkspaceAuthSession,
+        ).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+      refreshToken: "refresh",
+      accessToken: "stale",
+    });
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("workspace not found"), {
+        status: 404,
+        details: { error: { code: "not_found" } },
+      }),
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+    const pathname = "/ws/acme/ops/events";
+
+    const response = await proxyToControlPlaneWorkspace(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(404);
+    expect((await readErrorJson(response)).error.code).toBe(
+      "workspace_not_found",
+    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("still clears the session when the refresh is rejected with a real 401", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+      refreshToken: "refresh",
+      accessToken: "stale",
+    });
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("invalid"), {
+        status: 401,
+        details: { error: { code: "invalid_token" } },
+      }),
+    );
+    authSessionMocks.isRetryableWorkspaceRefreshFailure.mockReturnValue(true);
+    authSessionMocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure.mockReturnValue(
+      true,
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+    const pathname = "/ws/acme/ops/events";
+
+    const response = await proxyToControlPlaneWorkspace(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(401);
+    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+      expect.anything(),
+      "acme",
+      "ops",
+    );
   });
 });

@@ -12,6 +12,12 @@ import {
   sanitizeReturnPath,
 } from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
+import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import {
+  WORKSPACE_NOT_FOUND_MESSAGE,
+  WorkspaceFailureKind,
+  classifyWorkspaceFailure,
+} from "$lib/workspaceFailure.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
   hostedWorkspaceCoreBaseUrl,
@@ -258,20 +264,40 @@ export async function load(event) {
       });
       const promise = verifyCoreSchemaVersion(client)
         .then(() => "")
-        .catch((error) => {
+        .catch((failure) => {
           schemaCheckPromises.delete(cacheKey);
-          // Passive reads cannot wake a sleeping runtime. Activation checks the
-          // schema after establishing the selected workspace's session.
-          if (provider.mode === "hosted" && error?.coreHttpStatus === 503)
-            return "";
-          if (shouldDegradeCoreSchemaCheckInDev(error)) {
+          // Core could not be reached or read (a status, or a wrapped
+          // transport error) follows the shared failure rule: a missing
+          // workspace is the definitive not-found page; anything else is an
+          // outage, deferred like the session read. A sleeping runtime is one:
+          // passive reads cannot wake it, and activation checks the schema
+          // after establishing the session. A schema or contract mismatch is
+          // not a failure to reach core and still fails below.
+          const status = Number(failure?.coreHttpStatus) || 0;
+          if (failure?.cause !== undefined || status) {
+            if (
+              classifyWorkspaceFailure({ status }) ===
+              WorkspaceFailureKind.NOT_FOUND
+            )
+              throw error(404, {
+                message: WORKSPACE_NOT_FOUND_MESSAGE,
+                code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+              });
+            logServerEvent(
+              "workspace.layout.schema_check_deferred",
+              { org: workOrg, slug: workSlug, status },
+              { level: "warn" },
+            );
+            if (!shouldDegradeCoreSchemaCheckInDev(failure)) return "";
+          }
+          if (shouldDegradeCoreSchemaCheckInDev(failure)) {
             logServerEvent("workspace.layout.schema_check_degraded", {
               org: workOrg,
               slug: workSlug,
             });
-            return error instanceof Error ? error.message : String(error);
+            return failure instanceof Error ? failure.message : String(failure);
           }
-          throw error;
+          throw failure;
         });
       schemaCheckPromises.set(cacheKey, promise);
     }
@@ -280,29 +306,54 @@ export async function load(event) {
 
   const session = await sessionResult;
   /*
-   * On the viewer's own navigation an unreadable session is not an error page:
-   * the shell paints its skeleton and the selection POST establishes it (or
-   * reports the failure with its own Retry). Route-data loads keep failing
-   * loudly, so a broken preload is still visible rather than silently empty.
+   * The passive read resolves null only on an authoritative rejection (signed
+   * out). Its failures follow the shared rule (`classifyWorkspaceFailure`):
+   * - not found (404): the workspace itself is missing. Navigation and
+   *   route-data loads both get the definitive "not found" error page; no
+   *   session is cleared.
+   * - anything else is an outage: the session is kept and the read deferred,
+   *   for navigation and route-data loads alike. The shell paints its
+   *   skeleton and the selection POST establishes the session or reports the
+   *   outage with its own Retry.
    */
-  if (session.failure && event.isDataRequest)
-    throw error(
-      session.failure.status || 503,
-      "Could not validate workspace session.",
+  const failureStatus = Number(session.failure?.status) || 0;
+  if (
+    session.failure &&
+    classifyWorkspaceFailure(session.failure) === WorkspaceFailureKind.NOT_FOUND
+  ) {
+    logServerEvent(
+      "workspace.layout.session_read_not_found",
+      {
+        org: workOrg,
+        slug: workSlug,
+        data_request: Boolean(event.isDataRequest),
+      },
+      { level: "warn" },
     );
+    throw error(404, {
+      message: WORKSPACE_NOT_FOUND_MESSAGE,
+      code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+    });
+  }
   if (session.failure)
     logServerEvent(
       "workspace.layout.session_read_deferred",
       {
         org: workOrg,
         slug: workSlug,
-        status: session.failure.status ?? 0,
+        status: failureStatus,
+        data_request: Boolean(event.isDataRequest),
       },
       { level: "warn" },
     );
   return {
     ...(provider.mode === "hosted"
-      ? { workspaceSession: { agent: session.agent ?? null } }
+      ? {
+          workspaceSession: {
+            agent: session.agent ?? null,
+            ...(session.failure ? { sessionReadDeferred: true } : {}),
+          },
+        }
       : {}),
     /*
      * `page.data` merges root-first, so this copy of `workspaces` replaces the

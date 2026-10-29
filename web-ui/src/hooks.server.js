@@ -8,13 +8,14 @@ import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
 import { CURRENT_VERSION } from "$lib/generated/version";
 import { stripBasePath } from "$lib/workspacePaths";
 import {
-  clearWorkspaceAuthSession,
   ensureWorkspaceAccessTokenForCoreProxy,
   getWorkspaceAuthSession,
-  isRetryableWorkspaceRefreshFailure,
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
-  shouldClearWorkspaceAuthSessionAfterRetryableFailure,
+  settleWorkspaceSessionFailure,
+  settleWorkspaceUpstreamResponse,
+  workspaceSessionFailureResponse,
+  workspaceSessionUnavailableResponse,
 } from "$lib/server/authSession";
 import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
 import { coreEndpointURL } from "$lib/server/coreEndpoint";
@@ -33,6 +34,8 @@ import {
 import { resolveProxyTarget } from "$lib/server/proxyWorkspaceTarget";
 import { isDirectCoreProxyPath } from "$lib/server/directCoreProxyPaths";
 import { getOutOfWorkspaceProvider } from "$lib/server/outOfWorkspace/index.js";
+
+const UI_VERSION_HEADER = { "X-ANX-UI-Version": CURRENT_VERSION };
 
 function isDocumentNavigationRequest(request) {
   const method = request.method.toUpperCase();
@@ -152,26 +155,19 @@ async function refreshAndRetry(
       coreBaseUrl,
     });
   } catch (error) {
-    if (
-      isRetryableWorkspaceRefreshFailure(error, {
-        hadAccessToken,
-        hadRefreshToken: true,
-      })
-    ) {
-      if (
-        shouldClearWorkspaceAuthSessionAfterRetryableFailure(
-          event,
-          organizationSlug,
-          workspaceSlug,
-        )
-      ) {
-        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-      }
-      return null;
-    }
-
-    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-    return null;
+    // Rejected: pass the upstream 401 through (the session is cleared).
+    // Kept: answer 404 not found or 503 retryable, never a 401 the browser
+    // reads as sign-out.
+    return workspaceSessionFailureResponse(
+      settleWorkspaceSessionFailure(
+        event,
+        organizationSlug,
+        workspaceSlug,
+        error,
+        { hadAccessToken, hadRefreshToken: true },
+      ),
+      UI_VERSION_HEADER,
+    );
   }
 
   const refreshedSession = getWorkspaceAuthSession(
@@ -196,7 +192,8 @@ async function refreshAndRetry(
   try {
     return await fetch(targetUrl, requestInit);
   } catch {
-    return null;
+    // The refresh succeeded; only the retry hop failed. Still an outage.
+    return workspaceSessionUnavailableResponse(UI_VERSION_HEADER);
   }
 }
 
@@ -300,13 +297,16 @@ async function proxyToCore(
       requestBody,
       hadAccessTokenOnFirstRequest,
     );
-    if (retriedResponse) {
-      upstreamResponse = retriedResponse;
-      if (upstreamResponse.status === 401) {
-        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-      }
-    }
+    if (retriedResponse) upstreamResponse = retriedResponse;
   }
+  // The session rule on the final upstream answer: a 401 (including one with
+  // no refresh token to try) or a session-ending 403 clears the session.
+  await settleWorkspaceUpstreamResponse(
+    event,
+    organizationSlug,
+    workspaceSlug,
+    upstreamResponse,
+  );
 
   const responseHeaders = new Headers(upstreamResponse.headers);
   responseHeaders.delete("content-encoding");
