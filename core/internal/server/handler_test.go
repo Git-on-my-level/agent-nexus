@@ -607,3 +607,28 @@ func TestLoopbackVerificationReadsDoNotAllowNonLoopbackRequests(t *testing.T) {
 		t.Fatalf("unexpected status: got %d want %d", rr.Code, http.StatusUnauthorized)
 	}
 }
+
+func TestReadyzNamesFailingCheckWithoutRawError(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler("0.2.2", WithReadinessCheck("sidecar", "sidecar_unavailable", "sidecar not ready", func(context.Context) error {
+		return errors.New("dial unix /var/run/internal.sock: connection refused")
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), "internal.sock") {
+		t.Fatalf("public readiness leaked check error: %s", rr.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if check, _ := payload["check"].(map[string]any); check["name"] != "sidecar" {
+		t.Fatalf("expected failing check name, payload=%#v", payload)
+	}
+}
