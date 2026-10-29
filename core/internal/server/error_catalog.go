@@ -13,6 +13,8 @@ var defaultErrorMetadata = map[string]errorMetadata{
 	"auth_admin_required":        {Recoverable: false, Hint: "A human must explicitly grant this agent administration access through Access or auth admins grant."},
 	"human_required":             {Recoverable: false, Hint: "This action requires the human's own credentials."},
 	"host_self_revoke":           {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
+	"forbidden":                  {Recoverable: false, Hint: "These credentials were accepted but lack access to this resource. Confirm the acting principal, or ask a workspace admin for access."},
+	"authorization_denied":       {Recoverable: false, Hint: "These credentials were accepted but lack access to this resource. Confirm the acting principal, or ask a workspace admin for access."},
 	"access_denied":              {Recoverable: false, Hint: "Verify the deployment mode and endpoint access policy, then retry with the required auth context."},
 	"actor_exists":               {Recoverable: true, Hint: "Use a different actor id or read existing actors before retrying."},
 	"actor_registry_unavailable": {Recoverable: false, Hint: "Actor registry is unavailable; retry later or escalate to operator."},

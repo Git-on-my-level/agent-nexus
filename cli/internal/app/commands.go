@@ -328,7 +328,7 @@ Flags:
   --header key:value    Repeatable request header.
 
 Examples:
-  anx api call --method GET --path /readyz
+  anx api call --method GET --path /health
   anx api call POST /events --from-file body.json`)
 }
 

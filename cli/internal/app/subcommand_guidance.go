@@ -18,7 +18,7 @@ type subcommandSpec struct {
 var apiSubcommandSpec = subcommandSpec{
 	command:  "api",
 	valid:    []string{"call"},
-	examples: []string{"anx api call --method GET --path /readyz"},
+	examples: []string{"anx api call --method GET --path /health"},
 }
 
 var bridgeSubcommandSpec = subcommandSpec{

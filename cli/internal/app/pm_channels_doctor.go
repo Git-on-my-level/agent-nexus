@@ -126,6 +126,11 @@ func (a *App) probeBindings(ctx context.Context, cfg config.Resolved) (bool, str
 		if cfg.BaseURL == "" {
 			return false, "core base URL is not set; cannot read bindings"
 		}
+		if status := httpStatusFromErr(err); status == http.StatusUnauthorized || status == http.StatusForbidden {
+			// Hosted gateways keep binding reads to member sessions; an access
+			// boundary is not a channel failure.
+			return true, fmt.Sprintf("restricted: bindings are not visible to this credential (HTTP %d); check them from a hosted member session", status)
+		}
 		return false, "could not list bindings: " + err.Error()
 	}
 	body := commandResultBody(got)

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"agent-nexus-cli/internal/errnorm"
@@ -34,7 +35,7 @@ func TestDoctorCLIVersionAgainstHandshake(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
-				case "/readyz":
+				case "/health", "/readyz":
 					_, _ = w.Write([]byte(`{"ok":true}`))
 				case "/meta/handshake":
 					body, _ := json.Marshal(map[string]string{"min_cli_version": tc.min, "recommended_cli_version": tc.recommended})
@@ -117,7 +118,7 @@ func TestDoctorDoesNotGuessFromOneInstalledAdapter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/readyz":
+		case "/health", "/readyz":
 			_, _ = w.Write([]byte(`{"ok":true}`))
 		case "/meta/handshake":
 			_, _ = w.Write([]byte(`{"min_cli_version":"0.1.0"}`))
@@ -313,4 +314,118 @@ func TestBareInvocationFailsWhenSeveralHostsAreEnrolled(t *testing.T) {
 		}
 	}
 
+}
+
+func TestDoctorSeparatesLivenessFromRestrictedReadiness(t *testing.T) {
+	cases := []struct {
+		name          string
+		health        func(http.ResponseWriter)
+		readyz        func(http.ResponseWriter)
+		closed        bool
+		wantHealth    string
+		wantReadiness string
+	}{
+		{
+			name:          "hosted gateway restricts readiness",
+			health:        func(w http.ResponseWriter) { _, _ = w.Write([]byte(`{"ok":true}`)) },
+			readyz:        func(w http.ResponseWriter) { w.WriteHeader(http.StatusUnauthorized) },
+			wantHealth:    "pass",
+			wantReadiness: "restricted",
+		},
+		{
+			name:          "forbidden readiness is restricted",
+			health:        func(w http.ResponseWriter) { _, _ = w.Write([]byte(`{"ok":true}`)) },
+			readyz:        func(w http.ResponseWriter) { w.WriteHeader(http.StatusForbidden) },
+			wantHealth:    "pass",
+			wantReadiness: "restricted",
+		},
+		{
+			name:          "direct core dependency not ready",
+			health:        func(w http.ResponseWriter) { _, _ = w.Write([]byte(`{"ok":true}`)) },
+			readyz:        func(w http.ResponseWriter) { w.WriteHeader(http.StatusServiceUnavailable) },
+			wantHealth:    "pass",
+			wantReadiness: "fail",
+		},
+		{
+			name:          "liveness server error",
+			health:        func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+			readyz:        func(w http.ResponseWriter) { w.WriteHeader(http.StatusBadGateway) },
+			wantHealth:    "fail",
+			wantReadiness: "fail",
+		},
+		{
+			name:          "malformed liveness body",
+			health:        func(w http.ResponseWriter) { _, _ = w.Write([]byte(`<html>proxy</html>`)) },
+			readyz:        func(w http.ResponseWriter) { _, _ = w.Write([]byte(`{"ok":true}`)) },
+			wantHealth:    "fail",
+			wantReadiness: "pass",
+		},
+		{
+			name:          "unreachable core",
+			closed:        true,
+			wantHealth:    "fail",
+			wantReadiness: "fail",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var unexpected []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/health":
+					tc.health(w)
+				case r.Method == http.MethodGet && r.URL.Path == "/readyz":
+					tc.readyz(w)
+				case r.Method == http.MethodGet && r.URL.Path == "/meta/handshake":
+					_, _ = w.Write([]byte(`{"min_cli_version":"v0.1.0","recommended_cli_version":"v0.1.0"}`))
+				default:
+					mu.Lock()
+					unexpected = append(unexpected, r.Method+" "+r.URL.Path)
+					mu.Unlock()
+					http.NotFound(w, r)
+				}
+			}))
+			if tc.closed {
+				server.Close()
+			} else {
+				t.Cleanup(server.Close)
+			}
+
+			stdout := &strings.Builder{}
+			cli := newTestApp(t)
+			cli.Stdout = stdout
+			cli.Stderr = &strings.Builder{}
+			cli.Getenv = func(string) string { return "" }
+			cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+			_ = cli.Run([]string{"--json", "--base-url", server.URL, "--as", "codex", "doctor"})
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(stdout.String()), &payload); err != nil {
+				t.Fatalf("decode: %v raw=%s", err, stdout.String())
+			}
+			result := asMap(payload["result"])
+			if result == nil {
+				result = asMap(asMap(asMap(payload["error"])["details"]))
+			}
+			checks := asSlice(result["checks"])
+			if !doctorStatus(checks, "core_health", tc.wantHealth) {
+				t.Fatalf("core_health want %s: %#v", tc.wantHealth, checks)
+			}
+			if !doctorStatus(checks, "core_readiness", tc.wantReadiness) {
+				t.Fatalf("core_readiness want %s: %#v", tc.wantReadiness, checks)
+			}
+			for _, raw := range checks {
+				check := asMap(raw)
+				if anyString(check["name"]) == "host_enrollment" && asBool(check["ok"]) {
+					t.Fatalf("absent host enrollment must stay visible: %#v", check)
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(unexpected) > 0 {
+				t.Fatalf("doctor must only read liveness, readiness and handshake; got %v", unexpected)
+			}
+		})
+	}
 }

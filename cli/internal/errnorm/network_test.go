@@ -55,3 +55,24 @@ func TestHTTPStatusClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthRejectionHintsSeparateAuthenticationFromAuthorization(t *testing.T) {
+	unauthorized := FromHTTPFailure(401, nil)
+	if !strings.Contains(unauthorized.Hint, "host enrollment") {
+		t.Fatalf("401 should point at enrollment: %q", unauthorized.Hint)
+	}
+	forbidden := FromHTTPFailure(403, nil)
+	if strings.Contains(forbidden.Hint, "enrollment") || !strings.Contains(forbidden.Message, "403") {
+		t.Fatalf("403 must not blame enrollment: %q / %q", forbidden.Message, forbidden.Hint)
+	}
+	for _, code := range []string{"forbidden", "authorization_denied"} {
+		structured := FromHTTPFailure(403, []byte(`{"error":{"code":"`+code+`","message":"actor lacks access","hint":"Review error details and endpoint usage, then retry if appropriate."}}`))
+		if structured.Hint != forbiddenHint {
+			t.Fatalf("structured %s 403 hint = %q", code, structured.Hint)
+		}
+	}
+	revoked := FromHTTPFailure(403, []byte(`{"error":{"code":"agent_revoked","message":"revoked"}}`))
+	if !strings.Contains(revoked.Hint, "host enrollment") {
+		t.Fatalf("agent_revoked keeps its specific hint: %q", revoked.Hint)
+	}
+}

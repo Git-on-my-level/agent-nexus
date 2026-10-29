@@ -598,7 +598,10 @@ func writeLivenessOK(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func readinessErrorPayload(r *http.Request, opts handlerOptions) map[string]any {
+// readinessErrorPayload names the failing check. Only the authenticated
+// /ops/health view carries the check's raw error text: /readyz is public on
+// direct-core deployments, and dependency errors can describe internals.
+func readinessErrorPayload(r *http.Request, opts handlerOptions, includeDetail bool) map[string]any {
 	if opts.healthCheck != nil {
 		if err := opts.healthCheck(r.Context()); err != nil {
 			return map[string]any{
@@ -614,13 +617,14 @@ func readinessErrorPayload(r *http.Request, opts handlerOptions) map[string]any 
 		if err := check.Check(r.Context()); err != nil {
 			code := firstNonEmptyString(check.Code, "service_unavailable")
 			message := firstNonEmptyString(check.Message, "readiness check failed")
+			checkPayload := map[string]any{"name": check.Name}
+			if includeDetail {
+				checkPayload["error"] = err.Error()
+			}
 			return map[string]any{
 				"ok":    false,
 				"error": errorPayload(code, message),
-				"check": map[string]any{
-					"name":  check.Name,
-					"error": err.Error(),
-				},
+				"check": checkPayload,
 			}
 		}
 	}
@@ -628,7 +632,7 @@ func readinessErrorPayload(r *http.Request, opts handlerOptions) map[string]any 
 }
 
 func checkReadiness(w http.ResponseWriter, r *http.Request, opts handlerOptions) bool {
-	if payload := readinessErrorPayload(r, opts); payload != nil {
+	if payload := readinessErrorPayload(r, opts, false); payload != nil {
 		writeJSON(w, http.StatusServiceUnavailable, payload)
 		return false
 	}
@@ -933,7 +937,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				payload[key] = opts.opsHealthSections[key](r.Context())
 			}
 		}
-		if readinessPayload := readinessErrorPayload(r, opts); readinessPayload != nil {
+		if readinessPayload := readinessErrorPayload(r, opts, true); readinessPayload != nil {
 			for key, value := range readinessPayload {
 				payload[key] = value
 			}

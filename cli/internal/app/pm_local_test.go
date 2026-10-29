@@ -3535,3 +3535,23 @@ func TestHandleClaimedTurnHeartbeat503RetriesThenSucceeds(t *testing.T) {
 		t.Fatalf("transient 503 must not count as lease loss: %s", stderr.String())
 	}
 }
+
+func TestPMChannelsDoctorReportsRestrictedBindingsReadAsAccessBoundary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pm/bindings" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":{"code":"auth_required","message":"authorization token is required"}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	raw := runCLIForTest(t, t.TempDir(), map[string]string{"ANX_ACCESS_TOKEN": "fixture"}, nil, []string{"--json", "--base-url", srv.URL, "pm", "channels", "doctor"})
+	if !strings.Contains(raw, "restricted: bindings are not visible to this credential (HTTP 401)") {
+		t.Fatalf("expected restricted bindings check, output=%s", raw)
+	}
+	if strings.Contains(raw, "could not list bindings") {
+		t.Fatalf("restricted read reported as a failure: %s", raw)
+	}
+}
