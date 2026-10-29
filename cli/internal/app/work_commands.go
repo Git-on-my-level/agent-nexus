@@ -65,7 +65,7 @@ var workCommands = map[string]workCommandSpec{
 	"pm conversations message":   {path: "/pm/conversations/{id}/messages", method: "POST", idFlag: "conversation-id", body: true, summary: "Queue a PM message using request_key and text; an accepted turn is not a completed outcome."},
 	"pm decisions list":          {path: "/pm/decisions", method: "GET", summary: "List durable decisions with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm decisions get":           {path: "/pm/decisions/{id}", method: "GET", idFlag: "decision-id", summary: "Read an instruction, authorization scope, revision and answer status."},
-	"pm decisions create":        {path: "/pm/decisions", method: "POST", body: true, summary: "Propose an instruction bound to work, scope and target_revision; never approves it."},
+	"pm decisions create":        {path: "/pm/decisions", method: "POST", body: true, summary: "Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn."},
 	"pm decisions answer":        {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
 	"pm decisions dispatch":      {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
 	"pm actions list":            {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},

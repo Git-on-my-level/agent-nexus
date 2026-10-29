@@ -255,6 +255,13 @@ func FromHTTPFailure(status int, body []byte) *Error {
 		// command to run and never points at re-enrollment.
 		out.Hint = forbiddenHint
 	}
+	if code == "human_required" {
+		// Human authorization cannot be repaired by enrolling a machine again,
+		// even if an older server supplied that generic authentication hint.
+		out.Hint = humanRequiredHint
+		retryable := false
+		out.Recoverable = &retryable
+	}
 	if code == "remote_error" {
 		retryable := status >= 500
 		out.Recoverable = &retryable
@@ -296,13 +303,15 @@ type Metadata struct {
 // not help.
 const forbiddenHint = "The server accepted these credentials but denied this route. Run `anx --as <name> auth whoami` to confirm the acting principal, or ask a workspace admin for access."
 
+const humanRequiredHint = "This action needs a signed-in browser session. Ask the human to open the workspace in their browser and perform the action there."
+
 var defaultMetadataByCode = map[string]Metadata{
 	"outcome_unknown":               {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
-	"human_required":                {Recoverable: false, Hint: "Use the human's own credentials for this action."},
+	"human_required":                {Recoverable: false, Hint: humanRequiredHint},
 	"forbidden":                     {Recoverable: false, Hint: forbiddenHint},
 	"authorization_denied":          {Recoverable: false, Hint: forbiddenHint},
 	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},

@@ -103,6 +103,18 @@ func EnrichForCommand(e *Error, commandID string) {
 	if commandID == "" {
 		return
 	}
+	hostDetails, _ := e.Details.(map[string]any)
+	if (commandID == "host.exclude" || commandID == "host.include") && e.Code == "auth_required" && hostDetails["status"] == 401 {
+		// These commands have already authenticated their read, then send a
+		// host-key proof without a bearer. A session-only server can refuse that
+		// proof; repeating machine enrollment cannot supply a human session.
+		e.Hint = "This server requires authorization for host edits. If it needs a signed-in browser session, ask the human to open Access > Hosts and edit this host there. On a self-hosted server, verify that host-key proofs are enabled."
+		if details, ok := e.Details.(map[string]any); ok {
+			details["hint"] = e.Hint
+			delete(details, "anx_cli_recovery")
+		}
+		return
+	}
 	hint, recovery := enrichPMCommandError(commandID, e)
 	if hint == "" && recovery == nil {
 		hint, recovery = enrichConcurrencyCommandError(commandID, e)
