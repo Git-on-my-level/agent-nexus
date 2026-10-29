@@ -3335,7 +3335,7 @@
     "../server/docs_handlers.go:parseOptionalBoolQuery": "0c6cebfd0c8acec72db441f60e91516fc2538d317be604f97a07fb19363321e4",
     "../server/docs_handlers.go:writeDocumentCommentMutationError": "5d5e4863d81923025f2f12b47b7e66877bec68092d6b67b2af988cfd4c5db92d",
     "../server/docs_handlers.go:writeInvalidDocumentRequest": "2f998d00bd311a8cd799647506ad20d606634997835ac9e8187916fd377535aa",
-    "../server/error_catalog.go:defaultErrorMetadata": "8880c36eca5767f37fa0e357694dd7efb0760921a28e44360c1baa59b3172ca3",
+    "../server/error_catalog.go:defaultErrorMetadata": "013c5315b275835cb6aa1c4f3c6fb4f82cb818a953264cb90aa8b2464473f4b9",
     "../server/escalation_wake.go:NewEscalationPMWaker": "13596f0182b3752fce0cbf6775573c51df4d2365e47fb370a5bd33b5fca98c40",
     "../server/escalation_wake.go:NewEscalationReadCheck": "b064a294c7a79642519831621f3601302bee493687dfeb3f54aa1f6d7cc6aee6",
     "../server/event_append_errors.go:writeEventAppendContentionError": "637c6823c8f5de7dd46b998c2bf815b40bf8c99b6fc6f4287cda69d747c68bd4",
