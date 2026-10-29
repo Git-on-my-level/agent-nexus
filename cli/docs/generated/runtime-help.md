@@ -151,7 +151,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
 - `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
 - `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
-- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
+- `pm decisions create` (command): Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
 - `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
 - `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
 - `pm decisions list` (command): List durable decisions with principal-bound pagination.
@@ -1223,7 +1223,7 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm conversations list    List durable PM conversations with principal-bound pagination.
   anx pm conversations message Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
   anx pm decisions answer      Answer with revision, approve and text; the server requires an authorized human principal.
-  anx pm decisions create      Propose an instruction bound to work, scope and target_revision; never approves it.
+  anx pm decisions create      Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
   anx pm decisions dispatch    Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
   anx pm decisions get         Read an instruction, authorization scope, revision and answer status.
   anx pm decisions list        List durable decisions with principal-bound pagination.
@@ -2068,6 +2068,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites list ... ; anx --json auth invites list ... ; anx auth invites list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth invites create`
@@ -2100,6 +2102,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites create ... ; anx --json auth invites create ... ; anx auth invites create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth invites revoke`
@@ -2129,6 +2133,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth invites revoke ... ; anx --json auth invites revoke ... ; anx auth invites revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth bootstrap status`
@@ -2209,6 +2215,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth principals revoke ... ; anx --json auth principals revoke ... ; anx auth principals revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth audit list`
@@ -2719,6 +2727,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx boards purge ... ; anx --json boards purge ... ; anx boards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `boards cards`
@@ -3038,6 +3048,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx docs purge ... ; anx --json docs purge ... ; anx docs purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `docs revision get`
@@ -3195,6 +3207,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx cards purge ... ; anx --json cards purge ... ; anx cards purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `cards restore`
@@ -3747,6 +3761,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx inbox respond ... ; anx --json inbox respond ... ; anx inbox respond ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `inbox stream`
@@ -4060,6 +4076,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx artifacts purge ... ; anx --json artifacts purge ... ; anx artifacts purge ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `ref-edges list`
@@ -4110,6 +4128,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug derived rebuild ... ; anx --json debug derived rebuild ... ; anx debug derived rebuild ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `meta commands`
@@ -4462,6 +4482,8 @@ Usage: anx pm actions acknowledge <ref> (or --action-id <ref>)
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm actions get`
@@ -4569,6 +4591,8 @@ Usage: anx pm actions reconcile <ref> (or --action-id <ref>)
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm bindings create`
@@ -4618,6 +4642,8 @@ JSON body follows the central API contract; use anx debug meta commands for gene
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm bindings list`
@@ -4651,6 +4677,8 @@ Usage: anx pm bindings list
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm conversations create`
@@ -4847,11 +4875,13 @@ JSON body follows the central API contract; use anx debug meta commands for gene
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm decisions create`
 
-Propose an instruction bound to work, scope and target_revision; never approves it.
+Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
 
 ```text
 Generated Help: pm decisions create
@@ -4888,7 +4918,7 @@ Inputs:
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
-Propose an instruction bound to work, scope and target_revision; never approves it.
+Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
 
 Usage: anx pm decisions create --from-file <path|->
 
@@ -4897,6 +4927,8 @@ JSON body follows the central API contract; use anx debug meta commands for gene
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm decisions dispatch`
@@ -4936,6 +4968,8 @@ Usage: anx pm decisions dispatch <ref> (or --decision-id <ref>)
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
 Use --json for one machine-readable envelope.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `pm decisions get`
@@ -6169,6 +6203,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret list ... ; anx --json secret list ... ; anx secret list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `secret create`
@@ -6202,6 +6238,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret create ... ; anx --json secret create ... ; anx secret create ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `secret delete`
@@ -6232,6 +6270,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret delete ... ; anx --json secret delete ... ; anx secret delete ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `secret get --reveal`
@@ -6262,6 +6302,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret get --reveal ... ; anx --json secret get --reveal ... ; anx secret get --reveal ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `secret exec`
@@ -6292,6 +6334,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret exec ... ; anx --json secret exec ... ; anx secret exec ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `secret update`
@@ -6325,6 +6369,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx secret update ... ; anx --json secret update ... ; anx secret update ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `update status`
@@ -7241,6 +7287,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx notifications settings set ... ; anx --json notifications settings set ... ; anx notifications settings set ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `adapters token`
@@ -9717,6 +9765,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth access-requests request ... ; anx --json auth access-requests request ... ; anx auth access-requests request ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth access-requests list`
@@ -9739,6 +9789,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth access-requests list ... ; anx --json auth access-requests list ... ; anx auth access-requests list ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth access-requests approve`
@@ -9761,6 +9813,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth access-requests approve ... ; anx --json auth access-requests approve ... ; anx auth access-requests approve ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth access-requests deny`
@@ -9783,6 +9837,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth access-requests deny ... ; anx --json auth access-requests deny ... ; anx auth access-requests deny ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth access-requests summary`
@@ -9805,6 +9861,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth access-requests summary ... ; anx --json auth access-requests summary ... ; anx auth access-requests summary ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `host enroll`
@@ -9912,6 +9970,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth admins grant ... ; anx --json auth admins grant ... ; anx auth admins grant ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `auth admins revoke`
@@ -9952,6 +10012,8 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx auth admins revoke ... ; anx --json auth admins revoke ... ; anx auth admins revoke ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `host enrollments list`

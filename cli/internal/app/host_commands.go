@@ -516,7 +516,9 @@ func (a *App) hostExclusion(ctx context.Context, verb string, args []string, cfg
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return nil, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		failure := errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+		errnorm.EnrichForCommand(failure, "host."+verb)
+		return nil, failure
 	}
 	var result map[string]any
 	if err := json.Unmarshal(resp.Body, &result); err != nil {

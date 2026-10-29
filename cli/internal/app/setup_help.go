@@ -19,6 +19,8 @@ var setupJobs = map[string]string{
 
 Without answer delivery, unattended resumes wait; Git/drain remain manual.
 Await/batch and direct commands work without a bridge.
+Host exclude/include use host proof. Servers requiring a signed-in browser session
+for host edits need the human to use Access > Hosts instead.
 `,
 	"tokens": `Issue and revoke headless tokens
 

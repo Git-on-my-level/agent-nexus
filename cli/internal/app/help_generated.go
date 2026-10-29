@@ -1173,6 +1173,7 @@ func helpTopicText(topic string) (string, bool) {
 	if !ok {
 		return "", false
 	}
+	text = humanSessionHelp(topic, text)
 	if stability, stable := loopTierStability(topic); stable {
 		text = strings.TrimRight(text, "\n") + "\nStability: " + stability + "\n"
 	}
@@ -1189,6 +1190,9 @@ func qualifyDiagnosticExamples(text string) string {
 }
 
 func helpTopicTextRaw(topic string) (string, bool) {
+	if text, ok := hostExclusionHelp(topic); ok {
+		return text, true
+	}
 	if topic == "sync" || strings.HasPrefix(topic, "sync ") {
 		return "Local Help: " + topic + "\n\n" + syncHelp, true
 	}
