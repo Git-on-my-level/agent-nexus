@@ -264,20 +264,40 @@ export async function load(event) {
       });
       const promise = verifyCoreSchemaVersion(client)
         .then(() => "")
-        .catch((error) => {
+        .catch((failure) => {
           schemaCheckPromises.delete(cacheKey);
-          // Passive reads cannot wake a sleeping runtime. Activation checks the
-          // schema after establishing the selected workspace's session.
-          if (provider.mode === "hosted" && error?.coreHttpStatus === 503)
-            return "";
-          if (shouldDegradeCoreSchemaCheckInDev(error)) {
+          // Core could not be reached or read (a status, or a wrapped
+          // transport error) follows the shared failure rule: a missing
+          // workspace is the definitive not-found page; anything else is an
+          // outage, deferred like the session read. A sleeping runtime is one:
+          // passive reads cannot wake it, and activation checks the schema
+          // after establishing the session. A schema or contract mismatch is
+          // not a failure to reach core and still fails below.
+          const status = Number(failure?.coreHttpStatus) || 0;
+          if (failure?.cause !== undefined || status) {
+            if (
+              classifyWorkspaceFailure({ status }) ===
+              WorkspaceFailureKind.NOT_FOUND
+            )
+              throw error(404, {
+                message: WORKSPACE_NOT_FOUND_MESSAGE,
+                code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+              });
+            logServerEvent(
+              "workspace.layout.schema_check_deferred",
+              { org: workOrg, slug: workSlug, status },
+              { level: "warn" },
+            );
+            if (!shouldDegradeCoreSchemaCheckInDev(failure)) return "";
+          }
+          if (shouldDegradeCoreSchemaCheckInDev(failure)) {
             logServerEvent("workspace.layout.schema_check_degraded", {
               org: workOrg,
               slug: workSlug,
             });
-            return error instanceof Error ? error.message : String(error);
+            return failure instanceof Error ? failure.message : String(failure);
           }
-          throw error;
+          throw failure;
         });
       schemaCheckPromises.set(cacheKey, promise);
     }

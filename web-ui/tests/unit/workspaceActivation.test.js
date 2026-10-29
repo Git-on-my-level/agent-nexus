@@ -124,3 +124,20 @@ it("retries a malformed success instead of accepting it", async () => {
   expect(result.agent.agent_id).toBe("human");
   expect(fetchFn).toHaveBeenCalledTimes(3);
 });
+it.each([
+  ["a numeric", 42],
+  ["a whitespace-only", "   "],
+])("does not accept %s agent_id as an activation", async (_label, agentId) => {
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ agent: { agent_id: agentId } }))
+    .mockResolvedValueOnce(Response.json({ agent: { agent_id: "human" } }));
+  const result = await requestWorkspaceActivation({
+    url: "/auth/workspace-session",
+    input: {},
+    fetchFn,
+    wait: async () => {},
+  });
+  expect(result.agent.agent_id).toBe("human");
+  expect(fetchFn).toHaveBeenCalledTimes(2);
+});

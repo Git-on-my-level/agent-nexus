@@ -10,7 +10,8 @@ import {
 async function readActivation(response) {
   try {
     const body = await response.json();
-    if (body && typeof body === "object" && body.agent?.agent_id) return body;
+    const agentId = body?.agent?.agent_id;
+    if (typeof agentId === "string" && agentId.trim()) return body;
   } catch {
     // Unparseable success: fall through.
   }

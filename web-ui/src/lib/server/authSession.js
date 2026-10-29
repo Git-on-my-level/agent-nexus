@@ -928,6 +928,60 @@ export function workspaceSessionFailureResponse(outcome, extraHeaders = {}) {
   return null;
 }
 
+/**
+ * 403 codes that end the session itself (as opposed to a 403 that only
+ * refuses one action, such as `human_required` or `auth_admin_required`,
+ * which must never sign the viewer out).
+ */
+const SESSION_ENDING_FORBIDDEN_CODES = new Set([
+  "agent_revoked",
+  AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
+  AuthErrorCode.CP_ACCOUNT_INACTIVE,
+]);
+
+/**
+ * Apply the session rule to the final upstream answer of a proxied request
+ * (after any refresh-and-retry): a 401, or a 403 whose code ends the session,
+ * clears it. A kept session never reaches here as a 401: the refresh path
+ * answers 503 / 404 instead (including the first `invalid_token` of a
+ * possible refresh-rotation race).
+ *
+ * @param {import('@sveltejs/kit').RequestEvent} event
+ * @param {string} organizationSlug
+ * @param {string} workspaceSlug
+ * @param {Response} response
+ * @returns {Promise<boolean>} whether the session was cleared
+ */
+export async function settleWorkspaceUpstreamResponse(
+  event,
+  organizationSlug,
+  workspaceSlug,
+  response,
+) {
+  const rejected = await isSessionEndingUpstreamResponse(response);
+  if (rejected)
+    clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
+  return rejected;
+}
+
+/**
+ * A 401, or a 403 whose code ends the session. Reads a 403 body from a clone,
+ * so the response can still be streamed to the browser.
+ *
+ * @param {Response} response
+ */
+export async function isSessionEndingUpstreamResponse(response) {
+  if (response.status === 401) return true;
+  if (response.status !== 403) return false;
+  const payload = readJSONPayload(
+    await response
+      .clone()
+      .text()
+      .catch(() => ""),
+  );
+  return SESSION_ENDING_FORBIDDEN_CODES.has(String(payload?.error?.code ?? ""));
+}
+
 export function isLikelyStaleWorkspaceRefreshFailure(
   error,
   { hadAccessToken = false } = {},

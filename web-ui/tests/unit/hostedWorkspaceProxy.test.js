@@ -479,6 +479,59 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      "a 403 agent_revoked",
+      () =>
+        new Response(JSON.stringify({ error: { code: "agent_revoked" } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      true,
+    ],
+    [
+      "a 403 that only refuses the action",
+      () =>
+        new Response(JSON.stringify({ error: { code: "human_required" } }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+      false,
+    ],
+    [
+      "a 401 with no refresh token to try",
+      () => new Response("unauthorized", { status: 401 }),
+      true,
+    ],
+  ])(
+    "applies the session rule to %s straight from upstream",
+    async (_label, reply, cleared) => {
+      envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+      authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+        accessToken: "access",
+      });
+      authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("");
+      globalThis.fetch = vi.fn().mockResolvedValueOnce(reply());
+      const pathname = "/ws/acme/ops/events";
+
+      await proxyToControlPlaneWorkspace(createEvent(pathname), pathname);
+
+      expect(
+        authSessionMocks.refreshWorkspaceAuthSession,
+      ).not.toHaveBeenCalled();
+      if (cleared)
+        expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+          expect.anything(),
+          "acme",
+          "ops",
+        );
+      else
+        expect(
+          authSessionMocks.clearWorkspaceAuthSession,
+        ).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
     envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
     authSessionMocks.getWorkspaceAuthSession.mockReturnValue({

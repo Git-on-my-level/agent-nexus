@@ -16,6 +16,12 @@ export function sessionFailurePolicyMocks(actual, mocks) {
       actual.workspaceSessionUnavailableResponse,
     workspaceSessionNotFoundResponse: actual.workspaceSessionNotFoundResponse,
     workspaceSessionFailureResponse: actual.workspaceSessionFailureResponse,
+    isSessionEndingUpstreamResponse: actual.isSessionEndingUpstreamResponse,
+    settleWorkspaceUpstreamResponse: async (event, org, ws, response) => {
+      const rejected = await actual.isSessionEndingUpstreamResponse(response);
+      if (rejected) mocks.clearWorkspaceAuthSession(event, org, ws);
+      return rejected;
+    },
     settleWorkspaceSessionFailure: (event, org, ws, error, options) => {
       const { REJECTED, UNAVAILABLE } = actual.WorkspaceSessionFailure;
       const kind = actual.classifyWorkspaceSessionFailure(error);

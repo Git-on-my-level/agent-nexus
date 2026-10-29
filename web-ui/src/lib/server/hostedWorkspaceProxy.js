@@ -4,12 +4,12 @@ import { normalizeBaseUrl } from "$lib/config.js";
 import { CURRENT_VERSION } from "$lib/generated/version";
 import { parseWorkspaceRouteSlugs } from "$lib/workspacePaths";
 import {
-  clearWorkspaceAuthSession,
   ensureWorkspaceAccessTokenForCoreProxy,
   getWorkspaceAuthSession,
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
   settleWorkspaceSessionFailure,
+  settleWorkspaceUpstreamResponse,
   workspaceSessionFailureResponse,
   workspaceSessionUnavailableResponse,
 } from "$lib/server/authSession";
@@ -282,13 +282,16 @@ export async function proxyToControlPlaneWorkspace(event, pathname) {
       requestBody,
       hadAccessTokenOnFirstRequest,
     );
-    if (retriedResponse) {
-      upstreamResponse = retriedResponse;
-      if (upstreamResponse.status === 401) {
-        clearWorkspaceAuthSession(event, organizationSlug, workspaceSlug);
-      }
-    }
+    if (retriedResponse) upstreamResponse = retriedResponse;
   }
+  // The session rule on the final upstream answer: a 401 (including one with
+  // no refresh token to try) or a session-ending 403 clears the session.
+  await settleWorkspaceUpstreamResponse(
+    event,
+    organizationSlug,
+    workspaceSlug,
+    upstreamResponse,
+  );
 
   const responseHeaders = new Headers(upstreamResponse.headers);
   responseHeaders.delete("content-encoding");

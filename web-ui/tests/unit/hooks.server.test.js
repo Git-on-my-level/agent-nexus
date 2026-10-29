@@ -134,6 +134,7 @@ describe("hooks proxy retry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authSessionState.currentSession = { accessToken: "expired-token" };
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh-token");
     proxyWorkspaceTargetMocks.resolveProxyTarget.mockImplementation(() =>
       Promise.resolve({
         coreBaseUrl: "https://core.example.test",
@@ -658,6 +659,54 @@ describe("hooks proxy retry", () => {
       false,
     );
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("clears the session on a 403 agent_revoked straight from core", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "agent_revoked" } }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const response = await handle({ event: apiEvent(), resolve: vi.fn() });
+
+    expect(response.status).toBe(403);
+    expect(authSessionMocks.refreshWorkspaceAuthSession).not.toHaveBeenCalled();
+    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+      expect.anything(),
+      "acme",
+      "ops",
+    );
+  });
+
+  it("keeps the session on a 403 that only refuses the action", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "human_required" } }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const response = await handle({ event: apiEvent(), resolve: vi.fn() });
+
+    expect(response.status).toBe(403);
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("clears the session on a 401 when there is no refresh token to try", async () => {
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("");
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(unauthorized());
+
+    const response = await handle({ event: apiEvent(), resolve: vi.fn() });
+
+    expect(response.status).toBe(401);
+    expect(authSessionMocks.refreshWorkspaceAuthSession).not.toHaveBeenCalled();
+    expect(authSessionMocks.clearWorkspaceAuthSession).toHaveBeenCalledWith(
+      expect.anything(),
+      "acme",
+      "ops",
+    );
   });
 
   it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
