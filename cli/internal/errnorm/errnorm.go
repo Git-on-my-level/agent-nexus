@@ -250,6 +250,11 @@ func FromHTTPFailure(status int, body []byte) *Error {
 	if rawHint, ok := payload["hint"].(string); ok {
 		out.Hint = strings.TrimSpace(rawHint)
 	}
+	if code == "forbidden" || code == "authorization_denied" {
+		// Older cores send a generic hint for these; the CLI's names the
+		// command to run and never points at re-enrollment.
+		out.Hint = forbiddenHint
+	}
 	if code == "remote_error" {
 		retryable := status >= 500
 		out.Recoverable = &retryable
