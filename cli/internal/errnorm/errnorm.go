@@ -258,7 +258,7 @@ func FromHTTPFailure(status int, body []byte) *Error {
 				// Credentials were accepted; this route is outside their access.
 				// Re-enrolling would not help, so don't point there.
 				out.Message = "authorization denied (HTTP 403)"
-				out.Hint = "The server accepted these credentials but denied this route. Run `anx --as <name> auth whoami` to confirm the acting principal, or ask a workspace admin for access."
+				out.Hint = forbiddenHint
 			} else {
 				out.Message = fmt.Sprintf("authentication rejected (HTTP %d)", status)
 				out.Hint = "The server rejected authentication. Run `anx --as <name> auth whoami` to verify host enrollment and access with an auth-admin."
@@ -287,6 +287,10 @@ type Metadata struct {
 	Hint        string
 }
 
+// forbiddenHint is for 403s: credentials were accepted, so re-enrolling would
+// not help.
+const forbiddenHint = "The server accepted these credentials but denied this route. Run `anx --as <name> auth whoami` to confirm the acting principal, or ask a workspace admin for access."
+
 var defaultMetadataByCode = map[string]Metadata{
 	"outcome_unknown":               {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
@@ -294,6 +298,8 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
 	"human_required":                {Recoverable: false, Hint: "Use the human's own credentials for this action."},
+	"forbidden":                     {Recoverable: false, Hint: forbiddenHint},
+	"authorization_denied":          {Recoverable: false, Hint: forbiddenHint},
 	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
 	"auth_required":                 {Recoverable: true, Hint: "Run `anx --as <name> auth whoami` to verify host credentials, then retry."},
 	"busy":                          {Recoverable: true, Hint: "Wait and retry; this is a temporary capacity, queue, or conversation limit."},

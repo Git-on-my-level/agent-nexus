@@ -65,4 +65,14 @@ func TestAuthRejectionHintsSeparateAuthenticationFromAuthorization(t *testing.T)
 	if strings.Contains(forbidden.Hint, "enrollment") || !strings.Contains(forbidden.Message, "403") {
 		t.Fatalf("403 must not blame enrollment: %q / %q", forbidden.Message, forbidden.Hint)
 	}
+	for _, code := range []string{"forbidden", "authorization_denied"} {
+		structured := FromHTTPFailure(403, []byte(`{"error":{"code":"`+code+`","message":"actor lacks access"}}`))
+		if structured.Hint != forbiddenHint {
+			t.Fatalf("structured %s 403 hint = %q", code, structured.Hint)
+		}
+	}
+	revoked := FromHTTPFailure(403, []byte(`{"error":{"code":"agent_revoked","message":"revoked"}}`))
+	if !strings.Contains(revoked.Hint, "host enrollment") {
+		t.Fatalf("agent_revoked keeps its specific hint: %q", revoked.Hint)
+	}
 }
