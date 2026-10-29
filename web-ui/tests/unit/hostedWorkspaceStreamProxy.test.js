@@ -251,7 +251,7 @@ describe("proxyHostedWorkspaceStreamToCore", () => {
     },
   );
 
-  it("answers 503 retryable without a tokenless request when the pre-refresh hits an outage", async () => {
+  it("still opens the stream without a token when the pre-refresh kept the session", async () => {
     authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
       refreshToken: "refresh-only",
       accessToken: "",
@@ -266,8 +266,33 @@ describe("proxyHostedWorkspaceStreamToCore", () => {
       pathname,
     );
 
-    expect(response.status).toBe(503);
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("workspace not found"), {
+        status: 404,
+        details: { error: { code: "not_found" } },
+      }),
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+    const pathname = "/ws/acme/demo/stream/events";
+
+    const response = await proxyHostedWorkspaceStreamToCore(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(404);
+    expect((await readErrorJson(response)).error.code).toBe(
+      "workspace_not_found",
+    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 
   it("still clears the session when the refresh is rejected with a real 403", async () => {

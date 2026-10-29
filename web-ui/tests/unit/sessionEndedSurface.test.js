@@ -47,4 +47,38 @@ describe("session ended surface (BFF)", () => {
       AuthErrorCode.SESSION_ENDED_BY_ACCOUNT_STATUS,
     );
   });
+
+  function sessionRequest() {
+    return /** @type {any} */ ({
+      request: new Request("http://localhost/auth/session"),
+      cookies: { get: vi.fn(), set: vi.fn(), delete: vi.fn() },
+    });
+  }
+
+  it("GET /auth/session answers a missing workspace with 404 workspace_not_found, not an outage or a sign-out", async () => {
+    loadAgent.mockRejectedValue(
+      Object.assign(new Error("not found"), { status: 404 }),
+    );
+
+    const res = await GET(sessionRequest());
+
+    expect(res.status).toBe(404);
+    expect((await res.json()).error?.code).toBe(
+      AuthErrorCode.WORKSPACE_NOT_FOUND,
+    );
+  });
+
+  it("GET /auth/session answers a malformed core reply as an outage (503)", async () => {
+    loadAgent.mockRejectedValue(
+      Object.assign(new Error("unreadable"), {
+        status: 502,
+        details: { error: { code: "malformed_response" } },
+      }),
+    );
+
+    const res = await GET(sessionRequest());
+
+    expect(res.status).toBe(503);
+    expect((await res.json()).error?.code).toBe(AuthErrorCode.CORE_UNREACHABLE);
+  });
 });

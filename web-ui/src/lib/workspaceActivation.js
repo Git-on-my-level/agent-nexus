@@ -1,13 +1,28 @@
 import {
+  WorkspaceFailureKind,
+  WorkspaceNotFoundError,
   WorkspaceUnavailableError,
+  classifyWorkspaceFailure,
   isAbortError,
-  isTransientWorkspaceFailure,
-} from "./workspaceUnavailable.js";
+} from "./workspaceFailure.js";
+
+/** A successful activation names the signed-in agent; anything else is malformed. */
+async function readActivation(response) {
+  try {
+    const body = await response.json();
+    if (body && typeof body === "object" && body.agent?.agent_id) return body;
+  } catch {
+    // Unparseable success: fall through.
+  }
+  return null;
+}
 
 /**
  * Bounded retries for transient activation failures, independent of route
- * hydration. A transient failure that outlasts the retries rejects with
- * {@link WorkspaceUnavailableError}; any other failure is definitive.
+ * hydration, classified by {@link classifyWorkspaceFailure}: an outage
+ * (including a malformed success) that outlasts the retries rejects with
+ * {@link WorkspaceUnavailableError}, a 404 with {@link WorkspaceNotFoundError},
+ * and a 401 / 403 with a definitive error.
  */
 export async function requestWorkspaceActivation({
   url,
@@ -38,10 +53,21 @@ export async function requestWorkspaceActivation({
       continue;
     }
     if (!isCurrent()) return null;
-    if (response.ok) return response.json();
-    if (!isTransientWorkspaceFailure(response))
-      throw new Error("Could not open this workspace. Please try again.");
-    if (attempt === 3) throw new WorkspaceUnavailableError(response.status);
+    if (response.ok) {
+      const activation = await readActivation(response);
+      if (!isCurrent()) return null;
+      if (activation) return activation;
+    } else {
+      const kind = classifyWorkspaceFailure(response);
+      if (kind === WorkspaceFailureKind.NOT_FOUND)
+        throw new WorkspaceNotFoundError(response.status);
+      if (kind === WorkspaceFailureKind.REJECTED)
+        throw new Error("Could not open this workspace. Please try again.");
+    }
+    if (attempt === 3)
+      throw new WorkspaceUnavailableError(
+        response.ok ? "malformed_response" : response.status,
+      );
     const retryAfter = response.headers.get("retry-after");
     const seconds = Number(retryAfter);
     const serverDelay =

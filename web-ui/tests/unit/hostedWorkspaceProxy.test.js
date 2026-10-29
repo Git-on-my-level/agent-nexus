@@ -454,7 +454,7 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     },
   );
 
-  it("answers 503 retryable without a tokenless request when the pre-refresh hits an outage", async () => {
+  it("still sends a public request without a token when the pre-refresh kept the session", async () => {
     envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
     authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
       refreshToken: "refresh-only",
@@ -463,16 +463,49 @@ describe("hostedWorkspaceProxy (proxyToControlPlaneWorkspace)", () => {
     authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy.mockResolvedValueOnce(
       "unavailable",
     );
-    globalThis.fetch = vi.fn();
-    const pathname = "/ws/acme/ops/inbox";
+    globalThis.fetch = vi.fn(async () => new Response("ok", { status: 200 }));
+    const pathname = "/ws/acme/ops/meta/handshake";
 
     const response = await proxyToControlPlaneWorkspace(
       createEvent(pathname),
       pathname,
     );
 
-    expect(response.status).toBe(503);
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][1].headers.has("authorization")).toBe(
+      false,
+    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
+    envState.ANX_CONTROL_BASE_URL = "http://control.example.test";
+    authSessionMocks.getWorkspaceAuthSession.mockReturnValue({
+      refreshToken: "refresh",
+      accessToken: "stale",
+    });
+    authSessionMocks.readWorkspaceRefreshToken.mockReturnValue("refresh");
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("workspace not found"), {
+        status: 404,
+        details: { error: { code: "not_found" } },
+      }),
+    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+    const pathname = "/ws/acme/ops/events";
+
+    const response = await proxyToControlPlaneWorkspace(
+      createEvent(pathname),
+      pathname,
+    );
+
+    expect(response.status).toBe(404);
+    expect((await readErrorJson(response)).error.code).toBe(
+      "workspace_not_found",
+    );
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 

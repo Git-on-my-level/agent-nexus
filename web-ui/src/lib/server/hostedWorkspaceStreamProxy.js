@@ -11,7 +11,7 @@ import {
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
   settleWorkspaceSessionFailure,
-  WorkspaceSessionFailure,
+  workspaceSessionFailureResponse,
   workspaceSessionUnavailableResponse,
 } from "$lib/server/authSession";
 import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
@@ -92,10 +92,6 @@ function jsonErrorResponse(status, code, message) {
   );
 }
 
-/**
- * @returns {Promise<boolean|null>} Whether the request carries Authorization,
- *   or `null` when the session was kept through an outage and has no token.
- */
 async function applyWorkspaceBearerAuth(
   event,
   organizationSlug,
@@ -116,7 +112,7 @@ async function applyWorkspaceBearerAuth(
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
   } else if (refreshTok) {
-    const ensured = await ensureWorkspaceAccessTokenForCoreProxy({
+    await ensureWorkspaceAccessTokenForCoreProxy({
       event,
       organizationSlug,
       workspaceSlug,
@@ -124,7 +120,6 @@ async function applyWorkspaceBearerAuth(
       session: { accessToken: "", refreshToken: refreshTok },
       headers: hostedWorkspaceCoreProxyHeaders(event),
     });
-    if (ensured === WorkspaceSessionFailure.UNAVAILABLE) return null;
     const afterEnsure = getWorkspaceAuthSession(
       event,
       organizationSlug,
@@ -160,16 +155,18 @@ async function refreshAndRetryCoreStream(
     });
   } catch (error) {
     // Rejected: pass the upstream 401 through (the session is cleared).
-    // Kept: answer 503 retryable, never a 401 the browser reads as sign-out.
-    return settleWorkspaceSessionFailure(
-      event,
-      organizationSlug,
-      workspaceSlug,
-      error,
-      { hadAccessToken, hadRefreshToken: true },
-    ) === WorkspaceSessionFailure.UNAVAILABLE
-      ? workspaceSessionUnavailableResponse(UI_VERSION_HEADER)
-      : null;
+    // Kept: answer 404 not found or 503 retryable, never a 401 the browser
+    // reads as sign-out.
+    return workspaceSessionFailureResponse(
+      settleWorkspaceSessionFailure(
+        event,
+        organizationSlug,
+        workspaceSlug,
+        error,
+        { hadAccessToken, hadRefreshToken: true },
+      ),
+      UI_VERSION_HEADER,
+    );
   }
 
   const refreshedSession = getWorkspaceAuthSession(
@@ -288,11 +285,6 @@ export async function proxyHostedWorkspaceStreamToCore(event, pathname) {
     hostedCoreBaseUrl,
     requestInit,
   );
-  // A kept session with no access token: report the outage, do not send a
-  // tokenless request whose 401 would read as signed out.
-  if (hadAccessToken === null)
-    return workspaceSessionUnavailableResponse(UI_VERSION_HEADER);
-
   let upstreamResponse;
   try {
     upstreamResponse = await fetch(targetUrl.toString(), requestInit);

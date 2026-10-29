@@ -14,10 +14,12 @@ export function sessionFailurePolicyMocks(actual, mocks) {
     WorkspaceSessionFailure: actual.WorkspaceSessionFailure,
     workspaceSessionUnavailableResponse:
       actual.workspaceSessionUnavailableResponse,
+    workspaceSessionNotFoundResponse: actual.workspaceSessionNotFoundResponse,
+    workspaceSessionFailureResponse: actual.workspaceSessionFailureResponse,
     settleWorkspaceSessionFailure: (event, org, ws, error, options) => {
       const { REJECTED, UNAVAILABLE } = actual.WorkspaceSessionFailure;
-      if (actual.classifyWorkspaceSessionFailure(error) === UNAVAILABLE)
-        return UNAVAILABLE;
+      const kind = actual.classifyWorkspaceSessionFailure(error);
+      if (kind !== REJECTED) return kind;
       if (
         mocks.isRetryableWorkspaceRefreshFailure(error, options) &&
         !mocks.shouldClearWorkspaceAuthSessionAfterRetryableFailure(

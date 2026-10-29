@@ -17,7 +17,7 @@ import { setCurrentWorkspaceSlug } from "../../src/lib/workspaceContext.js";
 import {
   WORKSPACE_UNREACHABLE_MESSAGE,
   isWorkspaceUnavailableError,
-} from "../../src/lib/workspaceUnavailable.js";
+} from "../../src/lib/workspaceFailure.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -325,6 +325,79 @@ describe("authSession", () => {
       expect(get(authSessionReady)).toBe(false);
       expect(get(authenticatedAgent)).toBeNull();
       setCurrentWorkspaceSlug("alpha");
+    },
+  );
+
+  it.each([
+    ["an unparseable 200", () => new Response("<html>proxy</html>")],
+    ["a 200 without an agent field", () => Response.json({ ok: true })],
+    [
+      "a 200 with a shape-invalid agent",
+      () => Response.json({ agent: { username: "x" } }),
+    ],
+  ])("keeps the current agent on %s", async (_label, reply) => {
+    completeAuthSession(
+      { agent_id: "agent-12", actor_id: "actor-12", username: "kept" },
+      "alpha",
+    );
+
+    const agent = await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: async () => reply(),
+    });
+
+    expect(agent).toMatchObject({ agent_id: "agent-12" });
+    expect(isAuthenticated("alpha")).toBe(true);
+  });
+
+  it("rejects a malformed first read as unavailable, not signed out", async () => {
+    const workspaceSlug = `outage-${outageCase++}`;
+    setCurrentWorkspaceSlug(workspaceSlug);
+    await expect(
+      initializeAuthSession({
+        workspaceSlug,
+        rejectWhenUnavailable: true,
+        fetchFn: async () => new Response("<html>proxy</html>"),
+      }),
+    ).rejects.toMatchObject({ code: "workspace_unavailable" });
+    expect(get(authSessionReady)).toBe(false);
+    setCurrentWorkspaceSlug("alpha");
+  });
+
+  it("rejects a 404 as not found even with an agent in hand, without signing out", async () => {
+    completeAuthSession(
+      { agent_id: "agent-13", actor_id: "actor-13", username: "kept" },
+      "alpha",
+    );
+
+    await expect(
+      initializeAuthSession({
+        workspaceSlug: "alpha",
+        rejectWhenUnavailable: true,
+        fetchFn: async () =>
+          Response.json(
+            { error: { code: "workspace_not_accessible" } },
+            { status: 404 },
+          ),
+      }),
+    ).rejects.toMatchObject({ code: "workspace_not_found" });
+    expect(isAuthenticated("alpha")).toBe(true);
+  });
+
+  it.each([404, 400])(
+    "keeps the current agent on a %i outside the shell activation",
+    async (status) => {
+      completeAuthSession(
+        { agent_id: "agent-14", actor_id: "actor-14", username: "kept" },
+        "alpha",
+      );
+
+      const agent = await initializeAuthSession({
+        workspaceSlug: "alpha",
+        fetchFn: async () => Response.json({ error: {} }, { status }),
+      });
+
+      expect(agent).toMatchObject({ agent_id: "agent-14" });
     },
   );
 

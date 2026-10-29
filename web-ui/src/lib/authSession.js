@@ -37,7 +37,13 @@ import {
   currentOrganizationSlug,
 } from "./workspaceContext.js";
 import { APP_BASE_PATH, WORKSPACE_HEADER, appPath } from "./workspacePaths.js";
-import { WorkspaceUnavailableError } from "./workspaceUnavailable.js";
+import {
+  MALFORMED_RESPONSE_CODE,
+  WorkspaceFailureKind,
+  WorkspaceNotFoundError,
+  WorkspaceUnavailableError,
+  classifyWorkspaceFailure,
+} from "./workspaceFailure.js";
 
 export const authSessionReady = writable(false);
 export const authenticatedAgent = writable(null);
@@ -146,17 +152,29 @@ function applySessionEndedByAccountStatus(
 }
 
 /**
- * A failed `/auth/session` read is an outage, not a sign-out, unless the
- * server answered with a definitive status (401 / 403 / other 4xx). Outages
- * include the retryable auth-session 503: the server kept the session.
+ * `/auth/session` success shape: `{ agent: null }` (signed out) or
+ * `{ agent: { agent_id, ... } }`. Anything else is a malformed reply and is
+ * handled as an outage, never as "signed out".
  */
-function shouldPreserveAuthenticatedAgentOnInitFailure(error) {
-  if (!error || typeof error !== "object") {
-    return true;
-  }
+function isSessionPayload(payload) {
+  if (!payload || typeof payload !== "object" || !("agent" in payload))
+    return false;
+  const { agent } = payload;
+  return (
+    agent === null ||
+    (typeof agent === "object" &&
+      typeof agent.agent_id === "string" &&
+      agent.agent_id.trim() !== "")
+  );
+}
 
-  const status = Number(error.status);
-  return !Number.isFinite(status) || status >= 500;
+function malformedResponseError(status) {
+  return createErrorFromResponse(502, {
+    error: {
+      code: MALFORMED_RESPONSE_CODE,
+      message: `The workspace server sent an unreadable reply (${status}).`,
+    },
+  });
 }
 
 function isRetryableAuthSessionFailure(error) {
@@ -204,6 +222,8 @@ async function requestJSON(
     try {
       payload = JSON.parse(rawText);
     } catch {
+      // An unparseable success is an outage, not an empty answer.
+      if (response.ok) throw malformedResponseError(response.status);
       payload = { message: rawText };
     }
   }
@@ -320,9 +340,10 @@ export async function initializeAuthSession({
   authDriver,
   /**
    * Reject with {@link WorkspaceUnavailableError} when the first read of this
-   * workspace hits an outage, instead of resolving `null` (which the shell
-   * would read as signed out). The shell's activation passes this so it can
-   * show its retryable "temporarily unreachable" state.
+   * workspace hits an outage, and with {@link WorkspaceNotFoundError} on a
+   * 404, instead of resolving (a `null` agent would read as signed out). The
+   * shell's activation passes this so it can show its "temporarily
+   * unreachable" (Retry) or "not found" state.
    */
   rejectWhenUnavailable = false,
 } = {}) {
@@ -427,7 +448,8 @@ async function runInitializeAuthSession({
         },
       });
       if (generation !== state.generation) return null;
-      const nextAgent = result.agent ?? null;
+      if (!isSessionPayload(result)) throw malformedResponseError(200);
+      const nextAgent = result.agent;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
       if (agentChanged && previousAgent) {
         clearWorkspaceViews();
@@ -464,14 +486,20 @@ async function runInitializeAuthSession({
         continue;
       }
 
-      const transient = shouldPreserveAuthenticatedAgentOnInitFailure(error);
-      // First read of this workspace and it hit an outage: there is nothing
-      // to preserve, and `null` would read as signed out. Leave the state
-      // un-hydrated and let the caller show its retryable state.
-      if (transient && !previousAgent && rejectWhenUnavailable) {
-        throw new WorkspaceUnavailableError(error);
+      // Only an authoritative 401 / 403 signs out (see workspaceFailure.js).
+      const kind = classifyWorkspaceFailure(error);
+      if (rejectWhenUnavailable) {
+        // A missing workspace is definitive whatever this tab held before.
+        if (kind === WorkspaceFailureKind.NOT_FOUND)
+          throw new WorkspaceNotFoundError(error);
+        // First read of this workspace and it hit an outage: there is
+        // nothing to preserve, and `null` would read as signed out. Leave
+        // the state un-hydrated and let the caller show its retryable state.
+        if (kind === WorkspaceFailureKind.UNAVAILABLE && !previousAgent)
+          throw new WorkspaceUnavailableError(error);
       }
-      const nextAgent = transient ? previousAgent : null;
+      const nextAgent =
+        kind === WorkspaceFailureKind.REJECTED ? null : previousAgent;
       const agentChanged = !sameAgent(previousAgent, nextAgent);
       if (agentChanged && previousAgent) {
         clearWorkspaceViews();

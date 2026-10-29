@@ -97,35 +97,51 @@ it.each(["success", "failure"])(
   },
 );
 
-it("keeps the previous actor state and reports a failed handshake", async () => {
-  select();
-  setDevActorMode(true);
-  const onActorError = vi.fn();
-  const onDevFixturePersonas = vi.fn();
-  const refreshActors = vi.fn(async () => []);
-  await hydrateWorkspaceBootstrap({
-    workspaceSlug,
-    organizationSlug: "local",
-    storage,
-    fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
-    coreClient: {
-      getHandshake: async () => {
-        throw new Error("workspace server did not answer");
-      },
-    },
-    refreshActors,
-    onDevFixturePersonas,
-    onActorError,
-  });
-  expect(onActorError).toHaveBeenCalledWith(
-    "Failed to load actors: workspace server did not answer",
-  );
-  // Not silently switched off or emptied.
-  expect(get(devActorMode)).toBe(true);
-  expect(get(devActorModeReady)).toBe(true);
-  expect(onDevFixturePersonas).not.toHaveBeenCalled();
-  setDevActorMode(false);
-});
+it.each([
+  [
+    "an outage",
+    new Error("workspace server did not answer"),
+    "workspace_unavailable",
+  ],
+  [
+    "a missing workspace",
+    Object.assign(new Error("not found"), { status: 404 }),
+    "workspace_not_found",
+  ],
+])(
+  "a signed-in viewer's failed handshake (%s) rejects for the shell and keeps the actor state",
+  async (_label, failure, code) => {
+    select();
+    setDevActorMode(true);
+    const onActorError = vi.fn();
+    const onDevFixturePersonas = vi.fn();
+    const refreshActors = vi.fn(async () => []);
+    await expect(
+      hydrateWorkspaceBootstrap({
+        workspaceSlug,
+        organizationSlug: "local",
+        storage,
+        fetchFn: async () => Response.json({ agent: { agent_id: "human" } }),
+        coreClient: {
+          getHandshake: async () => {
+            throw failure;
+          },
+        },
+        refreshActors,
+        onDevFixturePersonas,
+        onActorError,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(onActorError).toHaveBeenCalledWith(
+      `Failed to load actors: ${failure.message}`,
+    );
+    // Not silently switched off or emptied.
+    expect(get(devActorMode)).toBe(true);
+    expect(get(devActorModeReady)).toBe(true);
+    expect(onDevFixturePersonas).not.toHaveBeenCalled();
+    setDevActorMode(false);
+  },
+);
 
 it("stays quiet when the handshake is aborted", async () => {
   select();

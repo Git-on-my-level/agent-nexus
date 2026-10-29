@@ -2,7 +2,8 @@
  * A workspace session the layout could not read is not an error page. The
  * viewer's navigation renders the shell and its skeleton, and the selection
  * POST establishes the session or reports the failure with its own Retry.
- * Route-data loads keep failing loudly so a broken preload stays visible.
+ * Outages defer the read for navigation and route-data loads alike; only a
+ * missing workspace (404) renders the definitive "not found" page.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -165,13 +166,35 @@ describe("workspace +layout.server.js unreadable session", () => {
     );
   });
 
-  it("still fails a route-data load whose session read errors", async () => {
+  it("defers a route-data load on any outage, not only a 503", async () => {
     authMocks.loadWorkspaceAuthenticatedAgent.mockRejectedValue(
       coreFailure(502),
     );
 
-    await expect(
-      load(hostedEvent({ isDataRequest: true })),
-    ).rejects.toMatchObject({ status: 502 });
+    const result = await load(hostedEvent({ isDataRequest: true }));
+
+    expect(result.workspaceSession).toEqual({
+      agent: null,
+      sessionReadDeferred: true,
+    });
   });
+
+  it.each([false, true])(
+    "shows the definitive not-found page when the workspace is gone (data request: %s)",
+    async (isDataRequest) => {
+      authMocks.loadWorkspaceAuthenticatedAgent.mockRejectedValue(
+        coreFailure(404),
+      );
+
+      await expect(load(hostedEvent({ isDataRequest }))).rejects.toMatchObject({
+        status: 404,
+        body: { code: "workspace_not_found" },
+      });
+      expect(logMocks.logServerEvent).toHaveBeenCalledWith(
+        "workspace.layout.session_read_not_found",
+        expect.objectContaining({ org: "acme", slug: "alpha" }),
+        { level: "warn" },
+      );
+    },
+  );
 });

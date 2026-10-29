@@ -95,7 +95,9 @@ describe("classifyWorkspaceSessionFailure", () => {
     [{ status: 503, code: "auth_session_retryable" }, "unavailable"],
     [{ status: 500 }, "unavailable"],
     [{ status: 502 }, "unavailable"],
-    [{ status: 404 }, "unavailable"],
+    [{ status: 404 }, "not_found"],
+    [{ status: 400 }, "unavailable"],
+    [{ status: 429 }, "unavailable"],
     [new TypeError("fetch failed"), "unavailable"],
     [
       Object.assign(new Error("aborted"), { name: "AbortError" }),
@@ -181,7 +183,12 @@ describe("ensureWorkspaceAccessTokenForCoreProxy keeps the session through outag
 });
 
 describe("loadWorkspaceAuthenticatedAgent (readOnly) reports outages", () => {
-  it.each(OUTAGES.filter(([label]) => label !== "a malformed 200"))(
+  it.each([
+    ...OUTAGES,
+    ["an empty 200", () => coreReply(200, "")],
+    ["a 200 without an agent", () => coreReply(200, { agent: null })],
+    ["a 200 with a shape-invalid agent", () => coreReply(200, { agent: {} })],
+  ])(
     "rejects on %s instead of reading as signed out",
     async (_label, reply) => {
       const { event, values, deleted } = sessionEvent({
@@ -259,5 +266,71 @@ describe("loadWorkspaceAuthenticatedAgent (refresh) settles through the same rul
       }),
     ).resolves.toBeNull();
     expect(values.get(SESSION_COOKIE)).toBeUndefined();
+  });
+});
+
+describe("a missing workspace (404) is definitive but never a sign-out", () => {
+  it("keeps the session on a 404 refresh and reports not_found", async () => {
+    const { event, values, deleted } = sessionEvent({
+      refreshToken: "refresh-token",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => coreReply(404, errorBody("not_found"))),
+    );
+
+    const outcome = await ensureWorkspaceAccessTokenForCoreProxy({
+      event,
+      organizationSlug: ORG,
+      workspaceSlug: WS,
+      coreBaseUrl: CORE,
+    });
+
+    expect(values.get(SESSION_COOKIE)).toBe("refresh-token");
+    expect(deleted).toEqual([]);
+    expect(outcome).toBe("not_found");
+  });
+
+  it("rejects a 404 read with its status instead of reading signed out", async () => {
+    const { event, values } = sessionEvent({ refreshToken: "refresh-token" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => coreReply(404, errorBody("not_found"))),
+    );
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        organizationSlug: ORG,
+        workspaceSlug: WS,
+        coreBaseUrl: CORE,
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(values.get(SESSION_COOKIE)).toBe("refresh-token");
+  });
+});
+
+describe("a malformed /agents/me success is an outage, not signed out", () => {
+  it.each([
+    ["unparseable", () => coreReply(200, "<html>proxy page</html>")],
+    ["no agent", () => coreReply(200, {})],
+    ["a null agent", () => coreReply(200, { agent: null })],
+    ["an agent without an id", () => coreReply(200, { agent: { id: 1 } })],
+  ])("rejects with 502 on %s and keeps the session", async (_label, reply) => {
+    const { event, values } = sessionEvent({
+      accessToken: "access-token",
+      refreshToken: "refresh-token",
+    });
+    vi.stubGlobal("fetch", vi.fn(reply));
+
+    await expect(
+      loadWorkspaceAuthenticatedAgent({
+        event,
+        organizationSlug: ORG,
+        workspaceSlug: WS,
+        coreBaseUrl: CORE,
+      }),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(values.get(SESSION_COOKIE)).toBe("refresh-token");
   });
 });

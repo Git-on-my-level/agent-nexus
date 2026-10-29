@@ -641,18 +641,38 @@ describe("hooks proxy retry", () => {
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 
-  it("answers 503 retryable without a tokenless core request when the pre-refresh hits an outage", async () => {
+  it("still sends a public request without a token when the pre-refresh kept the session", async () => {
+    // e.g. the handshake while a stale refresh token is debounced: the
+    // public route must keep working (durable-upload e2e regression).
     authSessionState.currentSession = { refreshToken: "rt", accessToken: "" };
     authSessionMocks.ensureWorkspaceAccessTokenForCoreProxy.mockResolvedValueOnce(
       "unavailable",
     );
-    globalThis.fetch = vi.fn();
+    globalThis.fetch = vi.fn(async () => Response.json({ ok: true }));
 
     const response = await handle({ event: apiEvent(), resolve: vi.fn() });
 
-    expect(response.status).toBe(503);
-    expect((await response.json()).error.code).toBe("auth_session_retryable");
-    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][1].headers.has("authorization")).toBe(
+      false,
+    );
+    expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps the session and answers 404 workspace_not_found when the refresh says the workspace is gone", async () => {
+    authSessionMocks.refreshWorkspaceAuthSession.mockRejectedValueOnce(
+      Object.assign(new Error("workspace not found"), {
+        status: 404,
+        details: { error: { code: "not_found" } },
+      }),
+    );
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(unauthorized());
+
+    const response = await handle({ event: apiEvent(), resolve: vi.fn() });
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("workspace_not_found");
     expect(authSessionMocks.clearWorkspaceAuthSession).not.toHaveBeenCalled();
   });
 

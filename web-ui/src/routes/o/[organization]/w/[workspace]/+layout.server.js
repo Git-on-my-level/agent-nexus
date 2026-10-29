@@ -12,6 +12,12 @@ import {
   sanitizeReturnPath,
 } from "$lib/workspaceLaunchFlow.js";
 import { loadWorkspaceAuthenticatedAgent } from "$lib/server/authSession.js";
+import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import {
+  WORKSPACE_NOT_FOUND_MESSAGE,
+  WorkspaceFailureKind,
+  classifyWorkspaceFailure,
+} from "$lib/workspaceFailure.js";
 import { logServerEvent } from "$lib/server/devLog";
 import {
   hostedWorkspaceCoreBaseUrl,
@@ -280,18 +286,35 @@ export async function load(event) {
 
   const session = await sessionResult;
   /*
-   * The passive read is signed out only on an authoritative rejection (it
-   * resolves null then). Any other failure is an outage: the session is kept
-   * and the read is deferred. On the viewer's own navigation that is not an
-   * error page: the shell paints its skeleton and the selection POST
-   * establishes the session (or reports the outage with its own Retry). A
-   * sleeping or unavailable runtime (503) defers route-data loads the same
-   * way; other route-data failures keep failing loudly, so a broken preload is
-   * still visible rather than silently empty.
+   * The passive read resolves null only on an authoritative rejection (signed
+   * out). Its failures follow the shared rule (`classifyWorkspaceFailure`):
+   * - not found (404): the workspace itself is missing. Navigation and
+   *   route-data loads both get the definitive "not found" error page; no
+   *   session is cleared.
+   * - anything else is an outage: the session is kept and the read deferred,
+   *   for navigation and route-data loads alike. The shell paints its
+   *   skeleton and the selection POST establishes the session or reports the
+   *   outage with its own Retry.
    */
   const failureStatus = Number(session.failure?.status) || 0;
-  if (session.failure && event.isDataRequest && failureStatus !== 503)
-    throw error(failureStatus || 503, "Could not validate workspace session.");
+  if (
+    session.failure &&
+    classifyWorkspaceFailure(session.failure) === WorkspaceFailureKind.NOT_FOUND
+  ) {
+    logServerEvent(
+      "workspace.layout.session_read_not_found",
+      {
+        org: workOrg,
+        slug: workSlug,
+        data_request: Boolean(event.isDataRequest),
+      },
+      { level: "warn" },
+    );
+    throw error(404, {
+      message: WORKSPACE_NOT_FOUND_MESSAGE,
+      code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+    });
+  }
   if (session.failure)
     logServerEvent(
       "workspace.layout.session_read_deferred",

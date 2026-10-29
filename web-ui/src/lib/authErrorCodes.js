@@ -21,6 +21,8 @@ export const AuthErrorCode = Object.freeze({
   REQUEST_LOOP_DETECTED: "request_loop_detected",
   /** Hosted BFF `/ws/...` path did not match `/ws/{org}/{ws}/...`. */
   INVALID_WORKSPACE_PROXY_PATH: "invalid_workspace_proxy_path",
+  /** The workspace itself is missing (404): a definitive "not found" state. */
+  WORKSPACE_NOT_FOUND: "workspace_not_found",
 });
 
 /** @type {Set<string>} */

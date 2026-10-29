@@ -2,6 +2,7 @@ import { env as privateEnv } from "$env/dynamic/private";
 import { json } from "@sveltejs/kit";
 
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
+import { WORKSPACE_NOT_FOUND_MESSAGE } from "$lib/workspaceFailure.js";
 import {
   classifyWorkspaceSessionFailure,
   clearWorkspaceAuthSession,
@@ -125,6 +126,23 @@ export async function GET(event) {
           },
           status: error.status,
         },
+      );
+    }
+    if (
+      classifyWorkspaceSessionFailure(error) ===
+      WorkspaceSessionFailure.NOT_FOUND
+    ) {
+      // The workspace itself is missing: definitive, and not a sign-out.
+      return json(
+        {
+          authenticated: false,
+          agent: null,
+          error: {
+            code: AuthErrorCode.WORKSPACE_NOT_FOUND,
+            message: WORKSPACE_NOT_FOUND_MESSAGE,
+          },
+        },
+        { headers: { "cache-control": "no-store" }, status: 404 },
       );
     }
     return json(

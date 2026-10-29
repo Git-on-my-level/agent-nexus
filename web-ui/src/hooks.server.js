@@ -14,7 +14,7 @@ import {
   readWorkspaceRefreshToken,
   refreshWorkspaceAuthSession,
   settleWorkspaceSessionFailure,
-  WorkspaceSessionFailure,
+  workspaceSessionFailureResponse,
   workspaceSessionUnavailableResponse,
 } from "$lib/server/authSession";
 import { coreBaseUrlForNodeFetch } from "$lib/server/coreBaseUrlForNodeFetch.js";
@@ -156,16 +156,18 @@ async function refreshAndRetry(
     });
   } catch (error) {
     // Rejected: pass the upstream 401 through (the session is cleared).
-    // Kept: answer 503 retryable, never a 401 the browser reads as sign-out.
-    return settleWorkspaceSessionFailure(
-      event,
-      organizationSlug,
-      workspaceSlug,
-      error,
-      { hadAccessToken, hadRefreshToken: true },
-    ) === WorkspaceSessionFailure.UNAVAILABLE
-      ? workspaceSessionUnavailableResponse(UI_VERSION_HEADER)
-      : null;
+    // Kept: answer 404 not found or 503 retryable, never a 401 the browser
+    // reads as sign-out.
+    return workspaceSessionFailureResponse(
+      settleWorkspaceSessionFailure(
+        event,
+        organizationSlug,
+        workspaceSlug,
+        error,
+        { hadAccessToken, hadRefreshToken: true },
+      ),
+      UI_VERSION_HEADER,
+    );
   }
 
   const refreshedSession = getWorkspaceAuthSession(
@@ -242,17 +244,13 @@ async function proxyToCore(
   } else if (incomingAuth) {
     requestInit.headers.set("authorization", incomingAuth);
   } else if (refreshTok) {
-    const ensured = await ensureWorkspaceAccessTokenForCoreProxy({
+    await ensureWorkspaceAccessTokenForCoreProxy({
       event,
       organizationSlug,
       workspaceSlug,
       coreBaseUrl,
       session: { accessToken: "", refreshToken: refreshTok },
     });
-    // A kept session with no access token: report the outage, do not send
-    // a tokenless request whose 401 would read as signed out.
-    if (ensured === WorkspaceSessionFailure.UNAVAILABLE)
-      return workspaceSessionUnavailableResponse(UI_VERSION_HEADER);
     const afterEnsure = getWorkspaceAuthSession(
       event,
       organizationSlug,

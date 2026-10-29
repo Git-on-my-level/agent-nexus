@@ -49,6 +49,12 @@
       body: "This server has no workspace at this address. Double-check the URL.",
       useServerMessage: true,
     },
+    // The selected workspace answered 404 (deleted or moved). Definitive:
+    // no sign-out, no Retry.
+    workspace_not_found: {
+      heading: "Workspace not found",
+      body: "This workspace doesn't exist, or it was moved or removed. Check the link, or open another workspace.",
+    },
     // Deliberately one answer for "does not exist" and "no access", so the
     // page does not tell a viewer which workspaces exist.
     workspace_not_accessible: {

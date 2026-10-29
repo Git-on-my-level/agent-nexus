@@ -1,6 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { requestWorkspaceActivation } from "../../src/lib/workspaceActivation.js";
-import { WORKSPACE_UNREACHABLE_MESSAGE } from "../../src/lib/workspaceUnavailable.js";
+import {
+  WORKSPACE_NOT_FOUND_MESSAGE,
+  WORKSPACE_UNREACHABLE_MESSAGE,
+} from "../../src/lib/workspaceFailure.js";
 it("backs off on 429/503 then returns a successful activation", async () => {
   const fetchFn = vi
     .fn()
@@ -91,4 +94,33 @@ it("reports a workspace that stays unreachable as unavailable, not as a definiti
     }),
   ).rejects.toMatchObject({ code: "workspace_unavailable" });
   expect(fetchFn).toHaveBeenCalledTimes(4);
+});
+it("reports a missing workspace (404) as not found, without retrying", async () => {
+  const fetchFn = vi.fn(async () => new Response("{}", { status: 404 }));
+  await expect(
+    requestWorkspaceActivation({
+      url: "/auth/workspace-session",
+      input: {},
+      fetchFn,
+    }),
+  ).rejects.toMatchObject({
+    code: "workspace_not_found",
+    message: WORKSPACE_NOT_FOUND_MESSAGE,
+  });
+  expect(fetchFn).toHaveBeenCalledTimes(1);
+});
+it("retries a malformed success instead of accepting it", async () => {
+  const fetchFn = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("<html>proxy</html>"))
+    .mockResolvedValueOnce(Response.json({ agent: null }))
+    .mockResolvedValueOnce(Response.json({ agent: { agent_id: "human" } }));
+  const result = await requestWorkspaceActivation({
+    url: "/auth/workspace-session",
+    input: {},
+    fetchFn,
+    wait: async () => {},
+  });
+  expect(result.agent.agent_id).toBe("human");
+  expect(fetchFn).toHaveBeenCalledTimes(3);
 });
