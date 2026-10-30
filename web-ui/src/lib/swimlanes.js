@@ -179,32 +179,37 @@ export function trayActions(nextActions) {
 
 /** `GET /work/ungrouped` rows, kept to what the tray shows. */
 export function trayRows(raw) {
-  return (Array.isArray(raw?.work) ? raw.work : [])
-    .filter((row) => row?.ref && row.needs_home === true && !row.parent_ref)
-    .map((row) => ({
-      ref: String(row.ref),
-      needs_home: true,
-      is_initiative: false,
-      title: String(row.title || row.ref),
-      phase: String(row.phase || ""),
-      createdAt: String(row.created_at || ""),
-      createdBy: String(
-        row.created_by?.display || row.created_by?.id || "",
-      ).trim(),
-      ...trayActions(
-        (Array.isArray(row.next_actions) ? row.next_actions : []).filter(
-          (action) =>
-            action?.command_id !== "work.move" || action.argv?.[3] === row.ref,
+  return (
+    (Array.isArray(raw?.work) ? raw.work : [])
+      // Every /work/ungrouped row is Unsorted by construction; only an explicit
+      // needs_home:false or a parent excludes one (older servers omit the flag).
+      .filter((row) => row?.ref && row.needs_home !== false && !row.parent_ref)
+      .map((row) => ({
+        ref: String(row.ref),
+        needs_home: true,
+        is_initiative: false,
+        title: String(row.title || row.ref),
+        phase: String(row.phase || ""),
+        createdAt: String(row.created_at || ""),
+        createdBy: String(
+          row.created_by?.display || row.created_by?.id || "",
+        ).trim(),
+        ...trayActions(
+          (Array.isArray(row.next_actions) ? row.next_actions : []).filter(
+            (action) =>
+              action?.command_id !== "work.move" ||
+              action.argv?.[3] === row.ref,
+          ),
         ),
-      ),
-      homes: (Array.isArray(row.likely_home) ? row.likely_home : [])
-        .filter((home) => home?.ref && home.ref !== row.ref)
-        .map((home) => ({
-          ref: String(home.ref),
-          title: String(home.title || home.ref),
-          reasons: Array.isArray(home.reasons) ? home.reasons : [],
-        })),
-    }));
+        homes: (Array.isArray(row.likely_home) ? row.likely_home : [])
+          .filter((home) => home?.ref && home.ref !== row.ref)
+          .map((home) => ({
+            ref: String(home.ref),
+            title: String(home.title || home.ref),
+            reasons: Array.isArray(home.reasons) ? home.reasons : [],
+          })),
+      }))
+  );
 }
 
 /**
