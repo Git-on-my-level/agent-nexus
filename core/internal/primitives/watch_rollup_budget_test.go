@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testutil/perfguard"
 )
@@ -46,22 +45,17 @@ func TestWatchWorkstreamRollupBudget(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE cards SET column_key='ready' WHERE id IN (SELECT 'watch-budget-'||value FROM json_each('[1,2,3,4,5,6,7,8,9,10]'))`); err != nil {
 		t.Fatal(err)
 	}
-	p := plans.Plan{Steps: []plans.Step{}}
 	for i := 1; i <= 10; i++ {
 		id := fmt.Sprintf("watch-budget-%d", i)
-		p.Steps = append(p.Steps, plans.Step{ID: id, Title: id, Ref: "card:" + id})
-		steps := []plans.Step{}
-		for j := 1; j <= 10; j++ {
-			leaf := fmt.Sprintf("watch-budget-%d", 10+(i-1)*10+j)
-			steps = append(steps, plans.Step{ID: leaf, Title: leaf, Ref: "card:" + leaf})
-		}
-		encoded, _ := json.Marshal(plans.Plan{Steps: steps})
-		if _, err = ws.DB().Exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,'now')`, id, string(encoded)); err != nil {
+		if _, err = ws.DB().Exec(`UPDATE cards SET parent_card_id=?,needs_home=0 WHERE id=?`, root["id"], id); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err = s.SetCardPlan(ctx, "writer", root["id"].(string), root["updated_at"].(string), p); err != nil {
-		t.Fatal(err)
+		for j := 1; j <= 10; j++ {
+			leaf := fmt.Sprintf("watch-budget-%d", 10+(i-1)*10+j)
+			if _, err = ws.DB().Exec(`UPDATE cards SET parent_card_id=?,needs_home=0 WHERE id=?`, id, leaf); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	privateBoard, privateErr := s.CreateBoard(ctx, "writer", map[string]any{"title": "Private unrelated board"})
 	if privateErr != nil {

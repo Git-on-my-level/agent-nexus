@@ -43,7 +43,7 @@ func TestBriefSeriesVisibilityFlatnessAndBounds(t *testing.T) {
 	now = now.Add(-24 * time.Hour)
 	work := func(title string, refs []string) {
 		t.Helper()
-		card, err := store.CreateWork(ctx, "owner", "", map[string]any{"title": title})
+		card, err := store.CreateWork(ctx, "owner", "", map[string]any{"title": title, "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}

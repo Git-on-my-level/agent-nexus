@@ -36,7 +36,7 @@ func workHasParentSQL(child string) string {
 type WorkChild struct {
 	Ref         string      `json:"ref"`
 	Title       string      `json:"title"`
-	StepID      string      `json:"step_id"`
+	StepID      string      `json:"step_id,omitempty"`
 	State       string      `json:"state"`
 	PastPromise bool        `json:"past_promise"`
 	NeedsViewer bool        `json:"needs_viewer"`

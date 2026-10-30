@@ -22,7 +22,7 @@ func TestBriefPMPrivateRowsStayOutOfLimitAndCounts(t *testing.T) {
 	}
 	work := func(title, owner string) map[string]any {
 		t.Helper()
-		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": title})
+		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": title, "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}

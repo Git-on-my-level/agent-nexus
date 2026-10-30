@@ -726,5 +726,10 @@
     "method": "POST",
     "path": "/work/{card_ref}/retire",
     "reason": "Atomic explicit initiative membership mutation; bounded advisory read covered by initiative budget."
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/move",
+    "reason": "Atomic replay-safe hierarchy mutation; bounded advisory reads covered by work-tree scale tests."
   }
 ]

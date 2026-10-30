@@ -32,9 +32,12 @@ func TestGroupingCreateAcrossBothSurfaces(t *testing.T) {
 				t.Fatal("replay duplicated child")
 			}
 			plan := workGetJSON(t, h.baseURL+"/cards/"+asString(parent["ref"])+"/plan", 200)
-			steps := plan["plan"].(map[string]any)["steps"].([]any)
-			if len(steps) != 1 || steps[0].(map[string]any)["ref"] != child["ref"] {
-				t.Fatalf("not one plan step: %#v", plan)
+			if plan["plan"] != nil {
+				t.Fatalf("create-under wrote a checklist: %#v", plan)
+			}
+			read := workGetJSON(t, h.baseURL+"/work/"+asString(parent["ref"]), 200)["work"].(map[string]any)
+			if read["rollup"].(map[string]any)["total"] != float64(1) {
+				t.Fatalf("replay changed child count: %#v", read)
 			}
 		})
 	}
@@ -50,14 +53,14 @@ func testGroupingLikelyHomeAndUngrouped(t *testing.T, surface string) {
 	t.Helper()
 	h := newProjectionMaintenanceTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
-	parent := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Cost 1/5: budget"}`, 201)["work"].(map[string]any)
+	parent := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Cost 1/5: budget","initiative":true}`, 201)["work"].(map[string]any)
 	created := workPostJSON(t, h.baseURL+"/"+surface, fmt.Sprintf(`{"actor_id":"grouper","title":"Cost 2/5: measure","board_ref":%q,"related_refs":[%q]}`, parent["board_ref"], parent["ref"]), 201)
 	homes, _ := created["likely_home"].([]any)
 	if len(homes) == 0 || homes[0].(map[string]any)["ref"] != parent["ref"] {
 		t.Fatalf("no likely home: %#v", created)
 	}
 	feed := workGetJSON(t, h.baseURL+"/work/ungrouped?limit=10", 200)
-	if rows, _ := feed["work"].([]any); len(rows) != 2 {
+	if rows, _ := feed["work"].([]any); len(rows) != 1 {
 		t.Fatalf("ungrouped feed: %#v", feed)
 	} else {
 		for _, row := range rows {
@@ -152,19 +155,18 @@ func TestGroupingCreateRejectsBadParentWithoutAnOrphan(t *testing.T) {
 			h := newProjectionMaintenanceTestServer(t)
 			workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
 			p := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Parent"}`, 201)["work"].(map[string]any)
+			stream := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"grouper","title":"Stream","under":%q}`, p["ref"]), 201)["work"].(map[string]any)
+			leaf := workPostJSON(t, h.baseURL+"/work", fmt.Sprintf(`{"actor_id":"grouper","title":"Leaf","under":%q}`, stream["ref"]), 201)["work"].(map[string]any)
 			for i, tc := range []struct {
-				under, after string
-				status       int
-			}{{"card:missing", "", 404}, {"topic:wrong-kind", "", 400}, {asString(p["ref"]), "missing-step", 400}} {
+				under  string
+				status int
+			}{{"card:missing", 404}, {"topic:wrong-kind", 400}, {asString(leaf["ref"]), 400}} {
 				body := map[string]any{"actor_id": "grouper", "board_ref": p["board_ref"], "title": "No orphan", "under": tc.under, "request_key": fmt.Sprintf("reject-%d", i)}
-				if tc.after != "" {
-					body["after"] = tc.after
-				}
 				raw, _ := json.Marshal(body)
 				workPostJSON(t, h.baseURL+"/"+surface, string(raw), tc.status)
 			}
 			var cards int
-			if err := h.workspace.DB().QueryRow(`SELECT count(*) FROM cards`).Scan(&cards); err != nil || cards != 1 {
+			if err := h.workspace.DB().QueryRow(`SELECT count(*) FROM cards`).Scan(&cards); err != nil || cards != 3 {
 				t.Fatalf("orphan card committed: %d err=%v", cards, err)
 			}
 		})
@@ -194,8 +196,12 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 	}
 	wg.Wait()
 	plan := workGetJSON(t, h.baseURL+"/cards/"+asString(p["ref"])+"/plan", 200)
-	if steps := plan["plan"].(map[string]any)["steps"].([]any); len(steps) != 1 {
-		t.Fatalf("concurrent replays added %d steps: %#v", len(steps), plan)
+	if plan["plan"] != nil {
+		t.Fatalf("group wrote a checklist: %#v", plan)
+	}
+	read := workGetJSON(t, url, 200)["work"].(map[string]any)
+	if read["parent_ref"] != p["ref"] {
+		t.Fatalf("concurrent group lost parent: %#v", read)
 	}
 	// Each verb's first send lands, then the same key with another body is
 	// refused.
@@ -233,9 +239,8 @@ func TestGroupingBatchCreateAtomicAndReplay(t *testing.T) {
 	}
 	planPath := h.baseURL + "/cards/" + asString(parent["ref"]) + "/plan"
 	before := workGetJSON(t, planPath, 200)
-	steps := before["plan"].(map[string]any)["steps"].([]any)
-	if len(steps) != 2 {
-		t.Fatalf("duplicate plan steps: %v", steps)
+	if before["plan"] != nil {
+		t.Fatalf("batch create wrote a checklist: %v", before)
 	}
 	payload["request_key"] = "rejected-batch"
 	payload["items"] = []any{
@@ -245,7 +250,7 @@ func TestGroupingBatchCreateAtomicAndReplay(t *testing.T) {
 	raw, _ = json.Marshal(payload)
 	postJSONExpectStatus(t, path, string(raw), 404).Body.Close()
 	after := workGetJSON(t, planPath, 200)
-	if len(after["plan"].(map[string]any)["steps"].([]any)) != 2 {
+	if after["plan"] != nil {
 		t.Fatal("failed batch changed parent plan")
 	}
 	workGetJSON(t, h.baseURL+"/work/card:batch-rollback-a", 404)
@@ -255,11 +260,11 @@ func TestInitiativeLifecycleWireReplayAndRefusal(t *testing.T) {
 	h := newProjectionMaintenanceTestServer(t)
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
 	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Launch"}`, 201)["work"].(map[string]any)
-	b := workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Initiatives","role":"initiatives","initiative_target":0}}`, 201)["board"].(map[string]any)
+	workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Initiatives","role":"initiatives","initiative_target":0}}`, 201)
 	body := `{"actor_id":"grouper","request_key":"promote-once","reason":"New independent outcome"}`
 	first := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
 	again := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
-	if first["event"].(map[string]any)["id"] != again["event"].(map[string]any)["id"] || first["over_target"] == nil || first["work"].(map[string]any)["board_ref"] != b["ref"] {
+	if first["event"].(map[string]any)["id"] != again["event"].(map[string]any)["id"] || first["over_target"] == nil || first["work"].(map[string]any)["board_ref"] != c["board_ref"] {
 		t.Fatalf("first=%v replay=%v", first, again)
 	}
 	for _, verb := range []string{"group", "fold"} {
@@ -268,7 +273,7 @@ func TestInitiativeLifecycleWireReplayAndRefusal(t *testing.T) {
 			key = "into"
 		}
 		errBody := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/"+verb, fmt.Sprintf(`{"actor_id":"grouper",%q:%q}`, key, c["ref"]), 400)
-		if !strings.Contains(fmt.Sprint(errBody), "anx initiative retire") {
+		if !strings.Contains(fmt.Sprint(errBody), "anx work move") {
 			t.Fatal(errBody)
 		}
 	}
@@ -356,5 +361,51 @@ func TestBoardInitiativeTargetGetAndPatch(t *testing.T) {
 	patch(nil, 200)
 	if got := workGetJSON(t, url, 200)["board"].(map[string]any)["initiative_target"]; got != nil {
 		t.Fatal(got)
+	}
+}
+
+func TestWorkTreeMoveWireReplayAndPaths(t *testing.T) {
+	if testing.Short() {
+		t.Skip("full HTTP/storage stack")
+	}
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	parent := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Delivery outcome","handle":"delivery","initiative":true}`, 201)["work"].(map[string]any)
+	child := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Retry delivery","handle":"retry"}`, 201)["work"].(map[string]any)
+	url := h.baseURL + "/work/" + asString(child["ref"])
+	body := fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tree-move-once"}`, parent["ref"])
+	for range 2 {
+		moved := workPostJSON(t, url+"/move", body, 200)["work"].(map[string]any)
+		if moved["path"] != "initiatives/delivery/retry" || moved["parent_ref"] != parent["ref"] || moved["needs_home"] != false || moved["board_ref"] != child["board_ref"] {
+			t.Fatalf("move projection: %v", moved)
+		}
+	}
+	workPostJSON(t, url+"/move", `{"actor_id":"grouper","unsorted":true,"request_key":"tree-move-once"}`, 409)
+	var count int
+	if err := h.workspace.DB().QueryRow(`SELECT count(*) FROM events WHERE type='card_updated' AND json_extract(payload_json,'$.payload.parent_ref')=?`, parent["ref"]).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("move replay audit count=%d err=%v", count, err)
+	}
+	read := workGetJSON(t, url, 200)["work"].(map[string]any)
+	if read["path"] != "initiatives/delivery/retry" {
+		t.Fatal(read)
+	}
+	resolved := workGetJSON(t, h.baseURL+"/work/resolve?path=initiatives/delivery/retry", 200)
+	if resolved["ref"] != child["ref"] {
+		t.Fatal(resolved)
+	}
+	tree := workGetJSON(t, h.baseURL+"/work/tree?root=initiatives/delivery&depth=2", 200)
+	children := tree["node"].(map[string]any)["children"].([]any)
+	if len(children) != 1 || children[0].(map[string]any)["path"] != "initiatives/delivery/retry" {
+		t.Fatal(tree)
+	}
+	where := workGetJSON(t, h.baseURL+"/work/where?ref="+asString(child["ref"]), 200)
+	if where["path"] != read["path"] || where["parent_ref"] != parent["ref"] {
+		t.Fatal(where)
+	}
+	workPostJSON(t, url+"/move", `{"actor_id":"grouper","root":true}`, 400)
+	workPostJSON(t, url+"/move", `{"actor_id":"grouper","root":"yes","reason":"Independent"}`, 400)
+	promoted := workPostJSON(t, url+"/move", `{"actor_id":"grouper","root":true,"reason":"Independent outcome","request_key":"tree-promote-once"}`, 200)
+	if promoted["event"].(map[string]any)["type"] != "initiative_promoted" || promoted["work"].(map[string]any)["path"] != "initiatives/retry" {
+		t.Fatal(promoted)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"agent-nexus-core/internal/plans"
 )
 
-func TestInitiativeBoardRoleSelectionAndFallback(t *testing.T) {
+func TestInitiativeSelectionIgnoresBoardRoleChanges(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s, defaultBoard := newWorkTestStore(t)
@@ -55,18 +55,18 @@ func TestInitiativeBoardRoleSelectionAndFallback(t *testing.T) {
 	if _, err = s.UpdateBoard(ctx, "actor-1", designated["id"].(string), map[string]any{"role": ""}, nil); err != nil {
 		t.Fatal(err)
 	}
-	read(2, true, now, "moving")
-	// An empty designated board still opts into explicit selection.
+	read(1, false, now, "moving")
+	// An empty designated board does not change stored initiative membership.
 	empty, err := s.CreateBoard(ctx, "actor-1", map[string]any{"title": "Empty initiative board", "role": "initiatives"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	read(0, false, now, "moving")
-	// An archived designation still prevents unrelated work becoming initiatives.
+	read(1, false, now, "moving")
+	// Archiving unrelated layout does not promote tray work.
 	if _, err = s.ArchiveBoard(ctx, "actor-1", empty["id"].(string)); err != nil {
 		t.Fatal(err)
 	}
-	read(0, false, now, "moving")
+	read(1, false, now, "moving")
 	if _, err = s.UpdateBoard(ctx, "actor-1", designated["id"].(string), map[string]any{"role": 1}, nil); err == nil {
 		t.Fatal("accepted non-string role")
 	}

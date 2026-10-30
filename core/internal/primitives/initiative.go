@@ -87,8 +87,11 @@ func initiativeOverTarget(budget map[string]any, ref string) map[string]any {
 	argv := []string{"anx", "ask", "Initiatives exceed the target: fold this initiative or keep it?", "--subject-ref", ref, "--recommend", "Retire and fold this initiative into an existing initiative; keep it if it needs a separate outcome."}
 	return map[string]any{"count": budget["count"], "target": budget["target"], "truncated": budget["truncated"], "next_actions": []map[string]any{{"command_id": "ask", "argv": argv, "mutates": true, "side_effect_class": "remote_coordination_write"}}}
 }
+
+// Retain the original board as event provenance: a later layout move must not
+// publish the private historical rationale through a now-public card/thread.
 func insertInitiativeChange(ctx context.Context, tx *accessTx, actor, kind, reason string, c boardCardRow, before, after map[string]any) (map[string]any, error) {
-	event := map[string]any{"type": kind, "thread_id": c.ThreadID.String, "refs": []string{"card:" + c.CardID}, "summary": "Initiative membership changed: " + c.Title, "payload": map[string]any{"subject_ref": "card:" + firstNonEmptyString(c.Handle.String, c.CardID), "title": c.Title, "reason": reason, "before": before, "after": after}}
+	event := map[string]any{"type": kind, "thread_id": c.ThreadID.String, "refs": []string{"card:" + c.CardID, "board:" + c.BoardID}, "summary": "Initiative membership changed: " + c.Title, "payload": map[string]any{"subject_ref": "card:" + firstNonEmptyString(c.Handle.String, c.CardID), "title": c.Title, "reason": reason, "before": before, "after": after}}
 	p, err := prepareEventForInsert(actor, event)
 	if err != nil {
 		return nil, err

@@ -412,7 +412,7 @@ func TestLoopDoneArchivedAndNull(t *testing.T) {
 	}
 	for _, annotated := range []bool{true, false} {
 		t.Run(fmt.Sprint(annotated), func(t *testing.T) {
-			input := map[string]any{"title": "Lifecycle card"}
+			input := map[string]any{"title": "Lifecycle card", "initiative": true}
 			if annotated {
 				input["cadence"] = map[string]any{"every_seconds": 3600}
 			}

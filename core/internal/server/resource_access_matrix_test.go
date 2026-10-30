@@ -48,6 +48,17 @@ func loadPrivacyRouteMatrix(t *testing.T) []privacyRoutePolicy {
 	if err = json.Unmarshal(raw, &inventory); err != nil {
 		t.Fatal(err)
 	}
+	// Core's new routes are mounted before the separate contracts lane lands.
+	// Require their policies now, and deduplicate once generation includes them.
+	for _, route := range []privacyRoutePolicy{{Method: "GET", Path: "/work/tree"}, {Method: "GET", Path: "/work/resolve"}, {Method: "GET", Path: "/work/where"}, {Method: "POST", Path: "/work/{card_ref}/move"}} {
+		found := false
+		for _, existing := range inventory.Routes {
+			found = found || existing.Method == route.Method && existing.Path == route.Path
+		}
+		if !found {
+			inventory.Routes = append(inventory.Routes, route)
+		}
+	}
 	covered := map[string]privacyRoutePolicy{}
 	for _, p := range policies {
 		key := p.Method + " " + p.Path
@@ -253,6 +264,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if path == "/attention/changes" {
 						path += "?scope_ref=builtin:initiatives"
 					}
+					if path == "/work/where" {
+						path += "?q=Confidential"
+					}
+					if path == "/work/resolve" {
+						path += "?path=unsorted/" + cardID
+					}
 					if path == "/docs/search" {
 						path += "?q=Confidential"
 					}
@@ -333,7 +350,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 							t.Errorf("private reference read: %d %s", resp.StatusCode, out)
 						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {

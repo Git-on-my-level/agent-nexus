@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -314,6 +315,223 @@ func TestWorkTreeBackfillFreezesLegacyHierarchy(t *testing.T) {
 		parent, tray, initiative := workTreeFacts(t, s, ctx, workString(want.card["ref"]))
 		if parent != workString(want.parent["ref"]) || tray != want.tray || initiative != want.initiative {
 			t.Errorf("%s: parent=%q tray=%v initiative=%v; want parent=%q tray=%v initiative=%v", want.card["title"], parent, tray, initiative, workString(want.parent["ref"]), want.tray, want.initiative)
+		}
+	}
+}
+
+// Structural checks must see hidden ancestors/descendants without disclosing
+// their identities, titles, paths or occupancy through ordinary projections.
+func TestWorkTreeHiddenStructurePrivacy(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	mustWork(t, s, ctx, map[string]any{"title": "Public board anchor"})
+	private, err := s.CreateBoard(ctx, "writer", map[string]any{"title": "Secret board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "writer", workString(private["thread_id"]), map[string]any{"pm_actor_id": "writer"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := s.CreateWork(ctx, "writer", workString(private["id"]), map[string]any{"title": "Secret webhook outcome", "handle": "secret-webhooks", "initiative": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := mustWork(t, s, ctx, map[string]any{"title": "Visible stream", "handle": "visible-stream"})
+	if _, err = s.GroupWork(ctx, "writer", workString(visible["ref"]), workString(secret["ref"]), ""); err != nil {
+		t.Fatal(err)
+	}
+	leaf := mustWork(t, s, ctx, map[string]any{"title": "Visible leaf", "under": visible["ref"]})
+	loose := mustWork(t, s, ctx, map[string]any{"title": "Webhook repair"})
+	reader := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	assertPrivate := func(value any) {
+		t.Helper()
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, hidden := range []string{workString(secret["ref"]), workString(secret["id"]), "Secret webhook outcome", "secret-webhooks"} {
+			if strings.Contains(string(raw), hidden) {
+				t.Fatalf("hidden structure leaked: %s", raw)
+			}
+		}
+	}
+	if path, err := s.WorkPath(reader, workString(visible["id"])); err != nil || path != "" {
+		t.Fatalf("hidden ancestor path=%q err=%v", path, err)
+	}
+	for _, ref := range []string{workString(visible["ref"]), workString(loose["ref"])} {
+		where, err := s.WorkWhere(reader, ref, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertPrivate(where)
+	}
+	for _, root := range []string{"", workString(visible["ref"])} {
+		tree, err := s.WorkTree(reader, root, 3, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertPrivate(tree)
+	}
+	if _, err := s.ResolveWorkPath(reader, "initiatives/secret-webhooks/visible-stream"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("hidden path resolved: %v", err)
+	}
+	// The nearest legal parent is hidden, so depth refusal must stay generic.
+	if _, err := s.MoveWork(reader, "stranger", workString(loose["ref"]), MoveWorkInput{Under: workString(leaf["ref"])}); !errors.Is(err, ErrInvalidWorkRequest) {
+		t.Fatalf("hidden ancestor ignored by depth check: %v", err)
+	} else {
+		assertPrivate(err.Error())
+	}
+	// A hidden child still contributes to subtree height, without becoming a
+	// visible rollup child or an error suggestion.
+	carrier := mustWork(t, s, ctx, map[string]any{"title": "Visible carrier"})
+	hiddenLeaf, err := s.CreateWork(ctx, "writer", workString(private["id"]), map[string]any{"title": "Secret nested task"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.GroupWork(ctx, "writer", workString(hiddenLeaf["ref"]), workString(carrier["ref"]), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.EnrichWorkHierarchy(reader, []map[string]any{carrier}, "stranger", false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if rollup := carrier["rollup"].(*WorkRollup); rollup.Total != 0 || rollup.HasMore {
+		t.Fatalf("hidden subtree occupancy leaked: %+v", rollup)
+	}
+	if _, err = s.MoveWork(reader, "stranger", workString(carrier["ref"]), MoveWorkInput{Under: workString(visible["ref"])}); !errors.Is(err, ErrInvalidWorkRequest) {
+		t.Fatalf("hidden descendant ignored by subtree height: %v", err)
+	} else {
+		assertPrivate(err.Error())
+		if strings.Contains(err.Error(), workString(hiddenLeaf["ref"])) || strings.Contains(err.Error(), "Secret nested task") {
+			t.Fatal(err)
+		}
+	}
+	// Cycle detection traverses the hidden root too.
+	if _, err = s.MoveWork(reader, "stranger", workString(visible["ref"]), MoveWorkInput{Under: workString(leaf["ref"])}); !errors.Is(err, ErrInvalidWorkRequest) {
+		t.Fatalf("cycle accepted: %v", err)
+	} else {
+		assertPrivate(err.Error())
+	}
+}
+
+func TestWorkTreeCreationDoesNotSuggestTrayAsHome(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	loose := mustWork(t, s, ctx, map[string]any{"title": "Webhook tray outcome"})
+	child := mustWork(t, s, ctx, map[string]any{"title": "Webhook repair", "related_refs": []string{workString(loose["ref"])}})
+	if homes := child["likely_home"].([]LikelyHome); len(homes) != 0 {
+		t.Fatalf("tray work suggested as home: %v", homes)
+	}
+	if _, err := s.MoveWork(ctx, "writer", workString(loose["ref"]), MoveWorkInput{Root: true, Reason: "Independent outcome"}); err != nil {
+		t.Fatal(err)
+	}
+	next := mustWork(t, s, ctx, map[string]any{"title": "Webhook delivery", "related_refs": []string{workString(loose["ref"])}})
+	if homes := next["likely_home"].([]LikelyHome); len(homes) != 1 || homes[0].Ref != loose["ref"] {
+		t.Fatalf("explicit initiative not suggested: %v", homes)
+	}
+}
+
+func TestWorkTreeRollupOrdersStoredChildrenWithoutChecklistIDs(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	parent := mustWork(t, s, ctx, map[string]any{"title": "Outcome", "initiative": true})
+	first := mustWork(t, s, ctx, map[string]any{"title": "Older", "under": parent["ref"]})
+	second := mustWork(t, s, ctx, map[string]any{"title": "Newer", "under": parent["ref"]})
+	if _, err := s.db.ExecContext(ctx, `UPDATE cards SET created_at=? WHERE id=?`, "2000-01-01", first["id"]); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetWork(ctx, workString(parent["ref"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetCardPlan(ctx, "writer", workString(parent["id"]), workString(current["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "newer-first", Title: "Dependency", Ref: workString(second["ref"])}, {ID: "older-last", Title: "Dependency", Ref: workString(first["ref"])}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.EnrichWorkHierarchy(ctx, []map[string]any{parent}, "writer", false, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	children := parent["rollup"].(*WorkRollup).Children
+	if len(children) != 2 || children[0].Ref != first["ref"] || children[1].Ref != second["ref"] {
+		t.Fatalf("checklist changed sibling order: %v", children)
+	}
+	raw, _ := json.Marshal(children)
+	if strings.Contains(string(raw), "step_id") {
+		t.Fatalf("checklist identity in stored children: %s", raw)
+	}
+}
+
+func TestWorkTreeUnfoldRestoresPreviousParent(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	before := mustWork(t, s, ctx, map[string]any{"title": "Original outcome", "initiative": true})
+	into := mustWork(t, s, ctx, map[string]any{"title": "Merge destination", "initiative": true})
+	child := mustWork(t, s, ctx, map[string]any{"title": "Merged task", "under": before["ref"]})
+	if _, err := s.FoldWork(ctx, "writer", workString(child["ref"]), workString(into["ref"]), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UnfoldWork(ctx, "writer", workString(child["ref"])); err != nil {
+		t.Fatal(err)
+	}
+	if parent, tray, initiative := workTreeFacts(t, s, ctx, workString(child["ref"])); parent != before["ref"] || tray || initiative {
+		t.Fatalf("unfold lost original position: parent=%s tray=%v initiative=%v", parent, tray, initiative)
+	}
+}
+
+func TestWorkTreeDigestDistinguishesFallbackFromMissingOwner(t *testing.T) {
+	for _, tc := range []struct{ owner, orphaned, want string }{
+		{"", "2000-01-01", "Awaiting an owner"},
+		{"actor:writer", "2000-01-01", "Ownership fell back to actor:writer"},
+	} {
+		input := cardHealthInput{Owner: tc.owner, OrphanedAt: tc.orphaned}
+		health := input.trackingDigest(plans.Health{State: plans.PromiseMoving}, time.Now())
+		if health.State != plans.PromiseDigest || !strings.Contains(health.Reason, tc.want) || (tc.owner != "" && strings.Contains(health.Reason, "Awaiting an owner")) {
+			t.Fatalf("owner=%q health=%+v", tc.owner, health)
+		}
+	}
+}
+
+func TestWorkTreeDoesNotRefillThroughHiddenRootCohort(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	mustWork(t, s, ctx, map[string]any{"title": "Public tray anchor"})
+	board, err := s.CreateBoard(ctx, "writer", map[string]any{"title": "Private root cohort"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "writer", workString(board["thread_id"]), map[string]any{"pm_actor_id": "writer"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<201)
+ INSERT INTO cards(id,board_id,title,summary,column_key,created_at,created_by,updated_at,updated_by,needs_home)
+ SELECT 'hidden-tree-'||i,?,'Secret root','','ready','2000-01-01','writer','2000-01-01','writer',0 FROM n`, board["id"]); err != nil {
+		t.Fatal(err)
+	}
+	visible := mustWork(t, s, ctx, map[string]any{"title": "Visible later root", "initiative": true})
+	reader := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	tree, err := s.WorkTree(reader, "", 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tree["initiatives"].([]map[string]any)) != 0 || tree["truncated"] != false {
+		t.Fatalf("tree refilled or exposed hidden occupancy: %v", tree)
+	}
+	// A point/subtree read still reaches the visible root outside the cohort.
+	point, err := s.WorkTree(reader, workString(visible["ref"]), 1, false)
+	if err != nil || point["node"].(map[string]any)["ref"] != visible["ref"] {
+		t.Fatalf("bounded admission hid a point read: %v %v", point, err)
+	}
+}
+
+func TestWorkTreeListCardsMatchesStoredPosition(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	root := mustWork(t, s, ctx, map[string]any{"title": "Listed root", "initiative": true})
+	child := mustWork(t, s, ctx, map[string]any{"title": "Listed child", "under": root["ref"]})
+	loose := mustWork(t, s, ctx, map[string]any{"title": "Listed loose task"})
+	cards, err := s.ListCards(ctx, CardListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 3 {
+		t.Fatal(cards)
+	}
+	for _, card := range cards {
+		initiative, tray := card["ref"] == root["ref"], card["ref"] == loose["ref"]
+		if card["is_initiative"] != initiative || card["needs_home"] != tray {
+			t.Fatalf("list lost tree position: child=%s row=%v", child["ref"], card)
 		}
 	}
 }

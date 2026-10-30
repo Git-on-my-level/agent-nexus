@@ -105,8 +105,8 @@ func (s *Store) ResolveWorkPath(ctx context.Context, path string) (map[string]an
 			where = `c.parent_card_id IS NULL AND c.needs_home=?`
 			args = []any{segments[0] == workTreeUnsortedRoot}
 		}
-		args = append(args, segment, segment)
-		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM cards c WHERE `+where+` AND c.trashed_at IS NULL AND (c.id=? OR (c.handle IS NOT NULL AND c.handle=?)) ORDER BY c.created_at,c.id LIMIT 1`, args...)
+		args = append([]any{segment, segment}, args...)
+		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM (SELECT id FROM cards WHERE id=? UNION SELECT id FROM cards WHERE handle IS NOT NULL AND trim(handle)<>'' AND handle=?) requested CROSS JOIN cards c ON c.id=requested.id WHERE `+where+` AND c.trashed_at IS NULL ORDER BY c.created_at,c.id LIMIT 1`, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -138,8 +138,16 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 	}
 	defer closeRead()
 	truncated := false
-	level := func(where string, args ...any) ([]workTreeRow, error) {
-		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM cards c WHERE `+where+` AND c.trashed_at IS NULL AND c.archived_at IS NULL`+workTreeOpen(includeDone)+` ORDER BY c.created_at,c.id LIMIT ?`, append(args, workTreeNodeLimit+1)...)
+	// Admit routing identities before scoped canonical hydration. Hidden rows
+	// never cause a refill or contribute to returned truncation metadata.
+	level := func(index, where string, args ...any) ([]workTreeRow, error) {
+		// Root/tray partial indexes require the live predicate. Other lifecycle
+		// eligibility follows the fixed routing window, without scanning to refill.
+		live, order := "", `c.parent_card_id,c.created_at,c.id`
+		if index != "idx_cards_parent" {
+			live, order = ` AND c.trashed_at IS NULL`, `c.created_at,c.id`
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM (SELECT c.id FROM main.cards c INDEXED BY `+index+` WHERE `+where+live+` ORDER BY `+order+` LIMIT ?) admitted CROSS JOIN cards c ON c.id=admitted.id WHERE c.trashed_at IS NULL AND c.archived_at IS NULL`+workTreeOpen(includeDone)+` ORDER BY c.created_at,c.id`, append(args, workTreeNodeLimit+1)...)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +177,7 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 			}
 			sort.Strings(keys)
 			encoded, _ := json.Marshal(keys)
-			children, err := level(`c.parent_card_id IN (SELECT value FROM json_each(?))`, string(encoded))
+			children, err := level("idx_cards_parent", `c.parent_card_id IN (SELECT value FROM json_each(?))`, string(encoded))
 			if err != nil {
 				return err
 			}
@@ -239,7 +247,11 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 		key, root string
 		tray      bool
 	}{{"initiatives", workTreeInitiativesRoot, false}, {"unsorted", workTreeUnsortedRoot, true}} {
-		rows, err := level(`c.parent_card_id IS NULL AND c.needs_home=?`, section.tray)
+		index, where := "idx_cards_tree_roots", `c.parent_card_id IS NULL AND c.needs_home=0`
+		if section.tray {
+			index, where = "idx_cards_tree_tray", `c.parent_card_id IS NULL AND c.needs_home=1`
+		}
+		rows, err := level(index, where)
 		if err != nil {
 			return nil, err
 		}

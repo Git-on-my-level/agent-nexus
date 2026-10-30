@@ -154,7 +154,7 @@ func likelyHomes(card map[string]any, candidates []homeCandidate) []LikelyHome {
 	}
 	scores := []scored{}
 	for _, c := range candidates {
-		if c.ref == card["ref"] || c.id == card["id"] || c.phase == "done" || c.phase == "cancelled" {
+		if !c.declaredRoot || c.ref == card["ref"] || c.id == card["id"] || c.phase == "done" || c.phase == "cancelled" {
 			continue
 		}
 		r, rp := c.signals, c.repositories
