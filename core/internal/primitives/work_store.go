@@ -1162,6 +1162,11 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 	if err := ValidateWorkAnnotations(patch); err != nil {
 		return nil, err
 	}
+	// The work tree decides initiatives; a top_level annotation would be a
+	// silent no-op. Point at the one hierarchy verb instead.
+	if _, ok := patch["top_level"]; ok {
+		return nil, workInvalid("top_level is replaced by the work tree: use anx work move %s --root --reason <why> (or --under <parent>)", firstNonEmptyString(identifier, "<card>"))
+	}
 	patch = workClone(patch)
 	if err := s.validateWorkReferences(ctx, patch); err != nil {
 		return nil, err
