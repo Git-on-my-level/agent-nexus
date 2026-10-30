@@ -18,18 +18,25 @@ Rows include owner, next actor, fourteen UTC daily activity counts (oldest first
 progress, time, and update time. Project group keys use `project:<topic handle>`;
 `none` means no project and `all` means ungrouped.
 
-Initiatives are open native cards on boards with role `initiatives`. Their
-states are `waiting_on_you`, `at_risk`, `stalled`, and `on_track`. An open ask
-addressed to the viewer about or blocking the initiative makes it waiting on
-them. A slipped promise or high risk makes it at risk; no promise or blocked
-work is stalled. Progress comes from the reader-visible plan and time from the
-current promise. Hidden linked plan text remains hidden.
+Watch picks initiatives using the same stored-tree predicate as Initiatives,
+Overview and the brief: an active card with no stored parent and `needs_home=false`
+(`is_initiative=true`). Board role, existence of a plan, assignee and lease age do
+not decide membership. This is the selection rule requested in issue #499.
+Unsorted (`needs_home=true`) is a separate tray; an unplaced card is never an
+initiative by accident. Cadenced work retains its Loops presentation.
 
-Watch's Initiatives tab retains top-level, non-loop cards on designated
-initiative boards even when they have no assignee, their worker lease ends,
-or reminder delivery routes them to a daily digest. Empty outcomes show
-"no children yet". Archived and trashed cards remain excluded; ordinary work
-without a designated initiative board keeps its existing digest-only policy.
+Collection states are `waiting_on_you`, `at_risk`, `stalled`, and `on_track`.
+An open ask addressed to the viewer about or blocking the initiative makes it
+waiting on them. A slipped promise or high risk makes it at risk; no promise or
+blocked work is stalled. Child rollups follow stored parentage and admit only
+visible children; plans remain independent checklists. Time comes from the
+current promise. Hidden children and hidden plan text remain hidden.
+
+Watch's Initiatives tab retains eligible outcomes without an assignee and after
+an internal worker lease ends or reminders move to a daily digest. “Awaiting an
+owner” means an empty assignee. Empty outcomes show “no children yet”. Archived
+and trashed work stays excluded. The brief projection and work-list freshness
+may differ, but they share one initiative predicate.
 
 The next actor is returned for generic human/agent assignments and concrete
 assignments to the viewer. Other concrete actor refs return `next_actor: null`
