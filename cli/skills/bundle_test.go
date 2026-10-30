@@ -69,7 +69,7 @@ func TestSkillAuthorityBoundaries(t *testing.T) {
 	if words := len(strings.Fields(participant.Content)); words >= 400 {
 		t.Errorf("participant skill has %d words, want < 400", words)
 	}
-	for _, term := range []string{"anx orient", "anx context", "anx note", "anx ask", "anx await", "anx done", "anx plan", "anx series push", "--subject-ref card:<slug>", "--recommend", "--alt", "--body", "--next <when>", "--evidence <ref>", "--by <when>", "--blocks <ref>", "anx help <job>", "anx api <operation>", "raw transcripts"} {
+	for _, term := range []string{"anx orient", "anx where", "anx mv", "anx tree", "anx work create", "anx note", "anx ask", "anx await", "anx done", "anx plan", "--subject-ref card:<slug>", "--recommend", "--alt", "--body", "--next <when>", "--evidence <ref>", "--by <when>", "--blocks <ref>", "anx help <job>", "anx api <operation>", "raw transcripts"} {
 		if !strings.Contains(participant.Content, term) {
 			t.Errorf("participant lacks %q", term)
 		}

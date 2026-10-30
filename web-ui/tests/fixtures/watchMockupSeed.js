@@ -403,12 +403,19 @@ export function mockupBrief(now = "2026-10-24T12:00:00Z") {
 }
 
 /** Core's tray actions: the fenced promote and the human-only move hint. */
-const trayActions = (ref, version) => [
+const trayActions = (ref) => [
   {
     label: "Make it an initiative",
-    command_id: "work.patch",
-    argv: ["anx", "work", "patch", ref, "--from-file", "-"],
-    stdin: { if_version: version, patch: { top_level: true } },
+    command_id: "work.move",
+    argv: [
+      "anx",
+      "work",
+      "move",
+      ref,
+      "--root",
+      "--reason",
+      "An independent outcome",
+    ],
     mutates: true,
     side_effect_class: "remote_coordination_write",
   },

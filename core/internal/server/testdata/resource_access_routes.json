@@ -1401,5 +1401,26 @@
     "path": "/work/{card_ref}/retire",
     "policy": "record",
     "reason": "Scoped card and destination boards; atomic membership and auditable event."
+  },
+  {
+    "method": "GET",
+    "path": "/work/tree",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/work/resolve",
+    "policy": "collection"
+  },
+  {
+    "method": "GET",
+    "path": "/work/where",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/work/{card_ref}/move",
+    "policy": "record",
+    "reason": "Scoped card and destination parent; atomic replay-safe hierarchy mutation."
   }
 ]

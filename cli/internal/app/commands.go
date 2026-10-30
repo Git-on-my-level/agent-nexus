@@ -66,6 +66,10 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 			return "help", &commandResult{Text: text, Data: helpEnvelopeResult(topic, text)}, nil
 		}
 	}
+	if isWorkTreeCommand(args) {
+		r, name, err := a.runWorkTreeCommand(ctx, args, cfg)
+		return name, r, err
+	}
 	if args[0] == "orient" {
 		result, err := a.runOrient(ctx, args[1:], cfg)
 		return "orient", result, err

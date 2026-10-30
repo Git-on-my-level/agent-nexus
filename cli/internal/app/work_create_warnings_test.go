@@ -44,9 +44,9 @@ func runWorkCreateForTest(t *testing.T, rows, title string) map[string]any {
 }
 
 func TestWorkCreateWarningNearDuplicate(t *testing.T) {
-	doc := runWorkCreateForTest(t, `{"ref":"card:ble-reliability","title":"Fix flaky BLE tests","phase":"in_progress"},{"ref":"card:done-one","title":"Fix flaky BLE test","phase":"done"}`, "Fix flaky BLE test")
+	doc := runWorkCreateForTest(t, `{"ref":"card:ble-reliability","title":"Fix flaky BLE tests","phase":"in_progress","is_initiative":true},{"ref":"card:done-one","title":"Fix flaky BLE test","phase":"done"}`, "Fix flaky BLE test")
 	msg := warningCodes(doc)["work_near_duplicate"]
-	if !strings.Contains(msg, "matches an open initiative") || !strings.Contains(msg, "card:ble-reliability") || !strings.Contains(msg, "anx plan step add card:ble-reliability") {
+	if !strings.Contains(msg, "matches an open initiative") || !strings.Contains(msg, "card:ble-reliability") || !strings.Contains(msg, "anx where card:ble-reliability") {
 		t.Fatalf("warnings=%#v", doc["warnings"])
 	}
 }
@@ -54,7 +54,7 @@ func TestWorkCreateWarningNearDuplicate(t *testing.T) {
 func TestWorkCreateWarningOverTarget(t *testing.T) {
 	rows := make([]string, 0, 16)
 	for i := 0; i < 16; i++ {
-		rows = append(rows, fmt.Sprintf(`{"ref":"card:w%d","title":"Initiative %c","phase":"ready"}`, i, 'a'+i))
+		rows = append(rows, fmt.Sprintf(`{"ref":"card:w%d","title":"Initiative %c","phase":"ready","is_initiative":true}`, i, 'a'+i))
 	}
 	doc := runWorkCreateForTest(t, strings.Join(rows, ","), "Something unrelated entirely")
 	codes := warningCodes(doc)

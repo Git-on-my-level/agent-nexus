@@ -688,6 +688,9 @@ func TestWorkCommandDispatchCoversRegistry(t *testing.T) {
 				continue
 			}
 		}
+		if isWorkTreeCommand(strings.Fields(runtimePath)) {
+			continue
+		}
 		if _, ok := workCommands[runtimePath]; !ok {
 			t.Errorf("registry command %s (%s) missing from workCommands as %q", cmd.CommandID, path, runtimePath)
 		}

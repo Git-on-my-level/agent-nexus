@@ -49,7 +49,7 @@ func TestBriefV1PromisesAsksAndBoundedReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	work := func(title string) map[string]any {
-		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": title})
+		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"initiative": true, "title": title})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,11 +157,11 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	boardID := anyString(board["id"])
-	assigned, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Assigned", "owner": "actor:agent-1"})
+	assigned, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"initiative": true, "title": "Assigned", "owner": "actor:agent-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	promised, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Promised"})
+	promised, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"initiative": true, "title": "Promised"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,11 +172,11 @@ func TestBriefV1AgentInitiativeOwnership(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	unrelated, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Unrelated", "owner": "actor:agent-2"})
+	unrelated, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"initiative": true, "title": "Unrelated", "owner": "actor:agent-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	participating, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"title": "Participating"})
+	participating, err := store.CreateWork(ctx, "actor-1", boardID, map[string]any{"initiative": true, "title": "Participating"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestBriefTrackingDefaultsMatchSharedFixture(t *testing.T) {
 	store := h.primitiveStore.(*primitives.Store)
 	create := func(title string) map[string]any {
 		t.Helper()
-		card, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": title})
+		card, err := store.CreateWork(ctx, "actor-1", "", map[string]any{"title": title, "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -458,10 +458,22 @@ func TestBriefTrackingDefaultsMatchSharedFixture(t *testing.T) {
 	}
 	assertBriefMatchesFixture(t, body)
 	initiatives := body["initiatives"].([]any)
-	if len(initiatives) != 1 {
-		t.Fatalf("digest work leaked into normal initiatives: %+v", initiatives)
+	// Digest routing does not change explicit initiative membership.
+	if len(initiatives) != 3 {
+		t.Fatalf("tracking hid explicit initiatives: %+v", initiatives)
 	}
-	row := initiatives[0].(map[string]any)
+	var row map[string]any
+	seen := map[string]bool{}
+	for _, value := range initiatives {
+		item := value.(map[string]any)
+		seen[anyString(item["ref"])] = true
+		if item["ref"] == normal["ref"] {
+			row = item
+		}
+	}
+	if row == nil || !seen[anyString(lapsed["ref"])] || !seen[anyString(ended["ref"])] {
+		t.Fatal(initiatives)
+	}
 	promise := row["promise"].(map[string]any)
 	if row["ref"] != normal["ref"] || row["owner"] != "actor:actor-1" || row["state"] != "moving" || promise["source"] != "default" {
 		t.Fatalf("default contract lost: %+v", row)

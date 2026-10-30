@@ -21,7 +21,7 @@ import (
 // are the only commands the participant skill teaches; their shapes are
 // stable (see loopTierStability). Everything else is setup (anx help <job>)
 // or scripting (anx api <operation>).
-var loopTierCommands = []string{"orient", "context", "note", "ask", "await", "done", "plan", "series push"}
+var loopTierCommands = []string{"orient", "where", "context", "note", "ask", "await", "done", "plan", "series push"}
 
 func loopTierStability(path string) (string, bool) {
 	path = strings.Join(strings.Fields(path), " ")

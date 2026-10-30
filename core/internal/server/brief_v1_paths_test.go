@@ -33,7 +33,7 @@ func TestBriefMaterializedFoldsMatchPerRequestFolds(t *testing.T) {
 		{{"evidence_refs": []any{"card:does-not-exist"}}, {"next": map[string]any{"at": "bogus"}}},
 		{},
 	} {
-		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Fixture %d", i)})
+		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Fixture %d", i), "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -530,5 +530,17 @@
   {
     "key": "GET /asks/{ask_id}/presentation",
     "milliseconds": 1000
+  },
+  {
+    "key": "GET /work/tree",
+    "milliseconds": 1000
+  },
+  {
+    "key": "GET /work/resolve",
+    "milliseconds": 1000
+  },
+  {
+    "key": "GET /work/where",
+    "milliseconds": 1000
   }
 ]

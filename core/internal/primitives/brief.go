@@ -55,10 +55,12 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	if err != nil {
 		return nil, err
 	}
-	budget, suggestions, err := b.groupingBudget()
+	// Initiatives are explicit top-level work; there are no fold suggestions.
+	budget, err := s.InitiativeBudget(ctx)
 	if err != nil {
 		return nil, err
 	}
+	suggestions := []map[string]any{}
 	initiatives, initiativesTruncated, err := b.initiatives()
 	if err != nil {
 		return nil, err
@@ -72,20 +74,9 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 		}
 	}
 	budget["count"] = max(budget["count"].(int), visibleOpen)
-	var declared bool
-	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`).Scan(&declared); err != nil {
-		return nil, err
-	}
 	var overTarget map[string]any
-	if declared {
-		budget, err = s.InitiativeBudget(ctx)
-		if err != nil {
-			return nil, err
-		}
-		suggestions = []map[string]any{} // Declared initiatives must be retired before folding.
-		if len(initiatives) > 0 {
-			overTarget = initiativeOverTarget(budget, workString(initiatives[0]["ref"]))
-		}
+	if len(initiatives) > 0 {
+		overTarget = initiativeOverTarget(budget, workString(initiatives[0]["ref"]))
 	}
 	changes, err := s.InitiativeChanges(ctx, 50)
 	if err != nil {
@@ -95,7 +86,7 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	if err != nil {
 		return nil, err
 	}
-	if declared && overTarget == nil && len(loops) > 0 {
+	if overTarget == nil && len(loops) > 0 {
 		overTarget = initiativeOverTarget(budget, workString(loops[0]["ref"]))
 	}
 
@@ -913,18 +904,9 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	if b.reader.Visible != nil {
 		ownerExpr = `COALESCE((SELECT json_extract(t.body_json,'$.pm_actor_id') FROM threads t WHERE t.id=c.thread_id),'')`
 	}
-	boardFilter := "(NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives'))"
-	groupFilter := "NOT " + workHasParentSQL("c") + " AND bi.loop_annotated=0 AND (bi.loop_last_run_at IS NULL OR bi.loop_last_run_at<'" + loopTS(b.now.Add(-loopWindow)) + "')"
+	boardFilter := "1=1"
+	groupFilter := workIsInitiativeSQL("c") + " AND bi.loop_annotated=0 AND (bi.loop_last_run_at IS NULL OR bi.loop_last_run_at<'" + loopTS(b.now.Add(-loopWindow)) + "')"
 	prefixArgs := []any{}
-	if !loops && len(b.topLevelIDs) > 0 {
-		encoded, _ := json.Marshal(b.topLevelIDs)
-		groupFilter = "(c.id IN (SELECT value FROM json_each(?)) OR (" + groupFilter + "))"
-		prefixArgs = append(prefixArgs, string(encoded))
-	}
-	if !loops && b.allCardsAreRoots {
-		groupFilter = "1=1"
-		prefixArgs = nil
-	}
 	source := ""
 	if loops {
 		boardFilter = "1=1"
@@ -947,17 +929,7 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 		source = `(SELECT card_id FROM work_grouping_brief_positions bi WHERE ` + admission + ` LIMIT 200) admitted
 		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`
 	}
-	if !loops {
-		// An explicit initiative board selects outcomes independently of who is
-		// currently working on them. Digest routing controls reminders, not
-		// whether those outcomes remain visible in Watch. Keep the fallback
-		// selection of ordinary work subject to its existing tracking policy.
-		groupFilter += ` AND (EXISTS(SELECT 1 FROM boards initiative_board WHERE initiative_board.id=c.board_id AND initiative_board.role='initiatives' AND COALESCE(initiative_board.archived_at,'')='' AND COALESCE(initiative_board.trashed_at,'')='') OR bi.open=0 OR (COALESCE(c.assignee,'')<>'' AND NOT EXISTS(SELECT 1 FROM work_tracking tracking WHERE tracking.card_id=c.id AND (tracking.orphaned_at<>'' OR (bi.promise_source='default' AND tracking.reminder_event_id<>''))) AND NOT EXISTS(SELECT 1 FROM card_leases lease WHERE lease.card_id=c.id AND lease.owner=c.assignee AND (lease.released_at<>'' OR lease.expires_at<='` + cardLeaseStamp(b.now) + `'))))`
-	}
 	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
-	if b.allCardsAreRoots {
-		loopColumns = "0,''"
-	}
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
 	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `,substr(COALESCE(NULLIF(trim(json_extract(m.metadata_json,'$.goal.label')),''),NULLIF(trim(json_extract(m.metadata_json,'$.goal.metric')),''),c.summary,''),1,281)
  FROM ` + source + ` CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id
@@ -988,9 +960,6 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 // evidence first), then recently done; at most BriefSectionLimit in all.
 func (b *briefBuild) initiatives() ([]map[string]any, bool, error) { return b.initiativeSection(false) }
 func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, error) {
-	if loopsOnly && b.allCardsAreRoots {
-		return []map[string]any{}, false, nil
-	}
 	limit := BriefSectionLimit + 1
 	promised, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
 	if err != nil {
@@ -1120,28 +1089,17 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 	if err := b.initiativeSeries(ids, out); err != nil {
 		return nil, false, err
 	}
-	hierarchy := []map[string]any{}
-	for i, r := range rows {
-		out[i]["parent_ref"] = nil
-		out[i]["rollup"] = emptyWorkRollup()
-		var p plans.Plan
-		_ = json.Unmarshal([]byte(r.plan), &p)
-		linked := false
-		for _, step := range p.Steps {
-			if strings.HasPrefix(step.Ref, "card:") {
-				linked = true
-				break
-			}
-		}
-		if loopsOnly || linked {
-			hierarchy = append(hierarchy, out[i])
-		}
-	}
+	// Every admitted card can have stored children, independently of its checklist.
+	hierarchy := out
 	if err = b.s.EnrichWorkHierarchy(b.groupingContext(), hierarchy, b.reader.ActorID, b.reader.human(), b.now); err != nil {
 		return nil, false, err
 	}
 	for _, item := range out {
+		// Brief items are initiatives or loops by selection; the per-card tree
+		// flags belong to work reads, not the brief.v1 contract.
 		delete(item, "id")
+		delete(item, "is_initiative")
+		delete(item, "needs_home")
 	}
 	return out, truncated, nil
 }

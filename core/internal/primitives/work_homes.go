@@ -64,7 +64,7 @@ func recentGroupingCandidates(ctx context.Context, q briefQueryer, openOnly bool
 	// deliberately a physical routing cohort before scoped hydration, never an
 	// all-workspace similarity or denial scan. Routing keys never leave this query.
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,
-	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),(c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))
+	 COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),c.column_key,c.created_by,COALESCE(m.version,0),(c.needs_home=0)
 	 FROM (`+recent+`) recent
 	 CROSS JOIN cards c ON c.id=recent.id CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE b.archived_at IS NULL AND b.trashed_at IS NULL AND NOT `+workHasParentSQL("c")+`
@@ -154,7 +154,7 @@ func likelyHomes(card map[string]any, candidates []homeCandidate) []LikelyHome {
 	}
 	scores := []scored{}
 	for _, c := range candidates {
-		if c.ref == card["ref"] || c.id == card["id"] || c.phase == "done" || c.phase == "cancelled" {
+		if !c.declaredRoot || c.ref == card["ref"] || c.id == card["id"] || c.phase == "done" || c.phase == "cancelled" {
 			continue
 		}
 		r, rp := c.signals, c.repositories
@@ -221,7 +221,7 @@ func homeCandidatesFor(ctx context.Context, q briefQueryer, card map[string]any,
 		refs = refs[:200]
 	}
 	encoded, _ := json.Marshal(refs)
-	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}')
+	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}'),(c.needs_home=0)
 	 FROM json_each(?) requested CROSS JOIN cards c ON c.id=requested.value OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=requested.value) CROSS JOIN boards b ON b.id=c.board_id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE c.archived_at IS NULL AND c.trashed_at IS NULL AND c.column_key NOT IN ('done','cancelled') AND b.archived_at IS NULL AND b.trashed_at IS NULL
 	 AND NOT `+workHasParentSQL("c")+` AND COALESCE(json_type(m.metadata_json,'$.cadence'),'null')='null' AND COALESCE(json_type(m.metadata_json,'$.goal'),'null')='null' AND NOT EXISTS(SELECT 1 FROM brief_initiatives bi WHERE bi.card_id=c.id AND (bi.loop_annotated=1 OR bi.loop_last_run_at>=?)) LIMIT 200`, string(encoded), loopTS(time.Now().UTC().Add(-loopWindow)))
@@ -236,7 +236,7 @@ func homeCandidatesFor(ctx context.Context, q briefQueryer, card map[string]any,
 	}
 	for rows.Next() {
 		var c homeCandidate
-		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata); err != nil {
+		if err = rows.Scan(&c.id, &c.ref, &c.title, &c.created, &c.updated, &c.refs, &c.project, &c.metadata, &c.declaredRoot); err != nil {
 			return nil, err
 		}
 		if !seen[c.id] {
@@ -251,7 +251,7 @@ func decorateCreatedCard(ctx context.Context, q briefQueryer, card, m map[string
 	card["parent_ref"] = nil
 
 	var declared bool
-	rows, err := q.QueryContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE id=? AND role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`, workString(card["board_id"]))
+	rows, err := q.QueryContext(ctx, `SELECT `+workIsInitiativeSQL("c")+` FROM cards c WHERE c.id=?`, workString(card["id"]))
 	if err != nil {
 		return err
 	}
@@ -270,11 +270,13 @@ func decorateCreatedCard(ctx context.Context, q briefQueryer, card, m map[string
 	}
 
 	if declared {
+		card["is_initiative"], card["needs_home"] = true, false
 		card["likely_home"] = []LikelyHome{}
 		return nil
 	}
 	if under := workString(m["under"]); under != "" {
 		card["parent_ref"] = under
+		card["is_initiative"], card["needs_home"] = false, false
 		card["likely_home"] = []LikelyHome{}
 		return nil
 	}
@@ -305,6 +307,9 @@ func GroupingNextActions(ref string, homes []LikelyHome, verb string) []map[stri
 	if verb == "fold" {
 		flag = "--into"
 	}
+	if verb == "group" {
+		verb = "move"
+	}
 	return append(out, map[string]any{"label": "Choose a home", "argv": []string{"anx", "work", verb, ref, flag, homes[0].Ref}, "mutates": true, "side_effect_class": "remote_coordination_write", "reasons": homes[0].Reasons})
 }
 
@@ -325,7 +330,7 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	for _, c := range base {
 		var metadata map[string]any
 		_ = json.Unmarshal([]byte(c.metadata), &metadata)
-		if !c.declaredRoot && metadata["top_level"] != true {
+		if !c.declaredRoot {
 			eligible = append(eligible, c)
 		}
 	}
@@ -350,13 +355,16 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 		}
 		inputs = append(inputs, m)
 	}
-	all, err := homeCandidatesFor(ctx, s.db, map[string]any{"related_refs": related}, base)
+	pool, err := homeCandidatesFor(ctx, s.db, map[string]any{"related_refs": related}, base)
 	if err != nil {
 		return nil, false, err
 	}
-	var declared bool
-	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL)`).Scan(&declared); err != nil {
-		return nil, false, err
+	// Only initiatives are homes; other Unsorted work is never suggested.
+	all := []homeCandidate{}
+	for _, c := range pool {
+		if c.declaredRoot {
+			all = append(all, c)
+		}
 	}
 	out := []map[string]any{}
 	actors := &briefBuild{s: s, ctx: ctx, actors: map[string]bool{}}
@@ -368,13 +376,8 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	}
 	for i, c := range candidates {
 		homes := likelyHomes(inputs[i], all)
-		actions := GroupingNextActions(c.ref, homes, "group")
-		body := map[string]any{"if_version": c.version, "patch": map[string]any{"top_level": true}}
-		if declared {
-			actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "initiative.promote", "argv": []string{"anx", "initiative", "promote", c.ref, "--reason", "An independent outcome"}, "mutates": true, "side_effect_class": "remote_coordination_write"})
-		} else {
-			actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.patch", "argv": []string{"anx", "work", "patch", c.ref, "--from-file", "-"}, "stdin": body, "mutates": true, "side_effect_class": "remote_coordination_write"})
-		}
+		actions := GroupingNextActions(c.ref, homes, "move")
+		actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.move", "argv": []string{"anx", "work", "move", c.ref, "--root", "--reason", "An independent outcome"}, "mutates": true, "side_effect_class": "remote_coordination_write"})
 		// OSS cannot inspect another deployment's permissions. This is a human
 		// command template only, never an executable agent action or permission grant.
 		actions = append(actions, map[string]any{"label": "Move to another workspace", "command_template": "anx move card " + c.ref + " --to <workspace-alias>", "requires_human": true, "requires_destination": true, "mutates": true, "side_effect_class": "remote_coordination_write"})
@@ -382,7 +385,7 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 		if p, ok := actors.display[stripActor(c.createdBy)]; ok {
 			creator = p
 		}
-		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "created_at": c.created, "created_by": creator, "likely_home": homes, "next_actions": actions})
+		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "needs_home": true, "is_initiative": false, "path": workTreeUnsortedRoot + "/" + strings.TrimPrefix(c.ref, "card:"), "created_at": c.created, "created_by": creator, "likely_home": homes, "next_actions": actions})
 	}
 
 	return out, more, nil

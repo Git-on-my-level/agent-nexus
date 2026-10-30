@@ -380,7 +380,7 @@ func (s *Store) LoopReport(ctx context.Context, board, card, health string, limi
 			{`bi.loop_last_run_at>=? AND EXISTS(SELECT 1 FROM events WHERE type='run_recorded' AND json_extract(payload_json,'$.subject_ref')='card:'||c.id AND ts>=? AND ts<=? AND COALESCE(trashed_at,'')='' AND COALESCE(archived_at,'')='')`, `bi.loop_last_run_at`, []any{loopTS(now.Add(-loopWindow)), loopTS(now.Add(-loopWindow)), loopTS(now)}},
 		} {
 			args := append(arm.args, boardID, boardID, boardID)
-			rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),c.title,`+arm.activity+` FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE `+arm.predicate+` AND COALESCE(c.trashed_at,'')='' AND COALESCE(c.archived_at,'')='' AND ((?<>'' AND c.board_id=?) OR (?='' AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives') OR c.board_id IN (SELECT id FROM boards WHERE role='initiatives')))) ORDER BY `+arm.activity+` DESC,bi.card_id LIMIT 51`, args...)
+			rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),c.title,`+arm.activity+` FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE `+arm.predicate+` AND COALESCE(c.trashed_at,'')='' AND COALESCE(c.archived_at,'')='' AND ((?<>'' AND c.board_id=?) OR ?='') ORDER BY `+arm.activity+` DESC,bi.card_id LIMIT 51`, args...)
 			if err != nil {
 				return nil, false, err
 			}

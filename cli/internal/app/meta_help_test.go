@@ -1206,8 +1206,8 @@ func TestGeneratedHelpResolvesAllRegistryBackedRuntimePaths(t *testing.T) {
 
 		output := runHelpCommand(t, append([]string{"help"}, strings.Fields(runtimePath)...)...)
 		header := "Generated Help: " + runtimePath
-		if cmd.CommandID == "pm.context" {
-			header = "Usage: anx pm context"
+		if cmd.CommandID == "pm.context" || isWorkTreeCommand(strings.Fields(runtimePath)) {
+			header = "Usage: anx " + runtimePath
 		}
 		if _, ok := localHelperTopicByPath(runtimePath); ok {
 			header = "Local Help: " + runtimePath
@@ -1343,6 +1343,10 @@ func expectedRuntimeSupportedCommandIDs(meta registry.MetaRegistry) map[string]s
 		addPath(path)
 	}
 
+	// The work tree has its own parser, including the top-level where verb.
+	for _, path := range []string{"work move", "work tree", "where"} {
+		addPath(path)
+	}
 	return expected
 }
 
@@ -1369,6 +1373,9 @@ func expectedGeneratedHelpRuntimePaths() []string {
 		appendPath(path)
 	}
 
+	for _, path := range []string{"work move", "work tree", "where"} {
+		appendPath(path)
+	}
 	return paths
 }
 

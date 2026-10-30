@@ -27,6 +27,9 @@ type foldSnapshot struct {
 	PlanBefore   plans.Plan     `json:"plan_before"`
 	PlanAfter    plans.Plan     `json:"plan_after"`
 	ArchivedAt   string         `json:"archived_at"`
+	// The child's parent before the fold; unfold restores it. Fold refuses
+	// initiatives, so no parent (including legacy snapshots) means the tray.
+	TreeParentBefore string `json:"tree_parent_before,omitempty"`
 }
 
 func groupingMetadata(ctx context.Context, tx *accessTx, id string) (map[string]any, error) {
@@ -162,6 +165,10 @@ func (s *Store) FoldWork(ctx context.Context, actor, id, into, after string) (ma
 				due = p.At.UTC().Format(time.RFC3339)
 			}
 		}
+		var treeParent sql.NullString
+		if err = tx.QueryRowContext(ctx, `SELECT parent_card_id FROM main.cards WHERE id=?`, child.CardID).Scan(&treeParent); err != nil {
+			return err
+		}
 		pref, err := s.groupWorkTx(ctx, tx, actor, child, into, after, due)
 		if err != nil {
 			return err
@@ -170,7 +177,7 @@ func (s *Store) FoldWork(ctx context.Context, actor, id, into, after string) (ma
 		if err != nil {
 			return err
 		}
-		snapshot := foldSnapshot{Parent: pref, ParentBefore: foldOwned(parent, pm), ChildBefore: foldOwned(child, cm), PlanBefore: before, PlanAfter: afterPlan, ArchivedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+		snapshot := foldSnapshot{Parent: pref, ParentBefore: foldOwned(parent, pm), ChildBefore: foldOwned(child, cm), PlanBefore: before, PlanAfter: afterPlan, ArchivedAt: time.Now().UTC().Format(time.RFC3339Nano), TreeParentBefore: treeParent.String}
 		sources, err := mergeFoldSources(pm["source_refs"], cm["source_refs"])
 		if err != nil {
 			return err
@@ -288,7 +295,7 @@ func (s *Store) UnfoldWork(ctx context.Context, actor, id string) (map[string]an
 		if err = s.saveGroupingPlan(ctx, tx, actor, parent, snapshot.PlanBefore); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE cards SET archived_at=NULL,archived_by=NULL WHERE id=?`, child.CardID); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE cards SET archived_at=NULL,archived_by=NULL,parent_card_id=?,needs_home=? WHERE id=?`, nullableString(snapshot.TreeParentBefore), snapshot.TreeParentBefore == "", child.CardID); err != nil {
 			return err
 		}
 		card, err := child.toMap()

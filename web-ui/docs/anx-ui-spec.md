@@ -178,12 +178,14 @@ P86 · 9"). Done this week lists children whose `done_at` is in the last
 seven days; older or undated finishes are a count. The reader's open
 decisions about a lane or its children sit in its needs-you column as
 "ask · you" chips linking to Decide, in place of the child they cover. The
-Ungrouped tray and the budget chip sit beside the board. Each tray row says
-who created the card. "Make it an initiative" sends core's version-fenced
-`work.patch` (`{top_level: true}`) through the outbox, with Undo; it is the
-one-tap answer when no home fits and is under "Other…" otherwise. "Move to
-another workspace" only shows core's human command to copy: the UI never
-performs a move. On a phone each lane
+Unsorted tray and the budget chip sit beside the board. Each tray row says
+who created the card. "Make it an initiative" opens a saved move to top level
+with an editable reason from core's `work.move` action. Saving sends `root`
+and the reason through the replay-safe outbox with its body `request_key`.
+The action is visible when no home fits and under "Other…" otherwise.
+"Choose a home" sends `work.move` with `under`; a card can also move back to
+Unsorted. "Move to another workspace" only shows core's human command to
+copy: that cross-workspace action stays outside this UI. On a phone each lane
 is a card: one tag, the bar, the lines that wait on the reader, and the rest
 a tap away. `/initiatives?view=lanes` redirects to Lanes, so there is one
 swimlane board. Measured initiatives and loops are on the Loops tab. The tab

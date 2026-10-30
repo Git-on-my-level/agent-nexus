@@ -1190,6 +1190,9 @@ func qualifyDiagnosticExamples(text string) string {
 }
 
 func helpTopicTextRaw(topic string) (string, bool) {
+	if text, ok := workTreeHelp(topic); ok {
+		return text, true
+	}
 	if text, ok := hostExclusionHelp(topic); ok {
 		return text, true
 	}
@@ -1210,7 +1213,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
-		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --from-file <path|-> [--handle <slug>]; anx work list. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
+		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
 	}
 	if topic == "note" {
 		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]...: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_promise_unowned, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n", true
@@ -2200,6 +2203,7 @@ func runtimeGeneratedRegistryPaths() []string {
 		}
 		paths = append(paths, path)
 	}
+	paths = append(paths, "work move", "work tree", "where")
 	return paths
 }
 
@@ -2242,6 +2246,8 @@ func mapRuntimePathToRegistryPath(path string) string {
 	// Live CLI paths that differ from OpenAPI x-anx-cli-path. This is not a
 	// compatibility table for deleted commands.
 	rewrites := map[string]string{
+		"mv":                       "work move",
+		"tree":                     "work tree",
 		"pm conversations message": "pm conversations messages create",
 		"pm turns propose":         "pm turns decisions create",
 		"events tail":              "events stream",

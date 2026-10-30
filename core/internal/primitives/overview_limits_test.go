@@ -36,7 +36,7 @@ func TestOverviewPrioritizesOpenWorkWithinCandidateLimit(t *testing.T) {
  SELECT 'history-'||n,'history-'||n,board_id,thread_id,title,summary,column_key,rank,created_at,created_by,updated_at,updated_by,provenance_json FROM cards,history WHERE cards.id=?`, w["id"]); err != nil {
 		t.Fatal(err)
 	}
-	open, err := s.CreateWork(ctx, "actor", b["id"].(string), map[string]any{"title": "Current initiative"})
+	open, err := s.CreateWork(ctx, "actor", b["id"].(string), map[string]any{"title": "Current initiative", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}

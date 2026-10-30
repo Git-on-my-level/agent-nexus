@@ -390,14 +390,14 @@ for (const [name, viewport] of [
         expect(Math.round(width)).toBe(260);
         // The tray sits under the board, dashed, with one-tap homes.
         const tray = board.locator("[data-swimlane-tray]");
-        await expect(tray).toContainText("Ungrouped · 4");
+        await expect(tray).toContainText("Unsorted · 4");
         // Who made it, and the tray's own actions.
         await expect(
           tray.locator('[data-tray-ref="card:retry-budget"]'),
         ).toContainText("created 2m ago by lane-stt");
         await expect(
           tray.locator('[data-promote="card:ramp-telemetry"]'),
-        ).toHaveText("Make it an initiative");
+        ).toHaveText("Move to top level");
         await expect(
           tray.locator(
             '[data-tray-ref="card:retry-budget"] option[value="+move"]',
@@ -405,7 +405,7 @@ for (const [name, viewport] of [
         ).toHaveText("Move to another workspace…");
         await expect(
           tray.locator('[data-group-under="card:capture"]'),
-        ).toHaveText(/Group under Every word captured/);
+        ).toHaveText(/Move under Every word captured/);
         await expect(tray).toContainText("likely: Unit economics");
         const below = await page.evaluate(() => {
           const lanes = document.querySelector(
@@ -438,7 +438,7 @@ for (const [name, viewport] of [
         await expect(lines.nth(2)).toContainText("9 · moving");
         await expect(lines.last()).toContainText("+ 6 more");
         await expect(page.locator("[data-swimlane-tray-open]")).toContainText(
-          "Ungrouped · 4",
+          "Unsorted · 4",
         );
         await lines.last().locator("button").tap();
         await expect(capture).toHaveAttribute("data-lane-collapsed", "false");

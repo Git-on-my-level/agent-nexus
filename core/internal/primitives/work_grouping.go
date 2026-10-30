@@ -2,7 +2,6 @@ package primitives
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,48 +13,39 @@ import (
 	"agent-nexus-core/internal/plans"
 )
 
-// Parentage is an ordinary plan reference. Choose the oldest visible open
-// parent card, then its ID. Both the plan and its owner must be readable.
-// The reverse covering index admits only this child's incoming links.
-const workParentSources = ` FROM brief_plan_refs link INDEXED BY idx_brief_plan_refs_target
-	 CROSS JOIN cards parent ON parent.id=link.card_id
-	 CROSS JOIN boards parent_board ON parent_board.id=parent.board_id `
+// The work tree stores parentage: cards.parent_card_id is the only parent
+// edge. A card is an initiative exactly when it has no parent and is not
+// waiting in the Unsorted tray (needs_home=1). Every read uses these helpers.
+const workTreeMaxDepth = 3
 
-// Protect explicit declarations and roots captured before a new incoming plan link.
-// Unmarked legacy members retain their pre-upgrade parentage.
-func workDeclaredRootSQL(child string) string {
-	return `(` + child + `.initiative_root=1 AND ` + child + `.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND archived_at IS NULL AND trashed_at IS NULL))`
+// workIsInitiativeSQL is the one initiative predicate (see work_tree.go). A
+// parent hidden from the reader counts as no parent, so a visible child of a
+// private initiative reads as top-level work and never reveals that parent
+// (reads resolve unqualified cards through the reader's scoped relation).
+func workIsInitiativeSQL(card string) string {
+	return `(` + card + `.needs_home=0 AND ` + workIsRootSQL(card) + `)`
 }
 
-func workParentEligible(child string) string {
-	return `parent.id<>` + child + `.id AND parent.archived_at IS NULL AND parent.trashed_at IS NULL AND parent.column_key NOT IN ('done','cancelled') AND parent_board.archived_at IS NULL AND parent_board.trashed_at IS NULL`
+// workIsRootSQL: the card has no parent the reader can see (tray included).
+func workIsRootSQL(card string) string {
+	return `(` + card + `.parent_card_id IS NULL OR NOT EXISTS(SELECT 1 FROM cards work_parent WHERE work_parent.id=` + card + `.parent_card_id))`
 }
+
+// workParentSQL yields the stored parent's ID while that parent is not trashed.
+// Callers hydrate it through the scoped cards relation, so a hidden parent
+// reads as absent.
 func workParentSQL(child string) string {
-	return `(SELECT parent.id` + workParentSources + ` WHERE NOT ` + workDeclaredRootSQL(child) + ` AND link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle) AND ` + workParentEligible(child) + ` ORDER BY parent.created_at,parent.id LIMIT 1)`
+	return `(SELECT parent.id FROM cards parent WHERE parent.id=` + child + `.parent_card_id AND parent.trashed_at IS NULL)`
 }
 
-// The current parent was admitted by the surrounding scoped query. Only an
-// older eligible alternative can displace it; do not hydrate/sort the current
-// parent again for every child. Incoming links remain scoped plan relations.
-func noEarlierWorkParentSQL(child, current string) string {
-	return `(NOT ` + workDeclaredRootSQL(child) + `) AND NOT EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref IN ('card:'||` + child + `.id,'card:'||` + child + `.handle)
- AND link.card_id<>` + current + `.id AND ` + workParentEligible(child) + `
- AND (parent.created_at<` + current + `.created_at OR (parent.created_at=` + current + `.created_at AND parent.id<` + current + `.id)))`
-}
-
-// Top-level admission needs existence, not the oldest parent's identity. Two
-// exact probes avoid sorting and building a two-key IN set for every card.
 func workHasParentSQL(child string) string {
-	probe := func(key string) string {
-		return `EXISTS(SELECT 1` + workParentSources + ` WHERE link.ref='card:'||` + child + `.` + key + ` AND ` + workParentEligible(child) + ` LIMIT 1)`
-	}
-	return `(CASE WHEN ` + workDeclaredRootSQL(child) + ` THEN 0 ELSE (` + probe("id") + ` OR ` + probe("handle") + `) END)`
+	return `(` + child + `.parent_card_id IS NOT NULL)`
 }
 
 type WorkChild struct {
 	Ref         string      `json:"ref"`
 	Title       string      `json:"title"`
-	StepID      string      `json:"step_id"`
+	StepID      string      `json:"step_id,omitempty"`
 	State       string      `json:"state"`
 	PastPromise bool        `json:"past_promise"`
 	NeedsViewer bool        `json:"needs_viewer"`
@@ -132,7 +122,7 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 		c["rollup"] = emptyWorkRollup()
 	}
 	encoded, _ := json.Marshal(ids)
-	rows, err := q.QueryContext(ctx, `SELECT requested.value,c.id,COALESCE((SELECT 'card:'||COALESCE(NULLIF(p.handle,''),p.id) FROM cards p WHERE p.id=`+workParentSQL("c")+`),'')
+	rows, err := q.QueryContext(ctx, `SELECT requested.value,c.id,COALESCE((SELECT 'card:'||COALESCE(NULLIF(p.handle,''),p.id) FROM cards p WHERE p.id=`+workParentSQL("c")+`),''),`+workIsInitiativeSQL("c")+`,c.needs_home
 	 FROM json_each(?) requested CROSS JOIN cards c ON c.id=requested.value OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=requested.value)`, string(encoded))
 	if err != nil {
 		return err
@@ -140,12 +130,15 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	canonical := map[string]map[string]any{}
 	for rows.Next() {
 		var key, id, parent string
-		if err = rows.Scan(&key, &id, &parent); err != nil {
+		var initiative, needsHome bool
+		if err = rows.Scan(&key, &id, &parent, &initiative, &needsHome); err != nil {
 			rows.Close()
 			return err
 		}
 		c := byID[key]
 		canonical[id] = c
+		// Reader-relative: a hidden parent reads as no parent.
+		c["is_initiative"], c["needs_home"] = initiative, needsHome
 		if parent != "" {
 			c["parent_ref"] = parent
 		}
@@ -167,12 +160,7 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	 ) a JOIN events e ON e.id=a.ask_id
 	 WHERE a.state='open' AND COALESCE(e.trashed_at,'')=''
 	 AND (a.recipient IN (?,?) OR (a.recipient='' AND ?)) AND a.requester NOT IN (?,?))`
-	streams := `EXISTS(SELECT 1 FROM brief_plan_refs grandchildren
- CROSS JOIN cards grandchild ON grandchild.id=substr(grandchildren.ref,6) OR (grandchild.handle IS NOT NULL AND trim(grandchild.handle)<>'' AND grandchild.handle=substr(grandchildren.ref,6))
- CROSS JOIN boards stream_board ON stream_board.id=c.board_id
- WHERE grandchildren.card_id=c.id AND substr(grandchildren.ref,1,5)='card:' AND grandchild.trashed_at IS NULL AND grandchild.id<>c.id
- AND c.archived_at IS NULL AND c.column_key NOT IN ('done','cancelled') AND stream_board.archived_at IS NULL AND stream_board.trashed_at IS NULL
- AND ` + noEarlierWorkParentSQL("grandchild", "c") + `)`
+	streams := `EXISTS(SELECT 1 FROM cards grandchild WHERE grandchild.parent_card_id=c.id AND grandchild.trashed_at IS NULL)`
 	if !expand {
 		streams = "0"
 	}
@@ -181,20 +169,17 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	// expression index instead of scanning every completion for every child.
 	doneAt := `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM events e
  WHERE e.id=(SELECT position.id FROM work_done_event_positions position WHERE position.card_id=+c.id ORDER BY anx_timestamp_key(position.ts) DESC,position.id DESC LIMIT 1)) END`
-	rows, err = q.QueryContext(ctx, `SELECT requested.value,COALESCE(NULLIF(c.handle,''),c.id),c.title,json_extract(step.value,'$.id'),c.column_key,
+	// Children are cards whose stored parent is the requested card, oldest
+	// first, at most 200 per parent through the parent index.
+	rows, err = q.QueryContext(ctx, `SELECT requested.parent_id,COALESCE(NULLIF(c.handle,''),c.id),c.title,'',c.column_key,
 	 `+needs+`,`+streams+`,c.id,c.assignee,
  bi.promise_at,bi.open,`+doneAt+`
-	 FROM json_each(?) requested CROSS JOIN cards current_parent ON current_parent.id=requested.value
- CROSS JOIN boards current_board ON current_board.id=current_parent.board_id
- CROSS JOIN card_plans p ON p.card_id=requested.value
-	 CROSS JOIN json_each(p.body_json,'$.steps') step
-	 CROSS JOIN cards c ON c.id=substr(json_extract(step.value,'$.ref'),6) OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=substr(json_extract(step.value,'$.ref'),6))
+	 FROM (SELECT requested.value AS parent_id,c.id AS child_id,ROW_NUMBER() OVER (PARTITION BY requested.value ORDER BY c.created_at,c.id) AS position
+	  FROM json_each(?) requested CROSS JOIN cards c ON c.parent_card_id=requested.value WHERE c.trashed_at IS NULL) requested
+	 CROSS JOIN cards c ON c.id=requested.child_id
 	 LEFT JOIN brief_initiatives bi ON bi.card_id=c.id
-	 WHERE CAST(step.key AS INTEGER)<200 AND substr(json_extract(step.value,'$.ref'),1,5)='card:' AND c.trashed_at IS NULL
-	 AND current_parent.id<>c.id AND current_parent.archived_at IS NULL AND current_parent.trashed_at IS NULL AND current_parent.column_key NOT IN ('done','cancelled')
- AND current_board.archived_at IS NULL AND current_board.trashed_at IS NULL
- AND `+noEarlierWorkParentSQL("c", "current_parent")+`
-	 ORDER BY requested.value,CAST(step.key AS INTEGER)`, stripActor(viewer), "actor:"+stripActor(viewer), human, stripActor(viewer), "actor:"+stripActor(viewer), string(encoded))
+	 WHERE requested.position<=200
+	 ORDER BY requested.parent_id,c.created_at,c.id`, stripActor(viewer), "actor:"+stripActor(viewer), human, stripActor(viewer), "actor:"+stripActor(viewer), string(encoded))
 	if err != nil {
 		return err
 	}
@@ -376,115 +361,142 @@ func (s *Store) loadGroupingCard(ctx context.Context, tx *accessTx, ref string) 
 	return s.loadBoardCardByGlobalID(ctx, tx, resolved.ID, true)
 }
 
-// groupWorkTx is used by BOTH create paths and work.group, inside the card's
-// own transaction. It never calls a second HTTP mutation or accepts a lost link.
+// groupWorkTx is used by BOTH create paths, fold and work.group, inside the
+// card's own transaction. It stores the parent; it never edits a plan.
+// A current initiative must be moved explicitly (MoveWork with a reason).
 func (s *Store) groupWorkTx(ctx context.Context, tx *accessTx, actor string, child boardCardRow, under, after, due string) (string, error) {
 	if err := refuseInitiativeGrouping(ctx, tx, child); err != nil {
 		return "", err
 	}
-	parent, err := s.loadGroupingCard(ctx, tx, under)
-	if err != nil {
-		return "", err
-	}
-	if parent.CardID == child.CardID {
-		return "", workInvalid("a card cannot group under itself")
-	}
-	if err = ensureBoardCardMutable(parent); err != nil {
-		return "", err
-	}
-	if plans.Status(parent.ColumnKey) == "done" || parent.ColumnKey == "cancelled" {
-		return "", workInvalid("parent must be open")
-	}
-	board, err := loadBoardRow(ctx, tx, parent.BoardID)
-	if err != nil {
-		return "", err
-	}
-	if board.ArchivedAt.Valid || board.TrashedAt.Valid {
-		return "", workInvalid("parent board must be active")
-	}
-	// Follow indexed incoming links to reject cycles. A fixed depth keeps
-	// malicious or legacy graphs bounded; ambiguous deep graphs fail closed.
-	ancestors := []string{parent.CardID}
-	seen := map[string]bool{}
-	for depth := 0; len(ancestors) > 0; depth++ {
-		if depth >= 32 || len(seen) > 200 {
-			return "", workInvalid("hierarchy exceeds safe depth")
+	return s.moveWorkTx(ctx, tx, actor, child, under)
+}
+
+// moveWorkTx stores child's parent (under=="" files it in the Unsorted tray).
+// It enforces one parent, no cycles, depth <= workTreeMaxDepth and an open
+// parent. Structural probes read main.cards: a hidden ancestor still counts
+// toward depth and cycles, but no hidden identity is ever returned.
+func (s *Store) moveWorkTx(ctx context.Context, tx *accessTx, actor string, child boardCardRow, under string) (string, error) {
+	parentID, parentRef := "", ""
+	if under != "" {
+		parent, err := s.loadGroupingCard(ctx, tx, under)
+		if err != nil {
+			return "", err
 		}
-		encoded, _ := json.Marshal(ancestors)
-		rows, e := tx.QueryContext(ctx, `SELECT DISTINCT p.id FROM json_each(?) requested CROSS JOIN cards c ON c.id=requested.value
-		 CROSS JOIN brief_plan_refs r ON r.ref IN ('card:'||c.id,'card:'||c.handle) JOIN cards p ON p.id=r.card_id JOIN card_plans cp ON cp.card_id=p.id
-		 WHERE NOT `+workDeclaredRootSQL("c")+` AND p.archived_at IS NULL AND p.trashed_at IS NULL AND p.column_key NOT IN ('done','cancelled') LIMIT 201`, string(encoded))
-		if e != nil {
-			return "", e
+		if parent.CardID == child.CardID {
+			return "", workInvalid("a card cannot be moved under itself")
 		}
-		next := []string{}
-		for rows.Next() {
-			var id string
-			if e = rows.Scan(&id); e != nil {
-				rows.Close()
-				return "", e
-			}
+		if plans.Status(parent.ColumnKey) == "done" || parent.ColumnKey == "cancelled" {
+			return "", workInvalid("parent must be open")
+		}
+		chain, err := workAncestorChain(ctx, tx, parent.CardID)
+		if err != nil {
+			return "", err
+		}
+		for _, id := range chain {
 			if id == child.CardID {
-				rows.Close()
-				return "", workInvalid("grouping would create a cycle")
-			}
-			if !seen[id] {
-				seen[id] = true
-				next = append(next, id)
+				return "", workInvalid("moving a card under its own descendant would create a cycle")
 			}
 		}
-		rows.Close()
-		if e = rows.Err(); e != nil {
-			return "", e
+		height, err := workSubtreeHeight(ctx, tx, child.CardID)
+		if err != nil {
+			return "", err
 		}
-		ancestors = next
+		// chain runs root..parent, so the child would sit at depth len(chain).
+		if len(chain)+height >= workTreeMaxDepth {
+			legal := workTreeMaxDepth - 1 - height - 1
+			if legal >= 0 && legal < len(chain) {
+				var ref string
+				if err = tx.QueryRowContext(ctx, `SELECT 'card:'||COALESCE(NULLIF(handle,''),id) FROM cards WHERE id=?`, chain[legal]).Scan(&ref); err == nil {
+					return "", workInvalid("the work tree is limited to %d levels (initiative, workstream, task); move it under %s instead", workTreeMaxDepth, ref)
+				}
+			}
+			return "", workInvalid("the work tree is limited to %d levels (initiative, workstream, task)", workTreeMaxDepth)
+		}
+		parentID = parent.CardID
+		parentRef = "card:" + firstNonEmptyString(parent.Handle.String, parent.CardID)
 	}
-	p, err := loadGroupingPlan(ctx, tx, parent.CardID)
+	var current sql.NullString
+	var needsHome bool
+	if err := tx.QueryRowContext(ctx, `SELECT parent_card_id,needs_home FROM main.cards WHERE id=?`, child.CardID).Scan(&current, &needsHome); err != nil {
+		return "", err
+	}
+	tray := parentID == ""
+	if current.String == parentID && needsHome == tray {
+		return parentRef, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=?,needs_home=?,updated_at=?,updated_by=? WHERE id=?`, nullableString(parentID), tray, now, actor, child.CardID); err != nil {
+		return "", err
+	}
+	if err := markBoardCardProjectionDirtyTx(ctx, tx, child); err != nil {
+		return "", err
+	}
+	card, err := child.toMap()
 	if err != nil {
 		return "", err
 	}
-	ref := "card:" + firstNonEmptyString(child.Handle.String, child.CardID)
-	existing := -1
-	afterFound := after == ""
-	for i, step := range p.Steps {
-		if step.ID == after {
-			afterFound = true
+	var parentValue any
+	if parentRef != "" {
+		parentValue = parentRef
+	}
+	return parentRef, insertWorkEvent(ctx, tx, actor, card, "card_updated", "Card moved in the work tree", map[string]any{"changed_fields": []string{"parent"}, "parent_ref": parentValue, "needs_home": tray})
+}
+
+// releaseWorkTreeChildrenTx sends a closing card's children to the Unsorted
+// tray: archived, trashed or purged work is never a home. Already-trashed
+// children are released too, so restoring one never revives a closed edge.
+func releaseWorkTreeChildrenTx(ctx context.Context, tx *accessTx, id, actor, now string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1,updated_at=?,updated_by=? WHERE parent_card_id=?`, now, actor, id)
+	return err
+}
+
+// workAncestorChain returns parent IDs from the root down to id (inclusive).
+func workAncestorChain(ctx context.Context, tx *accessTx, id string) ([]string, error) {
+	chain := []string{id}
+	for at := id; len(chain) <= 32; {
+		var parent sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT parent_card_id FROM main.cards WHERE id=?`, at).Scan(&parent); err != nil {
+			return nil, err
 		}
-		if step.Ref == ref || step.Ref == "card:"+child.CardID {
-			existing = i
+		if !parent.Valid || parent.String == "" {
+			for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
+				chain[i], chain[j] = chain[j], chain[i]
+			}
+			return chain, nil
 		}
-	}
-	if !afterFound {
-		return "", workInvalid("after must name an existing parent plan step")
-	}
-	if existing >= 0 && due == "" {
-		return "card:" + firstNonEmptyString(parent.Handle.String, parent.CardID), nil
-	}
-	if existing < 0 {
-		sum := sha256.Sum256([]byte(child.CardID))
-		step := plans.Step{ID: fmt.Sprintf("card-%x", sum[:10]), Title: child.Title, Ref: ref, After: []string{}}
-		if after != "" {
-			step.After = append(step.After, after)
+		for _, seen := range chain {
+			if seen == parent.String {
+				return nil, workInvalid("work tree contains a cycle")
+			}
 		}
-		p.Steps = append(p.Steps, step)
-		existing = len(p.Steps) - 1
+		chain = append(chain, parent.String)
+		at = parent.String
 	}
-	if due != "" {
-		p.Steps[existing].Due = due
+	return nil, workInvalid("hierarchy exceeds safe depth")
+}
+
+// workSubtreeHeight is how many levels sit below id, capped past the limit.
+// Each level is one exact EXISTS probe through the parent index, so a wide
+// branch can never hide a deeper one.
+func workSubtreeHeight(ctx context.Context, tx *accessTx, id string) (int, error) {
+	from := `main.cards l1`
+	where := `l1.parent_card_id=? AND l1.trashed_at IS NULL`
+	for height := 1; height <= workTreeMaxDepth; height++ {
+		var deeper bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+from+` WHERE `+where+`)`, id).Scan(&deeper); err != nil {
+			return 0, err
+		}
+		if !deeper {
+			return height - 1, nil
+		}
+		next := fmt.Sprintf("l%d", height+1)
+		from += fmt.Sprintf(` CROSS JOIN main.cards %s ON %s.parent_card_id=l%d.id`, next, next, height)
+		where += ` AND ` + next + `.trashed_at IS NULL`
 	}
-	if err = plans.Validate(p); err != nil {
-		return "", workInvalid("parent plan: %s", err)
-	}
-	if err = s.saveGroupingPlan(ctx, tx, actor, parent, p); err != nil {
-		return "", err
-	}
-	return "card:" + firstNonEmptyString(parent.Handle.String, parent.CardID), nil
+	return workTreeMaxDepth, nil
 }
 
 func (s *Store) saveGroupingPlan(ctx context.Context, tx *accessTx, actor string, parent boardCardRow, p plans.Plan) error {
-	if err := protectNewInitiativeLinks(ctx, tx, parent.CardID, p); err != nil {
-		return err
-	}
 	raw, _ := json.Marshal(p)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?) ON CONFLICT(card_id) DO UPDATE SET body_json=excluded.body_json,updated_at=excluded.updated_at`, parent.CardID, string(raw), now); err != nil {

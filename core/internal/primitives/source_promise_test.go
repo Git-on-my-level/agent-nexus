@@ -195,7 +195,7 @@ func TestBriefResolvesReferencedStepProgressAndPromises(t *testing.T) {
 	}
 	parents := []map[string]any{}
 	for _, ref := range []string{child["ref"].(string), "card:" + child["id"].(string)} {
-		parent, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative"})
+		parent, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative", "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,7 +276,7 @@ func TestBriefResolvedSourceCardProgressFollowsObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative"})
+	parent, err := s.CreateWork(ctx, "actor-1", board, map[string]any{"title": "Initiative", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -326,7 +326,7 @@ func sideEffectClass(cmd Command) string {
 	if cmd.CommandID == "asks.revise" || cmd.CommandID == "asks.retire" {
 		return "remote_coordination_write"
 	}
-	if strings.HasPrefix(cmd.CLIPath, "initiative ") {
+	if cmd.CLIPath == "work move" || strings.HasPrefix(cmd.CLIPath, "initiative ") {
 		return "remote_coordination_write"
 	}
 	if cmd.CLIPath == "work cadence" || cmd.CLIPath == "work goal" || cmd.CLIPath == "work receipt" {

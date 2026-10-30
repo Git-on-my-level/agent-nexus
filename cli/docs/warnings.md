@@ -14,8 +14,8 @@ machine-readable source for that check.
 | ask_no_deadline             | ask         | `no --by or --blocks`            | Add `--by <when>` (when the human should decide) and/or `--blocks <ref>` for the work this decision blocks.                                                  |
 | ask_overtaken_subject       | ask         | `since the subject last moved`   | The subject card is flagged possibly moot; if the decision is overtaken, `anx ask withdraw <ask-id> --reason overtaken`.                                     |
 | ask_auto_created_card       | ask         | `No --subject-ref`               | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available. |
-| work_near_duplicate         | work create | `matches an open initiative`     | Add a step to the matching initiative: `anx plan step add <card> --title <title> --ref <url>`.                                                               |
-| work_over_target            | work create | `open initiatives (target 15)`   | Prefer a plan step on an existing initiative over a new one.                                                                                                 |
+| work_near_duplicate         | work create | `matches an open initiative`     | Inspect the matching initiative with `anx where <card>` and name it with `work create --under <card>`.                                                       |
+| work_over_target            | work create | `open initiatives (target 15)`   | Prefer existing work or create under a named initiative.                                                                                                     |
 | note_promise_unowned        | note        | `promise set on an unowned card` | Claim it with `anx work start <card>` so an assignee is prompted to renew it.                                                                                |
 | note_no_next                | note        | `no --next`                      | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                          |
 | note_moved_without_evidence | note        | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`.                                                       |
@@ -51,3 +51,6 @@ How each warning is computed, and what it costs:
   caller's newest earlier `next` on the card resolves to a different time. One
   `GET /events` of the newest 50 card-thread notes, then the same local author check.
 - `note_beyond_horizon`: `--next` resolves more than 2 days out. No request.
+
+`needs_home`: creation entered Unsorted. Use `anx where <card>` to inspect suggestions,
+then `anx work move <card> --under <parent>` to confirm a home.

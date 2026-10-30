@@ -140,26 +140,31 @@ export const homeReason = (reasons) =>
     .filter(Boolean)
     .join(", ");
 
-/**
- * The tray's own actions from a row's `next_actions`. "Make it an
- * initiative" is core's fenced `work.patch` (`{top_level: true}` at
- * `if_version`); anything else in that slot is not offered. "Move to another
- * workspace" is a command for a person to run: it is shown, never sent.
+/** Core supplies explicit work.move confirmation argv. Cross-workspace moves
+ * remain human command hints and are never submitted from this tray.
  */
 export function trayActions(nextActions) {
   let promote = null;
   let move = "";
   for (const action of Array.isArray(nextActions) ? nextActions : []) {
-    const stdin = action?.stdin;
+    const argv = action?.argv;
     if (
       !promote &&
-      action?.command_id === "work.patch" &&
-      stdin?.patch?.top_level === true &&
-      Object.keys(stdin.patch).length === 1 &&
-      Number.isInteger(stdin.if_version) &&
-      stdin.if_version >= 0
+      action?.command_id === "work.move" &&
+      Array.isArray(argv) &&
+      argv.length === 7 &&
+      argv[0] === "anx" &&
+      argv[1] === "work" &&
+      argv[2] === "move" &&
+      typeof argv[3] === "string" &&
+      argv[3].startsWith("card:") &&
+      argv[4] === "--root" &&
+      argv[5] === "--reason" &&
+      typeof argv[6] === "string" &&
+      argv[6].trim() &&
+      [...argv[6]].length <= 2000
     )
-      promote = { version: stdin.if_version };
+      promote = { ref: argv[3], reason: argv[6] };
     if (
       !move &&
       action?.requires_human === true &&
@@ -174,25 +179,37 @@ export function trayActions(nextActions) {
 
 /** `GET /work/ungrouped` rows, kept to what the tray shows. */
 export function trayRows(raw) {
-  return (Array.isArray(raw?.work) ? raw.work : [])
-    .filter((row) => row?.ref && !row.parent_ref)
-    .map((row) => ({
-      ref: String(row.ref),
-      title: String(row.title || row.ref),
-      phase: String(row.phase || ""),
-      createdAt: String(row.created_at || ""),
-      createdBy: String(
-        row.created_by?.display || row.created_by?.id || "",
-      ).trim(),
-      ...trayActions(row.next_actions),
-      homes: (Array.isArray(row.likely_home) ? row.likely_home : [])
-        .filter((home) => home?.ref && home.ref !== row.ref)
-        .map((home) => ({
-          ref: String(home.ref),
-          title: String(home.title || home.ref),
-          reasons: Array.isArray(home.reasons) ? home.reasons : [],
-        })),
-    }));
+  return (
+    (Array.isArray(raw?.work) ? raw.work : [])
+      // Every /work/ungrouped row is Unsorted by construction; only an explicit
+      // needs_home:false or a parent excludes one (older servers omit the flag).
+      .filter((row) => row?.ref && row.needs_home !== false && !row.parent_ref)
+      .map((row) => ({
+        ref: String(row.ref),
+        needs_home: true,
+        is_initiative: false,
+        title: String(row.title || row.ref),
+        phase: String(row.phase || ""),
+        createdAt: String(row.created_at || ""),
+        createdBy: String(
+          row.created_by?.display || row.created_by?.id || "",
+        ).trim(),
+        ...trayActions(
+          (Array.isArray(row.next_actions) ? row.next_actions : []).filter(
+            (action) =>
+              action?.command_id !== "work.move" ||
+              action.argv?.[3] === row.ref,
+          ),
+        ),
+        homes: (Array.isArray(row.likely_home) ? row.likely_home : [])
+          .filter((home) => home?.ref && home.ref !== row.ref)
+          .map((home) => ({
+            ref: String(home.ref),
+            title: String(home.title || home.ref),
+            reasons: Array.isArray(home.reasons) ? home.reasons : [],
+          })),
+      }))
+  );
 }
 
 /**

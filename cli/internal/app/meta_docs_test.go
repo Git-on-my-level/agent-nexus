@@ -83,7 +83,7 @@ func TestRunMetaDocPrintsAgentGuideMarkdown(t *testing.T) {
 	if !strings.Contains(output, "Text output is compact") || !strings.Contains(output, "`--json` for scripts") {
 		t.Fatalf("expected output guidance output=%s", output)
 	}
-	if !strings.Contains(output, "anx.card.<initiative>") {
+	if !strings.Contains(output, "anx mv") {
 		t.Fatalf("expected agentctl run label guidance output=%s", output)
 	}
 }

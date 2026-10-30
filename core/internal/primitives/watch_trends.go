@@ -436,14 +436,7 @@ const trendDoneAt = `CASE WHEN c.column_key='done' THEN (SELECT e.ts FROM watch_
 func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, error) {
 	out := []trendPromise{}
 	var horizon, openCutoff time.Time
-	// Conservatively omit any linked child, including one whose parents have
-	// closed. Walking arbitrarily many closed parents to prove absence would
-	// break the read budget. Each incoming-ref probe stops at one row.
-	// Trends may span thousands of designated boards; this bounded point
-	// cohort checks the containing board by primary key rather than building
-	// the workspace role set used by batched hierarchy statements.
-	declaredRoot := `(c.initiative_root=1 AND EXISTS(SELECT 1 FROM boards root_board WHERE root_board.id=c.board_id AND root_board.role='initiatives' AND root_board.archived_at IS NULL AND root_board.trashed_at IS NULL))`
-	hasParent := `(NOT ` + declaredRoot + ` AND (EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.id LIMIT 1) OR EXISTS(SELECT 1 FROM brief_plan_refs link WHERE link.ref='card:'||c.handle LIMIT 1)))`
+	// Only initiatives (top-level work, not the Unsorted tray) contribute.
 	for _, open := range []bool{true, false} {
 		limit, kind, bound, order := trendsPromiseCap, "promise_closed", ` AND p.at_key>=anx_timestamp_key(?)`, `DESC`
 		if open {
@@ -455,8 +448,7 @@ func (b *trendsBuild) trendPromises() ([]trendPromise, time.Time, time.Time, err
 		}
 		rows, truncated, err := b.admitTrendRows(b.ctx, `SELECT p.at_key,p.id,
 		 CASE WHEN COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')=''
-		  AND (NOT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1) OR EXISTS(SELECT 1 FROM boards WHERE id=c.board_id AND role='initiatives' LIMIT 1))
-		  AND NOT `+hasParent+` THEN 1 ELSE 0 END,
+		  AND `+workIsInitiativeSQL("c")+` THEN 1 ELSE 0 END,
 		 bi.open,COALESCE(bi.promise_at,''),c.created_at,c.column_key,COALESCE(`+trendDoneAt+`,'')
 		 FROM watch_trend_positions p CROSS JOIN brief_initiatives bi ON bi.card_id=p.id CROSS JOIN cards c ON c.id=p.id
 		 WHERE p.kind=?`+bound+` ORDER BY p.at_key `+order+`,p.id `+order+` LIMIT ?`, limit, open, append(args, limit+1)...)

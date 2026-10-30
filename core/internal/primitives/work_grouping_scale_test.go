@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/plans"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testutil/perfguard"
 )
@@ -25,7 +24,7 @@ func TestGroupingReadsBoundedWithTenThousandUnrelatedCards(t *testing.T) {
 	}
 	defer ws.Close()
 	s := primitives.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-	p, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "P76 Parent"})
+	p, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "P76 Parent", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,11 +35,14 @@ func TestGroupingReadsBoundedWithTenThousandUnrelatedCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := plans.Plan{Steps: []plans.Step{}}
-	for i := 1; i <= 200; i++ {
-		plan.Steps = append(plan.Steps, plans.Step{ID: fmt.Sprintf("child-%d", i), Title: "Child", Ref: fmt.Sprintf("card:grouping-scale-%d", i)})
-	}
-	if err = s.SetCardPlan(ctx, "writer", p["id"].(string), p["updated_at"].(string), plan); err != nil {
+	if _, err = ws.DB().ExecContext(ctx, `UPDATE cards SET parent_card_id=?,needs_home=0 WHERE id IN (SELECT 'grouping-scale-'||value FROM json_each(?) )`, p["id"], func() string {
+		ids := make([]int, 200)
+		for i := range ids {
+			ids[i] = i + 1
+		}
+		raw, _ := json.Marshal(ids)
+		return string(raw)
+	}()); err != nil {
 		t.Fatal(err)
 	}
 	db, capture, err := perfguard.Open("file:" + ws.Layout().DatabasePath)
@@ -68,11 +70,12 @@ func TestGroupingReadsBoundedWithTenThousandUnrelatedCards(t *testing.T) {
 		}
 		for _, name := range []string{"homes", "hierarchy"} {
 			t.Run(fmt.Sprintf("%s/scoped=%v", name, scoped), func(t *testing.T) {
+				item := map[string]any{"id": p["id"]}
 				capture.Start()
 				if name == "homes" {
 					_, _, err = reader.UngroupedWork(readCtx, 20)
 				} else {
-					err = reader.EnrichWorkHierarchy(readCtx, []map[string]any{{"id": p["id"]}}, "reader", true, time.Now())
+					err = reader.EnrichWorkHierarchy(readCtx, []map[string]any{item}, "reader", true, time.Now())
 				}
 				statements, queries, rows := capture.Stop()
 				work := capture.Work()
@@ -88,6 +91,9 @@ func TestGroupingReadsBoundedWithTenThousandUnrelatedCards(t *testing.T) {
 				}
 				if err != nil || capture.WorkError() != nil || queries > b.Queries || rows > b.Rows || work.VMSteps > b.VMSteps {
 					t.Fatalf("err=%v instrument=%v queries=%d rows=%d work=%+v", err, capture.WorkError(), queries, rows, work)
+				}
+				if name == "hierarchy" && item["rollup"].(*primitives.WorkRollup).Total != 200 {
+					t.Fatalf("scale fixture lost its stored children: %v", item)
 				}
 				if !scoped && name == "homes" {
 					found := false

@@ -16,7 +16,7 @@ func (s *Store) PMWorkspaceContext(ctx context.Context, reader string) (refs []s
  LEFT JOIN boards b ON b.id=c.board_id
  WHERE c.archived_at IS NULL AND c.trashed_at IS NULL
  AND b.archived_at IS NULL AND b.trashed_at IS NULL
- AND (cp.card_id IS NOT NULL OR json_type(m.metadata_json,'$.plan')='object' OR b.role='initiatives')
+ AND `+workIsInitiativeSQL("c")+`
  ORDER BY p.attention,p.updated_at DESC,p.id DESC LIMIT 15`)
 	if err != nil {
 		return nil, nil, nil, err

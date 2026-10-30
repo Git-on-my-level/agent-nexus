@@ -93,7 +93,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 		if i >= 7 {
 			board = archived
 		}
-		work, createErr := store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds Alex: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
+		work, createErr := store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"initiative": true, "title": fmt.Sprintf("Initiative %d", i), "summary": "Ship a useful outcome\n- [x] Design\n- [ ] Build\n```markdown\n- [x] Example\nNeeds ghost: example\n```\nNeeds Alex: choose a launch date\nNeeds Alice: approve\n- [ ]", "priority": "p1"})
 		if createErr != nil {
 			t.Fatal(createErr)
 		}
@@ -108,7 +108,7 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retired, err := store.CreateWork(ctx, "executive", anyString(active["id"]), map[string]any{"title": "Retired initiative", "project_ref": topic.Topic["ref"], "next_actor": "human"})
+	retired, err := store.CreateWork(ctx, "executive", anyString(active["id"]), map[string]any{"initiative": true, "title": "Retired initiative", "project_ref": topic.Topic["ref"], "next_actor": "human"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -87,7 +87,7 @@ func TestWatchTrendsRequiresEmptyDenialSet(t *testing.T) {
 	}
 }
 
-func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
+func TestWatchTrendsOmitsStoredChildrenRegardlessOfChecklist(t *testing.T) {
 	t.Parallel()
 	f := newTrendsFixture(t)
 	child := f.card("Child promise", "", nil)
@@ -96,6 +96,7 @@ func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
 	f.exec(`UPDATE cards SET column_key='done' WHERE id=?`, parent["id"])
 	f.exec(`UPDATE brief_initiatives SET promise_at=? WHERE card_id=?`, loopTS(f.now.Add(-time.Hour)), child["id"])
 	f.exec(`INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, parent["id"], fmt.Sprintf(`{"steps":[{"id":"child","title":"Child","ref":%q}]}`, child["ref"]), loopTS(f.now))
+	f.exec(`UPDATE cards SET parent_card_id=?,needs_home=0 WHERE id=?`, parent["id"], child["id"])
 	read := func(want float64) {
 		t.Helper()
 		out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{}, "initiatives", 30, f.now)
@@ -110,6 +111,8 @@ func TestWatchTrendsConservativelyOmitsLinkedChildren(t *testing.T) {
 	}
 	read(0)
 	f.exec(`DELETE FROM card_plans WHERE card_id=?`, parent["id"])
+	read(0) // Removing a checklist link cannot promote a stored child.
+	f.exec(`UPDATE cards SET parent_card_id=NULL,needs_home=0 WHERE id=?`, child["id"])
 	read(1)
 }
 

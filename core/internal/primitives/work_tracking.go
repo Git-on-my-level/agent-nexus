@@ -135,14 +135,19 @@ func (input cardHealthInput) trackingDigest(h plans.Health, now time.Time) plans
 	if h.State == plans.PromiseDone {
 		return h
 	}
-	orphaned := input.OrphanedAt != "" || input.Owner == ""
-	if input.LeaseOwner == input.Owner && input.LeaseExpires != "" && (input.LeaseReleased != "" || !plans.ParseDue(input.LeaseExpires).After(now)) {
-		orphaned = true
-	}
-	if orphaned || (h.Promise != nil && h.Promise.Source == "default" && input.ReminderEventID != "") {
+	// One owner field: a card awaits an owner only when it has none. A lapsed
+	// claim (lease) is an internal detail; after an automatic fallback the card
+	// has an owner and says so.
+	orphaned := input.Owner == ""
+	fellBack := !orphaned && input.OrphanedAt != ""
+	if orphaned || fellBack || (h.Promise != nil && h.Promise.Source == "default" && input.ReminderEventID != "") {
 		h.State = plans.PromiseDigest
-		h.Reason = "Awaiting an owner; included in the daily digest."
-		if !orphaned {
+		switch {
+		case orphaned:
+			h.Reason = "Awaiting an owner; included in the daily digest."
+		case fellBack:
+			h.Reason = "Ownership fell back to " + input.Owner + " after the previous claim lapsed; included in the daily digest until it is confirmed."
+		default:
 			h.Reason = "Default promise elapsed; reminder recorded, then daily digest only."
 		}
 		h.PastPromiseForSeconds = nil

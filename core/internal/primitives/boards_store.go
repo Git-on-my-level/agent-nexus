@@ -215,6 +215,9 @@ type CardCreateReplay struct {
 type AddBoardCardInput struct {
 	Handle                      string
 	Under, After, CreateSurface string
+	// Initiative files a card without a parent at the top level instead of
+	// the Unsorted tray.
+	Initiative bool
 	// CreateReplay is internal request metadata, committed with the card.
 	CreateReplay *CardCreateReplay
 
@@ -712,8 +715,8 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		`INSERT INTO cards(
 			id, handle, board_id, thread_id, title, summary, due_at, definition_of_done_json, column_key, rank, version, head_revision_id, head_revision_number,
 			parent_thread_id, pinned_document_id, assignee, risk, resolution, resolution_refs_json, refs_json,
-			created_at, created_by, updated_at, updated_by, provenance_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			created_at, created_by, updated_at, updated_by, provenance_json, needs_home
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cardID,
 		cardHandle,
 		boardID,
@@ -739,6 +742,9 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		now,
 		actorID,
 		provenanceJSON,
+		// New work waits in the Unsorted tray until it names a parent; only the
+		// initiatives board (kept for layout) still creates top-level work.
+		boardRow.Role != "initiatives",
 	); err != nil {
 		if isUniqueViolation(err) {
 			return boardRow, boardCardRow{}, stagedContent, ErrConflict
@@ -843,6 +849,8 @@ type boardCardRow struct {
 	TrashedAt            sql.NullString
 	TrashedBy            sql.NullString
 	TrashReason          sql.NullString
+	ParentCardID         sql.NullString
+	NeedsHome            bool
 }
 
 var canonicalBoardColumnOrder = contractenums.BoardColumnKeyValues
@@ -1666,7 +1674,7 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		prefix+`SELECT `+boardID+`, `+boardHandle+`, c.id, c.handle, `+column+`, `+rank+`, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
 		        c.definition_of_done_json, c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by,
-		        c.trashed_at, c.trashed_by, c.trash_reason
+		        c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 		   FROM `+from+`
 		  WHERE `+whereSQL+`
 		  `+order,
@@ -1712,6 +1720,8 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 			&row.TrashedAt,
 			&row.TrashedBy,
 			&row.TrashReason,
+			&row.ParentCardID,
+			&row.NeedsHome,
 		); err != nil {
 			return nil, fmt.Errorf("scan card row: %w", err)
 		}
@@ -1860,6 +1870,10 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			return BoardCardMutationResult{}, err
 		}
 		input.Under = parentRef
+	} else if input.Initiative {
+		if _, err := tx.ExecContext(ctx, `UPDATE cards SET needs_home=0 WHERE id=?`, cardRow.CardID); err != nil {
+			return BoardCardMutationResult{}, err
+		}
 	} else if input.After != "" {
 		return BoardCardMutationResult{}, workInvalid("after requires under")
 	}
@@ -2036,6 +2050,14 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 				return nil, fmt.Errorf("items[%d]: %w", i, groupErr)
 			}
 			inputs[i].Under = parentRef
+		} else if inputs[i].Initiative {
+			if _, err := tx.ExecContext(ctx, `UPDATE cards SET needs_home=0 WHERE id=?`, cardRow.CardID); err != nil {
+				for _, staged := range stagedWrites {
+					_ = staged.Cleanup()
+				}
+				_ = tx.Rollback()
+				return nil, fmt.Errorf("items[%d]: %w", i, err)
+			}
 		} else if inputs[i].After != "" {
 			for _, staged := range stagedWrites {
 				_ = staged.Cleanup()
@@ -2564,7 +2586,7 @@ func (s *Store) MoveBoardCard(ctx context.Context, actorID, boardID, identifier 
 			return BoardCardMutationResult{}, e
 		}
 		if destination.ID != cardRow.BoardID {
-			cardRow, _, e = s.moveInitiativeCardTx(ctx, tx, actorID, cardRow, destination, "initiative_moved", strings.TrimSpace(input.Reason))
+			cardRow, e = s.moveCardBoardTx(ctx, tx, actorID, cardRow, destination)
 			if e != nil {
 				_ = tx.Rollback()
 				return BoardCardMutationResult{}, e
@@ -2846,6 +2868,11 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
+	// Children of archived work wait in the Unsorted tray for a new home.
+	if err := releaseWorkTreeChildrenTx(ctx, tx, cardRow.CardID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, now); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
@@ -3118,6 +3145,11 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if err != nil {
 		return fmt.Errorf("delete card: %w", err)
 	}
+	// Never leave a dangling parent edge; any remaining children (including
+	// trashed or archived ones) wait in the Unsorted tray.
+	if _, err = tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1 WHERE parent_card_id=?`, cardID); err != nil {
+		return fmt.Errorf("release purged card children: %w", err)
+	}
 	n, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("rows affected card purge: %w", err)
@@ -3216,6 +3248,13 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return BoardCardMutationResult{}, fmt.Errorf("trash board card: %w", err)
+	}
+	// Children of trashed work wait in the Unsorted tray for a new home.
+	if err := releaseWorkTreeChildrenTx(ctx, tx, cardRow.CardID, actorID, now); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("tx rollback failed: %v", rbErr)
+		}
+		return BoardCardMutationResult{}, fmt.Errorf("unparent trashed card children: %w", err)
 	}
 	cardRow.TrashedAt = sql.NullString{String: now, Valid: true}
 	cardRow.TrashedBy = sql.NullString{String: actorID, Valid: true}
@@ -3832,7 +3871,7 @@ func (s *Store) loadBoardCardRowsByBoardIDs(ctx context.Context, boardIDs []stri
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+		       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 			  FROM ref_edges re
 			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
@@ -3877,7 +3916,7 @@ func (s *Store) loadOrderedBoardCards(ctx context.Context, q queryRower, boardID
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 			  FROM ref_edges re
 			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
@@ -4079,7 +4118,7 @@ func loadBoardCardsForColumn(ctx context.Context, db interface {
 		        COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 		   FROM ref_edges re
 		   LEFT JOIN boards b ON b.id = re.source_id
 		   JOIN cards c ON c.id = re.target_id
@@ -4288,7 +4327,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 			  FROM ref_edges re
 			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
@@ -4318,7 +4357,7 @@ func (s *Store) loadBoardCardByIdentifier(ctx context.Context, rower queryRower,
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 			  FROM ref_edges re
 			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
@@ -4356,7 +4395,7 @@ func (s *Store) loadBoardCardByGlobalID(ctx context.Context, rower queryRower, c
 			       COALESCE(json_extract(re.metadata_json, '$.rank'), '') AS rank,
 			       c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at, c.definition_of_done_json,
 	c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason
+			       c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by, c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 			  FROM ref_edges re
 			  LEFT JOIN boards b ON b.id = re.source_id
 			  JOIN cards c ON c.id = re.target_id
@@ -4493,6 +4532,8 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }, extra ...any
 		&row.TrashedAt,
 		&row.TrashedBy,
 		&row.TrashReason,
+		&row.ParentCardID,
+		&row.NeedsHome,
 	}, extra...)...); err != nil {
 		return boardCardRow{}, fmt.Errorf("scan board card row: %w", err)
 	}
@@ -5055,6 +5096,8 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 		"updated_at":           r.UpdatedAt,
 		"updated_by":           r.UpdatedBy,
 		"provenance":           provenance,
+		"needs_home":           r.NeedsHome,
+		"is_initiative":        !r.ParentCardID.Valid && !r.NeedsHome,
 	}
 	lifecycleFieldsFromSQLColumns(r.ArchivedAt, r.ArchivedBy, r.TrashedAt, r.TrashedBy, r.TrashReason).apply(m)
 	return m, nil

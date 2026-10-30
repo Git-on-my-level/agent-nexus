@@ -122,7 +122,7 @@ func TestWatchExplicitInitiativesSurviveDigestRouting(t *testing.T) {
 	}
 }
 
-func TestWatchExplicitInitiativesExcludeInactiveBoards(t *testing.T) {
+func TestWatchInitiativesSurviveInactiveLayoutBoards(t *testing.T) {
 	for _, lifecycle := range []string{"archived", "trashed"} {
 		t.Run(lifecycle, func(t *testing.T) {
 			ctx := context.Background()
@@ -178,13 +178,12 @@ func TestWatchExplicitInitiativesExcludeInactiveBoards(t *testing.T) {
 					t.Fatal(err)
 				}
 				items := brief["initiatives"].([]map[string]any)
+				seen := map[string]bool{}
 				for _, item := range items {
-					if item["ref"] == inactive["ref"] {
-						t.Fatalf("%s: card on %s initiatives board is visible", kind, lifecycle)
-					}
+					seen[workString(item["ref"])] = true
 				}
-				if len(items) != 1 || items[0]["ref"] != active["ref"] {
-					t.Fatalf("%s: want only the active board's outcome, got %v", kind, items)
+				if len(items) != 2 || !seen[workString(active["ref"])] || !seen[workString(inactive["ref"])] {
+					t.Fatalf("%s: layout lifecycle changed initiative membership: %v", kind, items)
 				}
 			}
 		})

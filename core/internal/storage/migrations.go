@@ -1195,6 +1195,8 @@ var migrations = []migration{
 	// positions; canonical hydrated rows keep their own authorization.
 	{Version: 125, AfterApply: installWatchTrendPositions},
 	{Version: 126, AfterApply: installInitiativeBoardAuthority},
+	// The work tree stores parentage and the Unsorted tray (see work_tree.go).
+	{Version: 127, AfterApply: installWorkTree},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

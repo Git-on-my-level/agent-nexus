@@ -40,7 +40,7 @@ func TestDailyLoopAgainstCore(t *testing.T) {
 	}
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "S6 daily loop", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	boardRef := mustStringPath(t, board.Payload, "result.board.ref")
-	created := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": boardRef, "title": "S6 task"}, "work", "create", "--from-file", "-")
+	created := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": boardRef, "title": "S6 task", "initiative": true}, "work", "create", "--from-file", "-")
 	ref := mustStringPath(t, created.Payload, "result.work.ref")
 	initial := h.runCLIExpectOK(t, "worker", nil, "orient")
 	if got := mustStringPath(t, initial.Payload, "result.schema"); got != "brief.v1" {

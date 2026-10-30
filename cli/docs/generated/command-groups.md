@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `45`
+- Groups: `46`
 
 ## `topics`
 
@@ -482,9 +482,15 @@ Generated from `contracts/anx-openapi.yaml`.
 - Command IDs:
   - `watch.trends` (`watch trends`)
 
+## `where`
+
+- Commands: `1`
+- Command IDs:
+  - `work.where` (`where`)
+
 ## `work`
 
-- Commands: `16`
+- Commands: `19`
 - Command IDs:
   - `agents.me.presence` (`work presence`)
   - `work.capabilities` (`work capabilities`)
@@ -493,6 +499,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.get` (`work get`)
   - `work.group` (`work group`)
   - `work.list` (`work list`)
+  - `work.move` (`work move`)
   - `work.observations.list` (`work observations list`)
   - `work.observations.submit` (`work observations submit`)
   - `work.participants.list` (`work participants list`)
@@ -500,6 +507,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch` (`work patch`)
   - `work.refresh.get` (`work refresh get`)
   - `work.refresh.request` (`work refresh request`)
+  - `work.resolve` (`work resolve`)
+  - `work.tree` (`work tree`)
   - `work.unfold` (`work unfold`)
   - `work.ungrouped` (`work ungrouped`)
 

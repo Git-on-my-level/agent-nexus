@@ -5,23 +5,32 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v35.
+Skill contract: anx.participant.v36.
 
 ## Daily loop
 
 Set `--as <name>` / `ANX_AS`; enroll (`anx help enroll`). Select `--workspace <alias>` or directory/default. Never hardcode URLs.
 
-`anx orient`; `anx context <ref>` before edits.
+`anx orient`; `anx where <ref|path|text>` before edits.
+`anx tree` shows initiatives, children and Unsorted.
+Create with `anx work create --title "<outcome>" --under card:<parent>`;
+`anx work start <card>` takes ownership of native work.
 `anx note <card> "<text>" --evidence <ref>` posts progress;
-`anx done <card> --evidence <ref>` finishes. `anx plan`;
-`anx series push` measurements.
+`anx done <card> --evidence <ref>` finishes. `anx plan` is a power verb for checklists, not parentage.
 
 Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
 Evidence resets clock; promise moves remain visible.
 Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
-Group: `anx work create --under card:P` / `anx work group card:C --under card:P`; run label `anx.card.<initiative>` defaults parent (`--top-level` opts out). `likely_home` never blocks. `anx work fold` preserves refs/asks; `work unfold` reverses.
-`anx initiative promote <card> --reason "why"`; `anx initiative retire <card> --reason "why" [--under card:P] [--to-board board:tasks]`. Links to top-level initiatives mean dependencies, never nesting. Retire before group/fold.
+Initiatives are top-level cards outside Unsorted. Each card has one stored parent;
+depth is at most three (initiative → workstream → task). Board roles and plan links
+never determine parentage. Children are ordered by creation time.
+Creation without `--under` or explicit `--initiative` enters Unsorted (`needs_home=true`).
+`where` suggests; confirm by naming a home: `anx mv <ref|path> --under <ref|path>`.
+Move to top level with `anx mv <card> --root --reason "Independent outcome"`, or
+back to the tray with `anx mv <card> --unsorted`. Moving an initiative under another
+card requires a reason. Paths are aliases; keep stable card refs in stored evidence.
+One owner per card. Awaiting an owner means empty assignee, never an expired lease.
 
 ## Write for a busy boss
 
@@ -42,27 +51,10 @@ Require situation/impact/recommendation/why.
 `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
 Withdraw stale asks; `anx await <ask>`.
 
-## Attention
+## Advanced setup
 
-`anx attention place <subject-ref> --for actor:<actor-id> --to decide|watch|digest|routine --reason "<why>"` (≤200 characters).
-Human-designated placements win, otherwise newest; open asks always reach Decide.
-ANX runs no models. `anx attention feedback list --since 24h`: follow
-`next_cursor` through empty pages and learn. Never mark human visits.
-
-## Automation
-
-Preview `anx integrations enable context.inject --harness <harness> --dry-run`;
-bind a card. Hooks restore context without transcripts/presence writes.
-
-Elect `anx git enable --writer`; share binding. `anx git sync` publishes
-notes/promises, never completion.
-
-Preview `anx bridge install --dry-run`; `anx bridge add --as <name> --workspace <alias>`.
-Never alter services merely for coding.
-
-Preview `anx sync enable <directory> --card-id card:<handle> --dry-run`.
-Review allowlists. Mount only `.anx/outbox` writable, without credentials/network;
-mirrors read-only. Preserve UUIDs, uncertain originals/keys; inspect receipts and `stale_after`.
-
-Recurring: `anx work cadence|receipt|goal`; reuse run IDs.
-`anx help <job>` / `anx api <operation>`. Never share secrets or raw transcripts.
+`anx help <job>` / `anx api <operation>` cover power verbs, attention,
+measurements and automation. Preview setup with `--dry-run`; never alter host
+services merely for coding. Mount only `.anx/outbox` writable for networkless
+producers, without credentials; keep mirrors read-only. Preserve uncertain
+originals and keys and inspect receipts. Never share secrets or raw transcripts.
