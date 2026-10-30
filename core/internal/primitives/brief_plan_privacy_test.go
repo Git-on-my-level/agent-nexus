@@ -32,7 +32,7 @@ func TestBriefResolvedProgressRetainsPrivatePlanProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent, err := s.CreateWork(ctx, "owner", anyStringValue(publicBoard["id"]), map[string]any{"title": "Public initiative"})
+	parent, err := s.CreateWork(ctx, "owner", anyStringValue(publicBoard["id"]), map[string]any{"title": "Public initiative", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}

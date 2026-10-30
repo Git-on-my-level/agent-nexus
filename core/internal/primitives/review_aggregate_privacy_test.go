@@ -31,7 +31,7 @@ func TestOverviewAndReportBudgetsIgnoreInaccessibleWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	visible, err := store.CreateWork(ctx, "owner", public["id"].(string), map[string]any{"title": "Visible work"})
+	visible, err := store.CreateWork(ctx, "owner", public["id"].(string), map[string]any{"title": "Visible work", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}

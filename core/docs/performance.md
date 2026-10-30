@@ -1,5 +1,63 @@
 # Performance guardrails
 
+## Stored work tree
+
+Parentage now uses `cards.parent_card_id`; initiative membership uses a null
+parent and `needs_home=0`, independently of board roles and checklist links.
+Brief enriches every already-admitted section card (at most 50), so a card with
+stored children gets its rollup even without a checklist. It uses the existing
+batched hierarchy reader and unchanged grouping budgets, rather than one read
+per initiative. Lifecycle events retain their original board reference as
+historical privacy provenance; the added reference is a constant-size write.
+Creation's home scoring filters the same bounded candidate pool to initiatives;
+this adds no SQL or workspace scan. `ListCards` selects the two tree scalar
+columns so bulk work agrees with point reads; query count, admission and indexes
+are unchanged.
+
+On the shared authenticated scale fixture, warm tree requests use 30,775 VM
+steps for the owner and 30,361 for a restricted reader (previously 58,369 and
+57,955 before explicit routing-index selection). Resolve uses 806 / 639 VM
+steps after ID/handle admission (previously about 29,450). Where uses 31,500 /
+614 VM steps. Tree's reported scan steps cover its bounded ephemeral cohort;
+no business-table full scan or new plan allowance is introduced.
+
+The new `GET /work/tree`, `GET /work/resolve` and `GET /work/where` entries in
+`server/testdata/performance_routes.json` use the standard 100-query, 1,024-row,
+50,000-VM-step and 500ms ceilings. `POST /work/{card_ref}/move` is a record-policy
+write. No existing budget or query-plan exception is increased.
+
+Tree reads admit 201 positions and return at most 200 nodes per level, with
+1..3 levels and no denied-row refill. Root/tray admission uses
+`idx_cards_tree_roots` / `idx_cards_tree_tray`; child expansion uses
+`idx_cards_parent(parent_card_id,created_at,id)`, batching parents per level.
+Work grows with candidate children of the requested parents and the bounded
+returned tree, rather than unrelated workspace records. Path resolution has at
+most three segments, using parent/root indexes plus primary-key/handle seeks.
+Where resolves one card or scores at most 200 initiative positions, returning
+at most five suggestions; only these suggestions receive ancestor-path reads.
+ID/handle candidates are sought before checking their stored parent, avoiding a
+root-cohort scan for a point alias. Child routing follows parent/creation index
+order before LIMIT; only the admitted cohort needs display sorting. Ancestor
+paths seek card primary keys and stop at a hidden ancestor. Hidden
+cards never contribute returned titles, refs, paths, rollup counts or has-more
+metadata. Structural move validation deliberately probes `main.cards` for
+cycles/depth and uses a scoped lookup before naming a legal alternative parent.
+
+`TestPerformanceWorkTreeRoutes` exercises the new read entries against the
+shared authenticated scale corpus. The full route lane retains its normal
+cold/warm/invalidation phase coverage. The grouping scale fixture now stores
+200 real children and asserts its populated rollup; the workstream fixture
+stores ten streams with ten children each and retains its completion-index,
+query, row, VM and zero-full-scan gates.
+
+```sh
+ANX_PERFORMANCE_TEST=1 go test -C core ./internal/server \
+  -run '^TestPerformanceWorkTreeRoutes$' -count=1 -v -timeout=40m
+go test -C core ./internal/primitives \
+  -run '^Test(GroupingReadsBoundedWithTenThousandUnrelatedCards|WatchWorkstreamRollupBudget|InitiativeReadsBudget)$' \
+  -count=1 -v -timeout=40m
+```
+
 ## Card mutation grouping echoes
 
 Patch, revision, move and lifecycle echoes reload one scoped current card row

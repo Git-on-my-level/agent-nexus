@@ -1674,7 +1674,7 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 		prefix+`SELECT `+boardID+`, `+boardHandle+`, c.id, c.handle, `+column+`, `+rank+`, c.title, c.summary, c.version, c.head_revision_id, c.head_revision_number, c.thread_id, c.parent_thread_id, c.due_at,
 		        c.definition_of_done_json, c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
 		        c.created_at, c.created_by, c.updated_at, c.updated_by, c.provenance_json, c.archived_at, c.archived_by,
-		        c.trashed_at, c.trashed_by, c.trash_reason
+		        c.trashed_at, c.trashed_by, c.trash_reason, c.parent_card_id, c.needs_home
 		   FROM `+from+`
 		  WHERE `+whereSQL+`
 		  `+order,
@@ -1720,6 +1720,8 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 			&row.TrashedAt,
 			&row.TrashedBy,
 			&row.TrashReason,
+			&row.ParentCardID,
+			&row.NeedsHome,
 		); err != nil {
 			return nil, fmt.Errorf("scan card row: %w", err)
 		}

@@ -31,7 +31,7 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 	}
 	var small int64
 	for i := 0; i < 40; i++ {
-		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i)})
+		w, err := store.CreateWork(ctx, "actor-1", anyString(board["id"]), map[string]any{"title": fmt.Sprintf("Initiative %d", i), "initiative": true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,10 +132,10 @@ func TestOverviewPlanBatchPrivacyAndWireFixture(t *testing.T) {
 		t.Fatal(out.Body.String())
 	}
 	// One denial snapshot plus read-transaction admission, bounded open/closed
-	// selectors, the designated-board probe, two dashboard reads and the inbox page.
+	// selectors, two dashboard reads and the inbox page.
 	// No plans, ref facts or
 	// notification lifecycle queries run when all work is unreadable.
-	if counter.Count() != 8 {
+	if counter.Count() != 7 {
 		t.Fatalf("private query count %d", counter.Count())
 	}
 }

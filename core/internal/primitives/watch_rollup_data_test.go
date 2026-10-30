@@ -28,7 +28,7 @@ func TestWatchRollupData(t *testing.T) {
 		}
 		return w
 	}
-	root := create("Initiative", map[string]any{"summary": "Deliver a usable board\nDetails stay out of the outcome"})
+	root := create("Initiative", map[string]any{"summary": "Deliver a usable board\nDetails stay out of the outcome", "initiative": true})
 	stream := create("P76: storage", map[string]any{"under": root["ref"], "owner": "actor:writer"})
 	leaf := create("fs-p3: measure", map[string]any{"under": stream["ref"]})
 	done := create("A1: shipped", map[string]any{"under": stream["ref"]})
@@ -170,6 +170,10 @@ func TestWatchRollupData(t *testing.T) {
 			t.Fatalf("hidden terminal event supplied a date: %+v", c)
 		}
 	}
+	if err = s.EnrichWorkHierarchy(readCtx, []map[string]any{root}, "viewer", true, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	beforeHidden, _ := json.Marshal(root["rollup"])
 	hidden, err := s.CreateWork(ctx, "owner", workString(b["id"]), map[string]any{"title": "Secret P99", "owner": "actor:owner"})
 	if err != nil {
 		t.Fatal(err)
@@ -184,8 +188,8 @@ func TestWatchRollupData(t *testing.T) {
 	if strings.Contains(string(raw), "Secret") || strings.Contains(string(raw), workString(hidden["ref"])) || strings.Contains(string(raw), "actor:owner") {
 		t.Fatalf("hidden data: %s", raw)
 	}
-	if r = root["rollup"].(*WorkRollup); r.HasMore || len(r.Workstreams) != 0 {
-		t.Fatalf("hidden plan counted as stream: %+v", r)
+	if string(raw) != string(beforeHidden) {
+		t.Fatalf("hidden child changed visible rollup: before=%s after=%s", beforeHidden, raw)
 	}
 }
 
@@ -213,12 +217,14 @@ func TestWatchUngroupedCreatorAndActions(t *testing.T) {
 		t.Fatal(items)
 	}
 	actions := items[0]["next_actions"].([]map[string]any)
-	if len(actions) != 2 || actions[0]["command_id"] != "work.patch" || actions[1]["requires_human"] != true || actions[1]["argv"] != nil {
+	if len(actions) != 2 || actions[0]["command_id"] != "work.move" || actions[1]["requires_human"] != true || actions[1]["argv"] != nil {
 		t.Fatal(actions)
 	}
-	body := workMap(actions[0]["stdin"])
-	version, _ := workInt(body["if_version"])
-	if _, err = s.PatchWork(ctx, "writer", workString(w["ref"]), version, workMap(body["patch"])); err != nil {
+	argv := actions[0]["argv"].([]string)
+	if strings.Join(argv[:5], " ") != "anx work move "+workString(w["ref"])+" --root" {
+		t.Fatalf("invalid promotion command: %v", argv)
+	}
+	if _, err = s.MoveWork(ctx, "writer", workString(w["ref"]), MoveWorkInput{Root: true, Reason: "Independent outcome"}); err != nil {
 		t.Fatal(err)
 	}
 	items, _, err = s.UngroupedWork(readCtx, 20)
@@ -226,11 +232,10 @@ func TestWatchUngroupedCreatorAndActions(t *testing.T) {
 		t.Fatalf("intent not retained: %v %v", items, err)
 	}
 	current, err := s.GetWork(ctx, workString(w["ref"]))
-	if err != nil || current["top_level"] != true {
+	if err != nil || current["is_initiative"] != true {
 		t.Fatalf("%v %v", current, err)
 	}
-	version, _ = workInt(current["version"])
-	if _, err = s.PatchWork(ctx, "writer", workString(w["ref"]), version, map[string]any{"top_level": false}); err != nil {
+	if _, err = s.MoveWork(ctx, "writer", workString(w["ref"]), MoveWorkInput{Unsorted: true, Reason: "Needs a home"}); err != nil {
 		t.Fatal(err)
 	}
 	items, _, err = s.UngroupedWork(readCtx, 20)
@@ -267,7 +272,7 @@ func TestWatchOutcomeAndCodes(t *testing.T) {
 	}
 }
 
-func TestWatchOldestVisibleParent(t *testing.T) {
+func TestWatchStoredParentDoesNotFallBackToVisibleParent(t *testing.T) {
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -301,7 +306,7 @@ func TestWatchOldestVisibleParent(t *testing.T) {
 	if _, err = s.GroupWork(ctx, "owner", workString(child["ref"]), workString(older["ref"]), ""); err != nil {
 		t.Fatal(err)
 	}
-	// Tie creation times to exercise the ID tiebreak as well as privacy.
+	// Stored parentage does not fall back to another visible parent.
 	if _, err = ws.DB().Exec(`UPDATE cards SET created_at='2000-01-01T00:00:00Z' WHERE id IN ('a-parent','b-parent')`); err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +318,7 @@ func TestWatchOldestVisibleParent(t *testing.T) {
 		}
 		wantCount, wantParent := 0, older["ref"]
 		if actor == "stranger" {
-			wantCount, wantParent = 1, public["ref"]
+			wantParent = nil
 		}
 		if items[0]["rollup"].(*WorkRollup).Total != wantCount || items[1]["parent_ref"] != wantParent {
 			t.Fatalf("%s: %v", actor, items)

@@ -60,7 +60,7 @@ func TestInitiativeBoardAuthorityRegression(t *testing.T) {
 		if item["ref"] == other["ref"] {
 			found := false
 			for _, a := range item["next_actions"].([]map[string]any) {
-				if a["command_id"] == "initiative.promote" {
+				if a["command_id"] == "work.move" {
 					found = true
 				}
 			}
@@ -76,7 +76,7 @@ func TestInitiativeBoardAuthorityRegression(t *testing.T) {
 		} else {
 			_, e = s.FoldWork(ctx, "writer", workString(root["ref"]), workString(other["ref"]), "")
 		}
-		if !errors.Is(e, ErrInvalidWorkRequest) || !strings.Contains(e.Error(), "anx initiative retire "+workString(root["ref"])) {
+		if !errors.Is(e, ErrInvalidWorkRequest) || !strings.Contains(e.Error(), "anx work move "+workString(root["ref"])) {
 			t.Fatalf("%s accepted declared root: %v", verb, e)
 		}
 	}
@@ -94,15 +94,15 @@ func TestInitiativeBoardAuthorityRegression(t *testing.T) {
 	if len(roots) != 1 || roots[0]["ref"] != root["ref"] || brief["initiative_budget"].(map[string]any)["count"] != 1 {
 		t.Fatalf("lost declared initiative: %v", brief)
 	}
-	// Clearing the role restores ordinary oldest-open-parent semantics.
+	// Clearing the board role leaves the stored hierarchy untouched.
 	if _, err = s.UpdateBoard(ctx, "writer", workString(board["id"]), map[string]any{"role": ""}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.EnrichWorkHierarchy(ctx, []map[string]any{root, other}, "writer", false, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if root["parent_ref"] != other["ref"] || other["rollup"].(*WorkRollup).Total != 1 {
-		t.Fatalf("fallback changed: root=%v other=%v", root, other)
+	if root["parent_ref"] != nil || other["rollup"].(*WorkRollup).Total != 0 {
+		t.Fatalf("role change altered stored hierarchy: root=%v other=%v", root, other)
 	}
 }
 
@@ -153,10 +153,10 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if retired["event"].(map[string]any)["type"] != "initiative_retired" || retired["work"].(map[string]any)["board_ref"] != tasks["ref"] {
+	if retired["event"].(map[string]any)["type"] != "initiative_retired" || retired["work"].(map[string]any)["board_ref"] != c["board_ref"] {
 		t.Fatal(retired)
 	}
-	// Ordinary board moves emit membership changes without requiring a reason.
+	// Board moves affect layout only and emit no initiative membership changes.
 	if _, err = s.MoveBoardCard(ctx, "writer", "", workString(c["id"]), MoveBoardCardInput{ColumnKey: "ready", BoardRef: workString(b["ref"])}); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feed["items"].([]map[string]any)) != 4 {
+	if len(feed["items"].([]map[string]any)) != 2 {
 		t.Fatal(feed)
 	}
 	private, err := s.CreateBoard(ctx, "writer", map[string]any{"title": "Secret", "role": "initiatives"})
@@ -184,15 +184,20 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if _, err = s.ChangeInitiative(ctx, "writer", workString(hidden["ref"]), "retire", "Confidential rationale", workString(tasks["ref"]), ""); err != nil {
 		t.Fatal(err)
 	}
+	// Moving the retired card to public layout must not publish its private
+	// historical rationale or title in the initiative-change feed.
+	if _, err = s.MoveBoardCard(ctx, "writer", "", workString(hidden["id"]), MoveBoardCardInput{ColumnKey: "ready", BoardRef: workString(tasks["ref"])}); err != nil {
+		t.Fatal(err)
+	}
 	scoped := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
 	feed, err = s.InitiativeChanges(scoped, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feed["items"].([]map[string]any)) != 4 {
+	if len(feed["items"].([]map[string]any)) != 2 {
 		t.Fatalf("restricted feed leaked or suppressed public changes: %v", feed)
 	}
-	// Historical privacy persists through the before-board ref even after moving public.
+	// Historical private changes stay hidden even after a public layout move.
 	if feed["truncated"] != true {
 		t.Fatal(feed)
 	}
@@ -292,7 +297,7 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 	children := []map[string]any{}
 	loopCards := []map[string]any{}
 	for i := 0; i < 5; i++ {
-		root, e := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": fmt.Sprintf("Outcome %d", i)})
+		root, e := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": fmt.Sprintf("Outcome %d", i), "initiative": true})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -358,8 +363,22 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 		}
 	}
 	assertWatch()
-	// Reopen through the real migration, with the new protection column absent.
-	for _, q := range []string{`DROP VIEW initiative_card_positions`, `DROP VIEW initiative_legacy_parent_positions`, `DROP VIEW initiative_change_positions`, `DROP INDEX idx_events_initiative_changes`, `ALTER TABLE cards DROP COLUMN initiative_root`, `ALTER TABLE boards DROP COLUMN initiative_target`, `DELETE FROM schema_migrations WHERE version=126`} {
+	// Reconstruct the legacy checklist edges before removing the tree columns.
+	for i, root := range roots {
+		current, e := s.GetWork(ctx, workString(root["ref"]))
+		if e != nil {
+			t.Fatal(e)
+		}
+		legacy := plans.Plan{Steps: []plans.Step{}}
+		for j, child := range children[i*16 : (i+1)*16] {
+			legacy.Steps = append(legacy.Steps, plans.Step{ID: fmt.Sprintf("legacy-%d", j), Title: "Legacy child", Ref: workString(child["ref"])})
+		}
+		if e = s.SetCardPlan(ctx, "writer", workString(root["id"]), workString(current["updated_at"]), legacy); e != nil {
+			t.Fatal(e)
+		}
+	}
+	// Reopen through migration 126 followed by the tree migration.
+	for _, q := range []string{`DROP VIEW initiative_card_positions`, `DROP INDEX idx_cards_parent`, `DROP INDEX idx_cards_tree_roots`, `DROP INDEX idx_cards_tree_tray`, `ALTER TABLE cards DROP COLUMN parent_card_id`, `ALTER TABLE cards DROP COLUMN needs_home`, `DROP VIEW initiative_legacy_parent_positions`, `DROP VIEW initiative_change_positions`, `DROP INDEX idx_events_initiative_changes`, `ALTER TABLE cards DROP COLUMN initiative_root`, `ALTER TABLE boards DROP COLUMN initiative_target`, `DELETE FROM schema_migrations WHERE version>=126`} {
 		if _, err = ws.DB().Exec(q); err != nil {
 			t.Fatal(err)
 		}
@@ -430,6 +449,9 @@ func TestInitiativeNewLinkPreservesHiddenLegacyParent(t *testing.T) {
 	}
 	parent, err := s.CreateWork(ctx, "writer", workString(private["id"]), map[string]any{"title": "Hidden parent", "plan": map[string]any{"steps": []any{map[string]any{"id": "child", "title": "Child", "ref": c["ref"]}}}})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.GroupWork(ctx, "writer", workString(c["ref"]), workString(parent["ref"]), ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.PatchThread(ctx, "writer", workString(private["thread_id"]), map[string]any{"pm_actor_id": "writer"}, nil); err != nil {
@@ -518,7 +540,7 @@ func TestInitiativeProtectedRootRemainsInTrends(t *testing.T) {
 	}
 }
 
-func TestInitiativeRetireUnderRejectsCompetingEarlierParentAtomically(t *testing.T) {
+func TestInitiativeRetireUnderIgnoresEarlierChecklistAtomically(t *testing.T) {
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
 	if err != nil {
@@ -550,15 +572,18 @@ func TestInitiativeRetireUnderRejectsCompetingEarlierParentAtomically(t *testing
 		t.Fatal(err)
 	}
 	_, err = s.ChangeInitiative(ctx, "writer", workString(child["ref"]), "retire", "Consolidate", workString(tasks["ref"]), workString(under["ref"]))
-	if !errors.Is(err, ErrInvalidWorkRequest) || !strings.Contains(err.Error(), "earlier plan links") {
-		t.Fatalf("silently selected the wrong parent: %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
 	after, err := s.GetWork(ctx, workString(child["ref"]))
-	if err != nil || after["board_ref"] != b["ref"] {
-		t.Fatalf("rejected retirement committed: %v %v", after, err)
+	if err == nil {
+		err = s.EnrichWorkHierarchy(ctx, []map[string]any{after}, "writer", false, time.Now())
+	}
+	if err != nil || after["board_ref"] != b["ref"] || after["parent_ref"] != under["ref"] || after["is_initiative"] != false {
+		t.Fatalf("retirement lost stored parent or changed layout: %v %v", after, err)
 	}
 	feed, err := s.InitiativeChanges(ctx, 50)
-	if err != nil || len(feed["items"].([]map[string]any)) != 0 {
-		t.Fatalf("rejected retirement emitted event: %v %v", feed, err)
+	if err != nil || len(feed["items"].([]map[string]any)) != 1 || feed["items"].([]map[string]any)[0]["type"] != "initiative_retired" {
+		t.Fatalf("retirement did not emit exactly one event: %v %v", feed, err)
 	}
 }

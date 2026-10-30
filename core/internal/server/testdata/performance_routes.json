@@ -1614,5 +1614,41 @@
     "reason": "Scoped primary-key ask and head/event point reads; bounded presentation bytes, independent of history.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/work/tree",
+    "query": "depth=3",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "Bounded tree levels and 200-node admission; primary-key ancestor and indexed parent/root/tray seeks precede scoped hydration.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/work/resolve",
+    "query": "path=unsorted/{card_id}",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Bounded tree levels and 200-node admission; primary-key ancestor and indexed parent/root/tray seeks precede scoped hydration.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/work/where",
+    "query": "ref={card_ref}",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Bounded tree levels and 200-node admission; primary-key ancestor and indexed parent/root/tray seeks precede scoped hydration.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

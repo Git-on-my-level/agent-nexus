@@ -148,7 +148,7 @@ func TestGroupingUngroupedIncludesCompletedCardsButHomesStayOpen(t *testing.T) {
 	}
 	defer ws.Close()
 	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
-	p, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "Cost 1/5 Budget"})
+	p, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "Cost 1/5 Budget", "initiative": true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestGroupingUngroupedIncludesCompletedCardsButHomesStayOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, more, err := s.UngroupedWork(ctx, 10)
-	if err != nil || more || len(rows) != 2 {
+	if err != nil || more || len(rows) != 1 {
 		t.Fatalf("rows=%v more=%v err=%v", rows, more, err)
 	}
 	for _, row := range rows {
@@ -201,7 +201,7 @@ func TestGroupingHierarchyRollupAndBudget(t *testing.T) {
 		}
 		return w
 	}
-	p := create("P76 Parent", nil)
+	p := create("P76 Parent", map[string]any{"initiative": true})
 	c := create("P76 Workstream", map[string]any{"under": p["ref"]})
 	g := create("P76 Leaf", map[string]any{"under": c["ref"]})
 	_ = g
@@ -210,12 +210,12 @@ func TestGroupingHierarchyRollupAndBudget(t *testing.T) {
 	if _, err = s.AppendEvent(ctx, "writer", map[string]any{"type": "run_recorded", "subject_ref": "card:" + workString(receiptLoop["id"]), "summary": "Measured once", "refs": []string{workString(receiptLoop["ref"])}, "payload": map[string]any{"run_id": "once", "outcome": "no_op"}}); err != nil {
 		t.Fatal(err)
 	}
-	// The older parent wins even if another plan also links the child.
-	other := create("Other parent", nil)
-	if _, err = s.GroupWork(ctx, "writer", workString(c["ref"]), workString(other["ref"]), ""); err != nil {
+	// Checklist links do not displace the stored parent.
+	other := create("Other parent", map[string]any{"initiative": true})
+	if err = s.SetCardPlan(ctx, "writer", workString(other["id"]), workString(other["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "dependency", Title: "Needs stream", Ref: workString(c["ref"])}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.GroupWork(ctx, "writer", workString(p["ref"]), workString(c["ref"]), ""); !errors.Is(err, ErrInvalidWorkRequest) {
+	if _, err = s.MoveWork(ctx, "writer", workString(p["ref"]), MoveWorkInput{Under: workString(c["ref"]), Reason: "Invalid cycle"}); !errors.Is(err, ErrInvalidWorkRequest) {
 		t.Fatalf("accepted cycle: %v", err)
 	}
 	if _, err = s.AppendEvent(ctx, "writer", map[string]any{"type": "message_posted", "thread_id": c["thread_id"], "refs": []string{workString(c["ref"])}, "payload": map[string]any{"next": map[string]any{"at": "2000-01-01", "what": "Ship"}}}); err != nil {
@@ -270,8 +270,8 @@ func TestGroupingHierarchyRollupAndBudget(t *testing.T) {
 	if err = s.EnrichWorkHierarchy(ctx, []map[string]any{read}, "viewer", true, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if read["parent_ref"] != other["ref"] {
-		t.Fatalf("closed parent still owns child: %v", read["parent_ref"])
+	if read["parent_ref"] != p["ref"] {
+		t.Fatalf("archiving reparented child: %v", read["parent_ref"])
 	}
 }
 
@@ -305,6 +305,15 @@ func TestGroupingHiddenChildrenAndHomesDoNotLeak(t *testing.T) {
 	if _, err = s.GroupWork(ctx, "owner", workString(secret["ref"]), workString(public["ref"]), ""); err != nil {
 		t.Fatal(err)
 	}
+	// A hidden checklist remains authored data even though it no longer owns
+	// parentage. Grouping another child must neither read nor replace it.
+	if err = s.SetCardPlan(ctx, "owner", workString(public["id"]), workString(public["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "private-dependency", Title: "Secret dependency", Ref: workString(secret["ref"])}}}); err != nil {
+		t.Fatal(err)
+	}
+	var planBefore string
+	if err = ws.DB().QueryRowContext(ctx, `SELECT body_json FROM card_plans WHERE card_id=?`, public["id"]).Scan(&planBefore); err != nil {
+		t.Fatal(err)
+	}
 	reader := WithAccessScope(ctx, AccessScope{ActorID: "stranger"})
 	item, err := s.GetWork(reader, workString(public["id"]))
 	if err != nil {
@@ -321,10 +330,16 @@ func TestGroupingHiddenChildrenAndHomesDoNotLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, groupErr := s.GroupWork(reader, "stranger", workString(newChild["ref"]), workString(public["ref"]), "")
-	var hiddenPlan string
-	if err = ws.DB().QueryRowContext(ctx, `SELECT body_json FROM card_plans WHERE card_id=?`, public["id"]).Scan(&hiddenPlan); groupErr == nil || err != nil || !strings.Contains(hiddenPlan, workString(secret["ref"])) {
-		t.Fatalf("hidden plan did not survive grouping: %s groupErr=%v readErr=%v", hiddenPlan, groupErr, err)
+	if _, err = s.GroupWork(reader, "stranger", workString(newChild["ref"]), workString(public["ref"]), ""); err != nil {
+		t.Fatalf("hidden sibling prevented grouping: %v", err)
+	}
+	var planAfter string
+	if err = ws.DB().QueryRowContext(ctx, `SELECT body_json FROM card_plans WHERE card_id=?`, public["id"]).Scan(&planAfter); err != nil || planBefore != planAfter {
+		t.Fatalf("group overwrote unreadable checklist: err=%v", err)
+	}
+	var hiddenParent string
+	if err = ws.DB().QueryRowContext(ctx, `SELECT parent_card_id FROM cards WHERE id=?`, secret["id"]).Scan(&hiddenParent); err != nil || hiddenParent != public["id"] {
+		t.Fatalf("hidden sibling displaced: %s err=%v", hiddenParent, err)
 	}
 	safeParent, err := s.CreateWork(ctx, "writer", "", map[string]any{"title": "Visible parent"})
 	if err != nil {
@@ -332,7 +347,7 @@ func TestGroupingHiddenChildrenAndHomesDoNotLeak(t *testing.T) {
 	}
 	for _, title := range []string{"First visible child", "Second visible child"} {
 		if _, err = s.CreateWork(reader, "stranger", "", map[string]any{"title": title, "under": safeParent["ref"]}); err != nil {
-			t.Fatalf("readable plan rejected scoped create: %v", err)
+			t.Fatalf("visible parent rejected scoped create: %v", err)
 		}
 	}
 	items, more, err := s.UngroupedWork(reader, 10)
@@ -376,6 +391,9 @@ func TestGroupingFoldTransfersAndReversesOwnedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	cAfter, err := s.GetWork(ctx, workString(c["id"]))
+	if err == nil {
+		err = s.EnrichWorkHierarchy(ctx, []map[string]any{cAfter}, "writer", false, time.Now())
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,8 +409,8 @@ func TestGroupingFoldTransfersAndReversesOwnedFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	steps := plan[workString(p["id"])].Steps
-	if len(steps) != 1 || steps[0].Due != "2099-01-01T23:59:59Z" {
-		t.Fatalf("promise not carried: %+v", steps)
+	if len(steps) != 0 || cAfter["parent_ref"] != p["ref"] {
+		t.Fatalf("fold must store parent without writing checklist: child=%v steps=%+v", cAfter, steps)
 	}
 	if _, err = s.UnfoldWork(ctx, "writer", workString(c["ref"])); err != nil {
 		t.Fatal(err)
@@ -403,6 +421,17 @@ func TestGroupingFoldTransfersAndReversesOwnedFields(t *testing.T) {
 	}
 	if workString(got["archived_at"]) != "" || got["parent_ref"] != nil {
 		t.Fatalf("unfold failed: %#v", got)
+	}
+	for done := false; !done; {
+		var refreshErr error
+		done, refreshErr = s.RefreshBriefInitiatives(ctx, 200)
+		if refreshErr != nil {
+			t.Fatal(refreshErr)
+		}
+	}
+	folds, err := s.PromiseFolds(ctx, []string{workString(c["id"])})
+	if err != nil || folds[workString(c["id"])].Promise == nil || folds[workString(c["id"])].Promise.At.UTC().Format(time.RFC3339) != "2099-01-01T23:59:59Z" {
+		t.Fatalf("unfold lost the child's authored promise: %v %v", folds, err)
 	}
 	data, _ = json.Marshal(got["source_refs"])
 	if !strings.Contains(string(data), "pull/7") {

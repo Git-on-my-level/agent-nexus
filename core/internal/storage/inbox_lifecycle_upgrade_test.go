@@ -12,7 +12,7 @@ import (
 )
 
 func TestInboxLifecycleUpgradeDoesNotBackfillAtStartup(t *testing.T) {
-	t.Parallel()
+	// Serial: the 500ms startup budget must not compete with parallel fixtures.
 	if testing.Short() {
 		t.Skip("real SQLite upgrade benchmark")
 	}

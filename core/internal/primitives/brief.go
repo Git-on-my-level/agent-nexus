@@ -1089,23 +1089,8 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 	if err := b.initiativeSeries(ids, out); err != nil {
 		return nil, false, err
 	}
-	hierarchy := []map[string]any{}
-	for i, r := range rows {
-		out[i]["parent_ref"] = nil
-		out[i]["rollup"] = emptyWorkRollup()
-		var p plans.Plan
-		_ = json.Unmarshal([]byte(r.plan), &p)
-		linked := false
-		for _, step := range p.Steps {
-			if strings.HasPrefix(step.Ref, "card:") {
-				linked = true
-				break
-			}
-		}
-		if loopsOnly || linked {
-			hierarchy = append(hierarchy, out[i])
-		}
-	}
+	// Every admitted card can have stored children, independently of its checklist.
+	hierarchy := out
 	if err = b.s.EnrichWorkHierarchy(b.groupingContext(), hierarchy, b.reader.ActorID, b.reader.human(), b.now); err != nil {
 		return nil, false, err
 	}
