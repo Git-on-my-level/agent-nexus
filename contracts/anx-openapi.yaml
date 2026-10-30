@@ -12658,7 +12658,7 @@ components:
         reasons: {type: array, items: {type: string}}
     WorkPath:
       type: string
-      pattern: '^(initiatives/[^/]+(/[^/]+){0,2}|unsorted/[^/]+)$'
+      pattern: '^(initiatives|unsorted)/[^/]+(/[^/]+){0,2}$'
       description: Derived alias using each card handle, or its id when no handle exists. Handle renames and moves change paths; stable card refs remain canonical.
     WorkMoveRequest:
       type: object

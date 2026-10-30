@@ -6409,7 +6409,7 @@ Move a card under a parent, to top level or to Unsorted
 
 ```text
 Usage: anx work move <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.
+Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
 ```
 
 ## `work tree`
@@ -11777,7 +11777,7 @@ Move a card in the stored work tree.
 
 ```text
 Usage: anx mv <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.
+Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
 ```
 
 ## `tree`

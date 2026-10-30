@@ -38,7 +38,11 @@ at most five suggestions; only these suggestions receive ancestor-path reads.
 ID/handle candidates are sought before checking their stored parent, avoiding a
 root-cohort scan for a point alias. Child routing follows parent/creation index
 order before LIMIT; only the admitted cohort needs display sorting. Ancestor
-paths seek card primary keys and stop at a hidden ancestor. Hidden
+paths seek card primary keys; a hidden ancestor counts as no ancestor, so the
+highest visible card roots the path (matching the reader-relative initiative
+predicate). Tree root listings stay index-admitted: a visible child of a hidden
+parent is top-level in brief, Watch, where and path reads but is not listed as
+a tree root, since finding such cards would scan beyond the roots index. Hidden
 cards never contribute returned titles, refs, paths, rollup counts or has-more
 metadata. Structural move validation deliberately probes `main.cards` for
 cycles/depth and uses a scoped lookup before naming a legal alternative parent.

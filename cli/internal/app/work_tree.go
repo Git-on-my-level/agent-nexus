@@ -108,7 +108,7 @@ func parseWorkTreeCommand(args []string) (workTreeCommand, error) {
 
 func validWorkPath(ref string) bool {
 	parts := strings.Split(ref, "/")
-	if len(parts) < 2 || len(parts) > 4 || (parts[0] != "initiatives" && parts[0] != "unsorted") || (parts[0] == "unsorted" && len(parts) != 2) {
+	if len(parts) < 2 || len(parts) > 4 || (parts[0] != "initiatives" && parts[0] != "unsorted") {
 		return false
 	}
 	for _, part := range parts[1:] {
@@ -128,7 +128,7 @@ func (a *App) resolveWorkPath(ctx context.Context, cfg config.Resolved, ref stri
 		return ref, nil
 	}
 	if !validWorkPath(ref) {
-		return "", errnorm.Usage("invalid_request", "expected initiatives/<segment>[/<segment>[/<segment>]] or unsorted/<segment>")
+		return "", errnorm.Usage("invalid_request", "expected initiatives/ or unsorted/ followed by 1..3 segments")
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, "work resolve", "GET", "/work/resolve?"+url.Values{"path": {ref}}.Encode(), nil)
 	if err != nil {
@@ -309,7 +309,7 @@ func formatWorkWhere(body map[string]any) string {
 func workTreeHelp(topic string) (string, bool) {
 	switch topic {
 	case "mv", "work move":
-		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.", true
+		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.", true
 	case "tree", "work tree":
 		return "Usage: anx " + topic + " [ref|path] [--depth <1..3>] [--include-done]\nRead initiatives and Unsorted or one subtree; default depth 2. Children are in creation order. Truncation is explicit; read a subtree for more detail. Use --json for one envelope.", true
 	case "work ls":
