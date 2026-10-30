@@ -51,9 +51,12 @@ func workTreeOpen(includeDone bool) string {
 	return ` AND c.column_key NOT IN ('done','cancelled')`
 }
 
-// workPathFor walks visible ancestors. A hidden ancestor yields no path.
+// workPathFor walks visible ancestors. A hidden ancestor is treated as no
+// ancestor: the highest visible card roots the path, exactly as the initiative
+// predicate does, so a path never hints that a hidden parent exists.
 func workPathFor(ctx context.Context, q briefQueryer, id string) (string, error) {
 	segments := []string{}
+	var below *workTreeRow
 	for at, steps := id, 0; at != ""; steps++ {
 		if steps > 32 {
 			return "", nil
@@ -67,9 +70,17 @@ func workPathFor(ctx context.Context, q briefQueryer, id string) (string, error)
 			return "", err
 		}
 		if len(found) == 0 {
-			return "", nil
+			if below == nil {
+				return "", nil
+			}
+			root := workTreeInitiativesRoot
+			if below.needsHome {
+				root = workTreeUnsortedRoot
+			}
+			return root + "/" + strings.Join(segments, "/"), nil
 		}
 		r := found[0]
+		below = &found[0]
 		segments = append([]string{r.segment()}, segments...)
 		if !r.parent.Valid {
 			root := workTreeInitiativesRoot
@@ -313,12 +324,13 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 		if err != nil {
 			return nil, err
 		}
+		// A hidden parent reads as no parent (see workIsInitiativeSQL).
 		var parent sql.NullString
-		var needsHome bool
-		if err = s.db.QueryRowContext(ctx, `SELECT c.parent_card_id,c.needs_home FROM cards c WHERE c.id=?`, id).Scan(&parent, &needsHome); err != nil {
+		var needsHome, initiative bool
+		if err = s.db.QueryRowContext(ctx, `SELECT (SELECT p.id FROM cards p WHERE p.id=c.parent_card_id),c.needs_home,`+workIsInitiativeSQL("c")+` FROM cards c WHERE c.id=?`, id).Scan(&parent, &needsHome, &initiative); err != nil {
 			return nil, err
 		}
-		out["ref"], out["needs_home"], out["is_initiative"] = cardRef, needsHome, !parent.Valid && !needsHome
+		out["ref"], out["needs_home"], out["is_initiative"] = cardRef, needsHome, initiative
 		if path != "" {
 			out["path"] = path
 		}
@@ -370,7 +382,7 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 // initiativeHomeCandidates admits at most 200 open initiatives.
 func initiativeHomeCandidates(ctx context.Context, q briefQueryer) ([]homeCandidate, error) {
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}')
-	 FROM (SELECT id FROM initiative_card_positions LIMIT 200) p CROSS JOIN cards c ON c.id=p.id LEFT JOIN work_metadata m ON m.card_id=c.id
+	 FROM (SELECT p.id FROM initiative_card_positions p CROSS JOIN cards recent ON recent.id=p.id ORDER BY recent.updated_at DESC,recent.id LIMIT 200) p CROSS JOIN cards c ON c.id=p.id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE c.archived_at IS NULL AND c.trashed_at IS NULL ORDER BY c.created_at,c.id`)
 	if err != nil {
 		return nil, err

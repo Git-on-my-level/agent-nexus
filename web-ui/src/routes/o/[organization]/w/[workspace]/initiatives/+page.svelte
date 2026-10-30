@@ -288,12 +288,6 @@
   $effect(() => {
     search = filters.q;
   });
-  /*
-   * The Initiatives filter needs the board roles whether or not the list read
-   * succeeded; without this a failing list left the filter waiting forever on
-   * a request nothing was going to make.
-   */
-  $effect(() => {});
   $effect(() => {
     const key = filterKey;
     // Re-read when a local filter is toggled; neither is part of `filters`,

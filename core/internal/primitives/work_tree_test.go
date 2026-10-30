@@ -354,8 +354,17 @@ func TestWorkTreeHiddenStructurePrivacy(t *testing.T) {
 			}
 		}
 	}
-	if path, err := s.WorkPath(reader, workString(visible["id"])); err != nil || path != "" {
+	// A hidden parent reads as no parent: the visible card roots its own path
+	// and reads as an initiative, so neither path nor status hints at it.
+	if path, err := s.WorkPath(reader, workString(visible["id"])); err != nil || path != "initiatives/visible-stream" {
 		t.Fatalf("hidden ancestor path=%q err=%v", path, err)
+	}
+	if where, err := s.WorkWhere(reader, workString(visible["ref"]), ""); err != nil || where["is_initiative"] != true || where["needs_home"] != false || where["parent_ref"] != nil {
+		t.Fatalf("hidden parent changed status: %v %v", where, err)
+	}
+	enriched := map[string]any{"id": workString(visible["id"])}
+	if err := s.EnrichWorkHierarchy(reader, []map[string]any{enriched}, "stranger", false, time.Now()); err != nil || enriched["is_initiative"] != true || enriched["parent_ref"] != nil {
+		t.Fatalf("hidden parent changed enriched status: %v %v", enriched, err)
 	}
 	for _, ref := range []string{workString(visible["ref"]), workString(loose["ref"])} {
 		where, err := s.WorkWhere(reader, ref, "")
@@ -532,6 +541,112 @@ func TestWorkTreeListCardsMatchesStoredPosition(t *testing.T) {
 		initiative, tray := card["ref"] == root["ref"], card["ref"] == loose["ref"]
 		if card["is_initiative"] != initiative || card["needs_home"] != tray {
 			t.Fatalf("list lost tree position: child=%s row=%v", child["ref"], card)
+		}
+	}
+}
+
+// Archived and purged work is never a home: children wait in the tray.
+func TestWorkTreeArchiveReleasesChildrenAndTrayRowsAreMarked(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	root := mustWork(t, s, ctx, map[string]any{"title": "Initiative", "initiative": true})
+	child := mustWork(t, s, ctx, map[string]any{"title": "Task", "under": root["ref"]})
+	if _, err := s.ArchiveBoardCard(ctx, "writer", workString(root["board_id"]), workString(root["id"]), RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if parent, tray, _ := workTreeFacts(t, s, ctx, workString(child["ref"])); parent != "" || !tray {
+		t.Fatalf("child of archived parent: parent=%q tray=%v", parent, tray)
+	}
+	rows, _, err := s.UngroupedWork(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0]["needs_home"] != true || rows[0]["is_initiative"] != false {
+		t.Fatalf("tray rows must say they need a home: %v", rows)
+	}
+	loop := mustWork(t, s, ctx, map[string]any{"title": "Weekly review", "cadence": map[string]any{"every_seconds": 604800}})
+	if _, tray, initiative := workTreeFacts(t, s, ctx, workString(loop["ref"])); tray || !initiative {
+		t.Fatalf("a loop is a top-level commitment: tray=%v initiative=%v", tray, initiative)
+	}
+}
+
+// The backfill keeps the legacy eligibility rule and the depth limit.
+func TestWorkTreeBackfillEligibilityAndDepth(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	tasks, err := s.CreateBoard(ctx, "writer", map[string]any{"title": "Tasks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := s.CreateBoard(ctx, "writer", map[string]any{"title": "Old board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := func(board map[string]any, title string) map[string]any {
+		w, err := s.CreateWork(ctx, "writer", workString(board["id"]), map[string]any{"title": title})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	link := func(parent, child map[string]any) {
+		current, err := s.GetWork(ctx, workString(parent["id"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.SetCardPlan(ctx, "writer", workString(parent["id"]), workString(current["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "c", Title: "c", Ref: workString(child["ref"])}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	closed := create(tasks, "Closed parent")
+	orphan := create(tasks, "Only a closed parent")
+	stale := create(old, "Parent on an archived board")
+	stray := create(tasks, "Only an archived-board parent")
+	a := create(tasks, "Level 0")
+	b := create(tasks, "Level 1")
+	c := create(tasks, "Level 2")
+	d := create(tasks, "Level 3")
+	e := create(tasks, "Level 4")
+	link(closed, orphan)
+	link(stale, stray)
+	link(a, b)
+	link(b, c)
+	link(c, d)
+	link(d, e)
+	for _, q := range []string{
+		`UPDATE cards SET column_key='done' WHERE id='` + workString(closed["id"]) + `'`,
+		`UPDATE boards SET archived_at='2026-01-01T00:00:00Z' WHERE id='` + workString(old["id"]) + `'`,
+	} {
+		if _, err = ws.DB().ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tx, err := ws.DB().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = storage.BackfillWorkTree(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []struct {
+		card, parent map[string]any
+	}{
+		{orphan, nil}, // legacy reads ignored closed parents
+		{stray, nil},  // and parents on archived boards
+		{b, a},
+		{c, b},
+		{d, b}, // re-homed to level 2 under its level-1 ancestor
+		{e, b},
+	} {
+		if parent, _, _ := workTreeFacts(t, s, ctx, workString(want.card["ref"])); parent != workString(want.parent["ref"]) {
+			t.Errorf("%s: parent=%q want %q", want.card["title"], parent, workString(want.parent["ref"]))
 		}
 	}
 }

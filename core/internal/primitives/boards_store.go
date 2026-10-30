@@ -2868,6 +2868,11 @@ func (s *Store) ArchiveBoardCard(ctx context.Context, actorID, boardID, identifi
 			return BoardCardMutationResult{}, ErrConflict
 		}
 	}
+	// Children of archived work wait in the Unsorted tray for a new home.
+	if err := releaseWorkTreeChildrenTx(ctx, tx, cardRow.CardID, actorID, now); err != nil {
+		_ = tx.Rollback()
+		return BoardCardMutationResult{}, err
+	}
 	if err := advanceCardLifecycleVersion(ctx, tx, cardRow.CardID, actorID, now); err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, err
@@ -3140,6 +3145,11 @@ func (s *Store) PurgeArchivedBoardCard(ctx context.Context, boardID, identifier 
 	if err != nil {
 		return fmt.Errorf("delete card: %w", err)
 	}
+	// Never leave a dangling parent edge; any remaining children (including
+	// trashed or archived ones) wait in the Unsorted tray.
+	if _, err = tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1 WHERE parent_card_id=?`, cardID); err != nil {
+		return fmt.Errorf("release purged card children: %w", err)
+	}
 	n, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("rows affected card purge: %w", err)
@@ -3240,7 +3250,7 @@ func (s *Store) TrashBoardCard(ctx context.Context, actorID, boardID, identifier
 		return BoardCardMutationResult{}, fmt.Errorf("trash board card: %w", err)
 	}
 	// Children of trashed work wait in the Unsorted tray for a new home.
-	if _, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1,updated_at=?,updated_by=? WHERE parent_card_id=? AND trashed_at IS NULL`, now, actorID, cardRow.CardID); err != nil {
+	if err := releaseWorkTreeChildrenTx(ctx, tx, cardRow.CardID, actorID, now); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}

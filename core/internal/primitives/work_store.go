@@ -458,7 +458,8 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	m["create_surface"] = firstNonEmptyString(workString(input["create_surface"]), "work.create")
 	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{
 		Under: under, After: after, CreateSurface: firstNonEmptyString(workString(input["create_surface"]), "work.create"),
-		Initiative: input["initiative"] == true || m["top_level"] == true,
+		// Loops (cadence or goal) are standing top-level commitments.
+		Initiative: input["initiative"] == true || m["top_level"] == true || m["cadence"] != nil || m["goal"] != nil,
 		Handle:     workString(m["handle"]), CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
 		DefinitionOfDone: dod, Assignee: assignee, DueAt: dueAt, PinnedDocumentID: pinnedDocumentID,
 		Risk: risk, Refs: uniqueSortedStrings(refs), WorkMetadata: m,

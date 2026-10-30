@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -17,9 +18,12 @@ import (
 // waiting in the Unsorted tray (needs_home=1). Every read uses these helpers.
 const workTreeMaxDepth = 3
 
-// workIsInitiativeSQL is the one initiative predicate (see work_tree.go).
+// workIsInitiativeSQL is the one initiative predicate (see work_tree.go). A
+// parent hidden from the reader counts as no parent, so a visible child of a
+// private initiative reads as top-level work and never reveals that parent
+// (reads resolve unqualified cards through the reader's scoped relation).
 func workIsInitiativeSQL(card string) string {
-	return `(` + card + `.parent_card_id IS NULL AND ` + card + `.needs_home=0)`
+	return `(` + card + `.needs_home=0 AND (` + card + `.parent_card_id IS NULL OR NOT EXISTS(SELECT 1 FROM cards work_parent WHERE work_parent.id=` + card + `.parent_card_id)))`
 }
 
 // workParentSQL yields the stored parent's ID while that parent is not trashed.
@@ -113,7 +117,7 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 		c["rollup"] = emptyWorkRollup()
 	}
 	encoded, _ := json.Marshal(ids)
-	rows, err := q.QueryContext(ctx, `SELECT requested.value,c.id,COALESCE((SELECT 'card:'||COALESCE(NULLIF(p.handle,''),p.id) FROM cards p WHERE p.id=`+workParentSQL("c")+`),'')
+	rows, err := q.QueryContext(ctx, `SELECT requested.value,c.id,COALESCE((SELECT 'card:'||COALESCE(NULLIF(p.handle,''),p.id) FROM cards p WHERE p.id=`+workParentSQL("c")+`),''),`+workIsInitiativeSQL("c")+`,c.needs_home
 	 FROM json_each(?) requested CROSS JOIN cards c ON c.id=requested.value OR (c.handle IS NOT NULL AND trim(c.handle)<>'' AND c.handle=requested.value)`, string(encoded))
 	if err != nil {
 		return err
@@ -121,12 +125,15 @@ func loadWorkHierarchy(ctx context.Context, q briefQueryer, cards []map[string]a
 	canonical := map[string]map[string]any{}
 	for rows.Next() {
 		var key, id, parent string
-		if err = rows.Scan(&key, &id, &parent); err != nil {
+		var initiative, needsHome bool
+		if err = rows.Scan(&key, &id, &parent, &initiative, &needsHome); err != nil {
 			rows.Close()
 			return err
 		}
 		c := byID[key]
 		canonical[id] = c
+		// Reader-relative: a hidden parent reads as no parent.
+		c["is_initiative"], c["needs_home"] = initiative, needsHome
 		if parent != "" {
 			c["parent_ref"] = parent
 		}
@@ -430,6 +437,13 @@ func (s *Store) moveWorkTx(ctx context.Context, tx *accessTx, actor string, chil
 	return parentRef, insertWorkEvent(ctx, tx, actor, card, "card_updated", "Card moved in the work tree", map[string]any{"changed_fields": []string{"parent"}, "parent_ref": parentValue, "needs_home": tray})
 }
 
+// releaseWorkTreeChildrenTx sends a closing card's live children to the
+// Unsorted tray: archived, trashed or purged work is never a home.
+func releaseWorkTreeChildrenTx(ctx context.Context, tx *accessTx, id, actor, now string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1,updated_at=?,updated_by=? WHERE parent_card_id=? AND trashed_at IS NULL`, now, actor, id)
+	return err
+}
+
 // workAncestorChain returns parent IDs from the root down to id (inclusive).
 func workAncestorChain(ctx context.Context, tx *accessTx, id string) ([]string, error) {
 	chain := []string{id}
@@ -456,33 +470,24 @@ func workAncestorChain(ctx context.Context, tx *accessTx, id string) ([]string, 
 }
 
 // workSubtreeHeight is how many levels sit below id, capped past the limit.
+// Each level is one exact EXISTS probe through the parent index, so a wide
+// branch can never hide a deeper one.
 func workSubtreeHeight(ctx context.Context, tx *accessTx, id string) (int, error) {
-	level := []string{id}
-	for height := 0; height <= workTreeMaxDepth; height++ {
-		encoded, _ := json.Marshal(level)
-		rows, err := tx.QueryContext(ctx, `SELECT c.id FROM json_each(?) p CROSS JOIN main.cards c ON c.parent_card_id=p.value WHERE c.trashed_at IS NULL LIMIT 1000`, string(encoded))
-		if err != nil {
+	from := `main.cards l1`
+	where := `l1.parent_card_id=? AND l1.trashed_at IS NULL`
+	for height := 1; height <= workTreeMaxDepth; height++ {
+		var deeper bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+from+` WHERE `+where+`)`, id).Scan(&deeper); err != nil {
 			return 0, err
 		}
-		next := []string{}
-		for rows.Next() {
-			var child string
-			if err = rows.Scan(&child); err != nil {
-				rows.Close()
-				return 0, err
-			}
-			next = append(next, child)
+		if !deeper {
+			return height - 1, nil
 		}
-		rows.Close()
-		if err = rows.Err(); err != nil {
-			return 0, err
-		}
-		if len(next) == 0 {
-			return height, nil
-		}
-		level = next
+		next := fmt.Sprintf("l%d", height+1)
+		from += fmt.Sprintf(` CROSS JOIN main.cards %s ON %s.parent_card_id=l%d.id`, next, next, height)
+		where += ` AND ` + next + `.trashed_at IS NULL`
 	}
-	return workTreeMaxDepth + 1, nil
+	return workTreeMaxDepth, nil
 }
 
 func (s *Store) saveGroupingPlan(ctx context.Context, tx *accessTx, actor string, parent boardCardRow, p plans.Plan) error {

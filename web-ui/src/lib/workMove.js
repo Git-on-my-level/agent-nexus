@@ -37,7 +37,11 @@ export function workMoveRequest(draft, actor, key) {
   const reason = String(draft.reason || "").trim();
   if ([...reason].length > 2000)
     throw new Error("Keep the reason within 2000 characters.");
-  if ((body.root || (body.under && draft.work.is_initiative)) && !reason)
+  if (
+    (body.root ||
+      ((body.under || body.unsorted) && draft.work.is_initiative)) &&
+    !reason
+  )
     throw new Error("Give a reason for moving this initiative.");
   if (!key) throw new Error("Move replay key is missing.");
   if (reason) body.reason = reason;
