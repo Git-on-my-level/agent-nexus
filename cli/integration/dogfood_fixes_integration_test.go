@@ -29,7 +29,7 @@ func TestDogfoodPromiseCreateAndNoCardHookAgainstCore(t *testing.T) {
 	}
 	// Notes exercise ordinary work; a cadence card keeps its receipt promise.
 	loopRef := ref
-	ordinary := h.runCLIExpectOK(t, "worker", map[string]any{"title": "Verification checkpoint", "handle": "verify-checkpoint"}, "work", "create", "--from-file", "-")
+	ordinary := h.runCLIExpectOK(t, "worker", map[string]any{"title": "Verification checkpoint", "handle": "verify-checkpoint", "initiative": true}, "work", "create", "--from-file", "-")
 	ref = mustStringPath(t, ordinary.Payload, "result.work.ref")
 	note := h.runCLIExpectOK(t, "worker", nil, "note", ref, "Next checkpoint", "--next", "1d", "Verify result")
 	if strings.Contains(note.Stdout, "note_promise_unowned") {

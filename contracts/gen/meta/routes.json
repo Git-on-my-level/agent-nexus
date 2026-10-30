@@ -1285,7 +1285,7 @@
     {
       "method": "POST",
       "path": "/work/{card_ref}/move",
-      "access_class": "handler_defined"
+      "access_class": "workspace_business_surface"
     },
     {
       "method": "GET",
