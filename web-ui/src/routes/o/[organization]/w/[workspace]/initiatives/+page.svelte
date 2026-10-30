@@ -89,12 +89,8 @@
     now = $state(Date.now());
   let requested = $state({});
   let boards = $state([]);
-  // Two flags, because they answer different questions: `boardsRequested`
-  // stops a second request, and `boardsLoaded` says the roles are actually in
-  // hand — the Initiatives filter cannot narrow before they are, and "no
-  // matching tasks" while they are in flight would be a lie.
+  // Board titles are fetched once for layout labels.
   let boardsRequested = false;
-  let boardsLoaded = $state(false);
   let decisions = $state([]);
   let decisionsLoaded = $state(false);
   let shortcutsOpen = $state(false);
@@ -220,17 +216,15 @@
   // One row per source item: a GitHub issue read through two connections is
   // one task to the operator. The folded rows stay reachable from the kept
   // task's page.
-  /** The Initiatives filter is on but the board roles have not landed yet. */
-  let initiativesPending = $derived(initiativesOnly && !boardsLoaded);
+  /** Initiative identity comes from core, independent of board loading. */
+  const initiativesPending = false;
   let visible = $derived.by(() => {
     if (initiativesPending) return [];
     let rows = dedupeWorkBySource(records).records;
     if (humanOnly)
       rows = rows.filter((work) => isHumanNextActor(work, humanIds));
     if (initiativesOnly) {
-      rows = rows.filter((work) =>
-        initiativeBoardRefs.has(String(work?.board_ref ?? "").trim()),
-      );
+      rows = rows.filter((work) => work.is_initiative === true);
     }
     return rows;
   });
@@ -268,33 +262,6 @@
       return read.key === "error" && !read.kept;
     }).length,
   );
-  /*
-   * The boards Overview draws its initiatives from.
-   *
-   * `role=initiatives` is core's own selection — the same board role the
-   * Overview reads — so the filter reuses it rather than inventing a second
-   * rule for what an initiative is. It filters the rows this page already
-   * holds; `work.list` has no board parameter, so like the person filter it
-   * reads the full page cap and narrows locally.
-   */
-  let initiativeBoardRefs = $derived(
-    new Set(
-      boards
-        .map((entry) => entry?.board ?? entry)
-        .filter(
-          (board) =>
-            String(board?.role ?? "")
-              .trim()
-              .toLowerCase() === "initiatives",
-        )
-        .flatMap((board) =>
-          [board.ref, board.handle, board.id].map((value) =>
-            String(value ?? "").trim(),
-          ),
-        )
-        .filter(Boolean),
-    ),
-  );
   let boardTitles = $derived(
     Object.fromEntries(
       boards
@@ -326,9 +293,7 @@
    * succeeded; without this a failing list left the filter waiting forever on
    * a request nothing was going to make.
    */
-  $effect(() => {
-    if (initiativesOnly && !boardsRequested) void loadBoards();
-  });
+  $effect(() => {});
   $effect(() => {
     const key = filterKey;
     // Re-read when a local filter is toggled; neither is part of `filters`,
@@ -496,11 +461,7 @@
       if (ticket === boardsRead && scope === $localWorkScope)
         boards = Array.isArray(result?.boards) ? result.boards : [];
     } catch {
-      // Fail soft: the Board column falls back to the board_ref slug, and
-      // the Initiatives filter says it found no initiatives board.
-    } finally {
-      if (ticket === boardsRead && scope === $localWorkScope)
-        boardsLoaded = true;
+      // Fail soft: the Board column falls back to the board_ref slug.
     }
   }
   const DECISION_PREFETCH_PAGES = 25;
@@ -1089,9 +1050,7 @@
 
   {#if initiativesOnly && !initiativesPending}
     <p class="text-micro text-fg-muted" data-task-initiatives-filter>
-      {initiativeBoardRefs.size
-        ? "Showing initiatives only."
-        : "No initiatives are marked yet, so there is nothing to show. Mark one to use this filter."}
+      Showing top-level initiatives outside Unsorted.
       <a class="ui-prose-link" href={queryHref({ initiatives: "" })}>Clear</a>
     </p>
   {/if}

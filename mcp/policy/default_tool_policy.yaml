@@ -922,7 +922,7 @@ commands:
 
   "work.group":
     classification: exposed_write
-    reason: Add an ordinary plan step atomically with replay safety.
+    reason: Deprecated stored-parent move alias; plan steps no longer define hierarchy.
   "work.fold":
     classification: exposed_write
     reason: Transfer references and archive with a reversible scoped snapshot.
@@ -934,7 +934,19 @@ commands:
     reason: Bounded visible recent cards with deterministic likely homes.
   "initiative.promote":
     classification: exposed_write
-    reason: Declare initiative board membership with an audit reason and replay safety; agents may act.
+    reason: Deprecated move-to-root alias with an audit reason; board roles no longer define initiatives.
   "initiative.retire":
     classification: exposed_write
     reason: Retire membership and optionally group atomically with an audit reason; agents may act.
+  "work.move":
+    classification: unsupported_other
+    reason: "Use the work-tree CLI surface until the move API has verified keyed replay for MCP writes."
+  "work.resolve":
+    classification: unsupported_other
+    reason: "Path resolution is currently a work-tree CLI helper; no MCP adaptation is included in this phase."
+  "work.tree":
+    classification: unsupported_other
+    reason: "Tree presentation is currently provided by the CLI; no MCP adaptation is included in this phase."
+  "work.where":
+    classification: unsupported_other
+    reason: "Advisory placement is currently provided by the CLI; no MCP adaptation is included in this phase."

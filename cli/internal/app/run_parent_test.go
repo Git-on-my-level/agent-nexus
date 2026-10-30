@@ -42,15 +42,15 @@ func TestRunParentCreateSurfaces(t *testing.T) {
 	}{
 		{name: "batch", args: []string{"boards", "cards", "create-batch", "--board-id", "board:tasks", "--from-file", "BATCH_FILE"}, labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "batch top level", args: []string{"boards", "cards", "create-batch", "--board-id", "board:tasks", "--from-file", "BATCH_FILE", "--top-level"}, labels: `["anx.card.parent"]`},
-		{name: "work", args: []string{"work", "create", "--from-file", "FILE"}, labels: `["anx.card.parent"]`, want: "card:parent"},
+		{name: "work enters Unsorted", args: []string{"work", "create", "--from-file", "FILE"}, labels: `["anx.card.parent"]`},
 		{name: "cards", args: []string{"cards", "create", "--board", "board:tasks", "--title", "Child", "--body", "Details"}, labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "cards json", args: []string{"cards", "create", "--from-file", "CARD_FILE"}, labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "explicit", args: []string{"work", "create", "--from-file", "FILE", "--under", "card:chosen"}, labels: `["anx.card.parent"]`, want: "card:chosen"},
 		{name: "top level", args: []string{"work", "create", "--from-file", "FILE", "--top-level"}, labels: `["anx.card.parent"]`},
 		{name: "cards top level", args: []string{"cards", "create", "--from-file", "CARD_FILE", "--top-level"}, labels: `["anx.card.parent"]`},
-		{name: "multiple", args: []string{"work", "create", "--from-file", "FILE"}, labels: `["anx.card.a","anx.card.b"]`, code: "run_parent_ambiguous"},
-		{name: "cross workspace", args: []string{"work", "create", "--from-file", "FILE"}, labels: `["anx.card.parent"]`, unreadable: true, code: "run_parent_unreadable"},
-		{name: "lookup timeout", args: []string{"work", "create", "--from-file", "FILE"}, labels: "timeout", code: "run_parent_unavailable"},
+		{name: "multiple", args: []string{"cards", "create", "--from-file", "CARD_FILE"}, labels: `["anx.card.a","anx.card.b"]`, code: "run_parent_ambiguous"},
+		{name: "cross workspace", args: []string{"cards", "create", "--from-file", "CARD_FILE"}, labels: `["anx.card.parent"]`, unreadable: true, code: "run_parent_unreadable"},
+		{name: "lookup timeout", args: []string{"cards", "create", "--from-file", "CARD_FILE"}, labels: "timeout", code: "run_parent_unavailable"},
 		{name: "no label", args: []string{"work", "create", "--from-file", "FILE"}, labels: `[]`},
 		{name: "generic api", args: []string{"api", "work.create", "--json-body", `{"title":"Child"}`}, labels: `["anx.card.parent"]`, want: "card:parent"},
 		{name: "ask", args: []string{"ask", "Ship it?", "--body", "Context", "--recommend", "Yes", "--by", "1d"}, labels: `["anx.card.parent"]`, want: "card:parent"},
@@ -97,7 +97,7 @@ func TestRunParentCreateSurfaces(t *testing.T) {
 				case r.Method == "GET" && r.URL.Path == "/work":
 					rows := []any{}
 					for i := 0; i < 16; i++ {
-						rows = append(rows, map[string]any{"ref": fmt.Sprintf("card:root-%d", i), "phase": "ready"})
+						rows = append(rows, map[string]any{"ref": fmt.Sprintf("card:root-%d", i), "phase": "ready", "is_initiative": true})
 					}
 					_ = json.NewEncoder(w).Encode(map[string]any{"work": rows})
 				case r.URL.Path == "/agents/agent-1":

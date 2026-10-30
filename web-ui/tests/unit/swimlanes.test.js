@@ -247,6 +247,7 @@ describe("tray and budget", () => {
             title: "A1 F4",
             phase: "backlog",
             parent_ref: null,
+            needs_home: true,
             created_at: "2026-10-24T00:00:00Z",
             likely_home: [
               {
@@ -264,6 +265,8 @@ describe("tray and budget", () => {
     ).toEqual([
       {
         ref: "card:a1-f4",
+        needs_home: true,
+        is_initiative: false,
         title: "A1 F4",
         phase: "backlog",
         createdAt: "2026-10-24T00:00:00Z",
@@ -282,6 +285,7 @@ describe("tray and budget", () => {
       work: [
         {
           ref: "card:x",
+          needs_home: true,
           title: "X",
           created_by: { id: "agent:lane", display: "lane", kind: "agent" },
           next_actions: [

@@ -5,7 +5,7 @@
    * A mouse can also drag a row onto a lane (the board owns the drop); touch
    * never drags.
    *
-   * Core's other two tray actions sit beside them. "Make it an initiative"
+   * Core's other two tray actions sit beside them. "Move to top level"
    * is a write the board sends (`onPromote`), the one-tap answer when no
    * home fits. "Move to another workspace" only shows the command core
    * suggests: a move needs a person with access to both workspaces, so
@@ -49,7 +49,7 @@
     const lane = lanes.find((entry) => entry.ref === value);
     if (lane) onGroup(row, lane);
   }
-  const canPromote = (row) => Boolean(row.promote && onPromote);
+  const canPromote = (row) => Boolean(row.needs_home && onPromote);
 </script>
 
 <ul class="divide-y divide-line-subtle" data-swimlane-tray-rows>
@@ -105,7 +105,7 @@
             disabled={waiting}
             data-source="computed:next_actions"
             data-promote={row.ref}
-            onclick={() => onPromote(row)}>Make it an initiative</button
+            onclick={() => onPromote(row)}>Move to top level</button
           >
         {/if}
         {#each homes as home (home.ref)}
@@ -114,12 +114,12 @@
             class="tray-take min-h-9"
             disabled={waiting}
             data-group-under={home.ref}
-            onclick={() => onGroup(row, home)}>Group under {home.title}</button
+            onclick={() => onGroup(row, home)}>Move under {home.title}</button
           >
         {/each}
         {#if lanes.length || extra}
           <label class="sr-only" for="{idPrefix}-other-{row.ref}"
-            >Group “{row.title}” under another initiative, or another action</label
+            >Move “{row.title}” under another initiative, or another action</label
           >
           <select
             id="{idPrefix}-other-{row.ref}"
@@ -127,14 +127,14 @@
             disabled={waiting}
             onchange={(event) => other(row, event)}
           >
-            <option value="">{homes.length ? "Other…" : "Group under…"}</option>
+            <option value="">{homes.length ? "Other…" : "Move under…"}</option>
             {#each lanes as lane (lane.ref)}
               <option value={lane.ref}>{lane.title}</option>
             {/each}
             {#if extra}
               <optgroup label="Or">
                 {#if !promoteFirst && canPromote(row)}
-                  <option value={PROMOTE}>Make it an initiative</option>
+                  <option value={PROMOTE}>Move to top level</option>
                 {/if}
                 {#if row.move}
                   <option value={MOVE}>Move to another workspace…</option>
@@ -173,7 +173,7 @@
 </ul>
 {#if hasMore}
   <p class="pt-2 text-micro text-fg-muted">
-    More recent cards are waiting. Group these to see the rest.
+    More recent cards are waiting. Move these to see the rest.
   </p>
 {/if}
 

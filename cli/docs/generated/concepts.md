@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `84`
+- Commands: `88`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -213,6 +213,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.get`
   - `work.group`
   - `work.list`
+  - `work.move`
   - `work.observations.list`
   - `work.observations.submit`
   - `work.participants.list`
@@ -220,8 +221,11 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.patch`
   - `work.refresh.get`
   - `work.refresh.request`
+  - `work.resolve`
+  - `work.tree`
   - `work.unfold`
   - `work.ungrouped`
+  - `work.where`
   - `workspace.dashboard.set`
 
 ## `compatibility`

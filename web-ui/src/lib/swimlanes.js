@@ -175,9 +175,11 @@ export function trayActions(nextActions) {
 /** `GET /work/ungrouped` rows, kept to what the tray shows. */
 export function trayRows(raw) {
   return (Array.isArray(raw?.work) ? raw.work : [])
-    .filter((row) => row?.ref && !row.parent_ref)
+    .filter((row) => row?.ref && row.needs_home === true && !row.parent_ref)
     .map((row) => ({
       ref: String(row.ref),
+      needs_home: true,
+      is_initiative: false,
       title: String(row.title || row.ref),
       phase: String(row.phase || ""),
       createdAt: String(row.created_at || ""),

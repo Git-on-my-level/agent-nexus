@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -37,10 +38,10 @@ func commandSideEffectClass(command string) string {
 	if command == "pm card" || command == "pm context" || command == "pm status" || command == "pm presence" {
 		return "read_only"
 	}
-	if command == "work group" || command == "work fold" || command == "work unfold" || strings.HasPrefix(command, "initiative ") {
+	if command == "work move" || command == "mv" || command == "work group" || command == "work fold" || command == "work unfold" || strings.HasPrefix(command, "initiative ") {
 		return "remote_coordination_write"
 	}
-	if command == "work ungrouped" {
+	if command == "work tree" || command == "tree" || command == "work ls" || command == "where" || command == "work ungrouped" {
 		return "read_only"
 	}
 	if command == "refs resolve" {
@@ -264,7 +265,7 @@ func deriveNextActions(command string, argv []string, value any) []output.NextAc
 		}
 		if ref := anyString(item["ref"]); strings.HasPrefix(ref, "card:") && len(homes) > 0 {
 			if parent := anyString(asMap(homes[0])["ref"]); strings.HasPrefix(parent, "card:") {
-				actions = append(actions, action("Group under likely home", "anx", "work", "group", ref, "--under", parent))
+				actions = append(actions, action("Move under suggested home", "anx", "work", "move", ref, "--under", parent))
 			}
 		}
 	}
@@ -455,6 +456,17 @@ func doctorChecksOf(raw any) []doctorCheck {
 func resultWarnings(command string, argv []string, value any) ([]output.Warning, []output.NextAction) {
 	if command == "doctor" {
 		return doctorVersionWarnings(value)
+	}
+	if command == "work create" || command == "cards create" {
+		root := asMap(value)
+		item := asMap(root["work"])
+		if item == nil {
+			item = asMap(root["card"])
+		}
+		if item["needs_home"] == true {
+			ref := anyString(item["ref"])
+			return []output.Warning{{Code: "needs_home", Message: fmt.Sprintf("%s is in Unsorted. File it with anx work move %s --under <parent>, or use anx where %s for suggestions.", ref, ref, ref)}}, []output.NextAction{action("Suggest a home", "anx", "where", ref)}
+		}
 	}
 	parts := strings.Fields(command)
 	if len(parts) == 0 || parts[len(parts)-1] != "list" && parts[len(parts)-1] != "search" {

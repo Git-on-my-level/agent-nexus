@@ -119,7 +119,8 @@
       "groupWork": 1,
       "foldWork": 1,
       "unfoldWork": 1,
-      "setCardPlan": 1
+      "setCardPlan": 1,
+      "moveWork": 1
     }
   },
   "lib/refRoute.js": {

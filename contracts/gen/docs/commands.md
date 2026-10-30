@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `284`
+- Commands: `288`
 
 ## `actors.create`
 
@@ -2182,11 +2182,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
 
 ## `initiative.retire`
 
@@ -2195,11 +2195,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
+- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
 
 ## `integrations.bind`
 
@@ -3458,11 +3458,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.
+- Why: Create under an explicitly named parent, or with initiative true at top level. Without either the card enters Unsorted; parentage never writes plan steps.
 - Concepts: `cards`, `evidence`
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
-- Agent notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+- Agent notes: Workspace authenticated. Board placement is layout only. under names the stored parent; initiative true explicitly creates an initiative. Without either, needs_home is true. Paths are input aliases resolved before creation; stored references remain canonical card refs.
 
 ## `work.fold`
 
@@ -3497,11 +3497,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
+- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
 - Concepts: `cards`, `evidence`
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
-- Agent notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
+- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
 
 ## `work.list`
 
@@ -3515,6 +3515,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkListResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.move`
+
+- CLI path: `work move`
+- HTTP: `POST /work/{card_ref}/move`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Move a card under a parent, to top level or to Unsorted
+- Concepts: `cards`
+- Error codes: `invalid_request`, `not_found`, `conflict`
+- Output: Returns WorkResponse.
+- Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
 
 ## `work.observations.list`
 
@@ -3607,6 +3620,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `WorkRefreshResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
+## `work.resolve`
+
+- CLI path: `work resolve`
+- HTTP: `GET /work/resolve`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Resolve a path alias to a canonical card ref
+- Concepts: `cards`
+- Error codes: `invalid_request`, `not_found`, `conflict`
+- Output: Returns WorkResolveResponse.
+- Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+
+## `work.tree`
+
+- CLI path: `work tree`
+- HTTP: `GET /work/tree`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Read the visible work tree in creation order
+- Concepts: `cards`
+- Error codes: `invalid_request`, `not_found`, `conflict`
+- Output: Returns WorkTreeResponse.
+- Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+
 ## `work.unfold`
 
 - CLI path: `work unfold`
@@ -3632,6 +3671,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `work_unavailable`
 - Output: Returns `WorkUngroupedResponse`.
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
+
+## `work.where`
+
+- CLI path: `where`
+- HTTP: `GET /work/where`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `flags`
+- Why: Suggest a home for a card or text without filing it
+- Concepts: `cards`
+- Error codes: `invalid_request`, `not_found`, `conflict`
+- Output: Returns WorkWhereResponse.
+- Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
 
 ## `workspace.dashboard.list`
 

@@ -1,3 +1,4 @@
+import { workMoveRequest, workMoveTitle } from "$lib/workMove.js";
 import { get } from "svelte/store";
 import { localWorkScope } from "$lib/localWorkScope.js";
 import { enqueueLocalMutation } from "$lib/mutationOutbox.js";
@@ -20,6 +21,7 @@ import { randomUUID } from "$lib/replayPolicy.js";
  */
 
 export const GROUPING_OPERATIONS = [
+  "work.move",
   "work.group",
   "work.fold",
   "work.unfold",
@@ -43,7 +45,9 @@ const VERB_OPERATION = {
 };
 
 /** What the reader is told the saved change does. */
-export function groupingTitle({ verb, work, parent }) {
+export function groupingTitle(draft) {
+  if (draft.verb === "move") return workMoveTitle(draft);
+  const { verb, work, parent } = draft;
   const card = `“${work?.title || work?.ref}”`;
   const home = `“${parent?.title || parent?.ref}”`;
   switch (verb) {
@@ -89,6 +93,7 @@ export function groupingDraft(
 }
 
 export function groupingRequest(draft, actor, key) {
+  if (draft?.verb === "move") return workMoveRequest(draft);
   const operation = VERB_OPERATION[draft?.verb];
   const ref = String(draft?.work?.ref ?? "").trim();
   const parent = String(draft?.parent?.ref ?? "").trim();

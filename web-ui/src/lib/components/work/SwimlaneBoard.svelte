@@ -1,7 +1,7 @@
 <script>
   /**
    * The swimlane board: one lane per top-level initiative, its children in
-   * state columns, and an Ungrouped tray of new cards above.
+   * state columns, and an Unsorted tray of new cards above.
    *
    * Reads: the brief (lanes, rollups, loops, budget, fold suggestions, shared
    * with the nav badge) and one bounded `GET /work/ungrouped` page, re-read
@@ -19,6 +19,7 @@
    * Below `md` lanes stack as collapsible sections and the tray opens as a
    * sheet.
    */
+  import { workMoveDraft } from "$lib/workMove.js";
   import { onMount, tick } from "svelte";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
   import { countWaitingDecisions } from "$lib/brief.js";
@@ -188,11 +189,13 @@
     if (keyboard) void tick().then(() => noticeElement?.focus());
   }
   const group = (row, lane, options) =>
-    send(groupingDraft("group", row, lane), options);
-  const promote = (row) =>
-    send(
-      groupingDraft("promote", row, null, { version: row.promote?.version }),
-    );
+    send(workMoveDraft(row, "under", lane), options);
+  const promote = (row) => {
+    saved = workMoveDraft(row, "root");
+  };
+  const openMove = (work) => {
+    saved = workMoveDraft(work, "unsorted");
+  };
   const fold = (suggestion) =>
     send(
       groupingDraft(
@@ -217,6 +220,8 @@
   function doneText(draft) {
     const { work, parent } = draft;
     switch (draft.verb) {
+      case "move":
+        return `${groupingTitle(draft)}. Confirmed.`;
       case "group":
         return `Grouped “${work.title}” under “${parent?.title}”.`;
       case "fold":
@@ -224,11 +229,11 @@
       case "unfold":
         return `Unfolded “${work.title}”. It is its own initiative again.`;
       case "ungroup":
-        return `Took “${work.title}” out of “${parent?.title}”. It is back in Ungrouped.`;
+        return `Took “${work.title}” out of “${parent?.title}”. It is back in Unsorted.`;
       case "promote":
         return `“${work.title}” is an initiative now.`;
       case "unpromote":
-        return `“${work.title}” is back in Ungrouped.`;
+        return `“${work.title}” is back in Unsorted.`;
       default:
         return groupingTitle(draft);
     }
@@ -453,7 +458,7 @@
 {#snippet trayBody(idPrefix)}
   {#if tray.error}
     <StateError
-      title="Ungrouped cards didn’t load"
+      title="Unsorted cards didn’t load"
       message="Check your connection and try again."
       onretry={loadTray}
     />
@@ -491,11 +496,51 @@
         data-saved-grouping
       >
         <span class="min-w-0 flex-1">Saved: {groupingTitle(saved)}.</span>
+        {#if saved.verb === "move"}
+          <label class="text-micro"
+            >Destination
+            <select class="ui-input" bind:value={saved.destination}>
+              <option value="under">Under another initiative</option>
+              <option value="root">Move to top level</option>
+              <option value="unsorted">Move to Unsorted</option>
+            </select>
+          </label>
+          {#if saved.destination === "under"}
+            <label class="text-micro"
+              >Parent
+              <select
+                class="ui-input"
+                value={saved.parent?.ref || ""}
+                onchange={(event) => {
+                  saved.parent =
+                    lanes.find(
+                      (lane) => lane.ref === event.currentTarget.value,
+                    ) || null;
+                }}
+              >
+                <option value="">Choose an initiative…</option>
+                {#each lanes.filter((lane) => lane.ref !== saved.work.ref) as lane (lane.ref)}
+                  <option value={lane.ref}>{lane.title}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
+          <label class="text-micro"
+            >Reason
+            <input
+              class="ui-input"
+              maxlength="2000"
+              bind:value={saved.reason}
+              placeholder="Why this home?"
+            />
+          </label>
+        {/if}
         <button
           type="button"
           class="ui-btn-primary"
           disabled={pending.has(saved.work?.ref)}
-          onclick={() => send(saved)}>Send again</button
+          onclick={() => send(saved)}
+          >{saved.verb === "move" ? "Save move" : "Send again"}</button
         >
         <button
           type="button"
@@ -636,8 +681,7 @@
           </ul>
         {:else}
           <p class="mt-2 text-fg-muted">
-            No fold suggestions right now. Group new cards from Ungrouped
-            instead.
+            No fold suggestions right now. Move new cards from Unsorted instead.
           </p>
         {/if}
       </section>
@@ -648,8 +692,8 @@
         <h2 class="text-subtitle font-semibold text-fg">No initiatives yet</h2>
         <p class="mx-auto mt-2 max-w-md text-meta text-fg-muted">
           {tray.rows.length
-            ? "Cards are waiting in Ungrouped. Create an initiative to group them under."
-            : "Create an initiative. Cards grouped under it show up here as a lane."}
+            ? "Cards are waiting in Unsorted. Create an initiative to move them under."
+            : "Create an initiative. Cards placed under it show up here as a lane."}
         </p>
         <a
           class="ui-prose-link mt-4 inline-block text-meta"
@@ -699,6 +743,13 @@
                       >{lane.title}</a
                     >
                   </h2>
+                  <button
+                    type="button"
+                    class="ui-prose-link text-micro"
+                    disabled={pending.has(lane.ref)}
+                    onclick={() => openMove({ ...lane, is_initiative: true })}
+                    aria-label={`Move ${lane.title}`}>Move…</button
+                  >
                   <!-- Phone: one tag says the most urgent thing. -->
                   {#if view.needs.length}
                     <span
@@ -886,9 +937,9 @@
                   id="lane-cells-{lane.ref}"
                   class="pt-2 text-micro text-fg-muted md:col-span-4 md:px-3 md:py-3"
                 >
-                  Nothing grouped here yet.{phone
+                  No children here yet.{phone
                     ? ""
-                    : " Drag a card from Ungrouped onto this lane."}
+                    : " Drag a card from Unsorted onto this lane."}
                 </p>
               {:else}
                 <div
@@ -974,6 +1025,14 @@
                               >
                             {/if}
                           </a>
+                          <button
+                            type="button"
+                            class="ui-prose-link text-micro self-start"
+                            disabled={pending.has(child.ref)}
+                            onclick={() =>
+                              openMove({ ...child, parent_ref: lane.ref })}
+                            aria-label={`Move ${child.title}`}>Move…</button
+                          >
                         {/if}
                       {/each}
                       {#if rows.length > CELL_PREVIEW}
@@ -1038,10 +1097,10 @@
           class="flex flex-wrap items-baseline gap-x-2.5 text-meta"
         >
           <span class="text-body font-semibold text-fg"
-            >Ungrouped{trayCount}</span
+            >Unsorted{trayCount}</span
           >
           <span class="text-fg-muted"
-            >New cards land here until they're grouped. Suggestions come from
+            >New cards land here until they're placed. Suggestions come from
             shared links, repository, project and title prefix; anyone can take
             one, or drag a card onto a lane.</span
           >
@@ -1055,8 +1114,8 @@
         data-swimlane-tray-open
         onclick={openTray}
         ><span
-          ><span class="font-semibold text-fg">Ungrouped{trayCount}</span><span
-            class="text-fg-muted">{" · tap to group"}</span
+          ><span class="font-semibold text-fg">Unsorted{trayCount}</span><span
+            class="text-fg-muted">{" · tap to move"}</span
           ></span
         ><span aria-hidden="true" class="text-fg-muted">›</span></button
       >
@@ -1128,8 +1187,8 @@
     {drag.row.title}
     <span class="block text-micro text-fg-muted"
       >{dropRef
-        ? `Group under ${lanes.find((lane) => lane.ref === dropRef)?.title}`
-        : "Drop on a lane to group"}</span
+        ? `Move under ${lanes.find((lane) => lane.ref === dropRef)?.title}`
+        : "Drop on a lane to move"}</span
     >
   </div>
 {/if}
@@ -1154,7 +1213,7 @@
     >
       <div class="flex items-center justify-between gap-2">
         <h2 id="swimlane-sheet-title" class="text-subtitle text-fg">
-          Ungrouped{trayCount}
+          Unsorted{trayCount}
         </h2>
         <button
           type="button"

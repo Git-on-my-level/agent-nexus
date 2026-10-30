@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 284
+- Command count: 288
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -54,7 +54,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | topics | 10 |
 | usage | 1 |
 | watch | 1 |
-| work | 16 |
+| where | 1 |
+| work | 19 |
 | workspace | 4 |
 
 ## Counts by Classification
@@ -67,7 +68,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 13 |
-| unsupported_other | 9 |
+| unsupported_other | 13 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
@@ -79,7 +80,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 69 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 65 | not represented as direct MCP tools in v1 |
+| unsupported | 69 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -253,7 +254,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
-| initiative.promote | initiative | POST | /work/{card_ref}/promote | exposed_write | Declare initiative board membership with an audit reason and replay safety; agents may act. |
+| initiative.promote | initiative | POST | /work/{card_ref}/promote | exposed_write | Deprecated move-to-root alias with an audit reason; board roles no longer define initiatives. |
 | initiative.retire | initiative | POST | /work/{card_ref}/retire | exposed_write | Retire membership and optionally group atomically with an audit reason; agents may act. |
 | integrations.bind | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.disable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
@@ -354,8 +355,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.create | work | POST | /work | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.fold | work | POST | /work/{card_ref}/fold | exposed_write | Transfer references and archive with a reversible scoped snapshot. |
 | work.get | work | GET | /work/{card_ref} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
-| work.group | work | POST | /work/{card_ref}/group | exposed_write | Add an ordinary plan step atomically with replay safety. |
+| work.group | work | POST | /work/{card_ref}/group | exposed_write | Deprecated stored-parent move alias; plan steps no longer define hierarchy. |
 | work.list | work | GET | /work | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| work.move | work | POST | /work/{card_ref}/move | unsupported_other | Use the work-tree CLI surface until the move API has verified keyed replay for MCP writes. |
 | work.observations.list | work | GET | /work/{card_ref}/observations | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.submit | work | POST | /work/{card_ref}/observations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.participants.list | work | GET | /work/{card_ref}/participants | exposed_read | Read task-scoped participation after core privacy checks; other agents' session identifiers remain private. |
@@ -363,8 +365,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.patch | work | PATCH | /work/{card_ref} | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.refresh.get | work | GET | /work/{card_ref}/refresh | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.refresh.request | work | POST | /work/{card_ref}/refresh | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
+| work.resolve | work | GET | /work/resolve | unsupported_other | Path resolution is currently a work-tree CLI helper; no MCP adaptation is included in this phase. |
+| work.tree | work | GET | /work/tree | unsupported_other | Tree presentation is currently provided by the CLI; no MCP adaptation is included in this phase. |
 | work.unfold | work | POST | /work/{card_ref}/unfold | exposed_write | Reverse a fold without overwriting conflicting user edits. |
 | work.ungrouped | work | GET | /work/ungrouped | exposed_read | Bounded visible recent cards with deterministic likely homes. |
+| work.where | where | GET | /work/where | unsupported_other | Advisory placement is currently provided by the CLI; no MCP adaptation is included in this phase. |
 | workspace.dashboard.list | workspace | GET | /workspace/dashboard/reports | exposed_read | Validated dashboard report selector candidates. |
 | workspace.dashboard.pins.list | workspace | GET | /workspace/dashboard/pins | exposed_read | Read only the requesting principal's ordered dashboard pins. |
 | workspace.dashboard.pins.set | workspace | PUT | /workspace/dashboard/pins | exposed_write | Reversibly replace only the requesting principal's dashboard pins. |

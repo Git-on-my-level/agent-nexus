@@ -248,7 +248,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "cards", "runs"},
-		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID: "agents.stream",
@@ -3381,7 +3381,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:  []string{"work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID: "work.create",
@@ -3392,7 +3392,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.capabilities", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:  []string{"work.capabilities", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.fold",
@@ -3404,7 +3404,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.get",
@@ -3416,7 +3416,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.group",
@@ -3428,7 +3428,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID: "work.list",
@@ -3439,7 +3439,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards", "evidence"},
-		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
+	},
+	{
+		CommandID:  "work.move",
+		CLIPath:    "work move",
+		Group:      "work",
+		Method:     "POST",
+		Path:       "/work/{card_ref}/move",
+		PathParams: []string{"card_ref"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"cards"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.observations.list",
@@ -3451,7 +3463,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.observations.submit",
@@ -3463,7 +3475,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.participants.list",
@@ -3475,7 +3487,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.participants.register",
@@ -3487,7 +3499,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.patch",
@@ -3499,7 +3511,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.refresh.get",
@@ -3511,7 +3523,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.request", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.request", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.refresh.request",
@@ -3523,7 +3535,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.unfold", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.resolve", "work.tree", "work.unfold", "work.ungrouped"},
+	},
+	{
+		CommandID: "work.resolve",
+		CLIPath:   "work resolve",
+		Group:     "work",
+		Method:    "GET",
+		Path:      "/work/resolve",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"cards"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.tree", "work.unfold", "work.ungrouped"},
+	},
+	{
+		CommandID: "work.tree",
+		CLIPath:   "work tree",
+		Group:     "work",
+		Method:    "GET",
+		Path:      "/work/tree",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"cards"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.unfold", "work.ungrouped"},
 	},
 	{
 		CommandID:  "work.unfold",
@@ -3535,7 +3569,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "evidence"},
-		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.ungrouped"},
+		Adjacent:   []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.ungrouped"},
 	},
 	{
 		CommandID: "work.ungrouped",
@@ -3546,7 +3580,17 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.unfold"},
+		Adjacent:  []string{"work.capabilities", "work.create", "work.fold", "work.get", "work.group", "work.list", "work.move", "work.observations.list", "work.observations.submit", "work.participants.list", "work.participants.register", "work.patch", "agents.me.presence", "work.refresh.get", "work.refresh.request", "work.resolve", "work.tree", "work.unfold"},
+	},
+	{
+		CommandID: "work.where",
+		CLIPath:   "where",
+		Group:     "where",
+		Method:    "GET",
+		Path:      "/work/where",
+		InputMode: "flags",
+		Stability: "beta",
+		Concepts:  []string{"cards"},
 	},
 	{
 		CommandID: "workspace.dashboard.list",
@@ -4711,6 +4755,10 @@ func (c *Client) WorkList(ctx context.Context, opts RequestOptions) (*http.Respo
 	return c.Invoke(ctx, "work.list", nil, opts)
 }
 
+func (c *Client) WorkMove(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.move", pathParams, opts)
+}
+
 func (c *Client) WorkObservationsList(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "work.observations.list", pathParams, opts)
 }
@@ -4739,12 +4787,24 @@ func (c *Client) WorkRefreshRequest(ctx context.Context, pathParams map[string]s
 	return c.Invoke(ctx, "work.refresh.request", pathParams, opts)
 }
 
+func (c *Client) WorkResolve(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.resolve", nil, opts)
+}
+
+func (c *Client) WorkTree(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.tree", nil, opts)
+}
+
 func (c *Client) WorkUnfold(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "work.unfold", pathParams, opts)
 }
 
 func (c *Client) WorkUngrouped(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "work.ungrouped", nil, opts)
+}
+
+func (c *Client) WorkWhere(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "work.where", nil, opts)
 }
 
 func (c *Client) WorkspaceDashboardList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

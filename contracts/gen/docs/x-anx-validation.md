@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `284`
+- Command operations: `288`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `233`
+- Missing recommended examples: `237`
 
 ## Baseline gap counts
 
@@ -361,6 +361,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `work.get` `GET /work/{card_ref}`
 - `work.group` `POST /work/{card_ref}/group`
 - `work.list` `GET /work`
+- `work.move` `POST /work/{card_ref}/move`
 - `work.observations.list` `GET /work/{card_ref}/observations`
 - `work.observations.submit` `POST /work/{card_ref}/observations`
 - `work.participants.list` `GET /work/{card_ref}/participants`
@@ -368,8 +369,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - `work.patch` `PATCH /work/{card_ref}`
 - `work.refresh.get` `GET /work/{card_ref}/refresh`
 - `work.refresh.request` `POST /work/{card_ref}/refresh`
+- `work.resolve` `GET /work/resolve`
+- `work.tree` `GET /work/tree`
 - `work.unfold` `POST /work/{card_ref}/unfold`
 - `work.ungrouped` `GET /work/ungrouped`
+- `work.where` `GET /work/where`
 - `workspace.dashboard.list` `GET /workspace/dashboard/reports`
 - `workspace.dashboard.pins.list` `GET /workspace/dashboard/pins`
 - `workspace.dashboard.pins.set` `PUT /workspace/dashboard/pins`

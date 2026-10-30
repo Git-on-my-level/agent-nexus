@@ -162,6 +162,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 			"dry-run": {kind: preflightFlagBool},
 		})
 	}
+	if isWorkTreeCommand(args) {
+		p, err := parseWorkTreeCommand(args)
+		return p.name, err
+	}
 	switch args[0] {
 	case "orient":
 		return "orient", parseOrientArgs(args[1:])
@@ -1078,6 +1082,13 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"threads message":           {"thread": valueFlag, "thread-id": valueFlag},
 		"threads reply":             {"thread": valueFlag, "thread-id": valueFlag},
 		"boards workspace":          {"board-id": valueFlag},
+		"work create":               {"title": valueFlag, "initiative": boolFlag, "under": valueFlag, "from-file": valueFlag, "handle": valueFlag, "request-key": valueFlag, "after": valueFlag, "top-level": boolFlag},
+		"mv":                        {"under": valueFlag, "root": boolFlag, "unsorted": boolFlag, "reason": valueFlag, "after": valueFlag},
+		"work move":                 {"under": valueFlag, "root": boolFlag, "unsorted": boolFlag, "reason": valueFlag, "after": valueFlag},
+		"tree":                      {"depth": valueFlag, "include-done": boolFlag},
+		"work tree":                 {"depth": valueFlag, "include-done": boolFlag},
+		"work ls":                   {"include-done": boolFlag},
+		"where":                     {},
 		"boards cards create-batch": {"top-level": boolFlag, "under": valueFlag, "board-id": valueFlag, "from-file": valueFlag, "actor-id": valueFlag, "request-key": valueFlag, "if-board-updated-at": valueFlag},
 		"boards cards list":         {"board-id": valueFlag},
 		"workspace summary":         {"full-id": boolFlag},

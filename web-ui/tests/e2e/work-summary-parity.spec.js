@@ -71,20 +71,24 @@ const card = {
   phase: "in_progress",
   column_key: "in_progress",
   priority: "p1",
-  board_ref: "board:initiatives",
+  board_ref: "board:other",
+  is_initiative: true,
+  needs_home: false,
   updated_at: MOVED_AT,
   source: { authority: "nexus" },
   freshness: { status: "unknown" },
   work_summary: workSummary,
 };
 
-/** A second card on a board with no role, so the filter has something to drop. */
+/** Unsorted work on a designated board must still be excluded from initiatives. */
 const sideCard = {
   ...card,
   ref: "card:side-quest",
   handle: "side-quest",
   title: "Side quest",
-  board_ref: "board:other",
+  board_ref: "board:initiatives",
+  is_initiative: false,
+  needs_home: true,
   work_summary: {
     status: { state: "on_track", label: "In progress", reason: "Moving." },
     progress: { done: 1, total: 2, unit: "steps" },
@@ -106,6 +110,8 @@ const planlessCard = {
   phase: "in_progress",
   column_key: "in_progress",
   board_ref: "board:initiatives",
+  is_initiative: true,
+  needs_home: false,
   updated_at: MOVED_AT,
   source: { authority: "nexus" },
   freshness: { status: "unknown" },
@@ -135,6 +141,8 @@ const darkCard = {
   phase: "in_progress",
   column_key: "in_progress",
   board_ref: "board:initiatives",
+  is_initiative: true,
+  needs_home: false,
   updated_at: MOVED_AT,
   source: { authority: "nexus" },
   freshness: { status: "unknown" },
@@ -403,10 +411,13 @@ test("the Initiatives filter keeps the same rows, fewer of them", async ({
   // It is a filter, not a second renderer: the same rows, fewer of them.
   await page.goto(`${TASKS}?view=table&initiatives=1`);
   await expect(page.locator("[data-task-initiatives-filter]")).toContainText(
-    "Showing initiatives only",
+    "Showing top-level initiatives outside Unsorted",
   );
   await expect(page.locator("[data-work-ref]")).toHaveCount(3);
   await expect(page.locator(`[data-work-ref="${CARD_REF}"]`)).toBeVisible();
+  await expect(page.locator(`[data-work-ref="${sideCard.ref}"]`)).toHaveCount(
+    0,
+  );
   const filtered = await readSummary(
     page.locator(`[data-work-ref="${CARD_REF}"]`),
   );

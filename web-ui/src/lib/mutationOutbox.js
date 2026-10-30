@@ -322,6 +322,28 @@ async function send(entry, lease = null) {
     if (!result.card?.id) throw new Error("Assignment receipt is incomplete.");
     return result;
   }
+  if (entry.operation === "work.move") {
+    // The move API brief does not yet guarantee atomic keyed replay. Send an
+    // intent once; a crash or unknown result stays saved for explicit review.
+    // Do not replay an old placement over a newer move by another operator.
+    const uncertain = () =>
+      Object.assign(new Error("Move outcome is unknown."), {
+        publicMessage:
+          "This move could not be confirmed. It is saved here. Check the card’s current home, then edit the saved move if it still needs to be sent.",
+      });
+    if (entry.attempts > 1) throw uncertain();
+    const { ref, body } = entry.request;
+    try {
+      const result = await client.moveWork(ref, body, entry.key);
+      if (!result.work?.ref) throw uncertain();
+      return result;
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      if (!status || status >= 500 || status === 408 || status === 429)
+        throw uncertain();
+      throw error;
+    }
+  }
   if (["work.group", "work.fold", "work.unfold"].includes(entry.operation)) {
     const { ref, body } = entry.request;
     const result =
@@ -1186,7 +1208,9 @@ async function attempt(entry) {
       error,
       entry.operation === "artifacts.attachments.create"
         ? "file"
-        : ["cards.move", "pm.decisions.create"].includes(entry.operation)
+        : ["cards.move", "work.move", "pm.decisions.create"].includes(
+              entry.operation,
+            )
           ? "move"
           : entry.operation === "cards.patch"
             ? "assignment"
