@@ -270,8 +270,9 @@ func TestGroupingHierarchyRollupAndBudget(t *testing.T) {
 	if err = s.EnrichWorkHierarchy(ctx, []map[string]any{read}, "viewer", true, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if read["parent_ref"] != p["ref"] {
-		t.Fatalf("archiving reparented child: %v", read["parent_ref"])
+	// Archived work is never a home: its children wait in the Unsorted tray.
+	if read["parent_ref"] != nil || read["needs_home"] != true {
+		t.Fatalf("archiving kept the child under its archived parent: %v %v", read["parent_ref"], read["needs_home"])
 	}
 }
 

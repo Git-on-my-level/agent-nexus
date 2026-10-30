@@ -1095,7 +1095,11 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 		return nil, false, err
 	}
 	for _, item := range out {
+		// Brief items are initiatives or loops by selection; the per-card tree
+		// flags belong to work reads, not the brief.v1 contract.
 		delete(item, "id")
+		delete(item, "is_initiative")
+		delete(item, "needs_home")
 	}
 	return out, truncated, nil
 }

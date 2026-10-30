@@ -12576,10 +12576,6 @@ components:
           additionalProperties: true
           properties: *id001
       required:
-      - parent_ref
-      - is_initiative
-      - needs_home
-      - path
       - decision_revision
       - ref
       - title

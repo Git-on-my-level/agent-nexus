@@ -23,7 +23,12 @@ const workTreeMaxDepth = 3
 // private initiative reads as top-level work and never reveals that parent
 // (reads resolve unqualified cards through the reader's scoped relation).
 func workIsInitiativeSQL(card string) string {
-	return `(` + card + `.needs_home=0 AND (` + card + `.parent_card_id IS NULL OR NOT EXISTS(SELECT 1 FROM cards work_parent WHERE work_parent.id=` + card + `.parent_card_id)))`
+	return `(` + card + `.needs_home=0 AND ` + workIsRootSQL(card) + `)`
+}
+
+// workIsRootSQL: the card has no parent the reader can see (tray included).
+func workIsRootSQL(card string) string {
+	return `(` + card + `.parent_card_id IS NULL OR NOT EXISTS(SELECT 1 FROM cards work_parent WHERE work_parent.id=` + card + `.parent_card_id))`
 }
 
 // workParentSQL yields the stored parent's ID while that parent is not trashed.

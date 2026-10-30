@@ -385,7 +385,7 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 		if p, ok := actors.display[stripActor(c.createdBy)]; ok {
 			creator = p
 		}
-		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "needs_home": true, "is_initiative": false, "created_at": c.created, "created_by": creator, "likely_home": homes, "next_actions": actions})
+		out = append(out, map[string]any{"ref": c.ref, "title": c.title, "phase": c.phase, "parent_ref": nil, "needs_home": true, "is_initiative": false, "path": workTreeUnsortedRoot + "/" + strings.TrimPrefix(c.ref, "card:"), "created_at": c.created, "created_by": creator, "likely_home": homes, "next_actions": actions})
 	}
 
 	return out, more, nil
