@@ -59,21 +59,21 @@ func (s *Store) ReportActivitySubjects(ctx context.Context, refs []string, visib
 	}
 	if len(ids) > 0 {
 		raw, _ := json.Marshal(ids)
-		rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),COALESCE(b.role,''),p.card_id IS NOT NULL FROM cards c LEFT JOIN boards b ON b.id=c.board_id LEFT JOIN card_plans p ON p.card_id=c.id WHERE c.id IN (SELECT value FROM json_each(?))`, string(raw))
+		rows, err := s.db.QueryContext(ctx, `SELECT c.id,COALESCE(NULLIF(c.handle,''),c.id),`+workIsInitiativeSQL("c")+` FROM cards c WHERE c.id IN (SELECT value FROM json_each(?))`, string(raw))
 		if err != nil {
 			return nil, err
 		}
 		type item struct{ ref, kind string }
 		metadata := map[string]item{}
 		for rows.Next() {
-			var id, handle, role string
-			var hasPlan bool
-			if err = rows.Scan(&id, &handle, &role, &hasPlan); err != nil {
+			var id, handle string
+			var initiative bool
+			if err = rows.Scan(&id, &handle, &initiative); err != nil {
 				rows.Close()
 				return nil, err
 			}
 			kind := "card"
-			if role == "initiatives" || role == "initiative" || hasPlan {
+			if initiative {
 				kind = "initiative"
 			}
 			metadata[id] = item{"card:" + handle, kind}

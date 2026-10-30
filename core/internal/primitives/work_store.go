@@ -95,9 +95,6 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 		if err != nil {
 			return err
 		}
-		if err = protectNewInitiativeLinks(ctx, tx, cardID, p); err != nil {
-			return err
-		}
 		data, _ := json.Marshal(p)
 		if _, err = tx.ExecContext(ctx, `INSERT INTO card_plans(card_id,body_json,updated_at) VALUES(?,?,?)`, cardID, string(data), now); err != nil {
 			return err
@@ -309,8 +306,14 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 		}
 	}
 	under, after := workString(m["under"]), workString(m["after"])
+	if value, exists := input["initiative"]; exists {
+		if _, ok := value.(bool); !ok {
+			return nil, workInvalid("initiative must be a boolean")
+		}
+	}
 	delete(m, "under")
 	delete(m, "after")
+	delete(m, "initiative")
 	delete(m, "create_surface")
 	delete(m, foldSnapshotKey)
 	delete(m, "actor_id")
@@ -455,7 +458,8 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	m["create_surface"] = firstNonEmptyString(workString(input["create_surface"]), "work.create")
 	result, err := s.CreateBoardCard(ctx, actorID, boardID, AddBoardCardInput{
 		Under: under, After: after, CreateSurface: firstNonEmptyString(workString(input["create_surface"]), "work.create"),
-		Handle: workString(m["handle"]), CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
+		Initiative: input["initiative"] == true || m["top_level"] == true,
+		Handle:     workString(m["handle"]), CardID: id, Title: title, Body: workString(m["summary"]), ColumnKey: column,
 		DefinitionOfDone: dod, Assignee: assignee, DueAt: dueAt, PinnedDocumentID: pinnedDocumentID,
 		Risk: risk, Refs: uniqueSortedStrings(refs), WorkMetadata: m,
 	})
@@ -755,7 +759,7 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 		args = append(args, filter.ProjectRef)
 	}
 	if filter.Collection == "initiatives" {
-		where += ` AND COALESCE(m.authority,'nexus')='nexus' AND c.board_id IN (SELECT id FROM boards WHERE role='initiatives' AND COALESCE(archived_at,'')='' AND COALESCE(trashed_at,'')='')`
+		where += ` AND COALESCE(m.authority,'nexus')='nexus' AND ` + workIsInitiativeSQL("c")
 	}
 	if filter.Collection == "loops" {
 		if filter.ProjectRef == "" {
@@ -902,7 +906,7 @@ func reportWorkSQL(filter ReportWorkFilter, candidatesOnly bool) (string, []any)
 	projection := `SELECT COALESCE(b.id,''),b.handle,c.id,c.handle,` + placementColumns + `,
 	 c.title,c.summary,c.version,c.head_revision_id,c.head_revision_number,c.thread_id,c.parent_thread_id,c.due_at,c.definition_of_done_json,
 	 c.pinned_document_id,c.assignee,c.risk,c.resolution,c.resolution_refs_json,c.refs_json,c.created_at,c.created_by,c.updated_at,c.updated_by,c.provenance_json,
-	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,
+	 c.archived_at,c.archived_by,c.trashed_at,c.trashed_by,c.trash_reason,c.parent_card_id,c.needs_home,
 	 COALESCE(m.metadata_json,'{"source":{"authority":"nexus"}}'),COALESCE(m.version,0),COALESCE(m.refresh_json,'{"state":"idle"}'),o.body_json,a.body_json,
 	 COALESCE(b.title,''),COALESCE(b.role,''),COALESCE(b.thread_id,''),` + ownerColumns + `
 	 FROM ` + from + ` WHERE ` + projectionWhere + ordering + projectionLimit

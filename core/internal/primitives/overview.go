@@ -347,14 +347,8 @@ func (s *Store) overviewWork(ctx context.Context, visible func(string, string) b
 
 func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[string]bool, visible func(string, string) bool, now time.Time) (map[string]any, error) {
 	result := map[string]any{"generated_at": now.Format(time.RFC3339Nano)}
-	work, truncated, initiativeBoards, err := s.overviewWork(ctx, visible, now, true)
+	work, truncated, _, err := s.overviewWork(ctx, visible, now, true)
 	if err != nil {
-		return nil, err
-	}
-	// A single indexed existence probe preserves explicit selection even when
-	// an accessible designated board has no work in the bounded visit snapshot.
-	var designated bool
-	if err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM boards WHERE role='initiatives' LIMIT 1)`).Scan(&designated); err != nil {
 		return nil, err
 	}
 	humanIDs, agentNames, err = s.overviewPeople(ctx, work, humanIDs, agentNames)
@@ -394,7 +388,7 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 			initiative["progress"] = state.Progress
 			initiative["geometry"] = plans.TileGeometry(w["plan"].(plans.Plan), state)
 		}
-		if !designated || initiativeBoards[anyStringValue(w["board_ref"])] {
+		if w["is_initiative"] == true {
 			initiatives = append(initiatives, initiative)
 		}
 		if human {
@@ -410,9 +404,6 @@ func (s *Store) OverviewVisible(ctx context.Context, humanIDs, agentNames map[st
 	}
 	result["work"] = map[string]any{"status": "ok", "total": len(activeWork), "human_count": humanCount, "items": activeWork, "truncated": truncated}
 	result["initiatives"] = map[string]any{"status": "ok", "count": len(initiatives), "items": initiatives, "truncated": truncated}
-	if !designated {
-		result["initiatives"].(map[string]any)["hint"] = "Set a board role with anx boards patch <board> --role initiatives to select Overview initiatives."
-	}
 	result["needs_you"] = map[string]any{"status": "ok", "count": len(needs), "rows": needs, "href": "/inbox?mailbox=needs-you"}
 	dashboard, err := s.dashboard(ctx, false)
 	if err != nil {

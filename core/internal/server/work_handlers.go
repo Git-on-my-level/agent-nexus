@@ -33,14 +33,14 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 	switch {
 	case path == "":
 		valid = r.Method == http.MethodGet || r.Method == http.MethodPost
-	case path == "/capabilities" || path == "/ungrouped":
+	case path == "/capabilities" || path == "/ungrouped" || path == "/tree" || path == "/resolve" || path == "/where":
 		valid = r.Method == http.MethodGet
 	default:
 		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 		if len(parts) == 1 && parts[0] != "" {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPatch
 		}
-		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants" || parts[1] == "group" || parts[1] == "fold" || parts[1] == "unfold" || parts[1] == "promote" || parts[1] == "retire") {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants" || parts[1] == "group" || parts[1] == "fold" || parts[1] == "unfold" || parts[1] == "promote" || parts[1] == "retire" || parts[1] == "move") {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPost
 		}
 	}
@@ -263,6 +263,9 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			}
 			if !enrichPlans(w, r, opts, []map[string]any{item}) {
 				return
+			}
+			if tree, ok := opts.primitiveStore.(workGroupingStore); ok {
+				withWorkPath(r.Context(), tree, item)
 			}
 			writeJSON(w, 200, map[string]any{"work": publicWork(item)})
 			return
