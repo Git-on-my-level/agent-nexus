@@ -247,6 +247,7 @@ describe("tray and budget", () => {
             title: "A1 F4",
             phase: "backlog",
             parent_ref: null,
+            needs_home: true,
             created_at: "2026-10-24T00:00:00Z",
             likely_home: [
               {
@@ -264,6 +265,8 @@ describe("tray and budget", () => {
     ).toEqual([
       {
         ref: "card:a1-f4",
+        needs_home: true,
+        is_initiative: false,
         title: "A1 F4",
         phase: "backlog",
         createdAt: "2026-10-24T00:00:00Z",
@@ -277,22 +280,30 @@ describe("tray and budget", () => {
     ]);
   });
 
-  it("reads the creator, the fenced promote and the human move hint", () => {
+  it("reads the creator, the move confirmation and the human workspace hint", () => {
     const [row] = trayRows({
       work: [
         {
           ref: "card:x",
+          needs_home: true,
           title: "X",
           created_by: { id: "agent:lane", display: "lane", kind: "agent" },
           next_actions: [
             {
               label: "Choose a home",
-              argv: ["anx", "work", "group", "card:x", "--under", "card:a"],
+              argv: ["anx", "work", "move", "card:x", "--under", "card:a"],
             },
             {
-              command_id: "work.patch",
-              argv: ["anx", "work", "patch", "card:x", "--from-file", "-"],
-              stdin: { if_version: 7, patch: { top_level: true } },
+              command_id: "work.move",
+              argv: [
+                "anx",
+                "work",
+                "move",
+                "card:x",
+                "--root",
+                "--reason",
+                "An independent outcome",
+              ],
             },
             {
               command_template: "anx move card card:x --to <workspace-alias>",
@@ -305,7 +316,7 @@ describe("tray and budget", () => {
     });
     expect(row).toMatchObject({
       createdBy: "lane",
-      promote: { version: 7 },
+      promote: { ref: "card:x", reason: "An independent outcome" },
       move: "anx move card card:x --to <workspace-alias>",
     });
   });
@@ -313,7 +324,7 @@ describe("tray and budget", () => {
   it("offers no promote or move it cannot prove", () => {
     expect(
       trayActions([
-        // Not only top_level, or no fence, or another command: not a promote.
+        // Removed patch actions, malformed moves or another command cannot promote.
         {
           command_id: "work.patch",
           stdin: { if_version: 1, patch: { top_level: true, goal: null } },
@@ -326,6 +337,47 @@ describe("tray and budget", () => {
         {
           command_id: "work.fold",
           stdin: { if_version: 1, patch: { top_level: true } },
+        },
+        {
+          command_id: "work.move",
+          argv: [
+            "anx",
+            "work",
+            "group",
+            "card:x",
+            "--root",
+            "--reason",
+            "Outcome",
+          ],
+        },
+        {
+          command_id: "work.move",
+          argv: ["anx", "work", "move", "card:x", "--root", "--reason", ""],
+        },
+        {
+          command_id: "work.move",
+          argv: [
+            "anx",
+            "work",
+            "move",
+            "card:x",
+            "--root",
+            "--reason",
+            "x".repeat(2001),
+          ],
+        },
+        {
+          command_id: "work.move",
+          argv: [
+            "anx",
+            "work",
+            "move",
+            "card:x",
+            "--root",
+            "--reason",
+            "Outcome",
+            "--unsorted",
+          ],
         },
         // An executable move, or one not marked for a person, is not shown.
         {
@@ -570,99 +622,111 @@ describe("review fixes", () => {
   });
 });
 
-describe("make it an initiative", () => {
+describe("initiative moves and legacy outbox recovery", () => {
   const work = { ref: "card:ramp", title: "Ramp telemetry" };
 
-  it("is a fenced top_level patch at the version the tray read", () => {
-    const draft = groupingDraft("promote", work, null, { version: 3 });
-    expect(groupingTitle(draft)).toBe("Make “Ramp telemetry” an initiative");
+  it("new promote and undo intents are keyed moves with editable reasons", () => {
+    const draft = groupingDraft("promote", work);
+    expect(draft.reason).toBe("Made an initiative from Watch");
+    draft.reason = "A separate outcome";
     expect(groupingRequest(draft, "human", "k")).toEqual({
-      operation: "work.top_level",
+      operation: "work.move",
       request: {
-        ref: "card:ramp",
+        ref: work.ref,
         body: {
           actor_id: "human",
-          if_version: 3,
-          patch: { top_level: true },
+          request_key: "k",
+          root: true,
+          reason: "A separate outcome",
         },
       },
     });
-    const undo = groupingDraft("unpromote", work, null, { version: 4 });
-    expect(groupingTitle(undo)).toBe("Put “Ramp telemetry” back in Ungrouped");
-    expect(groupingRequest(undo, "human", "k").request.body).toEqual({
+    const undo = groupingDraft("unpromote", work);
+    expect(groupingTitle(undo)).toBe("Put “Ramp telemetry” back in Unsorted");
+    expect(groupingRequest(undo, "human", "undo-key").request.body).toEqual({
       actor_id: "human",
-      if_version: 4,
-      patch: { top_level: false },
+      request_key: "undo-key",
+      unsorted: true,
+      reason: "Returned to Unsorted from Watch",
     });
-    // No version, no write: it would not be fenced.
-    expect(() =>
-      groupingRequest(groupingDraft("promote", work), "human", "k"),
-    ).toThrow(/Reload/);
+    draft.reason = "";
+    expect(() => groupingRequest(draft, "human", "k")).toThrow(/reason/);
   });
 
-  const body = { actor_id: "h", if_version: 3, patch: { top_level: true } };
-  const conflict = () => Object.assign(new Error("409"), { status: 409 });
+  it.each([true, false])(
+    "translates a queued top_level=%s using its original identity",
+    async (wanted) => {
+      const body = {
+        actor_id: "h",
+        if_version: 3,
+        patch: { top_level: wanted },
+      };
+      const client = {
+        moveWork: vi.fn().mockResolvedValue({ work: { ref: work.ref } }),
+        patchWork: vi.fn(),
+        getWork: vi.fn(),
+      };
+      await sendTopLevel(client, { ref: work.ref, body }, "original-key");
+      await sendTopLevel(client, { ref: work.ref, body }, "original-key");
+      const expected = {
+        actor_id: "h",
+        request_key: "original-key",
+        ...(wanted ? { root: true } : { unsorted: true }),
+        reason: wanted
+          ? "Made an initiative from Watch"
+          : "Returned to Unsorted from Watch",
+      };
+      expect(client.moveWork.mock.calls).toEqual([
+        [work.ref, expected],
+        [work.ref, expected],
+      ]);
+      expect(body).toEqual({
+        actor_id: "h",
+        if_version: 3,
+        patch: { top_level: wanted },
+      });
+      expect(client.patchWork).not.toHaveBeenCalled();
+      expect(client.getWork).not.toHaveBeenCalled();
+    },
+  );
 
-  it("sends once and returns core's receipt", async () => {
-    const client = {
-      patchWork: vi.fn().mockResolvedValue({
-        work: { ref: "card:ramp", version: 4, top_level: true },
-      }),
-      getWork: vi.fn(),
-    };
-    await expect(
-      sendTopLevel(client, { ref: "card:ramp", body }),
-    ).resolves.toMatchObject({ work: { version: 4 } });
-    expect(client.patchWork).toHaveBeenCalledWith("card:ramp", body);
-    expect(client.getWork).not.toHaveBeenCalled();
-  });
-
-  it("confirms a retry whose first send landed, from a read-back", async () => {
-    const client = {
-      patchWork: vi.fn().mockRejectedValue(conflict()),
-      getWork: vi.fn().mockResolvedValue({
-        work: { ref: "card:ramp", version: 4, top_level: true },
-      }),
-    };
-    await expect(
-      sendTopLevel(client, { ref: "card:ramp", body }),
-    ).resolves.toEqual({
-      work: { ref: "card:ramp", version: 4, top_level: true },
-    });
-    expect(client.patchWork).toHaveBeenCalledTimes(1);
-    expect(client.getWork).toHaveBeenCalledWith("card:ramp", { summary: 1 });
-  });
-
-  it("stops when the card changed some other way", async () => {
-    const client = {
-      patchWork: vi.fn().mockRejectedValue(conflict()),
-      getWork: vi.fn().mockResolvedValue({
-        work: { ref: "card:ramp", version: 5, top_level: false },
-      }),
-    };
-    const error = await sendTopLevel(client, { ref: "card:ramp", body }).catch(
-      (e) => e,
-    );
-    expect(error.status).toBe(409);
-    expect(error.publicMessage).toMatch(/nothing was changed/);
-    // An unchanged version is not a landed write either.
-    client.getWork.mockResolvedValue({
-      work: { ref: "card:ramp", version: 3, top_level: true },
-    });
-    await expect(
-      sendTopLevel(client, { ref: "card:ramp", body }),
-    ).rejects.toHaveProperty("publicMessage");
-  });
-
-  it("leaves other failures to the outbox's retry", async () => {
+  it("retains a saved reason and leaves uncertain sends to keyed retry", async () => {
     const offline = Object.assign(new Error("offline"), { status: 503 });
     const client = {
-      patchWork: vi.fn().mockRejectedValue(offline),
-      getWork: vi.fn(),
+      moveWork: vi
+        .fn()
+        .mockRejectedValueOnce(offline)
+        .mockResolvedValue({ work: { ref: work.ref } }),
     };
-    await expect(sendTopLevel(client, { ref: "card:ramp", body })).rejects.toBe(
+    const request = {
+      ref: work.ref,
+      body: {
+        actor_id: "h",
+        patch: { top_level: true },
+        reason: "My original reason",
+      },
+    };
+    await expect(sendTopLevel(client, request, "saved-key")).rejects.toBe(
       offline,
     );
-    expect(client.getWork).not.toHaveBeenCalled();
+    await sendTopLevel(client, request, "saved-key");
+    expect(client.moveWork.mock.calls[1]).toEqual(
+      client.moveWork.mock.calls[0],
+    );
+    expect(client.moveWork.mock.calls[1][1].reason).toBe("My original reason");
+  });
+
+  it("keeps incomplete legacy intents for review instead of inventing a destination or key", async () => {
+    const client = { moveWork: vi.fn() };
+    await expect(
+      sendTopLevel(client, { ref: work.ref, body: { patch: {} } }, "k"),
+    ).rejects.toThrow(/incomplete/);
+    await expect(
+      sendTopLevel(client, {
+        ref: work.ref,
+        body: { patch: { top_level: true } },
+      }),
+    ).rejects.toThrow(/incomplete/);
+    expect(client.moveWork).not.toHaveBeenCalled();
   });
 });

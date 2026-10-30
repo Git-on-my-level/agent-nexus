@@ -2441,7 +2441,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.create
       x-anx-cli-path: work create
-      x-anx-why: Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.
+      x-anx-why: Create under an explicitly named parent, or with initiative true at top level. Without either the card enters Unsorted; parentage never writes plan steps.
       x-anx-input-mode: json-body
       x-anx-streaming:
         mode: none
@@ -2456,9 +2456,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's
-        oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside
-        attributed observations; refresh acceptance is not a successful read.
+      x-anx-agent-notes: Workspace authenticated. Board placement is layout only. under names the stored parent; initiative true explicitly creates an initiative. Without either, needs_home is true. Paths are input aliases resolved before creation; stored references remain canonical card refs.
       requestBody:
         required: true
         content:
@@ -2474,16 +2472,145 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkResponse'
+  /work/{card_ref}/move:
+    post:
+      operationId: workMove
+      summary: Move a card under a parent, to top level or to Unsorted
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-command-id: work.move
+      x-anx-cli-path: work move
+      x-anx-why: Move a card under a parent, to top level or to Unsorted
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns WorkResponse.
+      x-anx-error-codes: [invalid_request, not_found, conflict]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkMoveRequest'}
+      responses:
+        '200':
+          description: Move a card under a parent, to top level or to Unsorted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/tree:
+    get:
+      operationId: workTree
+      summary: Read the visible work tree in creation order
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-command-id: work.tree
+      x-anx-cli-path: work tree
+      x-anx-why: Read the visible work tree in creation order
+      x-anx-input-mode: flags
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns WorkTreeResponse.
+      x-anx-error-codes: [invalid_request, not_found, conflict]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+      parameters:
+      - {name: root, in: query, schema: {type: string}, description: Optional card ref or path alias.}
+      - {name: depth, in: query, schema: {type: integer, minimum: 1, maximum: 3, default: 2}}
+      - {name: include_done, in: query, schema: {type: boolean, default: false}}
+      responses:
+        '200':
+          description: Read the visible work tree in creation order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkTreeResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/resolve:
+    get:
+      operationId: workResolve
+      summary: Resolve a path alias to a canonical card ref
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-command-id: work.resolve
+      x-anx-cli-path: work resolve
+      x-anx-why: Resolve a path alias to a canonical card ref
+      x-anx-input-mode: flags
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns WorkResolveResponse.
+      x-anx-error-codes: [invalid_request, not_found, conflict]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+      parameters:
+      - {name: path, in: query, required: true, schema: {$ref: "#/components/schemas/WorkPath"}}
+      responses:
+        '200':
+          description: Resolve a path alias to a canonical card ref
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkResolveResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/where:
+    get:
+      operationId: workWhere
+      summary: Suggest a home for a card or text without filing it
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-command-id: work.where
+      x-anx-cli-path: where
+      x-anx-why: Suggest a home for a card or text without filing it
+      x-anx-input-mode: flags
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns WorkWhereResponse.
+      x-anx-error-codes: [invalid_request, not_found, conflict]
+      x-anx-concepts: [cards]
+      x-anx-stability: beta
+      x-anx-agent-notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
+      parameters:
+      - {name: ref, in: query, schema: {type: string}, description: Card ref; supply exactly one of ref or q.}
+      - {name: q, in: query, schema: {type: string}, description: Search text; supply exactly one of ref or q.}
+      responses:
+        '200':
+          description: Suggest a home for a card or text without filing it
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkWhereResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
   /work/{card_ref}/promote:
     post:
       operationId: initiativePromote
-      summary: Promote an initiative by explicit board membership
+      deprecated: true
+      summary: Deprecated; use work move with root true
       tags: [work]
       x-anx-surface: canonical
-      x-anx-agent-notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
       x-anx-command-id: initiative.promote
       x-anx-cli-path: initiative promote
-      x-anx-why: Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.
+      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns initiative membership, work and advisory facts.
@@ -2508,13 +2635,14 @@ paths:
   /work/{card_ref}/retire:
     post:
       operationId: initiativeRetire
-      summary: Retire an initiative by explicit board membership
+      deprecated: true
+      summary: Deprecated; use work move with under
       tags: [work]
       x-anx-surface: canonical
-      x-anx-agent-notes: Agents and humans may act. Atomic membership and audit event; retain request_key for replay.
+      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
       x-anx-command-id: initiative.retire
       x-anx-cli-path: initiative retire
-      x-anx-why: Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.
+      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns initiative membership, work and advisory facts.
@@ -2539,13 +2667,14 @@ paths:
   /work/{card_ref}/group:
     post:
       operationId: workGroup
-      summary: Add an existing card to a parent plan
+      deprecated: true
+      summary: Deprecated; use work move with under
       tags: [work]
       x-anx-surface: canonical
-      x-anx-agent-notes: Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire <card> --reason ...; no automatic choice.
+      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
       x-anx-command-id: work.group
       x-anx-cli-path: work group
-      x-anx-why: Add an existing card to a parent plan. Retain request_key and the original body until confirmed.
+      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `WorkResponse`.
@@ -2561,7 +2690,7 @@ paths:
             schema: {$ref: '#/components/schemas/WorkGroupRequest'}
       responses:
         '200':
-          description: Add an existing card to a parent plan
+          description: Move an existing card under a stored parent
           content:
             application/json:
               schema: {$ref: '#/components/schemas/WorkResponse'}
@@ -12275,10 +12404,13 @@ components:
       type: object
       additionalProperties: true
       properties:
-        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Stored parent card ref (card handle or id); plan links never establish parentage.}
+        is_initiative: {type: boolean, readOnly: true, description: Top-level active card outside the Unsorted tray; independent of board role and plans.}
+        needs_home: {type: boolean, readOnly: true, description: Card awaits explicit placement in the Unsorted tray.}
+        path: {$ref: '#/components/schemas/WorkPath'}
         rollup: {$ref: '#/components/schemas/WorkRollup'}
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
-        top_level: {type: boolean, description: Intentionally an initiative; excludes this root from the ungrouped tray. False clears the intent.}
+        top_level: {type: boolean, deprecated: true, description: Ignored. Use initiative on create or the work move route.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -12444,6 +12576,10 @@ components:
           additionalProperties: true
           properties: *id001
       required:
+      - parent_ref
+      - is_initiative
+      - needs_home
+      - path
       - decision_revision
       - ref
       - title
@@ -12470,7 +12606,7 @@ components:
         needing_viewer: {type: integer}
         workstreams: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
         children: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/WorkChild'}}
-        has_more: {type: boolean, description: True only when a visible workstream exceeds the 200-workstream expansion cohort. Each plan admits at most 200 steps. Hidden children never affect this field.}
+        has_more: {type: boolean, description: True when visible stored children exceed this bounded expansion. Each parent admits at most 200 children. Hidden children never affect this field.}
     WorkChild:
       type: object
       required: [ref, title, step_id, state, past_promise, needs_viewer]
@@ -12497,12 +12633,15 @@ components:
         has_more: {type: boolean}
     UngroupedCard:
       type: object
-      required: [ref, title, parent_ref, created_at, likely_home]
+      required: [ref, title, parent_ref, is_initiative, needs_home, path, created_at, likely_home]
       properties:
         phase: {type: string}
         ref: {type: string}
         title: {type: string}
-        parent_ref: {type: string, nullable: true}
+        parent_ref: {type: string, nullable: true, description: Stored parent; null for Unsorted.}
+        is_initiative: {type: boolean, enum: [false]}
+        needs_home: {type: boolean, enum: [true]}
+        path: {$ref: "#/components/schemas/WorkPath"}
         created_by: {nullable: true, readOnly: true, allOf: [{$ref: '#/components/schemas/BriefPrincipal'}], description: Scoped creator profile; null when unavailable or hidden.}
         created_at: {type: string, format: date-time}
         likely_home: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/LikelyHome'}}
@@ -12512,15 +12651,95 @@ components:
       required: [label, mutates, side_effect_class]
       properties:
         label: {type: string}
-        command_id: {type: string, description: work.patch for intentional top-level marking.}
-        argv: {type: array, items: {type: string}, description: Executable command; work.patch reads the supplied stdin object with --from-file -.}
-        stdin: {type: object, additionalProperties: true, description: Version-fenced WorkPatchRequest for the admitted card.}
+        command_id: {type: string, description: work.move for explicit placement or top-level moves.}
+        argv: {type: array, items: {type: string}, description: Explicit confirmation command; placement is never automatic.}
+        stdin: {type: object, additionalProperties: true, description: Optional request body for the admitted card. Parentage changes use work.move argv with an explicit destination.}
         command_template: {type: string, description: Human-only move command hint with a required workspace-alias argument. Not executable argv or a destination permission grant.}
         requires_human: {type: boolean}
         requires_destination: {type: boolean}
         mutates: {type: boolean}
         side_effect_class: {type: string}
         reasons: {type: array, items: {type: string}}
+    WorkPath:
+      type: string
+      pattern: '^(initiatives/[^/]+(/[^/]+){0,2}|unsorted/[^/]+)$'
+      description: Derived alias using each card handle, or its id when no handle exists. Handle renames and moves change paths; stable card refs remain canonical.
+    WorkMoveRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        actor_id: {type: string}
+        request_key: {type: string, maxLength: 256, description: Actor-scoped atomic original-result replay key. Retain the same key and body until confirmed; changed-body reuse conflicts.}
+        under: {type: string, minLength: 1, description: Visible open parent card ref.}
+        root: {type: boolean, enum: [true], description: Make this card a top-level initiative.}
+        unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
+        reason: {type: string, minLength: 1, maxLength: 2000, description: Required for root and when moving an initiative under another card.}
+        after: {type: string, description: Optional preceding sibling plan step id; never creates a plan step or hierarchy edge. Children remain ordered by creation time.}
+      oneOf:
+      - required: [under]
+        not: {anyOf: [{required: [root]}, {required: [unsorted]}]}
+      - required: [root, reason]
+        not: {anyOf: [{required: [under]}, {required: [unsorted]}]}
+      - required: [unsorted]
+        not: {anyOf: [{required: [under]}, {required: [root]}]}
+    WorkTreeNode:
+      type: object
+      required: [ref, title, state, path, owner, needs_home, is_initiative, children, has_more]
+      properties:
+        ref: {type: string}
+        title: {type: string}
+        state: {type: string}
+        path: {$ref: '#/components/schemas/WorkPath'}
+        owner: {type: string, nullable: true, description: Canonical assignee; absence means awaiting an owner regardless of leases.}
+        needs_home: {type: boolean}
+        is_initiative: {type: boolean}
+        children: {type: array, items: {$ref: '#/components/schemas/WorkTreeNode'}, description: Visible children in creation order.}
+        has_more: {type: boolean, description: Visible children remain beyond this bounded expansion.}
+    WorkTreeResponse:
+      type: object
+      required: [truncated]
+      properties:
+        initiatives: {type: array, items: {$ref: '#/components/schemas/WorkTreeNode'}}
+        unsorted: {type: array, items: {$ref: '#/components/schemas/WorkTreeNode'}}
+        node: {$ref: '#/components/schemas/WorkTreeNode'}
+        truncated: {type: boolean}
+      oneOf:
+      - required: [initiatives, unsorted]
+        not: {required: [node]}
+      - required: [node]
+        not: {anyOf: [{required: [initiatives]}, {required: [unsorted]}]}
+    WorkResolveResponse:
+      type: object
+      required: [ref, path]
+      properties:
+        ref: {type: string}
+        path: {$ref: '#/components/schemas/WorkPath'}
+    WorkWhereResponse:
+      type: object
+      required: [ref, path, parent_ref, is_initiative, needs_home, suggestions, next_actions]
+      properties:
+        ref: {type: string}
+        path: {type: string}
+        parent_ref: {type: string, nullable: true}
+        is_initiative: {type: boolean}
+        needs_home: {type: boolean}
+        suggestions:
+          type: array
+          items:
+            type: object
+            required: [ref, title, path, reasons]
+            properties:
+              ref: {type: string}
+              title: {type: string}
+              path: {$ref: '#/components/schemas/WorkPath'}
+              reasons: {type: array, items: {type: string}}
+        next_actions:
+          type: array
+          items:
+            type: object
+            required: [argv]
+            properties:
+              argv: {type: array, items: {type: string}}
     WorkGroupRequest:
       type: object
       properties:
@@ -12572,11 +12791,12 @@ components:
       type: object
       additionalProperties: true
       properties:
-        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
+        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle: {$ref: '#/components/schemas/CardHandle'}
-        top_level: {type: boolean, description: Intentionally an initiative; excludes this root from the ungrouped tray. False clears the intent.}
+        top_level: {type: boolean, deprecated: true, description: Ignored. Use initiative on create or the work move route.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
         request_key:
@@ -12643,9 +12863,10 @@ components:
           minimum: 0
         patch:
           type: object
+          description: top_level patches are rejected. Change parentage with work.move and an explicit destination instead.
           additionalProperties: true
+          not: {required: [top_level]}
           properties:
-            top_level: {type: boolean, description: Intentionally an initiative; false clears the intent.}
             cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
             goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
@@ -13095,7 +13316,7 @@ components:
         role:
           type: string
           maxLength: 64
-          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
+          description: Open board role retained for layout compatibility; never determines initiative identity or parentage. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -13302,7 +13523,10 @@ components:
     Card:
       type: object
       properties:
-        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Stored parent card ref (card handle or id); plan links never establish parentage.}
+        is_initiative: {type: boolean, readOnly: true, description: Top-level active card outside the Unsorted tray; independent of board role and plans.}
+        needs_home: {type: boolean, readOnly: true, description: Card awaits explicit placement in the Unsorted tray.}
+        path: {$ref: '#/components/schemas/WorkPath'}
         rollup: {$ref: '#/components/schemas/WorkRollup'}
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -13749,7 +13973,7 @@ components:
         request_key: {type: string, description: Retain the key and original body until confirmed.}
         reason: {type: string, minLength: 1, maxLength: 2000}
         to_board: {type: string, description: Retire destination; defaults to oldest active non-initiatives board or creates Tasks.}
-        under: {type: string, description: Retire only; atomically group under another open initiative. Destination defaults to a non-initiatives board.}
+        under: {type: string, description: Retire only; move under a visible open parent card without changing plan steps.}
     InitiativeMutationResponse:
       type: object
       required: [work, event, initiative_budget]
@@ -13810,7 +14034,7 @@ components:
         role:
           type: string
           maxLength: 64
-          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
+          description: Open board role retained for layout compatibility; never determines initiative identity or parentage. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -13844,7 +14068,7 @@ components:
         role:
           type: string
           maxLength: 64
-          description: Open board role. initiatives selects this board's eligible active cards for Overview initiatives. Empty clears; omission on patch preserves.
+          description: Open board role retained for layout compatibility; never determines initiative identity or parentage. Empty clears; omission on patch preserves.
         title: { type: string }
         summary:
           type: string
@@ -13868,7 +14092,8 @@ components:
     CardCreateInput:
       type: object
       properties:
-        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
+        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle:
@@ -14183,7 +14408,8 @@ components:
     CreateCardRequest:
       type: object
       properties:
-        under: {type: string, description: Optional visible open parent card. Creates and adds a plan step in one transaction.}
+        under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
+        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         actor_id: { type: string }
@@ -15417,7 +15643,7 @@ components:
           required: [status, count, items]
           properties:
             status: { type: string }
-            hint: { type: string, description: Suggests setting a board role when no initiatives board exists. }
+            hint: { type: string, description: Optional initiative selection guidance; board roles never determine membership. }
             count: { type: integer }
             items: { type: array, items: { $ref: '#/components/schemas/OverviewInitiative' } }
             truncated: { type: boolean }
@@ -15600,7 +15826,10 @@ components:
       properties:
         outcome: {type: string, maxLength: 280, readOnly: true, description: Goal annotation label (or metric), otherwise the first summary line; at most 280 Unicode code points.}
         proposed: {type: boolean, readOnly: true, description: True exactly when canonical placement is backlog; orthogonal to promise health state.}
-        parent_ref: {type: string, nullable: true, readOnly: true, description: Oldest visible open parent card by created_at then id; plan steps are the only hierarchy.}
+        parent_ref: {type: string, nullable: true, readOnly: true, description: Stored parent card ref (card handle or id); plan links never establish parentage.}
+        is_initiative: {type: boolean, readOnly: true, description: Top-level active card outside the Unsorted tray; independent of board role and plans.}
+        needs_home: {type: boolean, readOnly: true, description: Card awaits explicit placement in the Unsorted tray.}
+        path: {$ref: '#/components/schemas/WorkPath'}
         rollup: {$ref: '#/components/schemas/WorkRollup'}
         likely_home: {type: array, maxItems: 3, readOnly: true, items: {$ref: '#/components/schemas/LikelyHome'}}
         ref: { type: string, description: "card:<handle-or-id>" }

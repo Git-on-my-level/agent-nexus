@@ -75,10 +75,10 @@
   },
   "lib/groupingPlan.js": {
     "classification": "outbox",
-    "reason": "Audited version-fenced top_level work patch sent only by the mutation outbox, with read-back after a 409; not a direct form sender.",
+    "reason": "Legacy top_level outbox intents translate to replay-safe work.move with their saved actor and request key.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
-      "patchWork": 1
+      "moveWork": 1
     }
   },
   "lib/hostBridgeStatus.js": {
@@ -119,7 +119,8 @@
       "groupWork": 1,
       "foldWork": 1,
       "unfoldWork": 1,
-      "setCardPlan": 1
+      "setCardPlan": 1,
+      "moveWork": 1
     }
   },
   "lib/refRoute.js": {

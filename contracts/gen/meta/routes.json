@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 266,
+  "route_count": 270,
   "routes": [
     {
       "method": "GET",
@@ -1244,7 +1244,22 @@
     },
     {
       "method": "GET",
+      "path": "/work/resolve",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/tree",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
       "path": "/work/ungrouped",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/where",
       "access_class": "workspace_business_surface"
     },
     {
@@ -1266,6 +1281,11 @@
       "method": "POST",
       "path": "/work/{card_ref}/group",
       "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/work/{card_ref}/move",
+      "access_class": "handler_defined"
     },
     {
       "method": "GET",

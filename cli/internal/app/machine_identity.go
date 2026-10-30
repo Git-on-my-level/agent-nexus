@@ -8,6 +8,9 @@ type machineCommandIdentity struct {
 }
 
 var machineCommandIdentityByPath = map[string]machineCommandIdentity{
+	"mv":                       {Command: "mv", CommandID: "work.move"},
+	"tree":                     {Command: "tree", CommandID: "work.tree"},
+	"where":                    {Command: "where", CommandID: "work.where"},
 	"pm card":                  {Command: "pm card", CommandID: "pm.card"},
 	"pm propose":               {Command: "pm propose", CommandID: "pm.propose"},
 	"pm conversations message": {Command: "pm conversations message", CommandID: "pm.conversations.messages.create"},

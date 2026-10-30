@@ -4332,7 +4332,7 @@ func TestAgentGuideDocumentsAskAwaitAndRunLabel(t *testing.T) {
 	t.Parallel()
 
 	guide := agentGuideText()
-	if !strings.Contains(guide, "anx await <ask-id>") || !strings.Contains(guide, "anx.card.<initiative>") {
+	if !strings.Contains(guide, "anx await <ask-id>") || !strings.Contains(guide, "anx mv") {
 		t.Fatalf("expected await and run label guidance output=%s", guide)
 	}
 	for _, term := range []string{"CEO by default", "human-level initiative or outcome", "never mirror a tracker 1:1", "15 or fewer open cards", "do not also block the card", "2–3 alternatives", "event:<response_event_id>", "12 PRs + 4 Multica issues"} {

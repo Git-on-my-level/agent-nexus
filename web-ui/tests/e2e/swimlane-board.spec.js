@@ -5,7 +5,7 @@ import { setup } from "./helpers/durable-discussion.js";
 
 /**
  * The swimlane board, Watch's Lanes view (`/watch?view=lanes`): lanes from
- * the brief's rollups, the Ungrouped tray, grouping and folding through the
+ * the brief's rollups, the Unsorted tray, grouping and folding through the
  * device outbox, and every state, at desktop and phone widths.
  *
  * `BOARD_SHOTS=<dir>` also writes the screenshots used in the PR.
@@ -139,6 +139,7 @@ function seed() {
         title: "A1 F4: retry budget for funded failover",
         phase: "backlog",
         parent_ref: null,
+        needs_home: true,
         created_at: "2026-10-24T11:58:00Z",
         created_by: { id: "agent:lane-stt", display: "lane-stt" },
         likely_home: [
@@ -155,6 +156,7 @@ function seed() {
         title: "Cost 4/5: Railway egress",
         phase: "backlog",
         parent_ref: null,
+        needs_home: true,
         created_at: "2026-10-24T11:00:00Z",
         likely_home: [
           {
@@ -170,21 +172,22 @@ function seed() {
         title: "Shared-speech ramp telemetry",
         phase: "backlog",
         parent_ref: null,
+        needs_home: true,
         created_at: "2026-10-24T09:00:00Z",
         likely_home: [],
         next_actions: [
           {
             label: "Make it an initiative",
-            command_id: "work.patch",
+            command_id: "work.move",
             argv: [
               "anx",
               "work",
-              "patch",
+              "move",
               "card:ramp-telemetry",
-              "--from-file",
-              "-",
+              "--root",
+              "--reason",
+              "An independent outcome",
             ],
-            stdin: { if_version: 3, patch: { top_level: true } },
           },
           {
             label: "Move to another workspace",
@@ -196,10 +199,9 @@ function seed() {
         ],
       },
     ],
-    /** Card versions and `top_level`, for the fenced work patch. */
-    work: { "card:ramp-telemetry": { version: 3, top_level: false } },
-    parked: {},
-    losePatchResponses: 0,
+    moveReceipts: {},
+    moveEffects: 0,
+    loseMoveResponses: 0,
     hasMore: false,
     plans: {},
     planTokens: {},
@@ -224,12 +226,6 @@ function landChild(api, ref, under) {
     child(ref, row?.title || ref, row?.phase || "backlog"),
   ];
   target.rollup = rollup(children);
-  api.plans[under] = {
-    steps: [
-      ...(api.plans[under]?.steps ?? []),
-      { id: `card-${ref.slice(5)}`, title: row?.title, ref, after: [] },
-    ],
-  };
   return row;
 }
 
@@ -271,20 +267,69 @@ async function install(context, api) {
   );
   await context.route(
     (url) =>
-      /^\/work\/[^/]+\/(group|fold|unfold)$/.test(
+      /^\/work\/[^/]+\/(move|group|fold|unfold)$/.test(
         decodeURIComponent(url.pathname),
       ),
     async (route) => {
       const path = decodeURIComponent(new URL(route.request().url()).pathname);
       const [, ref, verb] = path.match(
-        /^\/work\/([^/]+)\/(group|fold|unfold)$/,
+        /^\/work\/([^/]+)\/(move|group|fold|unfold)$/,
       );
       const body = route.request().postDataJSON();
-      api.posts.push({ verb, ref, body });
+      api.posts.push({
+        verb,
+        ref,
+        body,
+        key: body.request_key,
+        headerKey: route.request().headers()["idempotency-key"],
+      });
       if (api.fail[verb]) {
         const failure = api.fail[verb];
         if (typeof failure === "number" && failure > 0) api.fail[verb] -= 1;
         return json(route, { error: { message: "Upstream detail" } }, 503);
+      }
+      const replayKey = `${ref}:${body.actor_id}:${body.request_key}`;
+      if (verb === "move") {
+        if (!body.request_key || !body.actor_id)
+          return json(
+            route,
+            { error: { message: "Missing replay identity" } },
+            400,
+          );
+        const saved = api.moveReceipts[replayKey];
+        if (saved)
+          return JSON.stringify(saved.body) === JSON.stringify(body)
+            ? json(route, saved.response)
+            : json(route, { error: { message: "Key reused" } }, 409);
+        api.moveEffects += 1;
+
+        if (body.under) landChild(api, ref, body.under);
+        else if (body.root) {
+          const row = api.ungrouped.find((entry) => entry.ref === ref);
+          api.ungrouped = api.ungrouped.filter((entry) => entry.ref !== ref);
+          api.brief.initiatives.push(lane(ref, row?.title || ref, []));
+        } else if (body.unsorted) {
+          let row;
+          for (const parent of api.brief.initiatives) {
+            row ||= parent.rollup.children.find((entry) => entry.ref === ref);
+            parent.rollup = rollup(
+              parent.rollup.children.filter((entry) => entry.ref !== ref),
+            );
+          }
+          const initiative = api.brief.initiatives.find(
+            (entry) => entry.ref === ref,
+          );
+          row ||= initiative;
+          api.brief.initiatives = api.brief.initiatives.filter(
+            (entry) => entry.ref !== ref,
+          );
+          api.ungrouped.push({
+            ref,
+            title: row?.title || ref,
+            needs_home: true,
+            parent_ref: null,
+          });
+        }
       }
       if (verb === "group") landChild(api, ref, body.under);
       if (verb === "fold") {
@@ -293,44 +338,31 @@ async function install(context, api) {
         );
         api.brief.next_actions = [];
       }
-      return json(route, {
+      const response = {
         work: { ref, parent_ref: body.under || body.into || null },
-      });
+      };
+      if (verb === "move") {
+        api.moveReceipts[replayKey] = { body, response };
+        if (api.loseMoveResponses > 0) {
+          api.loseMoveResponses -= 1;
+          return json(route, { error: { message: "Gateway timeout" } }, 503);
+        }
+      }
+      return json(route, response);
     },
   );
-  // Core's fenced work patch: a stale version is refused, so a retry of a
-  // landed patch comes back 409 and the client reads the card back.
+  // Core rejects the removed field; legacy queued intents must use move.
   await context.route(
     (url) =>
       /^\/work\/[^/]+$/.test(url.pathname) &&
       url.pathname !== "/work/ungrouped",
     async (route) => {
-      const ref = decodeURIComponent(
-        new URL(route.request().url()).pathname.split("/")[2],
+      api.posts.push({ verb: "patch", body: route.request().postDataJSON() });
+      return json(
+        route,
+        { error: { message: "top_level is replaced by the work tree" } },
+        400,
       );
-      const method = route.request().method();
-      api.calls.push(`${method} /work/${ref}`);
-      const card = api.work[ref];
-      if (!card) return json(route, { error: { message: "missing" } }, 404);
-      if (method === "GET") return json(route, { work: { ref, ...card } });
-      const body = route.request().postDataJSON();
-      api.posts.push({ verb: "patch", ref, body });
-      if (body.if_version !== card.version)
-        return json(route, { error: { message: "version changed" } }, 409);
-      card.version += 1;
-      card.top_level = body.patch.top_level;
-      if (card.top_level) {
-        api.parked[ref] = api.ungrouped.find((row) => row.ref === ref);
-        api.ungrouped = api.ungrouped.filter((row) => row.ref !== ref);
-      } else if (api.parked[ref]) {
-        api.ungrouped = [...api.ungrouped, api.parked[ref]];
-        delete api.parked[ref];
-      }
-      if (api.losePatchResponses > 0) {
-        api.losePatchResponses -= 1;
-        return json(route, { error: { message: "gateway timeout" } }, 503);
-      }
-      return json(route, { work: { ref, ...card } });
     },
   );
   await context.route(
@@ -512,7 +544,7 @@ test.describe("desktop", () => {
       "Initiatives 5/15",
     );
     await expect(page.locator("[data-swimlane-tray]")).toContainText(
-      "Ungrouped · 3",
+      "Unsorted · 3",
     );
     // One brief and one tray page; nothing per lane, and no work list.
     expect(api.calls.filter((call) => call.startsWith("GET /cards"))).toEqual(
@@ -530,205 +562,85 @@ test.describe("desktop", () => {
     expect(axe.violations).toEqual([]);
   });
 
-  test("one tap groups under a likely home, and Undo takes the step back out", async ({
+  test("one tap moves under a suggested home without changing a plan", async ({
     page,
     context,
   }) => {
     const api = await open(page, context);
-    const row = page.locator('[data-tray-ref="card:a1-f4"]');
-    await expect(row).toContainText(
-      "likely: Every word captured and attributed · same title prefix",
-    );
-    await row.locator('[data-group-under="card:capture"]').click();
+    await page
+      .locator('[data-tray-ref="card:a1-f4"] [data-group-under="card:capture"]')
+      .click();
     await expect(page.locator("[data-grouping-notice]")).toContainText(
-      "Grouped “A1 F4: retry budget for funded failover” under “Every word captured and attributed”.",
+      "Confirmed.",
     );
-    const [sent] = api.posts;
-    expect(sent).toMatchObject({
-      verb: "group",
+    expect(api.posts[0]).toMatchObject({
+      verb: "move",
       ref: "card:a1-f4",
-      body: { under: "card:capture", actor_id: "actor-comment" },
+      body: { under: "card:capture" },
     });
-    expect(sent.body.request_key).toMatch(/^[0-9a-f-]{36}$/);
-    // Core's next reads show it in the lane and out of the tray.
+    expect(api.posts[0].key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(api.posts[0].body.actor_id).toBe("actor-comment");
+    expect(Object.keys(api.posts[0].body).sort()).toEqual([
+      "actor_id",
+      "request_key",
+      "under",
+    ]);
+    expect(api.posts[0].headerKey).toBeUndefined();
+    expect(api.plans).toEqual({});
+    await expect(page.locator('[data-tray-ref="card:a1-f4"]')).toHaveCount(0);
     await expect(
       laneLocator(page, "card:capture").locator('[data-work-ref="card:a1-f4"]'),
     ).toBeVisible();
-    await expect(page.locator('[data-tray-ref="card:a1-f4"]')).toHaveCount(0);
-    await shot(page, "lanes-grouped-undo");
-
-    await page
-      .locator("[data-grouping-notice]")
-      .getByRole("button", { name: "Undo" })
-      .click();
-    await expect(page.locator("[data-grouping-notice]")).toContainText(
-      "It is back in Ungrouped.",
-    );
-    const plan = api.posts.find((post) => post.verb === "plan");
-    expect(plan.ref).toBe("card:capture");
-    expect(plan.body.plan.steps.map((step) => step.ref)).not.toContain(
-      "card:a1-f4",
-    );
-    expect(plan.body.if_updated_at).toBe("2026-10-24T12:00:01Z");
-    // The undo's own key, not one derived from a later read.
-    expect(plan.body.request_key).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  test("an undo whose response was lost never removes a step someone re-added", async ({
-    page,
-    context,
-  }) => {
-    // The review's sequence: the undo's plan write commits but its response
-    // is lost; another operator groups the card again; the retry fires.
-    const api = await open(page, context, seed(), { fixTime: false });
-    await page
-      .locator('[data-tray-ref="card:a1-f4"]')
-      .locator('[data-group-under="card:capture"]')
-      .click();
-    const notice = page.locator("[data-grouping-notice]");
-    await expect(notice).toContainText("Grouped “A1 F4");
-    api.losePlanResponses = 1;
-    await notice.getByRole("button", { name: "Undo" }).click();
-    await expect
-      .poll(() => api.posts.filter((post) => post.verb === "plan").length)
-      .toBe(1);
-    await expect(
-      page.locator('[data-mutation-state="retrying"]'),
-    ).toBeVisible();
-    // Another operator puts the step back before the retry.
-    api.plans["card:capture"] = {
-      steps: [
-        ...api.plans["card:capture"].steps,
-        { id: "card-a1-f4", title: "A1 F4", ref: "card:a1-f4", after: [] },
-      ],
-    };
-    api.planTokens["card:capture"] = "2026-10-24T12:30:00Z";
-    await expect
-      .poll(() => api.posts.filter((post) => post.verb === "plan").length, {
-        timeout: 15_000,
-      })
-      .toBe(2);
-    const [first, retry] = api.posts.filter((post) => post.verb === "plan");
-    // The retry replays the first write byte for byte: same key, same body.
-    expect(retry.body).toEqual(first.body);
-    await expect(notice).toContainText("It is back in Ungrouped.");
-    // The other operator's step survives.
-    expect(api.plans["card:capture"].steps.map((step) => step.ref)).toContain(
-      "card:a1-f4",
-    );
-    // Only one plan read: the retry never re-derived its write.
-    expect(
-      api.calls.filter((call) => call === "GET /cards/card:capture/plan"),
-    ).toHaveLength(1);
-  });
-
-  test("an undo that never landed is refused once the plan moves on", async ({
-    page,
-    context,
-  }) => {
-    const api = await open(page, context, seed(), { fixTime: false });
-    await page
-      .locator('[data-tray-ref="card:a1-f4"]')
-      .locator('[data-group-under="card:capture"]')
-      .click();
-    const notice = page.locator("[data-grouping-notice]");
-    await expect(notice).toContainText("Grouped “A1 F4");
-    api.dropPlanWrites = 1;
-    await notice.getByRole("button", { name: "Undo" }).click();
-    await expect(
-      page.locator('[data-mutation-state="retrying"]'),
-    ).toBeVisible();
-    // Someone edits the plan before the retry.
-    api.planTokens["card:capture"] = "2026-10-24T12:30:00Z";
-    await expect(
-      page.locator('[data-mutation-state="attention"]'),
-    ).toContainText("nothing was removed", { timeout: 15_000 });
-    const writes = api.posts.filter((post) => post.verb === "plan");
-    expect(writes).toHaveLength(2);
-    expect(writes[1].body).toEqual(writes[0].body);
-    expect(api.plans["card:capture"].steps.map((step) => step.ref)).toContain(
-      "card:a1-f4",
-    );
-  });
-
-  test("Make it an initiative sends core's fenced patch, and Undo puts it back", async ({
+  test("move to top level collects and persists a reason", async ({
     page,
     context,
   }) => {
     const api = await open(page, context);
-    const tray = page.locator("[data-swimlane-tray]");
-    // Who made a card, beside when.
-    await expect(tray.locator('[data-tray-ref="card:a1-f4"]')).toContainText(
-      "created 2m ago by lane-stt",
+    await page.locator('[data-promote="card:ramp-telemetry"]').click();
+    const draft = page.locator("[data-saved-grouping]");
+    await expect(draft.getByLabel("Reason")).toHaveValue(
+      "An independent outcome",
     );
-    const row = tray.locator('[data-tray-ref="card:ramp-telemetry"]');
-    await expect(row).toContainText("no likely home");
-    await row.locator('[data-promote="card:ramp-telemetry"]').click();
-    const notice = page.locator("[data-grouping-notice]");
-    await expect(notice).toContainText(
-      "“Shared-speech ramp telemetry” is an initiative now.",
+    await draft.getByLabel("Reason").fill("A separate measurable outcome");
+    await page.reload();
+    await expect(draft.getByLabel("Reason")).toHaveValue(
+      "A separate measurable outcome",
     );
-    const patches = () => api.posts.filter((post) => post.verb === "patch");
-    expect(patches()).toEqual([
-      {
-        verb: "patch",
-        ref: "card:ramp-telemetry",
-        body: {
-          actor_id: "actor-comment",
-          if_version: 3,
-          patch: { top_level: true },
-        },
-      },
-    ]);
-    await expect(
-      tray.locator('[data-tray-ref="card:ramp-telemetry"]'),
-    ).toHaveCount(0);
-
-    // Undo is fenced to the version the promote made.
-    await notice.getByRole("button", { name: "Undo" }).click();
-    await expect(notice).toContainText(
-      "“Shared-speech ramp telemetry” is back in Ungrouped.",
+    await draft.getByRole("button", { name: "Save move" }).click();
+    await expect(page.locator("[data-grouping-notice]")).toContainText(
+      "Confirmed.",
     );
-    expect(patches()[1].body).toEqual({
-      actor_id: "actor-comment",
-      if_version: 4,
-      patch: { top_level: false },
-    });
-    await expect(
-      tray.locator('[data-tray-ref="card:ramp-telemetry"]'),
-    ).toBeVisible();
-    expect(api.work["card:ramp-telemetry"]).toEqual({
-      version: 5,
-      top_level: false,
+    expect(api.posts[0]).toMatchObject({
+      verb: "move",
+      ref: "card:ramp-telemetry",
+      body: { root: true, reason: "A separate measurable outcome" },
     });
   });
 
-  test("a promote whose response was lost is confirmed by a read-back, not sent twice over", async ({
+  test("a child can move to Unsorted through a saved move", async ({
     page,
     context,
   }) => {
-    const api = seed();
-    api.losePatchResponses = 1;
-    await open(page, context, api, { fixTime: false });
-    await page.locator('[data-promote="card:ramp-telemetry"]').click();
-    await expect(
-      page.locator('[data-mutation-state="retrying"]'),
-    ).toBeVisible();
-    await expect(page.getByText("gateway timeout")).not.toBeVisible();
+    const api = await open(page, context);
+    await page
+      .getByRole("button", { name: "Move Japanese on-device STT", exact: true })
+      .click();
+    const draft = page.locator("[data-saved-grouping]");
+    await expect(draft.getByLabel("Destination")).toHaveValue("unsorted");
+    await draft.getByRole("button", { name: "Save move" }).click();
     await expect(page.locator("[data-grouping-notice]")).toContainText(
-      "is an initiative now.",
-      { timeout: 15_000 },
+      "Confirmed.",
     );
-    const patches = api.posts.filter((post) => post.verb === "patch");
-    // The retry repeats the original fence; core refuses it, and the card
-    // read back shows the first send landed. Applied once.
-    expect(patches).toHaveLength(2);
-    expect(patches[1].body).toEqual(patches[0].body);
-    expect(api.calls).toContain("GET /work/card:ramp-telemetry");
-    expect(api.work["card:ramp-telemetry"]).toEqual({
-      version: 4,
-      top_level: true,
+    expect(api.posts[0]).toMatchObject({
+      verb: "move",
+      ref: "card:japanese-stt",
+      body: { unsorted: true },
     });
+    await expect(
+      page.locator('[data-tray-ref="card:japanese-stt"]'),
+    ).toBeVisible();
   });
 
   test("Move to another workspace shows the command and sends nothing", async ({
@@ -774,14 +686,14 @@ test.describe("desktop", () => {
       steps: 8,
     });
     await expect(page.locator("[data-swimlane-drag]")).toContainText(
-      "Group under P76 coldline storage",
+      "Move under P76 coldline storage",
     );
     await page.mouse.up();
     await expect
       .poll(() =>
         api.posts.map((post) => [post.verb, post.ref, post.body.under]),
       )
-      .toEqual([["group", "card:ramp-telemetry", "card:p76-coldline"]]);
+      .toEqual([["move", "card:ramp-telemetry", "card:p76-coldline"]]);
     await expect(
       laneLocator(page, "card:p76-coldline").locator(
         '[data-work-ref="card:ramp-telemetry"]',
@@ -789,36 +701,130 @@ test.describe("desktop", () => {
     ).toBeVisible();
   });
 
-  test("an uncertain group survives reload and resends its original key", async ({
+  test("a lost move receipt retries after reload with the original body key", async ({
     page,
     context,
   }) => {
     const api = seed();
-    api.fail.group = 1;
+    api.loseMoveResponses = 1;
     await open(page, context, api, { fixTime: false });
     await page
-      .locator('[data-tray-ref="card:cost-4"]')
-      .locator('[data-group-under="card:margin"]')
+      .locator('[data-tray-ref="card:cost-4"] [data-group-under="card:margin"]')
       .click();
     await expect(
       page.locator('[data-mutation-state="retrying"]'),
     ).toBeVisible();
-    await expect(page.getByText("Upstream detail")).not.toBeVisible();
-    await expect(page.locator('[data-tray-ref="card:cost-4"]')).toContainText(
-      "Saved. Sending…",
+    await expect(
+      page.getByText("Gateway timeout", { exact: true }),
+    ).not.toBeVisible();
+    // Another actor moves the card after the first send committed. Receipt
+    // replay must confirm the original intent without applying it again.
+    const original = api.posts[0];
+    const parent = api.brief.initiatives.find(
+      (entry) => entry.ref === "card:margin",
     );
+    parent.rollup = rollup(
+      parent.rollup.children.filter((entry) => entry.ref !== original.ref),
+    );
+    api.ungrouped.push({
+      ref: original.ref,
+      title: "Cost 4/5: Railway egress",
+      needs_home: true,
+      parent_ref: null,
+    });
     await page.reload();
     await expect
-      .poll(() => api.posts.filter((post) => post.verb === "group").length, {
-        timeout: 15_000,
-      })
+      .poll(() => api.posts.filter((post) => post.verb === "move").length)
       .toBe(2);
-    const [first, second] = api.posts;
-    expect(second.body).toEqual(first.body);
-    await expect(
-      laneLocator(page, "card:margin").locator('[data-work-ref="card:cost-4"]'),
-    ).toBeVisible();
+    await expect(page.locator('[data-mutation-state="retrying"]')).toHaveCount(
+      0,
+    );
+    expect(api.posts[1].body).toEqual(original.body);
+    expect(original.key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(api.posts[1].headerKey).toBeUndefined();
+    expect(api.moveEffects).toBe(1);
+    await expect(page.locator('[data-tray-ref="card:cost-4"]')).toBeVisible();
   });
+
+  for (const wanted of [true, false, "header-key"]) {
+    test(`a saved legacy ${typeof wanted === "boolean" ? `top_level=${wanted}` : wanted} intent recovers as a keyed move`, async ({
+      page,
+      context,
+    }) => {
+      const api = seed();
+      await open(page, context, api, { fixTime: false });
+      await expect(
+        page.locator('[data-promote="card:ramp-telemetry"]'),
+      ).toBeVisible();
+      await context.setOffline(true);
+      const key = await page.evaluate(async (wanted) => {
+        const { enqueueLocalMutation } =
+          await import("/src/lib/mutationOutbox.js");
+        const key = crypto.randomUUID();
+        await enqueueLocalMutation({
+          key,
+          operation: wanted === "header-key" ? "work.move" : "work.top_level",
+          target: "work:card:ramp-telemetry:grouping",
+          draftTarget: "board:grouping",
+          draft: {
+            verb:
+              wanted === "header-key"
+                ? "move"
+                : wanted
+                  ? "promote"
+                  : "unpromote",
+            work: {
+              ref: "card:ramp-telemetry",
+              title: "Shared-speech ramp telemetry",
+            },
+            version: 3,
+          },
+          request: {
+            ref: "card:ramp-telemetry",
+            body:
+              wanted === "header-key"
+                ? { under: "card:capture" }
+                : {
+                    actor_id: "actor-comment",
+                    if_version: 3,
+                    patch: { top_level: wanted },
+                  },
+          },
+          title: "Saved initiative change",
+        });
+        return key;
+      }, wanted);
+      await expect(
+        page.locator('[data-mutation-state="pending"]'),
+      ).toBeVisible();
+      // Exercise the same persisted record through a fresh page runtime.
+      await context.setOffline(false);
+      await page.reload();
+      await expect
+        .poll(() => api.posts.filter((post) => post.verb === "move").length)
+        .toBe(1);
+      expect(api.posts[0]).toMatchObject({
+        verb: "move",
+        ref: "card:ramp-telemetry",
+        key,
+        body: {
+          actor_id: "actor-comment",
+          request_key: key,
+          ...(wanted === "header-key"
+            ? { under: "card:capture" }
+            : {
+                ...(wanted ? { root: true } : { unsorted: true }),
+                reason: wanted
+                  ? "Made an initiative from Watch"
+                  : "Returned to Unsorted from Watch",
+              }),
+        },
+      });
+      expect(api.posts[0].headerKey).toBeUndefined();
+      expect(api.posts.some((post) => post.verb === "patch")).toBe(false);
+      expect(api.moveEffects).toBe(1);
+    });
+  }
 
   test("over budget suggests folds, and a fold can be undone", async ({
     page,
@@ -897,7 +903,7 @@ test.describe("desktop", () => {
     api.ungrouped = seed().ungrouped;
     await page.reload();
     await expect(page.locator("[data-swimlanes-empty]")).toContainText(
-      "Cards are waiting in Ungrouped. Create an initiative to group them under.",
+      "Cards are waiting in Unsorted. Create an initiative to move them under.",
     );
     await shot(page, "lanes-empty");
 
@@ -918,7 +924,7 @@ test.describe("desktop", () => {
     await expect(
       page
         .locator("[data-swimlane-tray]")
-        .getByText("Ungrouped cards didn’t load"),
+        .getByText("Unsorted cards didn’t load"),
     ).toBeVisible();
     await expect(page.getByText("Tray failed", { exact: true })).toHaveCount(0);
     // A tray that never loaded has no count to show.
@@ -994,7 +1000,7 @@ test.describe("phone", () => {
     await expectCleanLayout(page, "swimlane board phone");
 
     await page.locator("[data-swimlane-tray-open]").tap();
-    const sheet = page.getByRole("dialog", { name: /Ungrouped/ });
+    const sheet = page.getByRole("dialog", { name: /Unsorted/ });
     await expect(sheet).toBeVisible();
     // The sheet's controls are its own: no id is used twice.
     expect(await duplicateIds(page)).toEqual([]);
@@ -1002,7 +1008,7 @@ test.describe("phone", () => {
     await sheet.locator('[data-group-under="card:capture"]').tap();
     await expect
       .poll(() => api.posts.map((post) => [post.verb, post.ref]))
-      .toEqual([["group", "card:a1-f4"]]);
+      .toEqual([["move", "card:a1-f4"]]);
     await sheet.getByRole("button", { name: "Done" }).tap();
     await expect(sheet).toHaveCount(0);
     await capture.locator("[data-lane-phone-lines] button").tap();

@@ -1,6 +1,11 @@
+import {
+  DEFAULT_PROMOTION_REASON,
+  DEFAULT_UNSORTED_REASON,
+} from "$lib/workMove.js";
+
 /**
  * Grouping writes the outbox sender applies: pure plan edits for undoing a
- * group, and the fenced send that makes a card an initiative.
+ * group, and translation of queued legacy initiative intents into moves.
  */
 
 /**
@@ -43,33 +48,28 @@ export function removeGroupedStep(plan, ref, stepId = "") {
   return { changed: true, stepId: step.id, plan: { ...plan, steps: kept } };
 }
 
-/**
- * Send a fenced `top_level` patch. A retry repeats the same version, so a
- * patch that already landed comes back 409 and is never applied twice. Core
- * asks for a read-back after any 409 (including `outcome_unknown`): the card
- * already past that version and in the wanted state means the change is in
- * effect; anything else means the card changed, and nothing is sent again.
+/** Deliver saved work.top_level entries without ever sending a top_level patch.
+ * The persisted outbox identity supplies the replay key; never allocate a new
+ * key during retry, and never infer success from the card's current position.
  */
-export async function sendTopLevel(client, { ref, body }) {
-  const wanted = body.patch.top_level === true;
-  try {
-    const result = await client.patchWork(ref, body);
-    if (!result?.work?.ref)
-      throw new Error("Initiative receipt is incomplete.");
-    return result;
-  } catch (error) {
-    if (Number(error?.status) !== 409) throw error;
-    const current = await client.getWork(ref, { summary: 1 });
-    const work = current?.work;
-    if (
-      work?.ref &&
-      Number(work.version) > body.if_version &&
-      (work.top_level === true) === wanted
-    )
-      return { work };
-    error.publicMessage = wanted
-      ? "This card changed after you pressed Make it an initiative, so nothing was changed. Reload the board and try again."
-      : "This card changed after you pressed Undo, so it is still an initiative. Reload the board and try again.";
-    throw error;
-  }
+export async function sendTopLevel(client, { ref, body }, key) {
+  if (
+    !ref ||
+    typeof body?.patch?.top_level !== "boolean" ||
+    Object.keys(body.patch).length !== 1 ||
+    !(body.request_key || key)
+  )
+    throw new Error("Saved initiative move is incomplete.");
+  const root = body.patch.top_level;
+  const move = {
+    ...(body.actor_id !== undefined ? { actor_id: body.actor_id } : {}),
+    request_key: body.request_key || key,
+    ...(root ? { root: true } : { unsorted: true }),
+    reason:
+      body.reason ??
+      (root ? DEFAULT_PROMOTION_REASON : DEFAULT_UNSORTED_REASON),
+  };
+  const result = await client.moveWork(ref, move);
+  if (!result?.work?.ref) throw new Error("Initiative receipt is incomplete.");
+  return result;
 }

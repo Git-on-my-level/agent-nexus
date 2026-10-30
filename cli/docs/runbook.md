@@ -949,9 +949,23 @@ anx docs ingest /path/to/knowledge-base \
 anx docs search "NOW.md" --knowledge --limit 20
 ```
 
-## Initiative plans and ref previews
+## Work tree and Unsorted
 
-Keep one plan per initiative card. Add steps instead of progress prose, link each step to a real ref when possible, and never choose a view. `anx plan show card:<slug>` returns live step status, progress, critical path, next steps, shape and health. `anx plan set card:<slug> --from-file plan.json` accepts `{ "steps": [...] }`; it reads the current card token before writing. Pass `--if-updated-at` from a previous read when edits must bind to that snapshot. Step writes also read then compare the token; conflicts are returned without automatic retries.
+Initiatives are top-level cards outside Unsorted. Each card has one stored parent;
+board roles and plan links never define hierarchy. Start with `anx orient`,
+`anx tree` and `anx where <ref|path|text>`. Create with `anx work create --title
+"Outcome" --under card:<parent>`, or explicitly `--initiative`. Omitting both
+lands in Unsorted with a warning. Confirm suggested homes with `anx mv <card>
+--under <parent>`. Use `--root --reason "Independent outcome"` for top level or
+`--unsorted` for the tray. Moving an initiative under another card needs a reason.
+Depth is at most three; children are ordered by creation time. Stable card refs
+are canonical; paths are aliases. See [the work tree guide](../../docs/grouping-work.md).
+
+## Plans and ref previews (power verbs)
+
+`anx plan` maintains independent checklists, including external steps and legacy
+card refs with `after` dependencies. It never establishes parentage. Link steps
+to real refs when possible. `anx plan show card:<slug>` returns live step status, progress, critical path, next steps, shape and health. `anx plan set card:<slug> --from-file plan.json` accepts `{ "steps": [...] }`; it reads the current card token before writing. Pass `--if-updated-at` from a previous read when edits must bind to that snapshot. Step writes also read then compare the token; conflicts are returned without automatic retries.
 
 ```sh
 anx plan step add card:launch --step-id build --title "Build" --ref card:implementation

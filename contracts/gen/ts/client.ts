@@ -840,6 +840,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -847,6 +848,8 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -4919,6 +4922,10 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "card.initiative",
+          "type": "boolean"
+        },
+        {
           "name": "card.provenance.by_field",
           "type": "object"
         },
@@ -4980,6 +4987,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "if_board_updated_at",
           "type": "datetime"
+        },
+        {
+          "name": "initiative",
+          "type": "boolean"
         },
         {
           "name": "request_key",
@@ -9775,8 +9786,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "POST",
     "path": "/work/{card_ref}/promote",
     "operation_id": "initiativePromote",
-    "summary": "Promote an initiative by explicit board membership",
-    "why": "Explicit initiative lifecycle with an auditable reason. Promotion succeeds even over target.",
+    "summary": "Deprecated; use work move with root true",
+    "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -9794,7 +9805,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Agents and humans may act. Atomic membership and audit event; retain request_key for replay.",
+    "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
     "body_schema": {
       "required": [
         {
@@ -9837,8 +9848,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "POST",
     "path": "/work/{card_ref}/retire",
     "operation_id": "initiativeRetire",
-    "summary": "Retire an initiative by explicit board membership",
-    "why": "Explicit initiative lifecycle with an auditable reason. Retirement leaves the initiatives board, optionally folded under another open initiative.",
+    "summary": "Deprecated; use work move with under",
+    "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -9856,7 +9867,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Agents and humans may act. Atomic membership and audit event; retain request_key for replay.",
+    "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
     "body_schema": {
       "required": [
         {
@@ -15345,6 +15356,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15353,6 +15365,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -15367,7 +15381,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/work",
     "operation_id": "workCreate",
     "summary": "Register a card-backed commitment",
-    "why": "Register a card-backed commitment. under adds an atomic parent plan step; without board_ref it inherits the parent board, otherwise uses the workspace default board.",
+    "why": "Create under an explicitly named parent, or with initiative true at top level. Without either the card enters Unsorted; parentage never writes plan steps.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -15386,7 +15400,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace authenticated. When board_ref is omitted, the server places the card on the workspace's oldest active board, creating a default Tasks board if none exists. With under and no board_ref, it inherits the parent's board and visibility unless the parent is on the initiatives board; then it uses a non-initiatives board and retains parent privacy through a canonical related reference. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
+    "agent_notes": "Workspace authenticated. Board placement is layout only. under names the stored parent; initiative true explicitly creates an initiative. Without either, needs_home is true. Paths are input aliases resolved before creation; stored references remain canonical card refs.",
     "body_schema": {
       "required": [
         {
@@ -15452,6 +15466,10 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "id",
           "type": "string"
+        },
+        {
+          "name": "initiative",
+          "type": "boolean"
         },
         {
           "name": "labels",
@@ -15587,6 +15605,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15595,6 +15614,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -15659,6 +15680,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15667,6 +15689,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -15709,6 +15733,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.fold",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15717,6 +15742,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -15730,8 +15757,8 @@ export const commandRegistry: CommandSpec[] = [
     "method": "POST",
     "path": "/work/{card_ref}/group",
     "operation_id": "workGroup",
-    "summary": "Add an existing card to a parent plan",
-    "why": "Add an existing card to a parent plan. Retain request_key and the original body until confirmed.",
+    "summary": "Deprecated; use work move with under",
+    "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"
@@ -15749,7 +15776,7 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Workspace authenticated; Initiatives-board cards cannot be grouped; retire first with anx initiative retire \u003ccard\u003e --reason ...; no automatic choice.",
+    "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
     "body_schema": {
       "required": [
         {
@@ -15781,6 +15808,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.fold",
       "work.get",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15789,6 +15817,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -15829,6 +15859,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.fold",
       "work.get",
       "work.group",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -15837,11 +15868,102 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
     "go_method": "WorkList",
     "ts_method": "workList"
+  },
+  {
+    "command_id": "work.move",
+    "cli_path": "work move",
+    "group": "work",
+    "method": "POST",
+    "path": "/work/{card_ref}/move",
+    "operation_id": "workMove",
+    "summary": "Move a card under a parent, to top level or to Unsorted",
+    "why": "Move a card under a parent, to top level or to Unsorted",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns WorkResponse.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
+    "body_schema": {
+      "optional": [
+        {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
+          "name": "after",
+          "type": "string"
+        },
+        {
+          "name": "reason",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
+          "type": "string"
+        },
+        {
+          "name": "root",
+          "type": "boolean",
+          "enum_values": [
+            "true"
+          ]
+        },
+        {
+          "name": "under",
+          "type": "string"
+        },
+        {
+          "name": "unsorted",
+          "type": "boolean",
+          "enum_values": [
+            "true"
+          ]
+        }
+      ]
+    },
+    "path_params": [
+      "card_ref"
+    ],
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.resolve",
+      "work.tree",
+      "work.unfold",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkMove",
+    "ts_method": "workMove"
   },
   {
     "command_id": "work.observations.list",
@@ -15880,6 +16002,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.submit",
       "work.participants.list",
       "work.participants.register",
@@ -15887,6 +16010,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16034,6 +16159,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.participants.list",
       "work.participants.register",
@@ -16041,6 +16167,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16088,6 +16216,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.register",
@@ -16095,6 +16224,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16163,6 +16294,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16170,6 +16302,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16279,10 +16413,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "patch.top_level",
-          "type": "boolean"
-        },
-        {
           "name": "patch.wake_condition",
           "type": "string"
         },
@@ -16302,6 +16432,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16309,6 +16440,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16352,6 +16485,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16359,6 +16493,8 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
@@ -16411,6 +16547,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16418,11 +16555,109 @@ export const commandRegistry: CommandSpec[] = [
       "work.patch",
       "agents.me.presence",
       "work.refresh.get",
+      "work.resolve",
+      "work.tree",
       "work.unfold",
       "work.ungrouped"
     ],
     "go_method": "WorkRefreshRequest",
     "ts_method": "workRefreshRequest"
+  },
+  {
+    "command_id": "work.resolve",
+    "cli_path": "work resolve",
+    "group": "work",
+    "method": "GET",
+    "path": "/work/resolve",
+    "operation_id": "workResolve",
+    "summary": "Resolve a path alias to a canonical card ref",
+    "why": "Resolve a path alias to a canonical card ref",
+    "input_mode": "flags",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns WorkResolveResponse.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.move",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.tree",
+      "work.unfold",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkResolve",
+    "ts_method": "workResolve"
+  },
+  {
+    "command_id": "work.tree",
+    "cli_path": "work tree",
+    "group": "work",
+    "method": "GET",
+    "path": "/work/tree",
+    "operation_id": "workTree",
+    "summary": "Read the visible work tree in creation order",
+    "why": "Read the visible work tree in creation order",
+    "input_mode": "flags",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns WorkTreeResponse.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
+    "adjacent_commands": [
+      "work.capabilities",
+      "work.create",
+      "work.fold",
+      "work.get",
+      "work.group",
+      "work.list",
+      "work.move",
+      "work.observations.list",
+      "work.observations.submit",
+      "work.participants.list",
+      "work.participants.register",
+      "work.patch",
+      "agents.me.presence",
+      "work.refresh.get",
+      "work.refresh.request",
+      "work.resolve",
+      "work.unfold",
+      "work.ungrouped"
+    ],
+    "go_method": "WorkTree",
+    "ts_method": "workTree"
   },
   {
     "command_id": "work.unfold",
@@ -16473,6 +16708,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16481,6 +16717,8 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.ungrouped"
     ],
     "go_method": "WorkUnfold",
@@ -16517,6 +16755,7 @@ export const commandRegistry: CommandSpec[] = [
       "work.get",
       "work.group",
       "work.list",
+      "work.move",
       "work.observations.list",
       "work.observations.submit",
       "work.participants.list",
@@ -16525,10 +16764,40 @@ export const commandRegistry: CommandSpec[] = [
       "agents.me.presence",
       "work.refresh.get",
       "work.refresh.request",
+      "work.resolve",
+      "work.tree",
       "work.unfold"
     ],
     "go_method": "WorkUngrouped",
     "ts_method": "workUngrouped"
+  },
+  {
+    "command_id": "work.where",
+    "cli_path": "where",
+    "group": "where",
+    "method": "GET",
+    "path": "/work/where",
+    "operation_id": "workWhere",
+    "summary": "Suggest a home for a card or text without filing it",
+    "why": "Suggest a home for a card or text without filing it",
+    "input_mode": "flags",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns WorkWhereResponse.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict"
+    ],
+    "concepts": [
+      "cards"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
+    "go_method": "WorkWhere",
+    "ts_method": "workWhere"
   },
   {
     "command_id": "workspace.dashboard.list",
@@ -17760,6 +18029,10 @@ export class AnxClient {
     return this.invoke("work.list", {}, options);
   }
 
+  workMove(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.move", pathParams, options);
+  }
+
   workObservationsList(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("work.observations.list", pathParams, options);
   }
@@ -17788,12 +18061,24 @@ export class AnxClient {
     return this.invoke("work.refresh.request", pathParams, options);
   }
 
+  workResolve(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.resolve", {}, options);
+  }
+
+  workTree(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.tree", {}, options);
+  }
+
   workUnfold(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("work.unfold", pathParams, options);
   }
 
   workUngrouped(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("work.ungrouped", {}, options);
+  }
+
+  workWhere(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("work.where", {}, options);
   }
 
   workspaceDashboardList(options: RequestOptions = {}): Promise<InvokeResult> {

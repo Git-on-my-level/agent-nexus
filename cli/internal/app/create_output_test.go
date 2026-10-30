@@ -35,11 +35,11 @@ func TestAskAutoCreatedCardSuggestsInitiatives(t *testing.T) {
 			// .99Z is newer than .9Z, but ".9Z" > ".99Z" lexicographically.
 			fmt.Fprint(w, `{"work":[
 				{"ref":"card:done","title":"Closed","phase":"done","updated_at":"2026-10-15T12:00:01Z"},
-				{"ref":"card:newest","title":"Newest initiative","phase":"ready","updated_at":"2026-10-15T12:00:00.99Z"},
-				{"ref":"card:second","title":"Second","phase":"in_progress","updated_at":"2026-10-15T12:00:00.9Z"},
+				{"ref":"card:newest","title":"Newest initiative","phase":"ready","updated_at":"2026-10-15T12:00:00.99Z","is_initiative":true},
+				{"ref":"card:second","title":"Second","phase":"in_progress","updated_at":"2026-10-15T12:00:00.9Z","is_initiative":true},
 				{"ref":"card:new-subject","title":"Ship it?","phase":"ready","updated_at":"2026-10-15T12:00:00.8Z"},
-				{"ref":"card:third","title":"Third","phase":"blocked","updated_at":"2026-10-15T12:00:00.7Z"},
-				{"ref":"card:fourth","title":"Fourth","phase":"ready","updated_at":"2026-10-15T12:00:00.6Z"}
+				{"ref":"card:third","title":"Third","phase":"blocked","updated_at":"2026-10-15T12:00:00.7Z","is_initiative":true},
+				{"ref":"card:fourth","title":"Fourth","phase":"ready","updated_at":"2026-10-15T12:00:00.6Z","is_initiative":true}
 			]}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
 			fmt.Fprint(w, `{"card":{"id":"card-2","ref":"card:new-subject","thread_id":"thread-2"}}`)
@@ -306,7 +306,7 @@ func TestPlanRefRejectsBareTrackerAndPRNumber(t *testing.T) {
 		t.Fatalf("ask help should recommend --subject-ref:\n%s", askHelp)
 	}
 	guide := agentGuideText()
-	if !strings.Contains(guide, "Pass `--subject-ref card:<slug>`") || !strings.Contains(guide, "not a bare id like SCA-123 or #123") {
+	if !strings.Contains(guide, "Pass `--subject-ref card:<slug>`") || !strings.Contains(guide, "Plans never establish parentage") {
 		t.Fatalf("agent guide missing subject and ref guidance")
 	}
 	setHelp := runCLIForTest(t, t.TempDir(), nil, nil, []string{"help", "plan", "set"})
@@ -339,8 +339,8 @@ func TestAskSuggestionsPagePastClosedWork(t *testing.T) {
 				t.Errorf("cursor=%q", r.URL.Query().Get("cursor"))
 			}
 			fmt.Fprint(w, `{"work":[
-				{"ref":"card:newest","title":"Newest","phase":"ready","updated_at":"2026-10-15T12:00:00.99Z"},
-				{"ref":"card:second","title":"Second","phase":"ready","updated_at":"2026-10-15T12:00:00.9Z"}
+				{"ref":"card:newest","title":"Newest","phase":"ready","updated_at":"2026-10-15T12:00:00.99Z","is_initiative":true},
+				{"ref":"card:second","title":"Second","phase":"ready","updated_at":"2026-10-15T12:00:00.9Z","is_initiative":true}
 			]}`)
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
 			fmt.Fprint(w, `{"card":{"id":"card-2","ref":"card:new-subject","thread_id":"thread-2"}}`)

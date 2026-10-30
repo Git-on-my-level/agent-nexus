@@ -383,6 +383,15 @@ const adapterCommandTable = [
     (filters = {}) => ({ options: q(filters) }),
   ],
   [
+    "moveWork",
+    "work.move",
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
+  ],
+  ["workTree", "work.tree", (filters) => ({ options: q(filters) })],
+  ["resolveWorkPath", "work.resolve", (path) => ({ options: q({ path }) })],
+  ["whereWork", "work.where", (filters) => ({ options: q(filters) })],
+  [
     "groupWork",
     "work.group",
     (ref, payload) => pb(pathParams({ card_ref: ref }), payload),

@@ -143,7 +143,7 @@ func askAutoCreatedCardWarning(subjectRef, board string, rows []map[string]any) 
 }
 
 func isOpenInitiative(row map[string]any) bool {
-	if anyString(row["parent_ref"]) != "" || row["cadence"] != nil || row["goal"] != nil || row["loop"] != nil {
+	if row["is_initiative"] != true || row["needs_home"] == true || anyString(row["parent_ref"]) != "" {
 		return false
 	}
 	switch strings.ToLower(firstNonEmpty(anyString(row["phase"]), anyString(row["column_key"]), anyString(row["status"]))) {
@@ -158,7 +158,7 @@ func workCreateWarningsFor(title string, open []map[string]any) []output.Warning
 	if len(open) > openInitiativeTarget {
 		warnings = append(warnings, output.Warning{
 			Code:    workOverTargetWarning,
-			Message: fmt.Sprintf("%d open initiatives (target 15); workspace initiative budget exceeded; prefer a plan step on an existing initiative", len(open)),
+			Message: fmt.Sprintf("%d open initiatives (target 15); workspace initiative budget exceeded; prefer existing work or create under a named initiative", len(open)),
 			Details: map[string]any{"open": len(open), "target": openInitiativeTarget},
 		})
 	}
@@ -173,10 +173,10 @@ func workCreateWarningsFor(title string, open []map[string]any) []output.Warning
 		}
 	}
 	if bestScore >= nearDuplicateThreshold && bestRef != "" {
-		argv := []string{"anx", "plan", "step", "add", bestRef, "--title", title, "--ref", "<url>"}
+		argv := []string{"anx", "where", bestRef}
 		warnings = append(warnings, output.Warning{
 			Code:    workNearDuplicateWarning,
-			Message: fmt.Sprintf("%q matches an open initiative %s %q (%.2f); prefer: anx plan step add %s --title <title> --ref <url>", title, bestRef, bestTitle, bestScore, bestRef),
+			Message: fmt.Sprintf("%q matches an open initiative %s %q (%.2f); inspect its home with anx where %s before creating more work", title, bestRef, bestTitle, bestScore, bestRef),
 			Details: map[string]any{"match_ref": bestRef, "score": bestScore, "suggest": argv},
 		})
 	}
