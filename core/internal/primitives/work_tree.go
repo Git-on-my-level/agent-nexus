@@ -23,6 +23,7 @@ type workTreeRow struct {
 	id, handle, title, state, assignee string
 	parent                             sql.NullString
 	needsHome                          bool
+	initiative                         bool // reader-relative (workIsInitiativeSQL)
 }
 
 func (r workTreeRow) segment() string { return firstNonEmptyString(r.handle, r.id) }
@@ -33,7 +34,7 @@ func scanWorkTreeRows(rows *sql.Rows) ([]workTreeRow, error) {
 	for rows.Next() {
 		var r workTreeRow
 		var handle, assignee sql.NullString
-		if err := rows.Scan(&r.id, &handle, &r.title, &r.state, &assignee, &r.parent, &r.needsHome); err != nil {
+		if err := rows.Scan(&r.id, &handle, &r.title, &r.state, &assignee, &r.parent, &r.needsHome, &r.initiative); err != nil {
 			return nil, err
 		}
 		r.handle, r.assignee = strings.TrimSpace(handle.String), assignee.String
@@ -42,7 +43,7 @@ func scanWorkTreeRows(rows *sql.Rows) ([]workTreeRow, error) {
 	return out, rows.Err()
 }
 
-const workTreeColumns = `c.id,c.handle,c.title,c.column_key,c.assignee,c.parent_card_id,c.needs_home`
+var workTreeColumns = `c.id,c.handle,c.title,c.column_key,c.assignee,c.parent_card_id,c.needs_home,` + workIsInitiativeSQL("c")
 
 func workTreeOpen(includeDone bool) string {
 	if includeDone {
@@ -113,7 +114,9 @@ func (s *Store) ResolveWorkPath(ctx context.Context, path string) (map[string]an
 		where := `c.parent_card_id=?`
 		args := []any{parent}
 		if i == 0 {
-			where = `c.parent_card_id IS NULL AND c.needs_home=?`
+			// A hidden parent counts as no parent, so reader-relative paths
+			// returned by WorkPath resolve. Candidates are id/handle seeks.
+			where = `c.needs_home=? AND ` + workIsRootSQL("c")
 			args = []any{segments[0] == workTreeUnsortedRoot}
 		}
 		args = append([]any{segment, segment}, args...)
@@ -173,7 +176,7 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 		if refs := boardCardAssigneeRefs(r.assignee); len(refs) > 0 {
 			owner = refs[0]
 		}
-		return map[string]any{"ref": "card:" + r.segment(), "title": r.title, "state": r.state, "path": path, "owner": owner, "needs_home": r.needsHome, "is_initiative": !r.parent.Valid && !r.needsHome, "children": []map[string]any{}, "has_more": false}
+		return map[string]any{"ref": "card:" + r.segment(), "title": r.title, "state": r.state, "path": path, "owner": owner, "needs_home": r.needsHome, "is_initiative": r.initiative, "children": []map[string]any{}, "has_more": false}
 	}
 	// Expand children breadth-first: one indexed query per level, never per node.
 	expand := func(roots []map[string]any, ids []string, levels int) error {
@@ -382,7 +385,7 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 // initiativeHomeCandidates admits at most 200 open initiatives.
 func initiativeHomeCandidates(ctx context.Context, q briefQueryer) ([]homeCandidate, error) {
 	rows, err := q.QueryContext(ctx, `SELECT c.id,'card:'||COALESCE(NULLIF(c.handle,''),c.id),c.title,c.created_at,c.updated_at,c.refs_json,COALESCE(json_extract(m.metadata_json,'$.project_ref'),''),COALESCE(m.metadata_json,'{}')
-	 FROM (SELECT p.id FROM initiative_card_positions p CROSS JOIN cards recent ON recent.id=p.id ORDER BY recent.updated_at DESC,recent.id LIMIT 200) p CROSS JOIN cards c ON c.id=p.id LEFT JOIN work_metadata m ON m.card_id=c.id
+	 FROM (SELECT id FROM initiative_card_positions ORDER BY created_at DESC,id DESC LIMIT 200) p CROSS JOIN cards c ON c.id=p.id LEFT JOIN work_metadata m ON m.card_id=c.id
 	 WHERE c.archived_at IS NULL AND c.trashed_at IS NULL ORDER BY c.created_at,c.id`)
 	if err != nil {
 		return nil, err

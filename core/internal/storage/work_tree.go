@@ -44,7 +44,7 @@ func installWorkTree(ctx context.Context, tx *sql.Tx) error {
 		`CREATE INDEX IF NOT EXISTS idx_cards_tree_roots ON cards(created_at,id) WHERE parent_card_id IS NULL AND needs_home=0 AND trashed_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_cards_tree_tray ON cards(created_at,id) WHERE needs_home=1 AND trashed_at IS NULL`,
 		`DROP VIEW IF EXISTS initiative_card_positions`,
-		`CREATE VIEW initiative_card_positions AS SELECT c.id FROM cards c INDEXED BY idx_cards_tree_roots WHERE c.parent_card_id IS NULL AND c.needs_home=0 AND c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key NOT IN ('done','cancelled')`,
+		`CREATE VIEW initiative_card_positions AS SELECT c.id,c.created_at FROM cards c INDEXED BY idx_cards_tree_roots WHERE c.parent_card_id IS NULL AND c.needs_home=0 AND c.trashed_at IS NULL AND c.archived_at IS NULL AND c.column_key NOT IN ('done','cancelled')`,
 	} {
 		if _, err = tx.ExecContext(ctx, statement); err != nil {
 			return err

@@ -442,10 +442,11 @@ func (s *Store) moveWorkTx(ctx context.Context, tx *accessTx, actor string, chil
 	return parentRef, insertWorkEvent(ctx, tx, actor, card, "card_updated", "Card moved in the work tree", map[string]any{"changed_fields": []string{"parent"}, "parent_ref": parentValue, "needs_home": tray})
 }
 
-// releaseWorkTreeChildrenTx sends a closing card's live children to the
-// Unsorted tray: archived, trashed or purged work is never a home.
+// releaseWorkTreeChildrenTx sends a closing card's children to the Unsorted
+// tray: archived, trashed or purged work is never a home. Already-trashed
+// children are released too, so restoring one never revives a closed edge.
 func releaseWorkTreeChildrenTx(ctx context.Context, tx *accessTx, id, actor, now string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1,updated_at=?,updated_by=? WHERE parent_card_id=? AND trashed_at IS NULL`, now, actor, id)
+	_, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=1,updated_at=?,updated_by=? WHERE parent_card_id=?`, now, actor, id)
 	return err
 }
 

@@ -92,7 +92,7 @@ func parseWorkTreeCommand(args []string) (workTreeCommand, error) {
 		}
 		p.reason = strings.TrimSpace(p.reason)
 		if len([]rune(p.reason)) > 2000 || (p.root && p.reason == "") {
-			return p, errnorm.Usage("invalid_request", "--reason must be 1..2000 characters and is required with --root")
+			return p, errnorm.Usage("invalid_request", "--reason must be 1..2000 characters; it is required with --root and when moving an initiative (the server checks)")
 		}
 	}
 	for _, ref := range []string{p.ref, p.under} {
@@ -309,7 +309,7 @@ func formatWorkWhere(body map[string]any) string {
 func workTreeHelp(topic string) (string, bool) {
 	switch topic {
 	case "mv", "work move":
-		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.", true
+		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.", true
 	case "tree", "work tree":
 		return "Usage: anx " + topic + " [ref|path] [--depth <1..3>] [--include-done]\nRead initiatives and Unsorted or one subtree; default depth 2. Children are in creation order. Truncation is explicit; read a subtree for more detail. Use --json for one envelope.", true
 	case "work ls":

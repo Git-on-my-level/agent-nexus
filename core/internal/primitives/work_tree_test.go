@@ -362,6 +362,12 @@ func TestWorkTreeHiddenStructurePrivacy(t *testing.T) {
 	if where, err := s.WorkWhere(reader, workString(visible["ref"]), ""); err != nil || where["is_initiative"] != true || where["needs_home"] != false || where["parent_ref"] != nil {
 		t.Fatalf("hidden parent changed status: %v %v", where, err)
 	}
+	if resolved, err := s.ResolveWorkPath(reader, "initiatives/visible-stream"); err != nil || resolved["ref"] != visible["ref"] {
+		t.Fatalf("reader-relative path must round-trip: %v %v", resolved, err)
+	}
+	if rooted, err := s.WorkTree(reader, workString(visible["ref"]), 1, false); err != nil || rooted["node"].(map[string]any)["is_initiative"] != true {
+		t.Fatalf("tree root status hints at a hidden parent: %v %v", rooted, err)
+	}
 	enriched := map[string]any{"id": workString(visible["id"])}
 	if err := s.EnrichWorkHierarchy(reader, []map[string]any{enriched}, "stranger", false, time.Now()); err != nil || enriched["is_initiative"] != true || enriched["parent_ref"] != nil {
 		t.Fatalf("hidden parent changed enriched status: %v %v", enriched, err)
@@ -648,5 +654,25 @@ func TestWorkTreeBackfillEligibilityAndDepth(t *testing.T) {
 		if parent, _, _ := workTreeFacts(t, s, ctx, workString(want.card["ref"])); parent != workString(want.parent["ref"]) {
 			t.Errorf("%s: parent=%q want %q", want.card["title"], parent, workString(want.parent["ref"]))
 		}
+	}
+}
+
+// A child trashed before its parent closes is released too, so restoring it
+// never revives an edge to closed work.
+func TestWorkTreeRestoredChildOfClosedParentWaitsInTray(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	root := mustWork(t, s, ctx, map[string]any{"title": "Initiative", "initiative": true})
+	child := mustWork(t, s, ctx, map[string]any{"title": "Task", "under": root["ref"]})
+	if _, err := s.TrashBoardCard(ctx, "writer", workString(child["board_id"]), workString(child["id"]), "later", RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ArchiveBoardCard(ctx, "writer", workString(root["board_id"]), workString(root["id"]), RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RestoreArchivedBoardCard(ctx, "writer", workString(child["board_id"]), workString(child["id"]), RemoveBoardCardInput{}); err != nil {
+		t.Fatal(err)
+	}
+	if parent, tray, _ := workTreeFacts(t, s, ctx, workString(child["ref"])); parent != "" || !tray {
+		t.Fatalf("restored child: parent=%q tray=%v", parent, tray)
 	}
 }
