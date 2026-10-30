@@ -12,9 +12,9 @@ import (
 //
 // The backfill freezes what reads showed before the upgrade: the oldest card
 // whose plan links the child (preferring an open parent), unless the child was
-// a declared initiative. Parentless open cards become initiatives when the old
-// rules made them one (initiatives-role board, top_level, a plan or children);
-// everything else waits in the tray rather than becoming an initiative.
+// a declared initiative. Parentless cards become initiatives when the old rules
+// made them one (initiatives-role board, top_level, a loop, a plan or
+// children); everything else waits in the tray rather than becoming one.
 func installWorkTree(ctx context.Context, tx *sql.Tx) error {
 	exists, err := sqliteTableExists(ctx, tx, "cards")
 	if err != nil || !exists {
@@ -59,6 +59,15 @@ type workTreeBackfillCard struct {
 	declared, topLevel  bool
 	roleBoard, hasPlan  bool
 	loop                bool
+}
+
+// BackfillWorkTree recomputes every card's stored tree position from legacy
+// signals. Migration 127 runs it once; tests use it to exercise the rules.
+func BackfillWorkTree(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE cards SET parent_card_id=NULL,needs_home=0`); err != nil {
+		return err
+	}
+	return backfillWorkTree(ctx, tx)
 }
 
 func backfillWorkTree(ctx context.Context, tx *sql.Tx) error {
@@ -185,7 +194,9 @@ func backfillWorkTree(ctx context.Context, tx *sql.Tx) error {
 	for _, id := range ids {
 		c := cards[id]
 		needsHome := 0
-		if parent[id] == "" && c.open && c.live && !c.loop && !c.topLevel && !c.roleBoard && !hasChildren[id] && (anyRoleBoard || !c.hasPlan) {
+		// Closed and archived non-initiatives also wait in the tray, so a finished
+		// task never reads as a finished initiative.
+		if parent[id] == "" && !c.loop && !c.topLevel && !c.roleBoard && !hasChildren[id] && (anyRoleBoard || !c.hasPlan) {
 			needsHome = 1
 		}
 		if parent[id] == "" && needsHome == 0 {
