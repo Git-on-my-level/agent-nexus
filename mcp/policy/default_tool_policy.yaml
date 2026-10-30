@@ -940,7 +940,7 @@ commands:
     reason: Retire membership and optionally group atomically with an audit reason; agents may act.
   "work.move":
     classification: unsupported_other
-    reason: "Use the work-tree CLI surface until the move API has verified keyed replay for MCP writes."
+    reason: "Use the work-tree CLI surface; no MCP move adaptation is included in this phase."
   "work.resolve":
     classification: unsupported_other
     reason: "Path resolution is currently a work-tree CLI helper; no MCP adaptation is included in this phase."

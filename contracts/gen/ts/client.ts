@@ -15904,11 +15904,19 @@ export const commandRegistry: CommandSpec[] = [
     "body_schema": {
       "optional": [
         {
+          "name": "actor_id",
+          "type": "string"
+        },
+        {
           "name": "after",
           "type": "string"
         },
         {
           "name": "reason",
+          "type": "string"
+        },
+        {
+          "name": "request_key",
           "type": "string"
         },
         {
@@ -16403,10 +16411,6 @@ export const commandRegistry: CommandSpec[] = [
         {
           "name": "patch.start_at",
           "type": "string"
-        },
-        {
-          "name": "patch.top_level",
-          "type": "boolean"
         },
         {
           "name": "patch.wake_condition",

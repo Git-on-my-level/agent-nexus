@@ -77,11 +77,11 @@ func TestWorkTreePathsAndMoveBody(t *testing.T) {
 	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
 	cfg := config.Resolved{BaseURL: server.URL, AccessToken: "fixture"}
 	for _, argv := range [][]string{{"mv", "unsorted/c", "--under", "initiatives/p", "--reason", "Home confirmed", "--after", "step-1"}, {"work", "move", "card:c", "--root", "--reason", "Independent"}, {"mv", "card:c", "--unsorted"}} {
-		if _, _, err := a.runWorkTreeCommand(context.Background(), argv, cfg); err != nil {
+		if _, _, err := a.runWorkTreeCommand(context.Background(), append(argv, "--request-key", "original-key"), cfg); err != nil {
 			t.Fatal(err)
 		}
 	}
-	want := []map[string]any{{"under": "card:p", "reason": "Home confirmed", "after": "step-1"}, {"root": true, "reason": "Independent"}, {"unsorted": true}}
+	want := []map[string]any{{"request_key": "original-key", "under": "card:p", "reason": "Home confirmed", "after": "step-1"}, {"request_key": "original-key", "root": true, "reason": "Independent"}, {"request_key": "original-key", "unsorted": true}}
 	if !reflect.DeepEqual(bodies, want) {
 		t.Fatalf("bodies=%v want=%v", bodies, want)
 	}
@@ -233,5 +233,63 @@ func TestInitiativeSuggestionsUseServerTreePredicate(t *testing.T) {
 	}
 	if !isOpenInitiative(map[string]any{"phase": "ready", "is_initiative": true, "goal": map[string]any{"metric": "score"}}) {
 		t.Fatal("goal must not override stored tree identity")
+	}
+}
+
+func TestWorkPatchRejectsLegacyTopLevelBeforeSending(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	for _, wanted := range []bool{true, false} {
+		a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+		a.Stdin = strings.NewReader(fmt.Sprintf(`{"if_version":3,"patch":{"top_level":%t}}`, wanted))
+		_, _, err := a.runWorkCommand(context.Background(), []string{"work", "patch", "card:x", "--from-file", "-"}, config.Resolved{BaseURL: server.URL, AccessToken: "fixture"})
+		if err == nil || !strings.Contains(err.Error(), "anx work move") {
+			t.Fatalf("legacy patch accepted or missing move guidance: %v", err)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("legacy patches made %d requests", calls)
+	}
+}
+
+func TestWorkMoveAllocatesReplayKey(t *testing.T) {
+	var keys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, anyString(body["request_key"]))
+		if r.Header.Get("Idempotency-Key") != "" {
+			t.Error("move must use body request_key")
+		}
+		fmt.Fprint(w, `{"work":{"ref":"card:x"}}`)
+	}))
+	defer server.Close()
+	a, _ := workspaceTestApp(t, t.TempDir(), t.TempDir(), nil)
+	for _, command := range [][]string{{"mv", "card:x", "--unsorted"}, {"work", "move", "card:x", "--unsorted"}} {
+		if _, _, err := a.runWorkTreeCommand(context.Background(), command, config.Resolved{BaseURL: server.URL, AccessToken: "fixture"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(keys) != 2 || len(keys[0]) != 32 || len(keys[1]) != 32 || keys[0] == keys[1] {
+		t.Fatalf("missing or reused keys: %v", keys)
+	}
+}
+
+func TestGroupingErrorsDoNotRecommendDeprecatedInitiativeVerbs(t *testing.T) {
+	for _, command := range []string{"work group", "work fold"} {
+		err := errnorm.WithDetails(errnorm.Usage("invalid_request", "move this initiative"), map[string]any{
+			"parsed": map[string]any{"error": map[string]any{"details": map[string]any{"initiative_ref": "card:x"}}},
+		})
+		for _, action := range deriveErrorActions(command, err) {
+			if strings.Contains(strings.Join(action.Argv, " "), "anx initiative") {
+				t.Fatalf("deprecated guidance: %v", action)
+			}
+		}
 	}
 }

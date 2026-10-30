@@ -371,6 +371,11 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		body = map[string]any{}
 	}
 	if object, ok := body.(map[string]any); ok {
+		if parsed.name == "work patch" {
+			if _, legacy := asMap(object["patch"])["top_level"]; legacy {
+				return nil, parsed.name, errnorm.Usage("invalid_request", "top_level is replaced by the work tree: use anx work move <ref> --root --reason <why> or --unsorted")
+			}
+		}
 		if parsed.handle != "" {
 			object["handle"] = parsed.handle
 		}

@@ -14,9 +14,9 @@ import (
 // The tree is server-owned. Paths are resolved for each invocation, never saved
 // as identity, and advisory home suggestions never trigger a mutation.
 type workTreeCommand struct {
-	name, ref, under, reason, after string
-	root, unsorted, includeDone     bool
-	depth                           int
+	name, ref, under, reason, after, requestKey string
+	root, unsorted, includeDone                 bool
+	depth                                       int
 }
 
 func isWorkTreeCommand(args []string) bool {
@@ -45,6 +45,7 @@ func parseWorkTreeCommand(args []string) (workTreeCommand, error) {
 		fs.BoolVar(&p.unsorted, "unsorted", false, "Move to Unsorted")
 		fs.StringVar(&p.reason, "reason", "", "Audit reason (required for root or moving an initiative under a parent)")
 		fs.StringVar(&p.after, "after", "", "Preceding sibling plan step id")
+		fs.StringVar(&p.requestKey, "request-key", "", "Retain the same key and body until confirmed")
 	case "tree", "work tree", "work ls":
 		if p.name != "work ls" {
 			fs.IntVar(&p.depth, "depth", 2, "Expansion depth (1..3)")
@@ -175,6 +176,12 @@ func (a *App) runWorkTreeCommand(ctx context.Context, args []string, cfg config.
 		if p.after != "" {
 			object["after"] = p.after
 		}
+		if p.requestKey != "" {
+			object["request_key"] = p.requestKey
+		}
+		if err := ensureGroupingRequestKey(object); err != nil {
+			return nil, p.name, err
+		}
 		body = object
 	case "where":
 		path = "/work/where"
@@ -302,7 +309,7 @@ func formatWorkWhere(body map[string]any) string {
 func workTreeHelp(topic string) (string, bool) {
 	switch topic {
 	case "mv", "work move":
-		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Use --json for one envelope.", true
+		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.", true
 	case "tree", "work tree":
 		return "Usage: anx " + topic + " [ref|path] [--depth <1..3>] [--include-done]\nRead initiatives and Unsorted or one subtree; default depth 2. Children are in creation order. Truncation is explicit; read a subtree for more detail. Use --json for one envelope.", true
 	case "work ls":
@@ -318,7 +325,7 @@ func init() {
 		path, summary, shape string
 		flags                []localHelperFlag
 	}{
-		{"mv", "Move a card in the stored work tree.", "`work`", []localHelperFlag{{Name: "--under <ref|path>", Description: "Stored parent."}, {Name: "--root", Description: "Move to top level; requires reason."}, {Name: "--unsorted", Description: "Move to Unsorted."}, {Name: "--reason <text>", Description: "Audit reason, at most 2000 characters."}, {Name: "--after <step-id>", Description: "Sibling plan step id."}}},
+		{"mv", "Move a card in the stored work tree.", "`work`", []localHelperFlag{{Name: "--under <ref|path>", Description: "Stored parent."}, {Name: "--root", Description: "Move to top level; requires reason."}, {Name: "--unsorted", Description: "Move to Unsorted."}, {Name: "--reason <text>", Description: "Audit reason, at most 2000 characters."}, {Name: "--after <step-id>", Description: "Sibling plan step id."}, {Name: "--request-key <key>", Description: "Retain the same key and body until confirmed."}}},
 		{"tree", "Read the stored work tree.", "`initiatives`, `unsorted`, or `node`; `truncated`", []localHelperFlag{{Name: "--depth <n>", Description: "Expansion depth 1..3; default 2."}, {Name: "--include-done", Description: "Include completed cards."}}},
 		{"work ls", "List immediate children of a ref or path.", "`children`, `has_more`, `truncated`", []localHelperFlag{{Name: "--include-done", Description: "Include completed cards."}}},
 	} {

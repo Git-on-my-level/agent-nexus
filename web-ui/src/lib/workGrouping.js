@@ -1,23 +1,19 @@
-import { workMoveRequest, workMoveTitle } from "$lib/workMove.js";
+import {
+  DEFAULT_PROMOTION_REASON,
+  DEFAULT_UNSORTED_REASON,
+  workMoveRequest,
+  workMoveTitle,
+} from "$lib/workMove.js";
 import { get } from "svelte/store";
 import { localWorkScope } from "$lib/localWorkScope.js";
 import { enqueueLocalMutation } from "$lib/mutationOutbox.js";
 import { randomUUID } from "$lib/replayPolicy.js";
 
 /**
- * Grouping writes from the board: put a card under an initiative, fold it
- * into one, and undo either. Every write goes through the device outbox with
- * the key it was saved with; core replays group, fold and unfold by
- * request_key (see docs/grouping-work.md).
- *
- * Undoing a group has no route of its own: it removes the one plan step the
- * group added, through the keyed plan write. The write is computed once and
- * frozen in the entry; see `groupingPlan.js` and the outbox sender.
- *
- * Making a card an initiative (and its undo) is the version-fenced
- * `work.patch` core offers in the tray's `next_actions`: `{top_level}` at the
- * version the tray read. It has no request key; the fence is what makes a
- * retry safe (see `sendTopLevel` in `groupingPlan.js`).
+ * Moves, legacy grouping and folds use persisted actor-scoped request keys.
+ * Existing work.top_level entries are translated by the outbox sender; new
+ * promotion intents always use work.move. Plan undo remains only for saved
+ * legacy group operations.
  */
 
 export const GROUPING_OPERATIONS = [
@@ -40,8 +36,8 @@ const VERB_OPERATION = {
   fold: "work.fold",
   unfold: "work.unfold",
   ungroup: "work.ungroup",
-  promote: "work.top_level",
-  unpromote: "work.top_level",
+  promote: "work.move",
+  unpromote: "work.move",
 };
 
 /** What the reader is told the saved change does. */
@@ -62,7 +58,7 @@ export function groupingTitle(draft) {
     case "promote":
       return `Make ${card} an initiative`;
     case "unpromote":
-      return `Put ${card} back in Ungrouped`;
+      return `Put ${card} back in Unsorted`;
     default:
       return `Change grouping for ${card}`;
   }
@@ -71,13 +67,13 @@ export function groupingTitle(draft) {
 /**
  * A complete immutable intent; retries never substitute newer reads.
  * `stepId` binds an undo-group to the one plan step the group added;
- * `version` fences a promote or unpromote to the card as the reader saw it.
+ * Legacy version fields are retained for saved drafts; moves use replay keys.
  */
 export function groupingDraft(
   verb,
   work,
   parent = null,
-  { stepId = "", version = null } = {},
+  { stepId = "", version = null, reason } = {},
 ) {
   return JSON.parse(
     JSON.stringify({
@@ -86,6 +82,15 @@ export function groupingDraft(
       parent: parent
         ? { ref: parent.ref, title: parent.title || parent.ref }
         : null,
+      ...(verb === "promote" || verb === "unpromote"
+        ? {
+            reason:
+              reason ??
+              (verb === "promote"
+                ? DEFAULT_PROMOTION_REASON
+                : DEFAULT_UNSORTED_REASON),
+          }
+        : {}),
       ...(stepId ? { stepId } : {}),
       ...(Number.isInteger(version) ? { version } : {}),
     }),
@@ -93,25 +98,25 @@ export function groupingDraft(
 }
 
 export function groupingRequest(draft, actor, key) {
-  if (draft?.verb === "move") return workMoveRequest(draft);
+  if (draft?.verb === "move") return workMoveRequest(draft, actor, key);
   const operation = VERB_OPERATION[draft?.verb];
   const ref = String(draft?.work?.ref ?? "").trim();
   const parent = String(draft?.parent?.ref ?? "").trim();
   if (!operation || !ref) throw new Error("Choose a card to group.");
-  if (operation === "work.top_level") {
-    if (!Number.isInteger(draft.version) || draft.version < 0)
-      throw new Error("Reload the board to make this card an initiative.");
-    return {
-      operation,
-      request: {
-        ref,
-        body: {
-          actor_id: actor,
-          if_version: draft.version,
-          patch: { top_level: draft.verb === "promote" },
-        },
+  if (draft.verb === "promote" || draft.verb === "unpromote") {
+    return workMoveRequest(
+      {
+        ...draft,
+        destination: draft.verb === "promote" ? "root" : "unsorted",
+        reason:
+          draft.reason ??
+          (draft.verb === "promote"
+            ? DEFAULT_PROMOTION_REASON
+            : DEFAULT_UNSORTED_REASON),
       },
-    };
+      actor,
+      key,
+    );
   }
   if (draft.verb !== "unfold" && !parent)
     throw new Error("Choose an initiative to group under.");

@@ -1,3 +1,6 @@
+export const DEFAULT_PROMOTION_REASON = "Made an initiative from Watch";
+export const DEFAULT_UNSORTED_REASON = "Returned to Unsorted from Watch";
+
 /** Stored-parent moves. Plans and board layout are independent of this intent. */
 export function workMoveDraft(work, destination = "under", parent = null) {
   return {
@@ -24,8 +27,8 @@ export function workMoveTitle(draft) {
   return `Move ${card} under “${draft.parent?.title || draft.parent?.ref || "a parent"}”`;
 }
 
-export function workMoveRequest(draft) {
-  const body = {};
+export function workMoveRequest(draft, actor, key) {
+  const body = { actor_id: actor, request_key: key };
   if (draft.destination === "root") body.root = true;
   else if (draft.destination === "unsorted") body.unsorted = true;
   else if (draft.destination === "under" && draft.parent?.ref)
@@ -36,6 +39,7 @@ export function workMoveRequest(draft) {
     throw new Error("Keep the reason within 2000 characters.");
   if ((body.root || (body.under && draft.work.is_initiative)) && !reason)
     throw new Error("Give a reason for moving this initiative.");
+  if (!key) throw new Error("Move replay key is missing.");
   if (reason) body.reason = reason;
   return { operation: "work.move", request: { ref: draft.work.ref, body } };
 }

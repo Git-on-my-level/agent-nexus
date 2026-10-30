@@ -5801,7 +5801,6 @@ Inputs:
   - body `patch.roles` (list<string>)
   - body `patch.source_refs` (list<any>)
   - body `patch.start_at` (string)
-  - body `patch.top_level` (boolean)
   - body `patch.wake_condition` (string)
   - body `patch.workspace_move` (object)
 
@@ -6409,8 +6408,8 @@ Human authorization: servers that gate this action on a signed-in browser sessio
 Move a card under a parent, to top level or to Unsorted
 
 ```text
-Usage: anx work move <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Use --json for one envelope.
+Usage: anx work move <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
+Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.
 ```
 
 ## `work tree`
@@ -11777,8 +11776,8 @@ Global flags:
 Move a card in the stored work tree.
 
 ```text
-Usage: anx mv <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Use --json for one envelope.
+Usage: anx mv <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
+Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root or when moving an initiative under a parent. Paths are resolved at request time. Retain the original request key and body for replay. Use --json for one envelope.
 ```
 
 ## `tree`

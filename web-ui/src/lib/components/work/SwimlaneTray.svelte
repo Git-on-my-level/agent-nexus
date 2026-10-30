@@ -49,7 +49,7 @@
     const lane = lanes.find((entry) => entry.ref === value);
     if (lane) onGroup(row, lane);
   }
-  const canPromote = (row) => Boolean(row.needs_home && onPromote);
+  const canPromote = (row) => Boolean(row.promote && onPromote);
 </script>
 
 <ul class="divide-y divide-line-subtle" data-swimlane-tray-rows>

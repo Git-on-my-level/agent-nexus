@@ -322,41 +322,33 @@ async function send(entry, lease = null) {
     if (!result.card?.id) throw new Error("Assignment receipt is incomplete.");
     return result;
   }
-  if (entry.operation === "work.move") {
-    // The move API brief does not yet guarantee atomic keyed replay. Send an
-    // intent once; a crash or unknown result stays saved for explicit review.
-    // Do not replay an old placement over a newer move by another operator.
-    const uncertain = () =>
-      Object.assign(new Error("Move outcome is unknown."), {
-        publicMessage:
-          "This move could not be confirmed. It is saved here. Check the card’s current home, then edit the saved move if it still needs to be sent.",
-      });
-    if (entry.attempts > 1) throw uncertain();
-    const { ref, body } = entry.request;
-    try {
-      const result = await client.moveWork(ref, body, entry.key);
-      if (!result.work?.ref) throw uncertain();
-      return result;
-    } catch (error) {
-      const status = Number(error?.status || 0);
-      if (!status || status >= 500 || status === 408 || status === 429)
-        throw uncertain();
-      throw error;
-    }
+  if (entry.operation === "work.move" && !entry.request.body.request_key) {
+    // Upgrade intents saved by the header-key version before their next send.
+    entry.request = {
+      ...entry.request,
+      body: { ...entry.request.body, request_key: entry.key },
+    };
+    await persist(entry, lease);
   }
-  if (["work.group", "work.fold", "work.unfold"].includes(entry.operation)) {
+  if (
+    ["work.move", "work.group", "work.fold", "work.unfold"].includes(
+      entry.operation,
+    )
+  ) {
     const { ref, body } = entry.request;
     const result =
-      entry.operation === "work.group"
-        ? await client.groupWork(ref, body)
-        : entry.operation === "work.fold"
-          ? await client.foldWork(ref, body)
-          : await client.unfoldWork(ref, body);
+      entry.operation === "work.move"
+        ? await client.moveWork(ref, body)
+        : entry.operation === "work.group"
+          ? await client.groupWork(ref, body)
+          : entry.operation === "work.fold"
+            ? await client.foldWork(ref, body)
+            : await client.unfoldWork(ref, body);
     if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
     return result;
   }
   if (entry.operation === "work.top_level")
-    return sendTopLevel(client, entry.request);
+    return sendTopLevel(client, entry.request, entry.key);
   if (entry.operation === "work.ungroup") {
     // One exact plan write per undo, like the op-based pins edit: the first
     // send reads the plan once, removes only the step this group added, and

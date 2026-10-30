@@ -19,7 +19,11 @@
    * Below `md` lanes stack as collapsible sections and the tray opens as a
    * sheet.
    */
-  import { workMoveDraft } from "$lib/workMove.js";
+  import {
+    DEFAULT_PROMOTION_REASON,
+    DEFAULT_UNSORTED_REASON,
+    workMoveDraft,
+  } from "$lib/workMove.js";
   import { onMount, tick } from "svelte";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
   import { countWaitingDecisions } from "$lib/brief.js";
@@ -191,7 +195,10 @@
   const group = (row, lane, options) =>
     send(workMoveDraft(row, "under", lane), options);
   const promote = (row) => {
-    saved = workMoveDraft(row, "root");
+    saved = {
+      ...workMoveDraft(row, "root"),
+      reason: row.promote?.reason || DEFAULT_PROMOTION_REASON,
+    };
   };
   const openMove = (work) => {
     saved = workMoveDraft(work, "unsorted");
@@ -244,6 +251,19 @@
   let saved = $state(null);
   function restoreSaved(value, reason) {
     saved = reason === "privacy" ? null : value;
+    if (saved?.verb === "promote" || saved?.verb === "unpromote") {
+      saved = {
+        ...workMoveDraft(
+          saved.work,
+          saved.verb === "promote" ? "root" : "unsorted",
+        ),
+        reason:
+          saved.reason ??
+          (saved.verb === "promote"
+            ? DEFAULT_PROMOTION_REASON
+            : DEFAULT_UNSORTED_REASON),
+      };
+    }
   }
 
   // ---- Lanes ----------------------------------------------------------------

@@ -558,15 +558,6 @@ func deriveErrorActions(command string, err *errnorm.Error) (actions []output.Ne
 	if err == nil {
 		return []output.NextAction{}
 	}
-	if (command == "work group" || command == "work fold") && err.Code == "invalid_request" {
-		details, _ := err.Details.(map[string]any)
-		parsed := asMap(details["parsed"])
-		apiError := asMap(parsed["error"])
-		apiDetails := asMap(apiError["details"])
-		if ref := anyString(apiDetails["initiative_ref"]); strings.HasPrefix(ref, "card:") {
-			return []output.NextAction{action("Retire before grouping", "anx", "initiative", "retire", ref, "--reason", "Consolidate initiative scope")}
-		}
-	}
 
 	defer func() {
 		if details, ok := err.Details.(map[string]any); ok && details["workspace_source"] != nil {

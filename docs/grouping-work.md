@@ -69,7 +69,7 @@ may retain `after` dependencies. A card step is a reference, never a stored
 parent. Moving a card does not rewrite the checklist. Existing `work group`,
 `initiative promote`, and `initiative retire` remain deprecated compatibility
 commands implemented over moves. Use `work move` for new workflows.
-`top_level` metadata is deprecated and ignored. Fold/unfold are separate legacy
+`top_level` metadata is deprecated on create; `work patch` rejects it. Fold/unfold are separate legacy
 merge operations, outside the ordinary tree workflow.
 
 ## Human surfaces and safe writes
@@ -82,17 +82,18 @@ layout is unchanged.
 
 Move drafts and submitted intents are saved on the device before sending, scoped
 to workspace, principal and card. Storage failure prevents sending. The UI sends
-the saved key as `Idempotency-Key`, keeping the move body exactly as specified.
-The supplied move API does not yet guarantee keyed replay: a move is sent once,
-and an uncertain outcome stays saved for review rather than automatically
-replaying an older placement over a newer one. Enable automatic retries only
-after core's atomic original-result replay and changed-body rejection are tested.
-Existing saved legacy grouping requests retain their original adapters.
+the saved key as body `request_key`. Core commits moves and their original-result
+receipts atomically; changed-body reuse conflicts. Uncertain sends retry with
+bounded backoff using the same persisted body and key, including after reload.
+Already queued `work.top_level` entries translate to root or Unsorted moves,
+keeping their saved key and using an editable/default reason rather than a
+rejected metadata patch. Existing saved legacy grouping requests retain their
+original adapters.
 
 ## HTTP routes and read cost
 
 - `POST /work/{card_ref}/move`: exactly one of `under`, `root:true`,
-  `unsorted:true`, plus optional `reason` and `after`; returns `{work}`.
+  `unsorted:true`, plus optional `reason`, `after`, `actor_id` and replay `request_key`; returns `{work}`.
 - `GET /work/tree?root=...&depth=1..3&include_done=false`: `{node,truncated}`
   with a root, otherwise `{initiatives,unsorted,truncated}`.
 - `GET /work/resolve?path=...`: `{ref,path}`, or 404.

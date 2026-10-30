@@ -12653,7 +12653,7 @@ components:
         label: {type: string}
         command_id: {type: string, description: work.move for explicit placement or top-level moves.}
         argv: {type: array, items: {type: string}, description: Explicit confirmation command; placement is never automatic.}
-        stdin: {type: object, additionalProperties: true, description: Optional request body for the admitted card; top_level metadata is deprecated and ignored.}
+        stdin: {type: object, additionalProperties: true, description: Optional request body for the admitted card. Parentage changes use work.move argv with an explicit destination.}
         command_template: {type: string, description: Human-only move command hint with a required workspace-alias argument. Not executable argv or a destination permission grant.}
         requires_human: {type: boolean}
         requires_destination: {type: boolean}
@@ -12668,6 +12668,8 @@ components:
       type: object
       additionalProperties: false
       properties:
+        actor_id: {type: string}
+        request_key: {type: string, maxLength: 256, description: Actor-scoped atomic original-result replay key. Retain the same key and body until confirmed; changed-body reuse conflicts.}
         under: {type: string, minLength: 1, description: Visible open parent card ref.}
         root: {type: boolean, enum: [true], description: Make this card a top-level initiative.}
         unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
@@ -12861,9 +12863,10 @@ components:
           minimum: 0
         patch:
           type: object
+          description: top_level patches are rejected. Change parentage with work.move and an explicit destination instead.
           additionalProperties: true
+          not: {required: [top_level]}
           properties:
-            top_level: {type: boolean, deprecated: true, description: Ignored. Use the work move route.}
             cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
             goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}

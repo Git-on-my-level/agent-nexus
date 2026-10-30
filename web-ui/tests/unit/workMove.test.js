@@ -12,21 +12,31 @@ const parent = { ref: "card:billing", title: "Billing" };
 describe("stored-parent move intents", () => {
   it("sends exactly one destination without authoring a plan", () => {
     const draft = workMoveDraft(work, "under", parent);
-    expect(workMoveRequest(draft)).toEqual({
+    expect(workMoveRequest(draft, "human", "saved-key")).toEqual({
       operation: "work.move",
-      request: { ref: work.ref, body: { under: parent.ref } },
+      request: {
+        ref: work.ref,
+        body: {
+          actor_id: "human",
+          request_key: "saved-key",
+          under: parent.ref,
+        },
+      },
     });
     expect(workMoveTitle(draft)).toBe("Move “Retries” under “Billing”");
     expect(
-      workMoveRequest(workMoveDraft(work, "unsorted")).request.body,
-    ).toEqual({ unsorted: true });
+      workMoveRequest(workMoveDraft(work, "unsorted"), "human", "saved-key")
+        .request.body,
+    ).toEqual({ actor_id: "human", request_key: "saved-key", unsorted: true });
   });
 
   it("requires reasons for top level and initiative retirement", () => {
     const root = workMoveDraft(work, "root");
-    expect(() => workMoveRequest(root)).toThrow("reason");
+    expect(() => workMoveRequest(root, "human", "saved-key")).toThrow("reason");
     root.reason = "Independent outcome";
-    expect(workMoveRequest(root).request.body).toEqual({
+    expect(workMoveRequest(root, "human", "saved-key").request.body).toEqual({
+      actor_id: "human",
+      request_key: "saved-key",
       root: true,
       reason: "Independent outcome",
     });
@@ -35,17 +45,25 @@ describe("stored-parent move intents", () => {
       "under",
       parent,
     );
-    expect(() => workMoveRequest(retired)).toThrow("reason");
+    expect(() => workMoveRequest(retired, "human", "saved-key")).toThrow(
+      "reason",
+    );
     retired.reason = "One shared outcome";
-    expect(workMoveRequest(retired).request.body).toEqual({
-      under: parent.ref,
-      reason: "One shared outcome",
-    });
+    expect(workMoveRequest(retired, "human", "saved-key").request.body).toEqual(
+      {
+        actor_id: "human",
+        request_key: "saved-key",
+        under: parent.ref,
+        reason: "One shared outcome",
+      },
+    );
     retired.reason = "x".repeat(2001);
-    expect(() => workMoveRequest(retired)).toThrow("2000");
+    expect(() => workMoveRequest(retired, "human", "saved-key")).toThrow(
+      "2000",
+    );
   });
 
-  it("uses the move route and preserves the saved key outside the exact body", async () => {
+  it("uses the move route and preserves the saved replay key in the body", async () => {
     const seen = [];
     const client = createAnxCoreClient({
       baseUrl: "https://core.test",
@@ -62,14 +80,14 @@ describe("stored-parent move intents", () => {
         });
       },
     });
-    const body = { under: parent.ref };
-    await client.moveWork(work.ref, body, "saved-key");
+    const body = { under: parent.ref, request_key: "saved-key" };
+    await client.moveWork(work.ref, body);
     expect(seen).toEqual([
       {
         url: "https://core.test/work/card%3Aretry/move",
         method: "POST",
-        body,
-        key: "saved-key",
+        body: { ...body, actor_id: "human" },
+        key: null,
       },
     ]);
   });

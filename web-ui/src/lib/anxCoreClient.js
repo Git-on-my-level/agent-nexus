@@ -385,10 +385,8 @@ const adapterCommandTable = [
   [
     "moveWork",
     "work.move",
-    (ref, payload, key) => ({
-      pathParams: pathParams({ card_ref: ref }),
-      options: { body: payload, headers: { "Idempotency-Key": key } },
-    }),
+    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
+    true,
   ],
   ["workTree", "work.tree", (filters) => ({ options: q(filters) })],
   ["resolveWorkPath", "work.resolve", (path) => ({ options: q({ path }) })],

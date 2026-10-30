@@ -178,16 +178,16 @@ function seed() {
         next_actions: [
           {
             label: "Make it an initiative",
-            command_id: "work.patch",
+            command_id: "work.move",
             argv: [
               "anx",
               "work",
-              "patch",
+              "move",
               "card:ramp-telemetry",
-              "--from-file",
-              "-",
+              "--root",
+              "--reason",
+              "An independent outcome",
             ],
-            stdin: { if_version: 3, patch: { top_level: true } },
           },
           {
             label: "Move to another workspace",
@@ -199,10 +199,9 @@ function seed() {
         ],
       },
     ],
-    /** Card versions and `top_level`, for the fenced work patch. */
-    work: { "card:ramp-telemetry": { version: 3, top_level: false } },
-    parked: {},
-    losePatchResponses: 0,
+    moveReceipts: {},
+    moveEffects: 0,
+    loseMoveResponses: 0,
     hasMore: false,
     plans: {},
     planTokens: {},
@@ -281,14 +280,29 @@ async function install(context, api) {
         verb,
         ref,
         body,
-        key: route.request().headers()["idempotency-key"],
+        key: body.request_key,
+        headerKey: route.request().headers()["idempotency-key"],
       });
       if (api.fail[verb]) {
         const failure = api.fail[verb];
         if (typeof failure === "number" && failure > 0) api.fail[verb] -= 1;
         return json(route, { error: { message: "Upstream detail" } }, 503);
       }
+      const replayKey = `${ref}:${body.actor_id}:${body.request_key}`;
       if (verb === "move") {
+        if (!body.request_key || !body.actor_id)
+          return json(
+            route,
+            { error: { message: "Missing replay identity" } },
+            400,
+          );
+        const saved = api.moveReceipts[replayKey];
+        if (saved)
+          return JSON.stringify(saved.body) === JSON.stringify(body)
+            ? json(route, saved.response)
+            : json(route, { error: { message: "Key reused" } }, 409);
+        api.moveEffects += 1;
+
         if (body.under) landChild(api, ref, body.under);
         else if (body.root) {
           const row = api.ungrouped.find((entry) => entry.ref === ref);
@@ -302,6 +316,13 @@ async function install(context, api) {
               parent.rollup.children.filter((entry) => entry.ref !== ref),
             );
           }
+          const initiative = api.brief.initiatives.find(
+            (entry) => entry.ref === ref,
+          );
+          row ||= initiative;
+          api.brief.initiatives = api.brief.initiatives.filter(
+            (entry) => entry.ref !== ref,
+          );
           api.ungrouped.push({
             ref,
             title: row?.title || ref,
@@ -317,44 +338,31 @@ async function install(context, api) {
         );
         api.brief.next_actions = [];
       }
-      return json(route, {
+      const response = {
         work: { ref, parent_ref: body.under || body.into || null },
-      });
+      };
+      if (verb === "move") {
+        api.moveReceipts[replayKey] = { body, response };
+        if (api.loseMoveResponses > 0) {
+          api.loseMoveResponses -= 1;
+          return json(route, { error: { message: "Gateway timeout" } }, 503);
+        }
+      }
+      return json(route, response);
     },
   );
-  // Core's fenced work patch: a stale version is refused, so a retry of a
-  // landed patch comes back 409 and the client reads the card back.
+  // Core rejects the removed field; legacy queued intents must use move.
   await context.route(
     (url) =>
       /^\/work\/[^/]+$/.test(url.pathname) &&
       url.pathname !== "/work/ungrouped",
     async (route) => {
-      const ref = decodeURIComponent(
-        new URL(route.request().url()).pathname.split("/")[2],
+      api.posts.push({ verb: "patch", body: route.request().postDataJSON() });
+      return json(
+        route,
+        { error: { message: "top_level is replaced by the work tree" } },
+        400,
       );
-      const method = route.request().method();
-      api.calls.push(`${method} /work/${ref}`);
-      const card = api.work[ref];
-      if (!card) return json(route, { error: { message: "missing" } }, 404);
-      if (method === "GET") return json(route, { work: { ref, ...card } });
-      const body = route.request().postDataJSON();
-      api.posts.push({ verb: "patch", ref, body });
-      if (body.if_version !== card.version)
-        return json(route, { error: { message: "version changed" } }, 409);
-      card.version += 1;
-      card.top_level = body.patch.top_level;
-      if (card.top_level) {
-        api.parked[ref] = api.ungrouped.find((row) => row.ref === ref);
-        api.ungrouped = api.ungrouped.filter((row) => row.ref !== ref);
-      } else if (api.parked[ref]) {
-        api.ungrouped = [...api.ungrouped, api.parked[ref]];
-        delete api.parked[ref];
-      }
-      if (api.losePatchResponses > 0) {
-        api.losePatchResponses -= 1;
-        return json(route, { error: { message: "gateway timeout" } }, 503);
-      }
-      return json(route, { work: { ref, ...card } });
     },
   );
   await context.route(
@@ -571,7 +579,13 @@ test.describe("desktop", () => {
       body: { under: "card:capture" },
     });
     expect(api.posts[0].key).toMatch(/^[0-9a-f-]{36}$/);
-    expect(Object.keys(api.posts[0].body)).toEqual(["under"]);
+    expect(api.posts[0].body.actor_id).toBe("actor-comment");
+    expect(Object.keys(api.posts[0].body).sort()).toEqual([
+      "actor_id",
+      "request_key",
+      "under",
+    ]);
+    expect(api.posts[0].headerKey).toBeUndefined();
     expect(api.plans).toEqual({});
     await expect(page.locator('[data-tray-ref="card:a1-f4"]')).toHaveCount(0);
     await expect(
@@ -586,10 +600,13 @@ test.describe("desktop", () => {
     const api = await open(page, context);
     await page.locator('[data-promote="card:ramp-telemetry"]').click();
     const draft = page.locator("[data-saved-grouping]");
-    await draft.getByLabel("Reason").fill("An independent outcome");
-    await page.reload();
     await expect(draft.getByLabel("Reason")).toHaveValue(
       "An independent outcome",
+    );
+    await draft.getByLabel("Reason").fill("A separate measurable outcome");
+    await page.reload();
+    await expect(draft.getByLabel("Reason")).toHaveValue(
+      "A separate measurable outcome",
     );
     await draft.getByRole("button", { name: "Save move" }).click();
     await expect(page.locator("[data-grouping-notice]")).toContainText(
@@ -598,7 +615,7 @@ test.describe("desktop", () => {
     expect(api.posts[0]).toMatchObject({
       verb: "move",
       ref: "card:ramp-telemetry",
-      body: { root: true, reason: "An independent outcome" },
+      body: { root: true, reason: "A separate measurable outcome" },
     });
   });
 
@@ -684,28 +701,130 @@ test.describe("desktop", () => {
     ).toBeVisible();
   });
 
-  test("an uncertain move survives reload without replaying over newer work", async ({
+  test("a lost move receipt retries after reload with the original body key", async ({
     page,
     context,
   }) => {
     const api = seed();
-    api.fail.move = 1;
+    api.loseMoveResponses = 1;
     await open(page, context, api, { fixTime: false });
     await page
       .locator('[data-tray-ref="card:cost-4"] [data-group-under="card:margin"]')
       .click();
     await expect(
-      page.locator('[data-mutation-state="attention"]'),
+      page.locator('[data-mutation-state="retrying"]'),
     ).toBeVisible();
     await expect(
-      page.getByText("Upstream detail", { exact: true }),
+      page.getByText("Gateway timeout", { exact: true }),
     ).not.toBeVisible();
+    // Another actor moves the card after the first send committed. Receipt
+    // replay must confirm the original intent without applying it again.
+    const original = api.posts[0];
+    const parent = api.brief.initiatives.find(
+      (entry) => entry.ref === "card:margin",
+    );
+    parent.rollup = rollup(
+      parent.rollup.children.filter((entry) => entry.ref !== original.ref),
+    );
+    api.ungrouped.push({
+      ref: original.ref,
+      title: "Cost 4/5: Railway egress",
+      needs_home: true,
+      parent_ref: null,
+    });
     await page.reload();
-    await expect(
-      page.locator('[data-mutation-state="attention"]'),
-    ).toBeVisible();
-    expect(api.posts.filter((post) => post.verb === "move")).toHaveLength(1);
+    await expect
+      .poll(() => api.posts.filter((post) => post.verb === "move").length)
+      .toBe(2);
+    await expect(page.locator('[data-mutation-state="retrying"]')).toHaveCount(
+      0,
+    );
+    expect(api.posts[1].body).toEqual(original.body);
+    expect(original.key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(api.posts[1].headerKey).toBeUndefined();
+    expect(api.moveEffects).toBe(1);
+    await expect(page.locator('[data-tray-ref="card:cost-4"]')).toBeVisible();
   });
+
+  for (const wanted of [true, false, "header-key"]) {
+    test(`a saved legacy ${typeof wanted === "boolean" ? `top_level=${wanted}` : wanted} intent recovers as a keyed move`, async ({
+      page,
+      context,
+    }) => {
+      const api = seed();
+      await open(page, context, api, { fixTime: false });
+      await expect(
+        page.locator('[data-promote="card:ramp-telemetry"]'),
+      ).toBeVisible();
+      await context.setOffline(true);
+      const key = await page.evaluate(async (wanted) => {
+        const { enqueueLocalMutation } =
+          await import("/src/lib/mutationOutbox.js");
+        const key = crypto.randomUUID();
+        await enqueueLocalMutation({
+          key,
+          operation: wanted === "header-key" ? "work.move" : "work.top_level",
+          target: "work:card:ramp-telemetry:grouping",
+          draftTarget: "board:grouping",
+          draft: {
+            verb:
+              wanted === "header-key"
+                ? "move"
+                : wanted
+                  ? "promote"
+                  : "unpromote",
+            work: {
+              ref: "card:ramp-telemetry",
+              title: "Shared-speech ramp telemetry",
+            },
+            version: 3,
+          },
+          request: {
+            ref: "card:ramp-telemetry",
+            body:
+              wanted === "header-key"
+                ? { under: "card:capture" }
+                : {
+                    actor_id: "actor-comment",
+                    if_version: 3,
+                    patch: { top_level: wanted },
+                  },
+          },
+          title: "Saved initiative change",
+        });
+        return key;
+      }, wanted);
+      await expect(
+        page.locator('[data-mutation-state="pending"]'),
+      ).toBeVisible();
+      // Exercise the same persisted record through a fresh page runtime.
+      await context.setOffline(false);
+      await page.reload();
+      await expect
+        .poll(() => api.posts.filter((post) => post.verb === "move").length)
+        .toBe(1);
+      expect(api.posts[0]).toMatchObject({
+        verb: "move",
+        ref: "card:ramp-telemetry",
+        key,
+        body: {
+          actor_id: "actor-comment",
+          request_key: key,
+          ...(wanted === "header-key"
+            ? { under: "card:capture" }
+            : {
+                ...(wanted ? { root: true } : { unsorted: true }),
+                reason: wanted
+                  ? "Made an initiative from Watch"
+                  : "Returned to Unsorted from Watch",
+              }),
+        },
+      });
+      expect(api.posts[0].headerKey).toBeUndefined();
+      expect(api.posts.some((post) => post.verb === "patch")).toBe(false);
+      expect(api.moveEffects).toBe(1);
+    });
+  }
 
   test("over budget suggests folds, and a fold can be undone", async ({
     page,

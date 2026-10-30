@@ -357,7 +357,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.get | work | GET | /work/{card_ref} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.group | work | POST | /work/{card_ref}/group | exposed_write | Deprecated stored-parent move alias; plan steps no longer define hierarchy. |
 | work.list | work | GET | /work | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
-| work.move | work | POST | /work/{card_ref}/move | unsupported_other | Use the work-tree CLI surface until the move API has verified keyed replay for MCP writes. |
+| work.move | work | POST | /work/{card_ref}/move | unsupported_other | Use the work-tree CLI surface; no MCP move adaptation is included in this phase. |
 | work.observations.list | work | GET | /work/{card_ref}/observations | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.submit | work | POST | /work/{card_ref}/observations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.participants.list | work | GET | /work/{card_ref}/participants | exposed_read | Read task-scoped participation after core privacy checks; other agents' session identifiers remain private. |
