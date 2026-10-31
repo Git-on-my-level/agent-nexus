@@ -65,7 +65,7 @@ func (a *App) currentCardRef(ctx context.Context, cfg config.Resolved) (string, 
 
 func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("work " + verb)
-	var askFlag, force trackedBool
+	var askFlag, force, again trackedBool
 	var body, bodyFile, reason trackedString
 	var recommend trackedString
 	var situation, impact, why, ifNoAnswer, details trackedString
@@ -83,6 +83,7 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 	fs.Var(&body, "body", "Markdown body for the optional ask")
 	fs.Var(&bodyFile, "body-file", "Read optional ask body from file or stdin (-)")
 	fs.Var(&force, "force", "Override ask authoring lint with --reason")
+	fs.Var(&again, "again", "File a new ask even though this question is already open or answered on the card")
 	fs.Var(&reason, "reason", "Recorded ask authoring override reason")
 	leading, rest := splitLeadingPositionals(args)
 	if err := fs.Parse(rest); err != nil {
@@ -140,6 +141,9 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			askBody = string(content)
 		}
 		askArgs = []string{text, "--subject-ref", cardRef, "--recommend", recommend.value, "--body", askBody}
+		if again.value {
+			askArgs = append(askArgs, "--again")
+		}
 		for _, f := range []struct {
 			name string
 			flag trackedString
@@ -215,7 +219,13 @@ func (a *App) runDailyWork(ctx context.Context, verb string, args []string, cfg 
 			if err != nil {
 				return nil, err
 			}
-			result := &commandResult{Data: map[string]any{"card_ref": cardRef, "phase": "blocked", "ask_id": commandResultBody(askResult)["ask_id"]}, Warnings: askResult.Warnings}
+			data := map[string]any{"card_ref": cardRef, "phase": "blocked", "ask_id": commandResultBody(askResult)["ask_id"]}
+			for _, key := range []string{"created", "status", "answer"} {
+				if value, ok := commandResultBody(askResult)[key]; ok {
+					data[key] = value
+				}
+			}
+			result := &commandResult{Data: data, Warnings: askResult.Warnings, NextActions: askResult.NextActions}
 			return result, nil
 		}
 	}

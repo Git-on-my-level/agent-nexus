@@ -55,7 +55,7 @@ func installBriefNotesTrash(ctx context.Context, tx *sql.Tx) error {
 }
 
 // repairBriefNoteExcerpts points the triggers at the field notes actually use
-// and refills every excerpt written while they read the wrong one.
+// and recomputes every excerpt written while they read the wrong one.
 func repairBriefNoteExcerpts(ctx context.Context, tx *sql.Tx) error {
 	exists, err := sqliteTableExists(ctx, tx, "brief_notes")
 	if err != nil || !exists {
@@ -66,7 +66,7 @@ func repairBriefNoteExcerpts(ctx context.Context, tx *sql.Tx) error {
 		`DROP TRIGGER IF EXISTS brief_notes_restore`,
 		briefNotesInsertTrigger(),
 		briefNotesRestoreTrigger(),
-		`UPDATE brief_notes SET excerpt=(SELECT ` + briefNoteExcerptSQL("e.payload_json") + ` FROM events e WHERE e.id=brief_notes.event_id) WHERE excerpt='' AND EXISTS(SELECT 1 FROM events e WHERE e.id=brief_notes.event_id)`,
+		`UPDATE brief_notes SET excerpt=(SELECT ` + briefNoteExcerptSQL("e.payload_json") + ` FROM events e WHERE e.id=brief_notes.event_id) WHERE EXISTS(SELECT 1 FROM events e WHERE e.id=brief_notes.event_id)`,
 	} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
 			return err

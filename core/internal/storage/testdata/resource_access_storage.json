@@ -3731,7 +3731,7 @@
     "../storage/brief_loop_facts.go:requeueIncumbentLoopFacts": "24c172a1cff11a248e01dad687b3db8a3151eb2ab34ab335353c2c98c86b103d",
     "../storage/brief_notes_trash.go:briefNotesRestoreTrigger": "7d4f474d3a03a76525a33b1d8d17f7fe0f01235d2d6f0687c8ae1f1157e01dfe",
     "../storage/brief_notes_trash.go:installBriefNotesTrash": "43e746a9a78af90086bdcb96f8afce701d5802beb2f56fe483eea779a576b8e9",
-    "../storage/brief_notes_trash.go:repairBriefNoteExcerpts": "a602318b43d98c1ff971e9c3819dc53e5e7f6d4528f09f5ecb2595a3c029e744",
+    "../storage/brief_notes_trash.go:repairBriefNoteExcerpts": "ec232a609d571387b5612b9fb516673649863196b9df3034b673a466bdce34de",
     "../storage/brief_plan_refs.go:briefPlanTargetQueue": "411b295dd2af602c47cf38ea4e2ccc5e7ccbc6879a9fd1d892f5a5d8de58732f",
     "../storage/brief_plan_refs.go:installBriefPlanRefs": "bf0d0ec69578ed1098194693658c6fdcf2e970def858a52e291c223d9db3f14b",
     "../storage/brief_plan_refs.go:installBriefPlanTargetTriggers": "08ef0d72b6941dff7a1fc004deca3505589360622edce169123ee2f2a2f7e3f9",

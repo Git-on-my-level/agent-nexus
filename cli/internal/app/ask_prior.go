@@ -37,18 +37,41 @@ func askLifecycleNames(ev, ask map[string]any) bool {
 // findPriorAsk reads events newest first. Prior-ask lookup is advisory: a failed
 // read must not stop an agent reaching a human, so it reports nothing found.
 func (a *App) findPriorAsk(ctx context.Context, cfg config.Resolved, threadID, title string) *priorAsk {
-	path := "/events?thread_id=" + url.QueryEscape(threadID) + "&type=human_attention_requested,human_attention_responded,human_attention_withdrawn,human_attention_retired,human_attention_reopened&limit=" + askPriorEventLimit
+	path := "/events?thread_id=" + url.QueryEscape(threadID) + "&type=human_attention_requested,human_attention_responded,human_attention_withdrawn,human_attention_retired,human_attention_reopened,human_attention_revised&limit=" + askPriorEventLimit
 	result, err := a.invokeRawJSON(ctx, cfg, "ask prior", "GET", path, nil)
 	if err != nil {
 		return nil
 	}
 	events := asSlice(commandResultBody(result)["events"])
 	want := askQuestionKey(title)
+	revisedTitles := map[string]string{}
+	var replaced []string
+	for _, raw := range events {
+		ev := asMap(raw)
+		payload := asMap(ev["payload"])
+		switch anyString(ev["type"]) {
+		case "human_attention_revised":
+			id := anyString(payload["request_event_id"])
+			if _, seen := revisedTitles[id]; !seen {
+				revisedTitles[id] = anyString(asMap(payload["presentation"])["title"])
+			}
+		case humanAttentionRequestedEventType:
+			if old := anyString(payload["supersedes"]); old != "" {
+				replaced = append(replaced, old)
+			}
+		}
+	}
 	var ask map[string]any
 	for _, raw := range events {
 		ev := asMap(raw)
 		payload := asMap(ev["payload"])
-		if anyString(ev["type"]) == humanAttentionRequestedEventType && anyString(payload["kind"]) == "ask" && askQuestionKey(anyString(payload["title"])) == want {
+		if anyString(ev["type"]) != humanAttentionRequestedEventType || anyString(payload["kind"]) != "ask" {
+			continue
+		}
+		if slices.Contains(replaced, "event:"+anyString(ev["id"])) || slices.Contains(replaced, anyString(ev["ref"])) {
+			continue
+		}
+		if askQuestionKey(firstNonEmpty(revisedTitles[anyString(ev["id"])], anyString(payload["title"]))) == want {
 			ask = ev
 			break
 		}
@@ -59,10 +82,11 @@ func (a *App) findPriorAsk(ctx context.Context, cfg config.Resolved, threadID, t
 	prior := &priorAsk{event: ask, ref: "event:" + anyString(ask["id"])}
 	for _, raw := range events {
 		ev := asMap(raw)
-		if anyString(ev["type"]) == humanAttentionRequestedEventType || !askLifecycleNames(ev, ask) {
+		eventType := anyString(ev["type"])
+		if eventType == humanAttentionRequestedEventType || eventType == "human_attention_revised" || !askLifecycleNames(ev, ask) {
 			continue
 		}
-		switch anyString(ev["type"]) {
+		switch eventType {
 		case "human_attention_responded":
 			prior.response = ev
 		case "human_attention_withdrawn", "human_attention_retired":
@@ -82,7 +106,7 @@ func priorAskResult(prior *priorAsk, subjectRef, kind string) *commandResult {
 	if prior.response != nil {
 		body["status"] = "answered"
 		payload := asMap(prior.response["payload"])
-		body["answer"] = firstNonEmpty(anyString(payload["response"]), anyString(payload["response_text"]), anyString(prior.response["summary"]))
+		body["answer"] = firstNonEmpty(anyString(payload["response_text"]), anyString(prior.response["summary"]))
 		return &commandResult{
 			Data:     body,
 			Warnings: []output.Warning{askWarning("ask_already_answered", "this question on this card is already answered; pass --again only if the facts changed", nil)},

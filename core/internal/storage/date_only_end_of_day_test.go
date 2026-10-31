@@ -79,12 +79,12 @@ func TestRepairBriefNoteExcerptsRefillsBlanks(t *testing.T) {
 	ctx := context.Background()
 	if _, err = db.ExecContext(ctx, `INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES
 		 ('blank','message_posted','2026-10-01T00:00:00Z','a','[]','{"payload":{"text":"what happened"}}'),
-		 ('kept','message_posted','2026-10-01T00:00:00Z','a','[]','{"payload":{"text":"newer text"}}')`); err != nil {
+		 ('stale','message_posted','2026-10-01T00:00:00Z','a','[]','{"payload":{"text":"note text","body":"old body"}}')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = db.ExecContext(ctx, `INSERT INTO brief_notes(event_id,card_id,author,ts,excerpt) VALUES
 		 ('blank','card-1','a','2026-10-01T00:00:00Z',''),
-		 ('kept','card-1','a','2026-10-01T00:00:00Z','already set'),
+		 ('stale','card-1','a','2026-10-01T00:00:00Z','old body'),
 		 ('orphan','card-1','a','2026-10-01T00:00:00Z','')`); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestRepairBriefNoteExcerptsRefillsBlanks(t *testing.T) {
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	for id, want := range map[string]string{"blank": "what happened", "kept": "already set", "orphan": ""} {
+	for id, want := range map[string]string{"blank": "what happened", "stale": "note text", "orphan": ""} {
 		var got string
 		if err = db.QueryRow(`SELECT excerpt FROM brief_notes WHERE event_id=?`, id).Scan(&got); err != nil || got != want {
 			t.Fatalf("%s excerpt %q err %v, want %q", id, got, err, want)

@@ -43,8 +43,8 @@ assignments to the viewer. Other concrete actor refs return `next_actor: null`
 until authoritative principal-kind enrichment is available.
 
 Loops are open cards with a cadence. Existing health maps failing → `failing`,
-overdue → `stopped_reporting`, stalled → `flat`, healthy → `improving`, and
-unknown → `unknown`. A goal gives a fourteen-day sparkline when it has points.
+overdue → `stopped_reporting`, stalled → `flat`, healthy → `improving` (with a
+goal) or `on_schedule` (without one), and unknown → `unknown`. A goal gives a fourteen-day sparkline when it has points.
 Agents use the bounded workspace roster: waiting on a human → `stuck`, stale →
 `offline`, idle → `idle`, and working → `working`. Their current task supplies
 progress and project membership. Presence does not prove progress.

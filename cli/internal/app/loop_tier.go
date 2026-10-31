@@ -133,7 +133,7 @@ func noteUsage() string {
 func keptPromise(card map[string]any, now time.Time) (at time.Time, what string, ok bool) {
 	health := asMap(card["plan_health"])
 	state := anyString(health["state"])
-	if len(health) == 0 || state == "done" || state == "digest" {
+	if len(health) == 0 || state == "done" {
 		return time.Time{}, "", false
 	}
 	promise := asMap(health["promise"])
@@ -146,6 +146,11 @@ func keptPromise(card map[string]any, now time.Time) (at time.Time, what string,
 		}
 		return at.UTC(), anyString(promise["what"]), true
 	case "", "default":
+		// A digest card reports on its own schedule; only a real note promise
+		// on one needs keeping.
+		if state == "digest" {
+			return time.Time{}, "", false
+		}
 		return fresh, "report progress", true
 	}
 	// Cadence and plan promises live outside notes; evidence cannot clear them.

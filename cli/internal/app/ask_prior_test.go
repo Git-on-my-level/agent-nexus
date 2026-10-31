@@ -60,8 +60,8 @@ func TestAskPriorState(t *testing.T) {
 		filed                            int
 	}{
 		{"open returns it", "", "open", "ask_already_open", 0},
-		{"answered by id", `{"id":"r","type":"human_attention_responded","payload":{"request_event_id":"ev_1","response":"Yes"}},`, "answered", "ask_already_answered", 0},
-		{"answered by handle", `{"id":"r","type":"human_attention_responded","payload":{"request_event_ref":"event:h1","response":"Yes"}},`, "answered", "ask_already_answered", 0},
+		{"answered by id", `{"id":"r","type":"human_attention_responded","payload":{"request_event_id":"ev_1","response_text":"Yes"}},`, "answered", "ask_already_answered", 0},
+		{"answered by handle", `{"id":"r","type":"human_attention_responded","payload":{"request_event_ref":"event:h1","response_text":"Yes"}},`, "answered", "ask_already_answered", 0},
 		{"withdrawn files anew", `{"id":"w","type":"human_attention_withdrawn","payload":{"request_event_ref":"event:ev_1"}},`, "", "", 1},
 		{"retired files anew", `{"id":"w","type":"human_attention_retired","payload":{"request_event_id":"ev_1"}},`, "", "", 1},
 		{"reopened is open", `{"id":"o","type":"human_attention_reopened","payload":{"request_event_id":"ev_1"}},{"id":"w","type":"human_attention_retired","payload":{"request_event_id":"ev_1"}},`, "open", "ask_already_open", 0},
@@ -106,5 +106,30 @@ func TestAskWarnsAboutRecordedRuling(t *testing.T) {
 	doc := runAskForTest(t, server)
 	if *filed != 1 || !strings.Contains(warningCodes(doc)["ask_prior_ruling"], "Decided by Dana: ship Friday") {
 		t.Fatalf("filed=%d warnings=%#v", *filed, doc["warnings"])
+	}
+}
+
+func TestAskPriorFollowsRevisionsAndReplacements(t *testing.T) {
+	revisedAway := `{"id":"v","type":"human_attention_revised","payload":{"request_event_id":"ev_1","presentation":{"title":"Hold it?"}}},` + askPriorRequest
+	server, filed := priorAskServer(t, revisedAway, "")
+	runAskForTest(t, server)
+	if *filed != 1 {
+		t.Fatalf("ask revised to another question still matched: filed=%d", *filed)
+	}
+	revisedTo := `{"id":"v","type":"human_attention_revised","payload":{"request_event_id":"ev_1","presentation":{"title":"Ship it?"}}},` + strings.Replace(askPriorRequest, "Ship  it?", "Hold it?", 1)
+	server, filed = priorAskServer(t, revisedTo, "")
+	if doc := runAskForTest(t, server); *filed != 0 || warningCodes(doc)["ask_already_open"] == "" {
+		t.Fatalf("ask revised to this question was missed: filed=%d", *filed)
+	}
+	replaced := `{"id":"ev_2","type":"human_attention_requested","payload":{"kind":"ask","title":"Hold it?","supersedes":"event:ev_1"}},` + askPriorRequest
+	server, filed = priorAskServer(t, replaced, "")
+	runAskForTest(t, server)
+	if *filed != 1 {
+		t.Fatalf("superseded ask still matched: filed=%d", *filed)
+	}
+	answeredThenRevised := `{"id":"v","type":"human_attention_revised","payload":{"request_event_id":"ev_1","presentation":{"title":"Ship it?"}}},{"id":"r","type":"human_attention_responded","payload":{"request_event_id":"ev_1","response_text":"Yes"}},` + askPriorRequest
+	server, filed = priorAskServer(t, answeredThenRevised, "")
+	if doc := runAskForTest(t, server); *filed != 0 || anyString(asMap(doc["result"])["status"]) != "answered" {
+		t.Fatalf("a revision hid the answer: filed=%d %#v", *filed, doc["result"])
 	}
 }

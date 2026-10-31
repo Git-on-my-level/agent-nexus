@@ -394,6 +394,13 @@ func TestEvidenceNoteLeavesOtherClocksAlone(t *testing.T) {
 	}
 }
 
+func TestEvidenceNoteKeepsNotePromiseOnDigestCard(t *testing.T) {
+	_, payload := runNoteWithHealth(t, `{"state":"digest","promise":{"at":"2099-01-01T00:00:00Z","what":"ship","source":"note"}}`, "card:x", "Merged", "--evidence", "event:e1")
+	if anyString(asMap(payload["next"])["what"]) != "ship" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
 func TestNoteMetEndsThePromise(t *testing.T) {
 	doc, payload := runNoteWithHealth(t, `{"state":"moving","promise":{"at":"2099-01-01T00:00:00Z","what":"ship","source":"note"}}`, "card:x", "Shipped", "--evidence", "event:e1", "--met")
 	if _, ok := payload["next"]; ok {

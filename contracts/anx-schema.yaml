@@ -1621,7 +1621,7 @@ brief:
   loop_rules:
     - "Initiative loop is null unless cadence or goal exists or a run was recorded within 30 days."
     - "Done, cancelled and archived cards retain loop data with health unknown and reason done."
-    - "Health precedence: two latest infra_error runs => failing; cadence missed by over twice every_seconds => overdue; goal set and no acted-or-kept effect within progress budget (default 7d) with runs => stalled; no goal with runs on cadence => healthy; effect within budget => healthy; otherwise unknown. No-run cadence age starts at cadence assignment."
+    - "Health precedence: two latest infra_error runs => failing; cadence missed by over twice every_seconds => overdue; goal set and no acted-or-kept effect within progress budget (default 7d) with runs => stalled; cadence with no goal and runs => healthy; no cadence and no goal with runs => unknown; effect within budget => healthy; otherwise unknown. No-run cadence age starts at cadence assignment."
     - "effects_7d counts runs in the last seven days with outcome acted or experiment decision kept, counting each run once; overview stats sum the same counts."
     - "recent_runs newest first at most 12; goal points oldest first at most 60. Best follows goal direction; series_ref uses scoped UTC daily rollups instead of receipt metrics."
 
