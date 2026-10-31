@@ -21,6 +21,7 @@ import (
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/hostidentity"
 	"agent-nexus-cli/internal/integrations"
+	"agent-nexus-cli/internal/workspaceconfig"
 )
 
 type hookFixture struct {
@@ -626,6 +627,33 @@ func TestAgentHookNoCardFallsBackToOwnBrief(t *testing.T) {
 				t.Fatalf("denied brief leaked: %s", f.out.String())
 			}
 		})
+	}
+}
+
+func TestUserScopeHookFollowsTheSessionDirectory(t *testing.T) {
+	f := newHookFixture(t)
+	f.run(t, "integrations", "enable", "context.inject", "--harness", "claude-code", "--scope", "user")
+	payload := fmt.Sprintf(`{"cwd":%q,"session_id":"routed","source":"startup","hook_event_name":"SessionStart"}`, f.root)
+	if brief := f.hook(t, "claude-code", payload); !strings.Contains(brief.Context, "Answered decision") {
+		t.Fatalf("unmapped directory should use the enabled workspace: %#v", brief)
+	}
+	root, err := filepath.EvalSymlinks(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspaceconfig.Update(f.dir, func(c *workspaceconfig.Catalog) error {
+		c.File.Rules[filepath.Join(root, "**")] = "https://other-workspace.example"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.a.Stdin = strings.NewReader(payload)
+	f.out.Reset()
+	if exit := f.a.Run([]string{"hook", "session.start", "--harness", "claude-code"}); exit != 0 {
+		t.Fatal(exit)
+	}
+	if strings.Contains(f.out.String(), "Answered decision") {
+		t.Fatalf("session was briefed on another workspace: %s", f.out.String())
 	}
 }
 
