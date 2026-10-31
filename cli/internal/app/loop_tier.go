@@ -122,7 +122,34 @@ func extractNextFlag(args []string) (rest []string, when string, what string, se
 }
 
 func noteUsage() string {
-	return `usage: anx note <card> ["<text>"] [--next <when> ["<what>"]] [--evidence <url|ref>]...`
+	return `usage: anx note <card> ["<text>"] [--next <when> ["<what>"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]`
+}
+
+// keptPromise is the promise an evidence note re-states. Evidence satisfies
+// every earlier note promise in the fold, so a note that names no next would
+// otherwise blank the card's clock. Core's fold decides what is live; this only
+// reads it. A lapsed promise keeps its text with a fresh checkpoint, because the
+// evidence just proved movement.
+func keptPromise(card map[string]any, now time.Time) (at time.Time, what string, ok bool) {
+	health := asMap(card["plan_health"])
+	state := anyString(health["state"])
+	if len(health) == 0 || state == "done" || state == "digest" {
+		return time.Time{}, "", false
+	}
+	promise := asMap(health["promise"])
+	fresh := now.Add(promiseHorizon).UTC()
+	switch anyString(promise["source"]) {
+	case "note":
+		at, err := time.Parse(time.RFC3339Nano, anyString(promise["at"]))
+		if err != nil || !at.After(now) {
+			at = fresh
+		}
+		return at.UTC(), anyString(promise["what"]), true
+	case "", "default":
+		return fresh, "report progress", true
+	}
+	// Cadence and plan promises live outside notes; evidence cannot clear them.
+	return time.Time{}, "", false
 }
 
 func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
@@ -143,8 +170,19 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 		cardRef = "card:" + cardRef
 	}
 	var warnings []output.Warning
+	keptAt, keptWhat, kept := time.Time{}, "", false
+	if len(parsed.evidence) > 0 && !parsed.nextSet && !parsed.met {
+		keptAt, keptWhat, kept = keptPromise(card, a.clockNow())
+	}
 	if !parsed.nextSet {
-		warnings = append(warnings, noteWarning("note_no_next", "no --next; a card renews by noting its next promise", []string{"anx", "note", cardRef, "--next", "<when>", "<what>"}))
+		switch {
+		case kept:
+			warnings = append(warnings, noteWarning("note_promise_kept", fmt.Sprintf("promise kept: %s by %s; pass --next to change it or --met if this note fulfils it", firstNonEmpty(keptWhat, "next update"), keptAt.Format(time.RFC3339)), []string{"anx", "note", cardRef, "--evidence", "<url|ref>", "--met"}))
+		case parsed.met:
+		case len(parsed.evidence) == 0 && anyString(asMap(asMap(card["plan_health"])["promise"])["source"]) == "note":
+		default:
+			warnings = append(warnings, noteWarning("note_no_next", "no --next; a card renews by noting its next promise", []string{"anx", "note", cardRef, "--next", "<when>", "<what>"}))
+		}
 	} else {
 		if len(stringList(card["assignee_refs"])) == 0 && anyString(card["assignee"]) == "" && anyString(card["owner"]) == "" {
 			warnings = append(warnings, noteWarning("note_promise_unowned", "promise set on an unowned card; nobody will be prompted to renew it", []string{"anx", "work", "start", cardRef}))
@@ -170,8 +208,18 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 		}
 		payload["next"] = next
 	}
+	if kept {
+		next := map[string]any{"at": keptAt.Format(time.RFC3339)}
+		if keptWhat != "" {
+			next["what"] = keptWhat
+		}
+		payload["next"] = next
+	}
 	if len(parsed.evidence) > 0 {
 		payload["evidence_refs"] = parsed.evidence
+	}
+	if parsed.decidedBy != "" {
+		payload["decided_by"] = parsed.decidedBy
 	}
 	if err := validateEventsCreateInput(body, "note"); err != nil {
 		return nil, err
@@ -190,8 +238,14 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	if parsed.nextSet {
 		data["next"] = map[string]any{"at": parsed.nextAt.Format(time.RFC3339), "what": parsed.nextWhat}
 	}
+	if kept {
+		data["next"] = map[string]any{"at": keptAt.Format(time.RFC3339), "what": keptWhat, "kept": true}
+	}
 	if len(parsed.evidence) > 0 {
 		data["evidence_refs"] = parsed.evidence
+	}
+	if parsed.decidedBy != "" {
+		data["decided_by"] = parsed.decidedBy
 	}
 	return &commandResult{Data: data, Warnings: warnings}, nil
 }
@@ -202,6 +256,8 @@ type noteArgs struct {
 	nextWhen, nextWhat string
 	nextAt             time.Time
 	evidence           []string
+	met                bool
+	decidedBy          string
 }
 
 // parseNoteArgs is shared by preflight and execution so malformed notes fail
@@ -216,8 +272,16 @@ func parseNoteArgs(args []string, now time.Time) (noteArgs, error) {
 	fs := newSilentFlagSet("note")
 	var evidence trackedStrings
 	fs.Var(&evidence, "evidence", "Evidence URL or typed ref (repeatable, at most 8)")
+	var met trackedBool
+	var decidedBy trackedString
+	fs.Var(&met, "met", "This evidence fulfils the card's promise; keep no promise running")
+	fs.Var(&decidedBy, "decided-by", "Record a decision a human made elsewhere, naming who made it")
 	if err := fs.Parse(flagArgs); err != nil {
 		return out, errnorm.Usage("invalid_flags", err.Error())
+	}
+	out.met, out.decidedBy = met.value, strings.TrimSpace(decidedBy.value)
+	if out.met && (set || len(evidence.values) == 0) {
+		return out, errnorm.Usage("invalid_request", "--met needs --evidence and cannot be combined with --next; "+noteUsage())
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) == 0 {
@@ -232,6 +296,12 @@ func parseNoteArgs(args []string, now time.Time) (noteArgs, error) {
 	}
 	if len(positionals) == 2 {
 		out.text = strings.TrimSpace(positionals[1])
+	}
+	if decidedBy.set {
+		if out.decidedBy == "" || out.text == "" {
+			return out, errnorm.Usage("invalid_request", "--decided-by needs a name and the decision as note text; "+noteUsage())
+		}
+		out.text = "Decided by " + out.decidedBy + ": " + out.text
 	}
 	if set {
 		at, ok := parsePromiseWhen(when, now)

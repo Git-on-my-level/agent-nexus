@@ -52,6 +52,13 @@ func TestLoopHealthPrecedenceAndGoals(t *testing.T) {
 			}
 		})
 	}
+	monitor := loopCard{phase: "in_progress", created: old, metadata: map[string]any{"cadence": map[string]any{"every_seconds": 3600}}}
+	if got := computeLoop(monitor, loopFacts{LastRun: &last}, now); got["health"] != "healthy" || got["health_reason"] != "running on cadence" {
+		t.Fatal(got)
+	}
+	if got := computeLoop(monitor, loopFacts{LastRun: &old}, now); got["health"] != "overdue" {
+		t.Fatal(got)
+	}
 	g := loopGoal(workMap(card.metadata["goal"]), []map[string]any{{"at": old, "value": 3.}, {"at": at, "value": 1.}, {"at": last, "value": 2.}})
 	if g["latest"] != 2. || g["best"] != 1. || g["baseline"] != 0. {
 		t.Fatal(g)

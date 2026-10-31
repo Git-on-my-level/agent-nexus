@@ -202,6 +202,11 @@ func computeLoop(c loopCard, f loopFacts, now time.Time) map[string]any {
 	case every > 0 && !anchor.IsZero() && now.Sub(anchor) > time.Duration(every)*2*time.Second:
 		out["health"] = "overdue"
 		out["health_reason"] = "more than two cadences since last run"
+	case f.LastRun != nil && len(goal) == 0:
+		// Without a goal there is nothing to move, so running on cadence is
+		// the whole job. Only a loop that set a goal can stall against it.
+		out["health"] = "healthy"
+		out["health_reason"] = "running on cadence"
 	case f.LastRun != nil && (f.LastEffect == nil || now.Sub(loopTime(f.LastEffect)) > time.Duration(budget)*time.Second):
 		out["health"] = "stalled"
 		out["health_reason"] = "no effect within progress budget"

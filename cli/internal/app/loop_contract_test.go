@@ -168,6 +168,10 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 	messages := map[string]string{
 		"note_promise_unowned":        "promise set on an unowned card",
 		"note_no_next":                "no --next; a card renews by noting its next promise",
+		"note_promise_kept":           "promise kept: report progress by 2026-11-02T00:00:00Z; pass --next to change it or --met if this note fulfils it",
+		"ask_already_open":            "this question on this card is already open; nothing new was filed",
+		"ask_already_answered":        "this question on this card is already answered; pass --again only if the facts changed",
+		"ask_prior_ruling":            "this card has a recorded ruling; check it still leaves this open: Decided by Dana: ship",
 		"note_beyond_horizon":         "--next 5d is beyond the 2-day horizon; promise a nearer checkpoint",
 		"note_moved_without_evidence": "promise moved without evidence; only an --evidence ref resets the clock",
 		"ask_no_deadline":             "no --by or --blocks; this sorts below every decision with a deadline or blocked work",

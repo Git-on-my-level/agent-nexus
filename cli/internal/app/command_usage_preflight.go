@@ -697,7 +697,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
 			"preview":   {kind: preflightFlagBool},
 			"situation": {kind: preflightFlagString}, "impact": {kind: preflightFlagString}, "why": {kind: preflightFlagString}, "if-no-answer": {kind: preflightFlagString}, "details": {kind: preflightFlagString}, "alternative": {kind: preflightFlagString},
-			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
+			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "again": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
 			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
 			"top-level": {kind: preflightFlagBool}, "under": {kind: preflightFlagString},
 			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},

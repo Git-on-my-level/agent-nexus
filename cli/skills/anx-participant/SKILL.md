@@ -5,7 +5,7 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v36.
+Skill contract: anx.participant.v37.
 
 ## Daily loop
 
@@ -19,12 +19,13 @@ Create with `anx work create --title "<outcome>" --under card:<parent>`;
 `anx done <card> --evidence <ref>` finishes. `anx plan` is a power verb for checklists, not parentage.
 
 Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
-Evidence resets clock; promise moves remain visible.
+Next step needs a human? File an ask; never wait in chat.
+Record chat rulings: `anx note <card> "<text>" --decided-by <who>`.
 Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
 Initiatives are top-level cards outside Unsorted. Each card has one stored parent;
 depth is at most three (initiative → workstream → task). Board roles and plan links
-never determine parentage. Children are ordered by creation time.
+never determine parentage.
 Creation without `--under` or explicit `--initiative` enters Unsorted (`needs_home=true`).
 `where` suggests; confirm by naming a home: `anx mv <ref|path> --under <ref|path>`.
 Move to top level with `anx mv <card> --root --reason "Independent outcome"`, or
@@ -42,12 +43,11 @@ Provide context:
 - Alternatives: real actions and consequences.
 - If no answer (`if_no_answer`): known default/blocker.
 
-Explain fully. Preserve uncertainty; never invent facts, urgency,
+Preserve uncertainty; never invent facts, urgency,
 costs, approvals or defaults. Omit unused optional fields. Collapse technical details/evidence.
 
 `anx ask --template decision`: fictional narrative example.
 Edit frontmatter; preview: `anx ask --from-file ask.md --preview`.
-Require situation/impact/recommendation/why.
 `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
 Withdraw stale asks; `anx await <ask>`.
 
