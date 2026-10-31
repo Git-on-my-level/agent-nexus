@@ -78,6 +78,10 @@ func TestStateDerivedActionsAndActorReferences(t *testing.T) {
 	if err != nil || args[3] != "actor:actor-alice" {
 		t.Fatalf("me: %v %#v", err, args)
 	}
+	args, err = normalizeActorArgs([]string{"lease", "release", "card:a", "--owner", "lane", "--handoff-to", "lead"}, config.Resolved{})
+	if err != nil || args[4] != "actor:lane" || args[6] != "actor:lead" {
+		t.Fatalf("hand-off target must normalize like the owner it becomes: %v %#v", err, args)
+	}
 	args, err = normalizeActorArgs([]string{"cards", "assign", "card:a", "--assignee-ref", "bob"}, config.Resolved{})
 	if err != nil || args[4] != "actor:bob" {
 		t.Fatalf("bare actor: %v %#v", err, args)

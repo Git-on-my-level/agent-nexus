@@ -525,7 +525,7 @@ func normalizeActorArgs(args []string, cfg config.Resolved) ([]string, error) {
 	out := append([]string(nil), args...)
 	for i := range out {
 		name, value, inline, flag := parseLongOptionToken(out[i])
-		if !flag || (name != "owner" && name != "owner-ref" && name != "assignee-ref") {
+		if !flag || (name != "owner" && name != "handoff-to" && name != "owner-ref" && name != "assignee-ref") {
 			continue
 		}
 		index := i
