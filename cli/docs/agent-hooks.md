@@ -50,7 +50,7 @@ session.start` or `anx hook context.compacted` with one JSON object on stdin:
 
 Only schema_version and absolute cwd are required. Generic output contains
 schema_version, context, nullable card_ref/as_of, stale. Native adapters emit
-only their context-injection protocol. Hooks fail open within 1.5 seconds, with
+only their context-injection protocol. Context hooks fail open within 8 seconds and Git capture within 1.5, with
 sanitized stderr diagnostics; no feature enabled means no auth/network work.
 Maximum input is 64 KiB, output context 6 KiB. Reads compose the existing scoped work, ten-observation page and plan/promise
 GETs concurrently under one budget. Unused refresh status is not requested.

@@ -37,7 +37,7 @@ installation applies within that directory; user installs apply everywhere in
 the pinned workspace. Card order: explicit argument/payload, session binding,
 installation default, longest directory rule, none. No implicit presence writes.
 Generic payload: {schema_version:1,cwd:<absolute>,session_id?:<id>,card_ref?:<ref>}.
-Hooks fail open within 1.5s. Stale cache is off unless enabled, at most five minutes,
+Context hooks fail open within 8s, Git capture within 1.5s. Stale cache is off unless enabled, at most five minutes,
 and cannot verify offline revocation. Claude/Codex SessionStart(compact) injects
 context; Cursor sessionStart is asynchronous and has no post-compaction promise.
 Codex trust review is required; inspect hooks in the harness. Unsupported versions
