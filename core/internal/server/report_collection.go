@@ -13,7 +13,7 @@ import (
 
 var collectionStates = map[string][][3]string{
 	"initiatives": {{"waiting_on_you", "Waiting on you", "attention"}, {"at_risk", "At risk", "warning"}, {"stalled", "Stalled", "quiet"}, {"on_track", "On track", "good"}},
-	"loops":       {{"failing", "Failing", "warning"}, {"stopped_reporting", "Stopped reporting", "warning"}, {"flat", "Flat", "quiet"}, {"improving", "Improving", "good"}, {"unknown", "Unknown", "neutral"}},
+	"loops":       {{"failing", "Failing", "warning"}, {"stopped_reporting", "Stopped reporting", "warning"}, {"flat", "Flat", "quiet"}, {"improving", "Improving", "good"}, {"on_schedule", "On schedule", "good"}, {"unknown", "Unknown", "neutral"}},
 	"agents":      {{"stuck", "Stuck", "attention"}, {"offline", "Offline", "quiet"}, {"idle", "Idle", "neutral"}, {"working", "Working", "good"}},
 }
 
@@ -326,9 +326,12 @@ func (reader *reportReader) collectionLoop(row, loop map[string]any) {
 	if state == "" {
 		state = "unknown"
 	}
+	goal := reportMap(loop["goal"])
+	if state == "improving" && len(goal) == 0 {
+		state = "on_schedule"
+	}
 	row["state"] = state
 	row["subtitle"] = nullableText(anyString(loop["health_reason"]))
-	goal := reportMap(loop["goal"])
 	points := []map[string]any{}
 	if all, ok := goal["points"].([]map[string]any); ok {
 		for _, p := range all {

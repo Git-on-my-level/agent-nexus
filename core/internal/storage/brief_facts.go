@@ -108,6 +108,19 @@ func requeueBriefPromiseFold(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
+func briefNotesInsertTrigger() string {
+	return `CREATE TRIGGER IF NOT EXISTS brief_notes_insert AFTER INSERT ON events WHEN NEW.type='message_posted' AND COALESCE(NEW.thread_id,'')<>'' BEGIN
+ INSERT INTO brief_notes(event_id,card_id,author,ts,next_at,next_what,evidence,excerpt)
+ SELECT NEW.id,c.id,COALESCE(NEW.actor_id,''),NEW.ts,
+  anx_resolve_when(json_extract(NEW.payload_json,'$.payload.next.at'),NEW.ts),
+  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.next.what'),''),1,160),
+  ` + briefEvidenceSQL + `,
+  ` + briefNoteExcerptSQL("NEW.payload_json") + `
+ FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
+ INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
+ END`
+}
+
 // installBriefFacts materializes brief.v1 facts on write events (Move 2):
 // asks with resolved decide_by and blocks, card notes with resolved next and
 // evidence, and a dirty queue of cards whose promise fold must be refreshed.
@@ -173,16 +186,7 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TRIGGER IF NOT EXISTS brief_asks_resolve AFTER INSERT ON human_attention_request_resolutions BEGIN
  UPDATE brief_asks SET state=NEW.resolution_type, answered_at=NEW.created_at, responder=COALESCE(NEW.actor_id,''), response_event_id=COALESCE(NEW.resolution_event_id,'') WHERE ask_id=NEW.request_event_id;
  END`,
-		`CREATE TRIGGER IF NOT EXISTS brief_notes_insert AFTER INSERT ON events WHEN NEW.type='message_posted' AND COALESCE(NEW.thread_id,'')<>'' BEGIN
- INSERT INTO brief_notes(event_id,card_id,author,ts,next_at,next_what,evidence,excerpt)
- SELECT NEW.id,c.id,COALESCE(NEW.actor_id,''),NEW.ts,
-  anx_resolve_when(json_extract(NEW.payload_json,'$.payload.next.at'),NEW.ts),
-  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.next.what'),''),1,160),
-  ` + briefEvidenceSQL + `,
-  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.body'),''),1,280)
- FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
- INSERT INTO brief_dirty(card_id) SELECT c.id FROM cards c WHERE c.thread_id=NEW.thread_id ON CONFLICT DO NOTHING;
- END`,
+		briefNotesInsertTrigger(),
 		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_insert AFTER INSERT ON cards BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.id) ON CONFLICT DO NOTHING; END`,
 		`CREATE TRIGGER IF NOT EXISTS brief_dirty_card_update AFTER UPDATE OF column_key,archived_at,trashed_at,due_at,board_id ON cards BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.id) ON CONFLICT DO NOTHING; END`,
 		`CREATE TRIGGER IF NOT EXISTS brief_dirty_plan_insert AFTER INSERT ON card_plans BEGIN INSERT INTO brief_dirty(card_id) VALUES(NEW.card_id) ON CONFLICT DO NOTHING; END`,
@@ -217,7 +221,7 @@ func installBriefFacts(ctx context.Context, tx *sql.Tx) error {
   anx_resolve_when(json_extract(NEW.payload_json,'$.payload.next.at'),NEW.ts),
   substr(COALESCE(json_extract(NEW.payload_json,'$.payload.next.what'),''),1,160),
   ` + briefEvidenceSQL + `,
-  substr(COALESCE(json_extract(NEW.payload_json,'$.payload.body'),''),1,280)
+  ` + briefNoteExcerptSQL("NEW.payload_json") + `
  FROM events NEW JOIN cards c ON c.thread_id=NEW.thread_id WHERE NEW.type='message_posted' AND COALESCE(NEW.thread_id,'')<>''`,
 	}
 	for _, q := range backfill {

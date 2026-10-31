@@ -19,7 +19,14 @@ export const LIVE_REPORT_TYPES = Object.freeze([
 /** State keys each collection accepts in a `live-collection` status filter. */
 export const COLLECTION_STATES = Object.freeze({
   initiatives: ["waiting_on_you", "at_risk", "stalled", "on_track"],
-  loops: ["failing", "stopped_reporting", "flat", "improving", "unknown"],
+  loops: [
+    "failing",
+    "stopped_reporting",
+    "flat",
+    "improving",
+    "on_schedule",
+    "unknown",
+  ],
   agents: ["stuck", "offline", "idle", "working"],
 });
 

@@ -261,6 +261,7 @@ type noteRecorder struct {
 	mu       sync.Mutex
 	posted   map[string]any
 	previous string
+	health   string
 }
 
 func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
@@ -269,7 +270,11 @@ func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/cards/"):
-			fmt.Fprint(w, `{"card":{"id":"card-1","ref":"card:x","thread_id":"thread-1","title":"X","column_key":"in_progress"}}`)
+			health := rec.health
+			if health == "" {
+				health = `{}`
+			}
+			fmt.Fprintf(w, `{"card":{"id":"card-1","ref":"card:x","thread_id":"thread-1","title":"X","column_key":"in_progress","plan_health":%s}}`, health)
 		case r.URL.Path == "/events" && r.Method == http.MethodGet:
 			rec.mu.Lock()
 			prev := rec.previous
@@ -331,6 +336,106 @@ func TestNotePostsNextAndEvidencePayload(t *testing.T) {
 	}
 	if codes := warningCodes(doc); len(codes) != 1 || codes["note_promise_unowned"] == "" {
 		t.Fatalf("expected warning for unassigned fixture card: %#v", doc["warnings"])
+	}
+}
+
+func runNoteWithHealth(t *testing.T, health string, args ...string) (map[string]any, map[string]any) {
+	t.Helper()
+	rec := &noteRecorder{health: health}
+	server := noteServer(t, rec)
+	t.Cleanup(server.Close)
+	a, out := dailyTestApp(t, server.URL)
+	argv := append([]string{"--json", "--as", "worker", "note"}, args...)
+	if exit := a.Run(argv); exit != 0 {
+		t.Fatalf("exit=%d %s", exit, out.String())
+	}
+	return dailyJSON(t, out), asMap(asMap(rec.posted["event"])["payload"])
+}
+
+func TestEvidenceNoteKeepsLivePromise(t *testing.T) {
+	at := time.Now().Add(6 * time.Hour).UTC().Format(time.RFC3339)
+	doc, payload := runNoteWithHealth(t, fmt.Sprintf(`{"state":"moving","promise":{"at":%q,"what":"ship the fix","source":"note"}}`, at), "card:x", "Merged", "--evidence", "event:e1")
+	next := asMap(payload["next"])
+	if anyString(next["at"]) != at || anyString(next["what"]) != "ship the fix" {
+		t.Fatalf("next=%#v", next)
+	}
+	if !strings.Contains(warningCodes(doc)["note_promise_kept"], "promise kept: ship the fix") {
+		t.Fatalf("warnings=%#v", doc["warnings"])
+	}
+}
+
+func TestEvidenceNoteRenewsLapsedPromiseWithItsText(t *testing.T) {
+	_, payload := runNoteWithHealth(t, `{"state":"past_promise","promise":{"at":"2020-01-01T00:00:00Z","what":"ship the fix","source":"note"}}`, "card:x", "Merged", "--evidence", "event:e1")
+	next := asMap(payload["next"])
+	at, err := time.Parse(time.RFC3339, anyString(next["at"]))
+	if err != nil || !at.After(time.Now()) || anyString(next["what"]) != "ship the fix" {
+		t.Fatalf("next=%#v err=%v", next, err)
+	}
+}
+
+func TestEvidenceNoteStartsDefaultClockWhenNothingIsLive(t *testing.T) {
+	_, payload := runNoteWithHealth(t, `{"state":"no_promise"}`, "card:x", "Merged", "--evidence", "event:e1")
+	if anyString(asMap(payload["next"])["what"]) != "report progress" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestEvidenceNoteLeavesOtherClocksAlone(t *testing.T) {
+	for _, health := range []string{
+		`{"state":"done"}`,
+		`{"state":"digest"}`,
+		`{"state":"moving","promise":{"at":"2099-01-01T00:00:00Z","what":"Cadence","source":"cadence"}}`,
+		`{}`,
+	} {
+		_, payload := runNoteWithHealth(t, health, "card:x", "Merged", "--evidence", "event:e1")
+		if _, ok := payload["next"]; ok {
+			t.Fatalf("%s: next=%#v", health, payload["next"])
+		}
+	}
+}
+
+func TestEvidenceNoteKeepsNotePromiseOnDigestCard(t *testing.T) {
+	_, payload := runNoteWithHealth(t, `{"state":"digest","promise":{"at":"2099-01-01T00:00:00Z","what":"ship","source":"note"}}`, "card:x", "Merged", "--evidence", "event:e1")
+	if anyString(asMap(payload["next"])["what"]) != "ship" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestNoteMetEndsThePromise(t *testing.T) {
+	doc, payload := runNoteWithHealth(t, `{"state":"moving","promise":{"at":"2099-01-01T00:00:00Z","what":"ship","source":"note"}}`, "card:x", "Shipped", "--evidence", "event:e1", "--met")
+	if _, ok := payload["next"]; ok {
+		t.Fatalf("next=%#v", payload["next"])
+	}
+	if len(warningCodes(doc)) != 0 {
+		t.Fatalf("warnings=%#v", doc["warnings"])
+	}
+}
+
+func TestNoteWithoutEvidenceLeavesLivePromiseQuiet(t *testing.T) {
+	doc, payload := runNoteWithHealth(t, `{"state":"moving","promise":{"at":"2099-01-01T00:00:00Z","what":"ship","source":"note"}}`, "card:x", "Still on it")
+	if _, ok := payload["next"]; ok || len(warningCodes(doc)) != 0 {
+		t.Fatalf("payload=%#v warnings=%#v", payload, doc["warnings"])
+	}
+}
+
+func TestNoteDecidedByRecordsTheRuling(t *testing.T) {
+	_, payload := runNoteWithHealth(t, `{}`, "card:x", "Ship Friday", "--decided-by", "Dana")
+	if anyString(payload["decided_by"]) != "Dana" || anyString(payload["text"]) != "Decided by Dana: Ship Friday" {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestNoteFlagMisuseFailsBeforeAnyRequest(t *testing.T) {
+	now := time.Now()
+	for _, bad := range [][]string{
+		{"card:x", "Shipped", "--met"},
+		{"card:x", "Shipped", "--met", "--evidence", "event:e", "--next", "1d"},
+		{"card:x", "--decided-by", "Dana"},
+		{"card:x", "Ship", "--decided-by", " "},
+	} {
+		if _, err := parseNoteArgs(bad, now); err == nil {
+			t.Fatalf("%v must be a usage error", bad)
+		}
 	}
 }
 

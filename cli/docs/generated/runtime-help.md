@@ -369,6 +369,7 @@ Supply 1–6 distinct responses as answer buttons, at most 240 Unicode character
 Retire stale asks: anx ask retire <ask-ref> --reason "No longer relevant" --evidence <ref>; anx ask retire <ask-ref> --undo.
 Revise copy: anx ask revise <ask-ref> --from-file presentation.json; anx ask revise <ask-ref> --undo. Read the concurrency token with anx ask presentation <ask-ref>.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
+Repeats: the same question on the same card returns the open ask or its answer instead of filing again, so retrying is safe. --again files a new ask when the facts changed.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 Stability: stable
@@ -387,7 +388,7 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, answers, initiatives and the next command.
 4. Run anx context card:<slug>, then anx note card:<slug> "Progress" --next <when> "<what>" as you go.
-5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" --by <when> and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
+5. Every decision a human must make goes through anx ask: run anx ask --template decision > ask.md, edit it, then anx ask --from-file ask.md --by <when> and anx await <ask-id>. If a human decided in chat, record it: anx note card:<slug> "<decision>" --decided-by <who>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
 6. Run anx done card:<slug> --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 

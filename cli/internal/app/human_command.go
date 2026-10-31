@@ -36,6 +36,7 @@ Supply 1–6 distinct responses as answer buttons, at most 240 Unicode character
 Retire stale asks: anx ask retire <ask-ref> --reason "No longer relevant" --evidence <ref>; anx ask retire <ask-ref> --undo.
 Revise copy: anx ask revise <ask-ref> --from-file presentation.json; anx ask revise <ask-ref> --undo. Read the concurrency token with anx ask presentation <ask-ref>.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
+Repeats: the same question on the same card returns the open ask or its answer instead of filing again, so retrying is safe. --again files a new ask when the facts changed.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 `)
@@ -118,6 +119,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		situationFlag, impactFlag, whyFlag, ifNoAnswerFlag, detailsFlag trackedString
 		alternativeFlags                                                trackedStrings
 		dryRunFlag                                                      trackedBool
+		againFlag                                                       trackedBool
 		forceFlag                                                       trackedBool
 		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag           trackedString
 		deliveryFlag                                                    trackedString
@@ -161,6 +163,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&webhookFlag, "webhook", "HTTPS answer subscription URL")
 	fs.Var(&deliveryFlag, "delivery", "Answer delivery mode: await, resume, batch, or none")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render the request without sending it")
+	fs.Var(&againFlag, "again", "File a new ask even though this question is already open or answered on the card")
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -439,6 +442,12 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	if err := validateID(threadID, "thread id"); err != nil {
 		return nil, err
+	}
+	if !autoSubject && kind == "ask" && !againFlag.value && !dryRunFlag.value && firstNonEmpty(supersedesFlag.value, fmFromFile.Supersedes) == "" {
+		if prior := a.findPriorAsk(ctx, cfg, threadID, title); prior != nil {
+			return priorAskResult(prior, subjectRef, kind), nil
+		}
+		loopWarnings = append(loopWarnings, a.priorRulings(ctx, cfg, threadID)...)
 	}
 
 	for _, ref := range relatedRefs {

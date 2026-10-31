@@ -1197,6 +1197,8 @@ var migrations = []migration{
 	{Version: 126, AfterApply: installInitiativeBoardAuthority},
 	// The work tree stores parentage and the Unsorted tray (see work_tree.go).
 	{Version: 127, AfterApply: installWorkTree},
+	// Watch's latest-note excerpt read a field notes never set.
+	{Version: 128, AfterApply: repairBriefNoteExcerpts},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

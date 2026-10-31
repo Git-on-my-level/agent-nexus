@@ -97,7 +97,7 @@ describe("every generated snippet parses", () => {
      * block stops being covered by everything below, and a floor would keep
      * passing while it did.
      */
-    expect(parts).toHaveLength(_kind === "pm" ? 9 : 7);
+    expect(parts).toHaveLength(_kind === "pm" ? 9 : 8);
     for (const part of parts) {
       // `sh -n` parses without running: a broken line continuation or an
       // unbalanced quote fails here.

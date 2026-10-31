@@ -33,9 +33,12 @@ Core computes health in this order:
 1. Two latest runs both have infrastructure errors: **failing**.
 2. More than twice the cadence has elapsed since the last run: **overdue**.
    Before the first run, the clock starts when cadence is assigned.
-3. Runs exist but no effect occurred within the progress budget: **stalled**.
-4. An effect occurred within that budget: **healthy**.
-5. Otherwise: **unknown**.
+3. Runs exist on a cadence with no goal: **healthy**. A monitor that only reports
+   is doing its whole job by running on cadence. A recent run with neither a
+   cadence nor a goal is **unknown**.
+4. A goal is set, and no effect occurred within the progress budget: **stalled**.
+5. An effect occurred within that budget: **healthy**.
+6. Otherwise: **unknown**.
 
 Cadence counts as tracking even before the first receipt. `plan_health`, card
 summaries, ref previews and brief never label a cadence card `no_promise`.

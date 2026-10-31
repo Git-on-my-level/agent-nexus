@@ -1216,7 +1216,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
 	}
 	if topic == "note" {
-		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]...: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_promise_unowned, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n", true
+		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_promise_unowned, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n  --evidence keeps the live promise running; --met says this note fulfils it.\n  --decided-by <who> records a decision a human made outside ANX, with the decision as the note text.\n", true
 	}
 	if topic == "done" {
 		return "anx done [card] --evidence <url|event:ref|artifact:ref>...: resolve a card with evidence and clear presence; omitted card uses presence (remote_coordination_write).\n", true
@@ -2226,7 +2226,7 @@ Every ANX reader is a CEO by default: group execution detail into a small set of
 2. Run anx config workspaces when unsure; set a default with anx config use <alias>. Do not hardcode --base-url in agent prompts. Let agentctl supply adapter context, or select ANX_AS / --as.
 3. Run anx orient. Confirm your handle, host, answers, initiatives and the next command.
 4. Run anx context card:<slug>, then anx note card:<slug> "Progress" --next <when> "<what>" as you go.
-5. When blocked, use anx ask "One-line decision?" --body-file ask.md --recommend "Answer" --by <when> and anx await <ask-id>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
+5. Every decision a human must make goes through anx ask: run anx ask --template decision > ask.md, edit it, then anx ask --from-file ask.md --by <when> and anx await <ask-id>. If a human decided in chat, record it: anx note card:<slug> "<decision>" --decided-by <who>. After anx auth access-requests request, run anx await access-request:<id> (exit 0 approved, exit 9 denied).
 6. Run anx done card:<slug> --evidence <url|ref> when the card is complete.
 7. Label agentctl runs anx.card.<card-slug> to link execution with the card.
 

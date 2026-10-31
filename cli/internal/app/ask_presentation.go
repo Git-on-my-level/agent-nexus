@@ -100,6 +100,9 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 	if p.Recommendation == nil || strings.TrimSpace(p.Recommendation.Why) == "" {
 		errors = append(errors, "Missing recommendation.why; add --why or recommendation.why in --from-file ask.md")
 	}
+	if len(errors) > 0 {
+		errors = append(errors, "Start from the worked example: anx ask --template decision > ask.md")
+	}
 	if utf8.RuneCountInString(title) > 80 {
 		warnings = append(warnings, fmt.Sprintf("Title %q exceeds 80 characters; shorten it to the decision", title))
 	}

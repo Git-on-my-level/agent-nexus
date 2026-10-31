@@ -104,6 +104,10 @@ func TestAgentErgonomicsAgainstCore(t *testing.T) {
 	if !strings.Contains(noted.Stdout, "https://example.test/verification") || !strings.Contains(noted.Stdout, "saved note_ref=event:") || !strings.Contains(noted.Stdout, "next_at=") || !strings.Contains(noted.Stdout, `next_what="Acceptance checks"`) || strings.Contains(noted.Stdout, "Review the error") {
 		t.Fatalf("note confirmation: %s", noted.Stdout)
 	}
+	met := ok(false, nil, "note", ref, "Acceptance checks finished", "--evidence", "https://example.test/verification", "--met")
+	if strings.Contains(met.Stdout, "next_at=") {
+		t.Fatalf("--met kept a promise: %s", met.Stdout)
+	}
 	noNext := ok(false, nil, "note", ref, "More progress")
 	if strings.Contains(noNext.Stdout, "suggest.3=") || !strings.Contains(noNext.Stdout, "anx note "+ref+" --next") {
 		t.Fatalf("note suggestion: %s", noNext.Stdout)

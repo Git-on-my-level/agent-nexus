@@ -68,3 +68,40 @@ func TestDateOnlyEndOfDayBackfillLeavesTimestamps(t *testing.T) {
 		t.Fatalf("timestamp note moved: %q %v", noteAt, err)
 	}
 }
+
+func TestRepairBriefNoteExcerptsRefillsBlanks(t *testing.T) {
+	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ws.Close() })
+	db := ws.DB()
+	ctx := context.Background()
+	if _, err = db.ExecContext(ctx, `INSERT INTO events(id,type,ts,actor_id,refs_json,payload_json) VALUES
+		 ('blank','message_posted','2026-10-01T00:00:00Z','a','[]','{"payload":{"text":"what happened"}}'),
+		 ('stale','message_posted','2026-10-01T00:00:00Z','a','[]','{"payload":{"text":"note text","body":"old body"}}')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.ExecContext(ctx, `INSERT INTO brief_notes(event_id,card_id,author,ts,excerpt) VALUES
+		 ('blank','card-1','a','2026-10-01T00:00:00Z',''),
+		 ('stale','card-1','a','2026-10-01T00:00:00Z','old body'),
+		 ('orphan','card-1','a','2026-10-01T00:00:00Z','')`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = repairBriefNoteExcerpts(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]string{"blank": "what happened", "stale": "note text", "orphan": ""} {
+		var got string
+		if err = db.QueryRow(`SELECT excerpt FROM brief_notes WHERE event_id=?`, id).Scan(&got); err != nil || got != want {
+			t.Fatalf("%s excerpt %q err %v, want %q", id, got, err, want)
+		}
+	}
+}
