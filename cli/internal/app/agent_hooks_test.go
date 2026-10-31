@@ -657,6 +657,25 @@ func TestUserScopeHookFollowsTheSessionDirectory(t *testing.T) {
 	}
 }
 
+func TestUserScopeHookWithPinnedCardKeepsItsWorkspace(t *testing.T) {
+	f := newHookFixture(t)
+	f.run(t, "integrations", "enable", "context.inject", "--harness", "claude-code", "--scope", "user", "--card-id", "card:work")
+	root, err := filepath.EvalSymlinks(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspaceconfig.Update(f.dir, func(c *workspaceconfig.Catalog) error {
+		c.File.Rules[filepath.Join(root, "**")] = "https://other-workspace.example"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload := fmt.Sprintf(`{"cwd":%q,"session_id":"pinned","source":"startup","hook_event_name":"SessionStart"}`, f.root)
+	if brief := f.hook(t, "claude-code", payload); !strings.Contains(brief.Context, "ANX context card:work") {
+		t.Fatalf("pinned card left its workspace: %#v", brief)
+	}
+}
+
 func TestAgentHookNoCardBriefDeadline(t *testing.T) {
 	f := newHookFixture(t)
 	f.run(t, "integrations", "enable", "context.inject", "--harness", "generic")

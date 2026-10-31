@@ -1199,6 +1199,8 @@ var migrations = []migration{
 	{Version: 127, AfterApply: installWorkTree},
 	// Watch's latest-note excerpt read a field notes never set.
 	{Version: 128, AfterApply: repairBriefNoteExcerpts},
+	// Core's own reminders have only a summary, and showed as blank notes.
+	{Version: 129, AfterApply: repairBriefNoteExcerpts},
 }
 
 func installRunReceiptIndexes(ctx context.Context, tx *sql.Tx) error {

@@ -481,10 +481,15 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 	}
 	workspace := install.Workspace
 	// A user-scope install runs in every project on the machine, so the session's
-	// directory picks the workspace; the one it was enabled from is only a fallback.
-	// Otherwise a session in one workspace's repo is briefed on another's work.
-	if install.Scope == "user" {
-		if routed, e := a.hookWorkspace(cfg, event.CWD, ""); e == nil && routed.BaseURL != "" {
+	// directory picks the workspace. Otherwise a session in one workspace's repo is
+	// briefed on another's work, so a routing error injects nothing. A pinned card
+	// belongs to the workspace it was enabled in; the same ref elsewhere is unrelated.
+	if install.Scope == "user" && install.Card == "" {
+		routed, e := a.hookWorkspace(cfg, event.CWD, "")
+		if e != nil {
+			return empty, e
+		}
+		if routed.BaseURL != "" {
 			workspace = routed.BaseURL
 		}
 	}
