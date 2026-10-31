@@ -328,13 +328,27 @@ func parseAgentHook(args []string) (agentHookOptions, error) {
 // invoked it; Git work left over is deferred to an explicit sync.
 const defaultHookBudget = 1500 * time.Millisecond
 
+// contextHookBudget runs once per session, and a hosted brief takes seconds. A
+// session without its context costs more than a few seconds at its start.
+const contextHookBudget = 8 * time.Second
+
+// hookCacheReserve leaves a timed-out read time to fall back to the stale cache.
+const hookCacheReserve = 400 * time.Millisecond
+
+func isCaptureHook(event string) bool {
+	return event == "tool.after" || event == "git.commit"
+}
+
 func (a *App) runAgentHook(overrides config.Overrides, args []string) int {
 	o, e := parseAgentHook(args)
 	if e != nil {
 		fmt.Fprintln(a.Stderr, "anx hook: invalid invocation")
 		return 0
 	}
-	budget := defaultHookBudget
+	budget := contextHookBudget
+	if isCaptureHook(o.event) {
+		budget = defaultHookBudget
+	}
 	if a.hookBudget > 0 {
 		budget = a.hookBudget
 	}
@@ -444,7 +458,7 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 	var install integrations.HookInstallation
 	matches := 0
 	recipe := "context.inject"
-	if o.event == "tool.after" || o.event == "git.commit" {
+	if isCaptureHook(o.event) {
 		recipe = "git.capture"
 	}
 	for _, i := range s.Installations {
@@ -497,9 +511,9 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 	cfg.AccessToken = ""
 	cfg.BaseURL = workspace
 	cfg.Sources = map[string]string{"base_url": "hook", "agent": "hook"}
-	cfg.Timeout = time.Second
-	// Do not run an optional 2s discovery subprocess on the 1.5s path. Installed
-	// hooks have an explicit agent; no inherited harness can replace it.
+	cfg.Timeout = contextHookBudget
+	// Do not spend the budget on an optional discovery subprocess. Installed hooks
+	// have an explicit agent; no inherited harness can replace it.
 	local := *a
 	local.runtimeIdentity = nil
 	auth, e := local.resolveHostAgent(ctx, cfg)
@@ -512,9 +526,7 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 	}
 	if card == "" {
 		auth.HostID = "" // The installed principal is already authenticated.
-		readCtx, cancel := context.WithTimeout(ctx, 1100*time.Millisecond)
-		defer cancel()
-		r, err := local.invokeRawJSON(readCtx, auth, "hook brief", "GET", "/brief", nil)
+		r, err := local.invokeRawJSON(ctx, auth, "hook brief", "GET", "/brief", nil)
 		if err != nil {
 			return empty, err
 		}
@@ -528,8 +540,12 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 	key := integrations.Digest(auth.BaseURL + "\x00" + auth.HostID + "\x00" + auth.ActorID + "\x00" + card)
 	cache := filepath.Join(dir, "hooks", "cache", key+".json")
 	auth.HostID = "" // Use the already resolved bearer, without a second identity refresh.
-	readCtx, cancel := context.WithTimeout(ctx, 1100*time.Millisecond)
-	defer cancel()
+	readCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		readCtx, cancel = context.WithDeadline(ctx, deadline.Add(-hookCacheReserve))
+		defer cancel()
+	}
 	body, e := local.readHookContext(readCtx, auth, card)
 	if e != nil {
 		// Authorization failures never disclose a cached body; only uncertain network

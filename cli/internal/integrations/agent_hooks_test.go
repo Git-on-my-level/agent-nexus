@@ -348,3 +348,21 @@ func TestDrainSelectedStopsBeforeReceiptEviction(t *testing.T) {
 		t.Fatal(calls, got, e)
 	}
 }
+
+// The harness must outwait the hook's own budget, or it kills a hook about to answer.
+func TestMergeHookGivesContextLongerThanCapture(t *testing.T) {
+	for _, tc := range []struct {
+		harness, recipe string
+		want            string
+	}{
+		{"claude-code", "context.inject", `"timeout": 10`},
+		{"claude-code", "git.capture", `"timeout": 2`},
+		{"cursor", "context.inject", `"timeout": 10`},
+		{"cursor", "git.capture", `"timeout": 2`},
+	} {
+		got, _, e := MergeHook([]byte(`{}`), tc.harness, tc.recipe, "anx hook", "", true)
+		if e != nil || !bytes.Contains(got, []byte(tc.want)) {
+			t.Fatalf("%s %s: %v %s", tc.harness, tc.recipe, e, got)
+		}
+	}
+}

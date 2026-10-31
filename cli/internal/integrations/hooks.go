@@ -242,6 +242,16 @@ func HookAdapterPath(home, project, harness, scope string) (string, error) {
 	}
 	return "", fmt.Errorf("unsupported harness")
 }
+
+// hookTimeoutSeconds is how long the harness waits, just past the hook's own budget,
+// so the hook fails open itself rather than being killed.
+func hookTimeoutSeconds(recipe string) int {
+	if recipe == "context.inject" {
+		return 10
+	}
+	return 2
+}
+
 func MergeHook(raw []byte, harness, recipe, command, previous string, enable bool) ([]byte, bool, error) {
 	event, matcher := "SessionStart", "startup|resume|clear|compact|fork"
 	if recipe == "git.capture" {
@@ -266,7 +276,7 @@ func MergeHook(raw []byte, harness, recipe, command, previous string, enable boo
 					var cmd string
 					_ = json.Unmarshal(handler["command"], &cmd)
 					if cmd == command {
-						handler["timeout"] = encode(2)
+						handler["timeout"] = encode(hookTimeoutSeconds(recipe))
 						if harness == "codex" && recipe == "context.inject" {
 							handler["additionalContextLimit"] = encode(6 << 10)
 						}
@@ -322,7 +332,7 @@ func MergeHook(raw []byte, harness, recipe, command, previous string, enable boo
 		return raw, false, nil
 	}
 	if enable {
-		kept = append(kept, encode(map[string]any{"command": command, "timeout": 2}))
+		kept = append(kept, encode(map[string]any{"command": command, "timeout": hookTimeoutSeconds(recipe)}))
 	}
 	root["version"] = encode(1)
 	hooks[event] = encode(kept)

@@ -46,6 +46,7 @@ type hookFixture struct {
 	fileSendStatus       atomic.Int32
 	briefStatus          atomic.Int32
 	briefDelay           atomic.Bool
+	briefLatency         atomic.Int64
 	cardDelay            atomic.Int64
 }
 
@@ -98,6 +99,7 @@ func newHookFixture(t *testing.T) *hookFixture {
 				<-r.Context().Done()
 				return
 			}
+			time.Sleep(time.Duration(f.briefLatency.Load()))
 			if status := f.briefStatus.Load(); status != 0 {
 				w.WriteHeader(int(status))
 				fmt.Fprint(w, `{"error":{"code":"forbidden","message":"denied"}}`)
@@ -686,6 +688,18 @@ func TestAgentHookNoCardBriefDeadline(t *testing.T) {
 	brief := f.hook(t, "generic", payload)
 	if brief.Context != "" || time.Since(start) > 1800*time.Millisecond {
 		t.Fatalf("deadline/fail-open violated: %#v", brief)
+	}
+}
+
+// A hosted brief takes seconds, so the default budget has to outlast one.
+func TestContextHookWaitsForASlowBrief(t *testing.T) {
+	f := newHookFixture(t)
+	f.run(t, "integrations", "enable", "context.inject", "--harness", "generic")
+	f.briefLatency.Store(int64(2 * time.Second))
+	f.a.hookBudget = 0
+	payload := fmt.Sprintf(`{"schema_version":1,"cwd":%q}`, f.root)
+	if brief := f.hook(t, "generic", payload); !strings.Contains(brief.Context, "card:own") {
+		t.Fatalf("slow brief injected nothing: %#v", brief)
 	}
 }
 
