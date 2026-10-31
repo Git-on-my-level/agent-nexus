@@ -6,9 +6,10 @@ import (
 )
 
 // briefNoteExcerptSQL reads a note's text for Watch. Notes store text; body is
-// the older field some imported messages still carry.
+// the older field some imported messages still carry; core's own reminders have
+// only a summary.
 func briefNoteExcerptSQL(payload string) string {
-	return `substr(COALESCE(NULLIF(json_extract(` + payload + `,'$.payload.text'),''),json_extract(` + payload + `,'$.payload.body'),''),1,280)`
+	return `substr(COALESCE(NULLIF(json_extract(` + payload + `,'$.payload.text'),''),NULLIF(json_extract(` + payload + `,'$.payload.body'),''),json_extract(` + payload + `,'$.summary'),''),1,280)`
 }
 
 func briefNotesRestoreTrigger() string {

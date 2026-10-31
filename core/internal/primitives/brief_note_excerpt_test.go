@@ -22,8 +22,8 @@ func TestBriefNoteExcerptReadsNoteText(t *testing.T) {
 	}
 	card := registerWork(t, s, board["id"].(string))
 	thread := card["thread_id"].(string)
-	for _, payload := range []map[string]any{{"text": "from text"}, {"body": "from body"}, {"text": "", "body": "body after empty text"}} {
-		if _, err := s.AppendEvent(ctx, "agent-1", map[string]any{"type": "message_posted", "thread_id": thread, "summary": "note", "refs": []string{}, "provenance": map[string]any{"sources": []string{"actor_statement:test"}}, "payload": payload}); err != nil {
+	for _, payload := range []map[string]any{{"text": "from text"}, {"body": "from body"}, {"text": "", "body": "body after empty text"}, {}} {
+		if _, err := s.AppendEvent(ctx, "agent-1", map[string]any{"type": "message_posted", "thread_id": thread, "summary": "from summary", "refs": []string{}, "provenance": map[string]any{"sources": []string{"actor_statement:test"}}, "payload": payload}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -40,7 +40,7 @@ func TestBriefNoteExcerptReadsNoteText(t *testing.T) {
 		}
 		got = append(got, excerpt)
 	}
-	want := []string{"from text", "from body", "body after empty text"}
+	want := []string{"from text", "from body", "body after empty text", "from summary"}
 	if len(got) != len(want) {
 		t.Fatalf("excerpts=%q", got)
 	}

@@ -479,9 +479,23 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 		}
 		return empty, e
 	}
+	workspace := install.Workspace
+	// A user-scope install runs in every project on the machine, so the session's
+	// directory picks the workspace. Otherwise a session in one workspace's repo is
+	// briefed on another's work, so a routing error injects nothing. A pinned card
+	// belongs to the workspace it was enabled in; the same ref elsewhere is unrelated.
+	if install.Scope == "user" && install.Card == "" {
+		routed, e := a.hookWorkspace(cfg, event.CWD, "")
+		if e != nil {
+			return empty, e
+		}
+		if routed.BaseURL != "" {
+			workspace = routed.BaseURL
+		}
+	}
 	cfg.As = install.Agent
 	cfg.AccessToken = ""
-	cfg.BaseURL = install.Workspace
+	cfg.BaseURL = workspace
 	cfg.Sources = map[string]string{"base_url": "hook", "agent": "hook"}
 	cfg.Timeout = time.Second
 	// Do not run an optional 2s discovery subprocess on the 1.5s path. Installed
