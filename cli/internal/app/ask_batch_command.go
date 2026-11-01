@@ -482,9 +482,13 @@ func (a *App) registerAskBatchResume(ctx context.Context, cfg config.Resolved, e
 	}
 	askID := strings.TrimPrefix(askRef, "event:")
 	registryPath := askRegistryPath(dir, askRef)
-	registration := askResumeRegistration{AskID: askRef, BaseURL: cfg.BaseURL, ActorID: cfg.ActorID, Command: entry.decided.Command, Dir: cwd, ThreadID: entry.thread, State: "pending"}
-	if err := writeAskRegistration(registryPath, registration); err != nil {
-		return err
+	// A retry keeps an existing registration, whose command may be the one still
+	// waiting. Subscribing is idempotent, so a failed earlier attempt is repaired.
+	if _, statErr := os.Stat(registryPath); os.IsNotExist(statErr) {
+		registration := askResumeRegistration{AskID: askRef, BaseURL: cfg.BaseURL, ActorID: cfg.ActorID, Command: entry.decided.Command, Dir: cwd, ThreadID: entry.thread, State: "pending"}
+		if err := writeAskRegistration(registryPath, registration); err != nil {
+			return err
+		}
 	}
 	if _, err := a.invokeRawJSON(ctx, cfg, "ask subscribe", "POST", "/asks/"+url.PathEscape(askID)+"/subscriptions", map[string]any{"kind": "bridge", "label": "host resume"}); err != nil {
 		return err

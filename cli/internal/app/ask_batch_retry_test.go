@@ -3,8 +3,12 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -161,6 +165,53 @@ func TestAskBatchRetryCarriesAnAnswerAndRestoresResume(t *testing.T) {
 	want := "/asks/" + anyStringValue(s.events[1]["id"]) + "/subscriptions"
 	if len(s.subscribed) != 1 || s.subscribed[0] != want {
 		t.Fatalf("resume should be restored only for the open ask %s: %v", want, s.subscribed)
+	}
+}
+
+func TestAskBatchRetryKeepsAWorkingResumeRegistration(t *testing.T) {
+	s := newAskBatchRetryServer(t)
+	home := askBatchRetryHome(t)
+	path := askBatchFixture(t, askBatchRetryFile)
+	args := askBatchRetryArgs(s, path, "--delivery", "resume")
+	first := map[string]string{"AGENTCTL_EXECUTION_ID": "exec-1"}
+	runCLIForTest(t, home, first, nil, args)
+	registrations := func() map[string]string {
+		t.Helper()
+		found := map[string]string{}
+		_ = filepath.WalkDir(filepath.Join(home, ".config", "anx", "answer-resumes"), func(p string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				raw, _ := os.ReadFile(p)
+				found[p] = string(raw)
+			}
+			return nil
+		})
+		return found
+	}
+	before := registrations()
+	if len(before) == 0 {
+		t.Fatal("first filing registered nothing")
+	}
+	runCLIForTest(t, home, map[string]string{"AGENTCTL_EXECUTION_ID": "exec-2"}, nil, args)
+	if after := registrations(); !reflect.DeepEqual(before, after) {
+		t.Fatalf("retry replaced a working registration:\n%v\n%v", before, after)
+	}
+	if s.postCount() != 1 || len(s.subscribed) != 2*len(s.events) {
+		t.Fatalf("posts=%d subscribed=%v", s.postCount(), s.subscribed)
+	}
+}
+
+func TestAskBatchRetryDoesNotClaimAnotherAgentsAsk(t *testing.T) {
+	s := newAskBatchRetryServer(t)
+	home := askBatchRetryHome(t)
+	path := askBatchFixture(t, askBatchRetryFile)
+	runCLIForTest(t, home, map[string]string{}, nil, askBatchRetryArgs(s, path))
+	for _, event := range s.events {
+		event["payload"].(map[string]any)["requester_actor_id"] = "actor_other"
+	}
+	raw := runCLIForTest(t, home, map[string]string{"AGENTCTL_EXECUTION_ID": "exec-1"}, nil, askBatchRetryArgs(s, path, "--delivery", "resume"))
+	_, views := askBatchRetryViews(t, raw)
+	if views[0]["delivery"] != nil || len(s.subscribed) != 0 {
+		t.Fatalf("delivery=%v subscribed=%v", views[0]["delivery"], s.subscribed)
 	}
 }
 

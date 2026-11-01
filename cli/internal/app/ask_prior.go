@@ -166,8 +166,13 @@ func (a *App) repeatedAskBatch(ctx context.Context, cfg config.Resolved, entries
 		view := asMap(repeat.Data)
 		delete(view, "event")
 		view["title"] = entry.Title
+		askViews = append(askViews, view)
+		// Another agent's ask delivers to that agent, so this call has nothing to report.
+		if cfg.ActorID == "" || anyString(asMap(prior.event["payload"])["requester_actor_id"]) != cfg.ActorID {
+			continue
+		}
 		// The lost response may have cost the resume registration too, and only this
-		// retry can restore it. The ask's owner may register; subscribing is idempotent.
+		// retry can restore it.
 		entry.deliveryInput.AskID = strings.TrimPrefix(prior.ref, "event:")
 		decided, err := a.resolveAskDelivery(cfg, entry.deliveryInput)
 		if err != nil {
@@ -175,13 +180,12 @@ func (a *App) repeatedAskBatch(ctx context.Context, cfg config.Resolved, entries
 		}
 		entry.decided = decided
 		view["delivery"] = askDeliveryResultView(decided, prior.ref)
-		if decided.Mode == askDeliveryResume && prior.response == nil && anyString(asMap(prior.event["payload"])["requester_actor_id"]) == cfg.ActorID {
+		if decided.Mode == askDeliveryResume && prior.response == nil {
 			if err := a.registerAskBatchResume(ctx, cfg, entry, prior.ref); err != nil {
 				registrationFailures++
 				view["registration_error"] = err.Error()
 			}
 		}
-		askViews = append(askViews, view)
 	}
 	if registrationFailures > 0 {
 		result.Warnings = append(result.Warnings, askBatchRegistrationWarning(registrationFailures))
