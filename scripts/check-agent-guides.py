@@ -33,9 +33,7 @@ TRAILING_PUNCTUATION = ".,;:)"
 FENCE = re.compile(r"^\s*(```|~~~)")
 # References shaped like file paths that name something else. Each carries
 # its owner; delete the entry when the guide stops using the reference.
-PATH_ALLOWANCES = {
-    "lib/inboxResponseQueue.js": "web-ui/AGENTS.md abbreviates src/lib as lib; normalize the guide",
-}
+PATH_ALLOWANCES = {}
 
 
 def tracked_guides():

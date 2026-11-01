@@ -86,7 +86,7 @@ Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts:
 
 **Popover / menu dismiss:** `use:dismissOnEscape` from `src/lib/actions/dismissOnEscape.js` on the popover root while open (`enabled`, `onDismiss`). Capture-phase document listener; stops propagation so other handlers do not run.
 
-**Decide answers:** `DecisionCard` (shared by `/decide`, `/decide/{id}` and the initiative page) sends through `lib/inboxResponseQueue.js` (undo window) rather than calling `respondInboxItem` directly; its reply `<form>` uses Layer A. `j`/`k` move focus between rows and `c` copies the focused row's ref.
+**Decide answers:** `DecisionCard` (shared by `/decide`, `/decide/{id}` and the initiative page) sends through `src/lib/inboxResponseQueue.js` (undo window) rather than calling `respondInboxItem` directly; its reply `<form>` uses Layer A. `j`/`k` move focus between rows and `c` copies the focused row's ref.
 
 ## Validation
 

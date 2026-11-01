@@ -71,6 +71,6 @@ Synthesize your findings and the user's answers into a `## Design Context` secti
 [3-5 principles derived from the conversation that should guide all design decisions]
 ```
 
-Write this section to .cursorrules in the project root. If the file exists, append or update the Design Context section.
+Write this section to the project instructions your tool loads: .cursorrules in Cursor, AGENTS.md elsewhere. If the file exists, append or update the Design Context section.
 
 Confirm completion and summarize the key design principles that will now guide all future work.
