@@ -180,10 +180,18 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		return result, nil
 	}
 
+	// Recorded before publishing, as a single ask is.
+	askWaitWarnings := []output.Warning{}
+	for index := range entries {
+		if warning := a.recordAskForSession(cfg, "event:"+entries[index].eventID, entries[index].Title); warning != nil {
+			askWaitWarnings = append(askWaitWarnings, *warning)
+		}
+	}
 	result, err := a.invokeTypedJSON(ctx, cfg, "ask batch", "asks.batch.create", nil, nil, bodyMap)
 	if err != nil {
 		return nil, err
 	}
+	result.Warnings = append(result.Warnings, askWaitWarnings...)
 	body := commandResultBody(result)
 	batchID := anyString(body["batch_id"])
 	askViews := make([]map[string]any, 0, len(entries))

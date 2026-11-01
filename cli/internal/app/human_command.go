@@ -445,7 +445,14 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	}
 	if !autoSubject && kind == "ask" && !againFlag.value && !dryRunFlag.value && firstNonEmpty(supersedesFlag.value, fmFromFile.Supersedes) == "" {
 		if prior := a.findPriorAsk(ctx, cfg, threadID, title); prior != nil {
-			return priorAskResult(prior, subjectRef, kind), nil
+			repeat := priorAskResult(prior, subjectRef, kind)
+			// This session now waits on the open ask it would have filed.
+			if prior.response == nil && priorAskIsMine(prior, cfg) {
+				if warning := a.recordAskForSession(cfg, prior.ref, title); warning != nil {
+					repeat.Warnings = append(repeat.Warnings, *warning)
+				}
+			}
+			return repeat, nil
 		}
 		loopWarnings = append(loopWarnings, a.priorRulings(ctx, cfg, threadID)...)
 	}
@@ -578,9 +585,15 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		registryPath = askRegistryPath(dir, "event:"+localAskID)
 		registration = askResumeRegistration{AskID: "event:" + localAskID, BaseURL: cfg.BaseURL, ActorID: cfg.ActorID, Command: command, Dir: cwd, ThreadID: threadID, State: "pending"}
 	}
+	// Recorded before publishing: a response lost after the server commits must
+	// not cost this session its answer.
+	askWaitWarning := a.recordAskForSession(cfg, "event:"+localAskID, title)
 	result, err := a.invokeTypedJSON(ctx, cfg, kind, "events.create", nil, nil, bodyMap)
 	if err != nil {
 		return nil, err
+	}
+	if askWaitWarning != nil {
+		result.Warnings = append(result.Warnings, *askWaitWarning)
 	}
 	event := asMap(asMap(commandResultBody(result))["event"])
 	askRef := ""

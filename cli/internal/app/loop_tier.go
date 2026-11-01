@@ -516,6 +516,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	workspace := a.orientWorkspace(cfg)
 	if !cfg.JSON {
 		markOrientAgentInitiatives(brief, agent, detail)
+		a.annotateAnsweredOrigin(brief, cfg)
 		text := workspaceText(workspace) + renderOrientText(brief, a.orientIdentityLine(cfg))
 		if bridgeRecommended {
 			text += "recommended next: anx bridge install; then register each intended agent/workspace with anx bridge add. Without answer delivery, unattended resumes wait; Git/drain remain manual. Await/batch work without a bridge.\n"
@@ -628,6 +629,9 @@ func renderOrientText(brief map[string]any, identity string) string {
 		if item["followed_recommendation"] == false {
 			line += " (not your recommendation)"
 		}
+		if item["session_origin"] == "other_session" {
+			line += " (another session's ask)"
+		}
 		b.WriteString(line + "\n")
 	}
 	waiting := asSlice(brief["your_asks"])
@@ -691,11 +695,16 @@ func renderOrientText(brief map[string]any, identity string) string {
 		fmt.Fprintf(&b, "daily digest:  %s %q · %s\n", anyString(item["ref"]), anyString(item["title"]), reason)
 	}
 	if next == "" {
+		// Answer read state is shared across this agent's sessions, so only an
+		// answer to this session's own ask is suggested for marking read.
 		for _, raw := range answered {
-			if ref := briefShortRef(asMap(raw)); ref != "" {
-				next = "anx inbox read " + ref
+			if item := asMap(raw); item["session_origin"] == "this_session" {
+				next = "anx inbox read " + anyString(item["ask_id"])
 				break
 			}
+		}
+		if next == "" && len(answered) > 0 {
+			next = "anx inbox list --unread"
 		}
 	}
 	if next == "" {
