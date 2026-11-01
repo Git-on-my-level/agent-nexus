@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v38"
+const agentGuideSkillVersion = "anx.participant.v39"
 
 type guideSection struct {
 	Title string
@@ -62,8 +62,8 @@ func agentGuideSections() []guideSection {
 			"2. Use `anx where card:<slug>` to inspect its home before substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.",
 			"3. Post `anx note card:<slug> \"What changed and why\" --evidence <ref>` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.",
 			"4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask --from-file ask.md`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason \"<short reason>\"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.",
-			"5. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. For a batch, use `anx await --answers`; `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.",
-			"6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.",
+			"5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --timeout <dur>` as a background process and re-arm it after each return: it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.",
+			"6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer to your own ask with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery, and that read state is shared with other sessions of your agent, so it refuses an ask another session filed; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.",
 			"7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.",
 		}},
 		{Title: "Runs and output", Lines: []string{

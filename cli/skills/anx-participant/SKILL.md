@@ -5,7 +5,7 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v38.
+Skill contract: anx.participant.v39.
 
 ## Daily loop
 
@@ -19,23 +19,19 @@ Create with `anx work create --title "<outcome>" --under card:<parent>`;
 `anx done <card> --evidence <ref>` finishes. `anx plan` is for checklists.
 
 Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
-Next step needs a human? File an ask; never wait in chat.
+Next step needs a human? File an ask, not chat.
 Record chat rulings: `anx note <card> "<text>" --decided-by <who>`.
 Cite blockers as `event:<ask-id>`; share `anx link` URLs.
 
 Initiatives are top-level cards outside Unsorted. Each card has one stored parent;
-depth is at most three (initiative → workstream → task). Board roles and plan links
-never determine parentage.
+depth is at most three (initiative → workstream → task).
 Creation without `--under` or explicit `--initiative` enters Unsorted (`needs_home=true`).
 `where` suggests; confirm by naming a home: `anx mv <ref|path> --under <ref|path>`.
 Top level: `anx mv <card> --root --reason "Independent outcome"`, or
-back to the tray with `anx mv <card> --unsorted`. Moving an initiative under another
-card requires a reason. Paths are aliases; keep stable card refs in stored evidence.
+back to the tray with `anx mv <card> --unsorted`. Paths are aliases; keep stable card refs in stored evidence.
 One owner per card. Awaiting an owner means empty assignee, never an expired lease.
 
 ## Write for a busy boss
-
-Provide context:
 
 - What's happening (`situation`): baseline, change, numbers.
 - Why it matters (`impact`): affected people; why facts determine the choice.
@@ -49,12 +45,13 @@ costs, approvals or defaults. Omit unused optional fields. Collapse technical de
 `anx ask --template decision`: fictional narrative example.
 Edit frontmatter; preview: `anx ask --from-file ask.md --preview`.
 `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
-Withdraw stale asks; `anx await <ask>`. Answers may be free text or questions: act, re-ask if needed.
+Withdraw stale asks. Answers may be free text or questions: act or re-ask.
+After filing, arm a wake: `anx await <ask>` or background `anx await --answers`, re-armed on return; it skips other sessions' asks. Mark read only your own.
 
 ## Advanced setup
 
 `anx help <job>` / `anx api <operation>` cover power verbs, attention,
 measurements and automation. Preview setup with `--dry-run`; never alter host
-services merely for coding. Mount only `.anx/outbox` writable for networkless
+services for coding. Mount only `.anx/outbox` writable for networkless
 producers, without credentials; keep mirrors read-only. Preserve uncertain
 originals and keys and inspect receipts. Never share secrets or raw transcripts.

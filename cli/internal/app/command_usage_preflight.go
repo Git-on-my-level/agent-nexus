@@ -689,7 +689,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}
 	}
 	addLayer(map[string]map[string]preflightFlagSpec{
-		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}},
+		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}, "settle": {kind: preflightFlagString}, "all": {kind: preflightFlagBool}},
 		"work start": {},
 		"work block": {"again": {kind: preflightFlagBool}, "situation": {kind: preflightFlagString}, "impact": {kind: preflightFlagString}, "why": {kind: preflightFlagString}, "if-no-answer": {kind: preflightFlagString}, "details": {kind: preflightFlagString}, "alternative": {kind: preflightFlagString}, "ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}, "body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}},
 	})

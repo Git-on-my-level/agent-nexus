@@ -4,18 +4,15 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/httpclient"
-	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/internal/streaming"
 )
 
@@ -252,35 +249,47 @@ func (a *App) dailyMove(ctx context.Context, cfg config.Resolved, ref, phase str
 func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("await")
-	var until, timeout trackedString
-	var answers trackedBool
+	var until, timeout, settle trackedString
+	var answers, all trackedBool
 	fs.Var(&until, "until", "answered or state=<phase>")
 	fs.Var(&timeout, "timeout", "Maximum wait duration, default 30m")
-	fs.Var(&answers, "answers", "Wait for a debounced batch of answers to my asks")
+	fs.Var(&answers, "answers", "Wait for answers to this session's asks that it has not been handed yet")
+	fs.Var(&settle, "settle", "With --answers: how long to keep collecting after an answer while asks stay open, default 20s")
+	fs.Var(&all, "all", "With --answers: include asks filed by other sessions of this agent")
 	if err := fs.Parse(rest); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	refs := append(leading, fs.Args()...)
 	if answers.value {
 		if len(refs) != 0 || until.set {
-			return nil, errnorm.Usage("invalid_args", "usage: anx await --answers [--timeout <dur>]")
+			return nil, errnorm.Usage("invalid_args", "usage: anx await --answers [--timeout <dur>] [--settle <dur>] [--all]")
 		}
-		wait := 30 * time.Minute
+		opts := answerWaitOptions{timeout: 30 * time.Minute, settle: answerWaitDefaultSettle, all: all.value}
 		if timeout.set {
 			var err error
-			wait, err = time.ParseDuration(timeout.value)
-			if err != nil || wait <= 0 {
+			opts.timeout, err = time.ParseDuration(timeout.value)
+			if err != nil || opts.timeout <= 0 {
 				return nil, errnorm.Usage("invalid_request", "--timeout must be a positive duration")
 			}
 		}
-		return a.runAwaitAnswers(ctx, cfg, wait)
+		if settle.set {
+			var err error
+			opts.settle, err = time.ParseDuration(settle.value)
+			if err != nil || opts.settle < 0 {
+				return nil, errnorm.Usage("invalid_request", "--settle must be zero or a positive duration")
+			}
+		}
+		return a.runAwaitAnswers(ctx, cfg, opts)
+	}
+	if settle.set || all.set {
+		return nil, errnorm.Usage("invalid_args", "--settle and --all apply only to anx await --answers")
 	}
 	if len(refs) != 1 {
 		return nil, errnorm.Usage("invalid_args", "usage: anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]")
 	}
 	target := refs[0]
-	if !strings.HasPrefix(target, "card:") && !strings.HasPrefix(target, "event:") && !strings.HasPrefix(target, "access-request:") {
-		target = "event:" + target
+	if !strings.HasPrefix(target, "card:") && !strings.HasPrefix(target, "access-request:") {
+		target = normalizeAskRef(target)
 	}
 	wait := 30 * time.Minute
 	if timeout.set {
@@ -434,107 +443,6 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 	}
 	return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out"), map[string]any{"target": target, "timeout": wait.String()})
-}
-
-func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, timeout time.Duration) (*commandResult, error) {
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	var lastUnmatched []string
-	readBatch := func() (*commandResult, bool, error) {
-		notifications, err := a.invokeRawJSON(waitCtx, cfg, "await answer notifications", "GET", "/agent-notifications?status=unread", nil)
-		if err != nil {
-			return nil, false, err
-		}
-		responseIDs := map[string]bool{}
-		for _, raw := range asSlice(commandResultBody(notifications)["items"]) {
-			item := asMap(raw)
-			triggerID := strings.TrimSpace(anyString(item["trigger_event_id"]))
-			if triggerID != "" {
-				responseIDs[triggerID] = true
-			}
-			for _, ref := range stringList(item["related_refs"]) {
-				if strings.HasPrefix(ref, "event:") {
-					responseIDs[strings.TrimPrefix(ref, "event:")] = true
-				}
-			}
-		}
-		if len(responseIDs) == 0 {
-			return nil, false, nil
-		}
-		// Sweep newest-first for the woken answers. The scan stops as soon as
-		// every notified answer is matched, or after maxOwnAsksLookupPages
-		// pages, so a wake behind newer activity is still found without
-		// looping over the whole ask history.
-		_, actorID, err := a.resolveOwnAsksActor(waitCtx, cfg)
-		if err != nil {
-			return nil, false, err
-		}
-		batch := make([]any, 0, len(responseIDs))
-		cursor := ""
-		for page := 0; page < maxOwnAsksLookupPages; page++ {
-			items, next, pageErr := a.fetchOwnAsksPageForActor(waitCtx, cfg, actorID, cursor, 200)
-			if pageErr != nil {
-				return nil, false, pageErr
-			}
-			for _, raw := range items {
-				item := asMap(raw)
-				answerID := strings.TrimSpace(anyString(asMap(item["answer"])["response_event_id"]))
-				if answerID == "" || !responseIDs[answerID] {
-					continue
-				}
-				batch = append(batch, item)
-				delete(responseIDs, answerID)
-			}
-			if len(responseIDs) == 0 || next == "" {
-				break
-			}
-			cursor = next
-		}
-		// Whatever is left after the bounded window is preserved, never
-		// silently dropped: notified answers older than the newest
-		// maxOwnAsksLookupPages*200 asks stay listed as unmatched.
-		unmatched := make([]string, 0, len(responseIDs))
-		for answerID := range responseIDs {
-			unmatched = append(unmatched, answerID)
-		}
-		sort.Strings(unmatched)
-		lastUnmatched = unmatched
-		if len(batch) == 0 {
-			return nil, false, nil
-		}
-		data := map[string]any{"answers": batch, "count": len(batch)}
-		result := &commandResult{Data: data}
-		if len(unmatched) > 0 {
-			data["incomplete"] = true
-			data["unmatched_notification_ids"] = unmatched
-			result.Warnings = append(result.Warnings, output.Warning{Code: "ask_delivery", Message: fmt.Sprintf("%d notified answer(s) were not found among the newest %d asks; they may answer older asks. Continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(unmatched), maxOwnAsksLookupPages*200)})
-		}
-		return result, true, nil
-	}
-	if result, ready, err := readBatch(); err != nil || ready {
-		return result, err
-	}
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-waitCtx.Done():
-			details := map[string]any{"target": "answers", "timeout": timeout.String()}
-			if len(lastUnmatched) > 0 {
-				details["unmatched_notification_ids"] = lastUnmatched
-				details["continuation"] = fmt.Sprintf("%d notified answer(s) were never found among the newest %d asks; continue with: anx inbox list --status answered --unread --limit 200, then page with --cursor", len(lastUnmatched), maxOwnAsksLookupPages*200)
-			}
-			return nil, errnorm.WithDetails(errnorm.New(errnorm.KindNetwork, "timeout", "await timed out waiting for answer batch"), details)
-		case <-ticker.C:
-			result, ready, err := readBatch()
-			if err != nil {
-				return nil, err
-			}
-			if ready {
-				return result, nil
-			}
-		}
-	}
 }
 
 func awaitResponseResult(target string, event map[string]any) (map[string]any, error) {

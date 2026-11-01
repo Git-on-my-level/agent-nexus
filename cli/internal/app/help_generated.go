@@ -1251,7 +1251,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
 	if topic == "await" {
-		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>]: wait for a debounced batch of answers to your asks (read_only)\n", true
+		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>] [--settle <dur>] [--all]: block until this session has answers it has not been handed yet, then re-arm (read_only on the server; keeps a local per-session cursor and never marks anything read). Returns answers to asks this session filed, plus answers to asks of unknown origin that arrive after its first wait. It skips asks filed by another session of this agent unless --all. After the first answer it keeps collecting for --settle (default 20s) while in-scope asks stay open, and returns at once when none do. Session: ANX_SESSION, else the harness session id; with neither, one cursor per agent. Exit 8 on timeout; a withdrawn or expired ask of yours also ends the wait, with a null answer.\n", true
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
@@ -2051,7 +2051,7 @@ Note: by default, archived and trashed events are excluded from the timeline out
 		return strings.TrimSpace(`View scoping:
   - ` + "`anx inbox list`" + ` lists your own open asks. Use ` + "`--status answered`" + ` to read replies, or ` + "`--status all`" + ` for both.
   - Add ` + "`--unread`" + ` to show answers not yet individually marked read; it implies answered unless ` + "`--status`" + ` is explicit.
-  - ` + "`anx inbox read event:<ask-id>`" + ` marks only that answer read, even during the quiet window.
+  - ` + "`anx inbox read event:<ask-id>`" + ` marks only that answer read, even during the quiet window. Read state is shared by every session of this agent, so it refuses an ask another session filed unless ` + "`--force`" + `.
   - ` + "`anx notifications read --wakeup-id <id>`" + ` marks a wake notification read separately.
   - Human attention triage remains available as ` + "`anx debug inbox list`" + `; use ` + "`anx inbox respond`" + ` to answer an inbox item.
   - Select an agent with ` + "`--as <name>`" + ` or ` + "`ANX_AS`" + `.

@@ -111,6 +111,12 @@ func priorAskIn(events []any, title string) *priorAsk {
 	return prior
 }
 
+// priorAskIsMine reports whether the prior ask was filed by this agent. Another
+// agent's ask delivers to that agent.
+func priorAskIsMine(prior *priorAsk, cfg config.Resolved) bool {
+	return cfg.ActorID != "" && anyString(asMap(prior.event["payload"])["requester_actor_id"]) == cfg.ActorID
+}
+
 // priorAskResult answers a repeated ask from the workspace instead of filing it
 // twice, so a retry after a timeout is safe and an answered question stays
 // answered until the agent says otherwise.
@@ -158,6 +164,11 @@ func (a *App) repeatedAskBatch(ctx context.Context, cfg config.Resolved, entries
 	for index := range entries {
 		entry, prior := &entries[index], priors[index]
 		repeat := priorAskResult(prior, entry.subject, "ask")
+		if prior.response == nil && priorAskIsMine(prior, cfg) {
+			if warning := a.recordAskForSession(cfg, prior.ref, entry.Title); warning != nil {
+				result.Warnings = append(result.Warnings, *warning)
+			}
+		}
 		for _, warning := range repeat.Warnings {
 			warning.Message = fmt.Sprintf("asks[%d]: %s", index, warning.Message)
 			result.Warnings = append(result.Warnings, warning)

@@ -535,6 +535,7 @@ func (a *App) processAgentHook(ctx context.Context, overrides config.Overrides, 
 			return empty, errnorm.Local("invalid_response", "hook brief returned no brief.v1")
 		}
 		at := a.clockNow().UTC().Format(time.RFC3339Nano)
+		a.annotateAnsweredOrigin(body, cfg)
 		return integrations.HookBrief{Version: 1, Context: renderHookOrient(body), AsOf: &at}, nil
 	}
 	key := integrations.Digest(auth.BaseURL + "\x00" + auth.HostID + "\x00" + auth.ActorID + "\x00" + card)

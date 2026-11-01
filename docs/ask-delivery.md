@@ -12,7 +12,7 @@ the exact follow-up command.
 | -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `await`  | the agent is blocked and still alive | the caller blocks on `anx await <ask-id>`; the ask result prints the exact command                                                                                                                               |
 | `resume` | long-running or sleeping hosts       | the ask registers an executor command (`--on-answer`, `ANX_RESUME_CMD`, or an agentctl continuation) that a running `anx bridge run` fires the moment the answer lands — even if the asking session is long gone |
-| `batch`  | many low-stakes asks                 | answers queue as notifications; nothing wakes; the owning agent sweeps them on its next run with `anx await --answers`                                                                                           |
+| `batch`  | many low-stakes asks                 | answers queue as notifications; nothing wakes; the owning agent collects them with `anx await --answers`                                                                                                         |
 | `none`   | FYI / human-owned follow-through     | explicit opt-out. Nothing is registered; the answer stays visible through `anx orient` and `anx inbox list --status answered`                                                                                    |
 
 `none` is never chosen automatically — it exists so "no delivery" is always a
@@ -100,14 +100,69 @@ asks. Without the answer job, unattended resumes wait; Git/drain remain manual
 without their jobs. Await/batch/direct commands continue to work. See the
 [host bridge guide](../cli/docs/host-bridge.md) for policies, migration and doctor.
 
-## Sweeping batched answers
+## Waiting on answers
 
 ```bash
-anx await --answers               # block until a batch of answers arrives
+anx await <ask-id>                # one answer gates the next step
+anx await --answers --timeout 4h  # any answer this session has not been handed
 anx inbox list --status answered  # everything already answered, including
                                   # answers filed while the session was closed
-anx inbox read <ask-id>           # one answer in full, marks it read
+anx inbox list --unread           # answers nobody has marked read
+anx inbox read <ask-ref>          # mark one answer read; accepts event:<id> and
+                                  # the ask:... ref that orient prints
 ```
 
 `anx inbox list --status answered` always includes the caller's own answered
 asks and agrees with `anx orient` → `my_asks_and_answers`.
+
+### What `anx await --answers` returns
+
+Every session of a harness on one host shares a derived principal, and both
+answer read state and wake notifications belong to that principal. So the wait
+keeps its own local state under `<config>/answer-waits/` and writes nothing to
+the server:
+
+- **Answers to this session's asks** always come back, once, however old the ask
+  and even if they landed before the first wait. They are found by reading each
+  ask directly, because the asks page is ordered by ask time and an old ask
+  answered late can sit arbitrarily deep.
+- **Asks of unknown origin** (filed elsewhere, without a session, or by an older
+  CLI) come back only if they were answered after this session's first wait, and
+  only from the newest 200 asks.
+- **Asks another session filed** are skipped. `--all` includes them. A timeout
+  reports `other_session_unread` so a lost answer stays discoverable.
+- **A withdrawn or expired ask of yours** also ends the wait, with `answer: null`.
+
+The session is `ANX_SESSION`, else the harness session id, else, when a child
+agent inherits two harness markers, the agentctl execution id. With none there is
+one cursor per agent. A resumed session that gets a new id can no longer claim
+its old asks: set `ANX_SESSION` to a stable name, or use `--all`. Waiters sharing
+a session share a cursor, so whichever polls first is handed the answer.
+
+Delivery is at-least-once and the local cursor is a wake mechanism, not a record:
+`anx inbox list --unread` and `anx orient` stay authoritative after a crash.
+
+### Debounce
+
+Two independent windows apply.
+
+The server batches **wake notifications** per principal: a wake fires 60 seconds
+(`ANX_ANSWER_WAKE_QUIET_WINDOW`) after the _latest_ answer, and within about a
+second when that principal has no open asks left. Measured on a local core:
+
+| answers                                    | wake             |
+| ------------------------------------------ | ---------------- |
+| one, another ask still open                | +60.8s           |
+| two 20.5s apart, another ask still open    | +81.8s, one wake |
+| one, and it was the last open ask          | +1.0s            |
+| two 5.4s apart, the second closing the set | +6.3s, one wake  |
+
+Because the window is per principal, one session's open ask delays the wake for
+every other session of that agent. `anx await --answers` does not read wakes.
+
+The **wait** applies its own quiet period, `--settle` (default 20s): after the
+latest answer it keeps collecting while in-scope asks stay open, and returns at
+once when none do or when `--timeout` arrives. A held answer never becomes a
+timeout. Poll cost is one read per ask the session still waits on, plus one page
+of at most 200 asks, every 5 seconds, with at most 25 asks read per poll; a
+session with more takes turns through them.

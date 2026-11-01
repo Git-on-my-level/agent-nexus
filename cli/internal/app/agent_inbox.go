@@ -209,16 +209,20 @@ func (a *App) loadOwnInboxAsksForActor(ctx context.Context, cfg config.Resolved,
 func (a *App) runAgentInboxRead(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("inbox read")
+	var force trackedBool
+	fs.Var(&force, "force", "Mark an answer read even though another session of this agent filed the ask")
 	if err := fs.Parse(rest); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	ids := append(leading, fs.Args()...)
 	if len(ids) != 1 {
-		return nil, errnorm.Usage("invalid_args", "usage: anx inbox read <event:ask-id>")
+		return nil, errnorm.Usage("invalid_args", "usage: anx inbox read <event:ask-id> [--force]")
 	}
-	wanted := strings.TrimSpace(ids[0])
-	if !strings.HasPrefix(wanted, "event:") {
-		wanted = "event:" + wanted
+	wanted := normalizeAskRef(ids[0])
+	if store, err := a.answerWaitStore(cfg); err == nil && !force.value {
+		if _, other := store.origin(wanted); other {
+			return nil, otherSessionAnswerError(wanted)
+		}
 	}
 	cfg, actorID, err := a.resolveOwnAsksActor(ctx, cfg)
 	if err != nil {
