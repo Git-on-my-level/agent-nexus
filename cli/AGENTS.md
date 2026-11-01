@@ -94,7 +94,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 - Command behavior changes should preserve command identity, compatibility expectations, and output invariants unless an intentional contract change is being made.
 - Auth, host identity, transport, output, and streaming changes should be reviewed for automation safety first, then for default text clarity.
 - Dogfood-only workflow rules belong in narrower local guides such as [dogfood/pi/AGENTS.md](dogfood/pi/AGENTS.md).
-- Adding result actions: add command side effect classification in `internal/app/output_contract.go` and generated command classification in `internal/registry/registry.go`. Add bounded, concrete result-state rules to `deriveNextActions`: inspect the flattened result, require a real ref or cursor, and construct exact argv accepted by the parser. Include `mutates` and `side_effect_class` through the shared `action` constructor. Add error repairs to `deriveErrorActions`, warnings to `resultWarnings`, and verify both JSON and text projection. Never infer a target from a title or a partial ref.
+- Adding result actions: add command side effect classification in `internal/app/output_side_effects.go` and generated command classification in `internal/registry/registry.go`. Add bounded, concrete result-state rules to `deriveNextActions`: inspect the flattened result, require a real ref or cursor, and construct exact argv accepted by the parser. Include `mutates` and `side_effect_class` through the shared `action` constructor. Add error repairs to `deriveErrorActions`, warnings to `resultWarnings`, and verify both JSON and text projection. Never infer a target from a title or a partial ref.
 
 ## Validation
 

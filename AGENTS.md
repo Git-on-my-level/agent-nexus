@@ -6,7 +6,7 @@ Root onboarding and routing guide for agents working in this monorepo. Use this 
 
 - Run `make freshness` before relying on this checkout; stale checkouts mislead agents.
 - [docs/map.md](docs/map.md) is the generated map of where things live; run `make map` to regenerate it, never edit it by hand.
-- Files over 800 lines may not grow (`scripts/check-file-sizes.py`); split by concern first.
+- Files over 800 lines may not grow (`scripts/check-file-sizes.py`); split by concern first, then run `make file-size-baseline`.
 
 ## Keeping this file short
 

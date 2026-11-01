@@ -22,11 +22,7 @@ ROOT_LIMIT = 120
 NESTED_LIMIT = 60
 # Guides over today's limits, with the ceiling they may not exceed. The
 # trimming lane shrinks them; empty this table once they are within limits.
-LIMIT_EXCEPTIONS = {
-    "AGENTS.md": (166, "being trimmed"),
-    "cli/AGENTS.md": (134, "being trimmed"),
-    "core/AGENTS.md": (267, "being trimmed"),
-}
+LIMIT_EXCEPTIONS = {}
 
 BACKTICK = re.compile(r"`([^`\n]+)`")
 LINK = re.compile(r"\]\(([^)\s]+)\)")

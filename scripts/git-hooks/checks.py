@@ -491,7 +491,8 @@ def static_checks(changed, all_files=False):
                     {".md", ".yaml", ".yml", ".json", ".js", ".mjs", ".cjs", ".css", ".svelte", ".ts"}
                     and not p.startswith(("contracts/", "cli/internal/registry/",
                                           "cli/docs/generated/", "web-ui/src/lib/generated/"))
-                and p != "mcp/docs/tool-coverage.md"]  # Verified byte-for-byte by check-tool-policy below.
+                and p != "mcp/docs/tool-coverage.md"  # Verified byte-for-byte by check-tool-policy below.
+                and p != "docs/map.md"]  # Verified byte-for-byte by gen-map.py --check below.
     if format_files:
         run("pnpm", "-C", "web-ui", "exec", "prettier", "--check",
             *["../" + p for p in format_files])
