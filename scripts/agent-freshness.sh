@@ -11,13 +11,14 @@ git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 # Submodule drift is a local comparison; it needs no network. `git submodule
 # status` marks a submodule whose checkout differs from the recorded revision
-# with a leading +.
+# with a leading +, but the SHA on that line is the checkout's, so the recorded
+# one comes from the parent's index.
 superproject=$(git rev-parse --show-superproject-working-tree 2>/dev/null)
 if [ -n "$superproject" ]; then
     while read -r entry path _rest; do
         case "$entry" in
-            +*) recorded=${entry#+}
-                checked=$(git -C "$superproject/$path" rev-parse HEAD 2>/dev/null)
+            +*) recorded=$(git -C "$superproject" ls-files -s -- "$path" | cut -d' ' -f2)
+                checked=${entry#+}
                 if [ -n "$checked" ]; then
                     echo "agent-freshness: submodule $path is at ${checked:0:12} but the" \
                          "parent records ${recorded:0:12}; run git submodule update in the" \

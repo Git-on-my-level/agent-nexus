@@ -94,6 +94,7 @@ git -C "$tmp/parent" config user.name "freshness tests"
 git -C "$tmp/parent" config user.email "freshness@example.com"
 git -C "$tmp/parent" -c protocol.file.allow=always submodule add -q "$tmp/submodule" sub
 git -C "$tmp/parent" commit -qm "add submodule"
+recorded=$(git -C "$tmp/parent" rev-parse HEAD:sub | cut -c1-12)
 # Advance the submodule checkout past what the parent has recorded.
 cd "$tmp/parent/sub"
 git config user.name "freshness tests"
@@ -101,7 +102,8 @@ git config user.email "freshness@example.com"
 echo drift > drift
 git add drift
 git commit -qm drift
-expect "submodule drift" output "submodule sub is at" "parent records"
+checked=$(git rev-parse HEAD | cut -c1-12)
+expect "submodule drift" output "submodule sub is at $checked" "parent records $recorded"
 
 if [ "$failed" -ne 0 ]; then
     echo "freshness checks FAILED"
