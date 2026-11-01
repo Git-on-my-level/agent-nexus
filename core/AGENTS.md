@@ -81,182 +81,23 @@ It owns the canonical organizational record, validates and records state transit
 
 ## Maintenance Guidance
 
-- Prefer describing stable responsibilities and boundaries here, not current file layout.
+- Prefer describing stable responsibilities and boundaries here, not current file layout; layout detail belongs in the generated map at `../docs/map.md` (root `make map`, never edited by hand).
 - Link to specs, runbooks, and tests for evolving implementation detail.
 - Update this file when core purpose, module boundaries, or invariants change in a way downstream agents need to know early.
 
 ## Resource authorization
 
-HTTP authentication installs an immutable principal scope for both regular and
-stream routes. `primitives.WithAccessScope` and `CanAccessResource` define one
-record-visibility policy: backing threads inherit their canonical owner, cards
-inherit their board, and evidence inherits every referenced private resource.
-Only the private owner retains ordinary access; PM designation grants no extra
-read authority. Runner endpoints may load turn envelopes solely to validate a
-claim/lease, then bind business reads and proposals to the requesting owner.
-Unrelated humans, agents, and anonymous development readers remain excluded.
+HTTP authentication installs an immutable principal scope for both regular and stream routes. Backing threads inherit their canonical owner, cards inherit their board, and evidence inherits every referenced private resource; only the private owner retains ordinary access, and PM designation grants no extra read authority. The complete policy — ownership graph, migration-by-migration authorization history, stream and inbox rules, maintenance scopes and route/fixture gates — lives in [docs/resource-authorization.md](docs/resource-authorization.md). Read it before touching authorization, ownership edges, storage privacy, streams or migrations.
 
-Canonical text/JSON, event payloads, notification triggers, plans, work metadata,
-observations/evidence and runs participate in inherited ownership. Metadata and
-observations constrain the whole card before projection or search. Migration 55 backfills
-`resource_access_edges`; database triggers maintain that index atomically with
-canonical JSON/scalar writes, including imports. Migration 56 reconciles earlier
-55 previews with metadata edges and the normalized project/wakeup indexes.
-Migrations 57/58 reconcile every ref-bearing source and blob manifest, including
-scalar-vs-structured parsing in already-applied previews. Migration 59 repairs
-legacy prose reference candidates and marks preexisting series summaries whose
-full contributor provenance cannot be reconstructed. Those streams remain hidden
-when the reader has any denied contributor; ordinary appends do not clear the
-uncertainty. Adapter last_push is suppressed for partial-visibility readers.
-Migration 60 repairs NUL-truncated indexes and replaces legacy scalar-function
-triggers before rescanning manifests. Reference SQL helpers cast arguments to
-BLOB; unsafe TEXT calls fail closed. User text/JSON and business SQL writes
-reject NUL with invalid_request at HTTP boundaries. Only internally generated
-ReferenceManifest values preserve arbitrary binary/legacy bytes; this exemption
-skips text validation, never authorization. Do not cast user input to that type.
-Blob validation uses the declared content type: binary bytes remain binary even
-when they parse as JSON. Binary manifests still scan every byte for ownership.
-Reference matching treats controls and invalid UTF-8 as boundaries on both sides;
-only identifier continuations suppress a boundary (with paired Markdown wrappers).
-`resourceaccess.OwnershipSources` drives atomic triggers; `ReferenceAtoms` scans
-nested JSON values/keys and typed refs in text with shared normalization. Prose candidates retain the original text so legacy IDs containing punctuation
-or internal whitespace can match complete identities. Migration 61 resolves prose
-inheritance at write time and on identity/alias/revision changes, including targets
-created after the prose. Reads traverse materialized mention edges and fixed-size
-exact-atom keys. Regular GET requests reuse an immutable denial snapshot only when
-the authorization epoch still matches within the consuming statement; a mismatch
-falls back to the canonical graph. Rebinding a scope clears its request state.
-Inbox SSE starts a new epoch-validated read boundary on every tick and retains
-no request snapshot across ticks. Other streams and transactional reads evaluate
-the canonical graph directly.
-Migration 62 backfills PM and inbox provenance and repairs virtual revision
-identities when a parent arrives after its revisions. PM initialization installs
-its body-reference triggers atomically with the table; retain separate `(kind,id)`
-contributors even though inherited privacy follows PM IDs across kinds. Inbox
-parent columns contribute both raw atoms and typed refs, including legacy aliases.
-Canonical inbox collections use their indexed SQL visibility and batch metadata
-hydration; avoid rebuilding authorization for every already-filtered ordinary row.
-Migration 63 indexes ancillary profile fields without making profile denials
-resource identities: those denials are graph leaves. Host/auth/actor profiles
-remain scoped. Bind cached denial rows as data, never literal SQL, and avoid
-repeated CTE references that duplicate the ownership graph during SQLite
-preparation. Read selector checks reuse the epoch-validated request snapshot;
-transactional mutation checks, including Overview visits, always evaluate their
-current graph. Read closures may be shared only with bounded storage keyed by
-database identity, ActorID, PMActorID and authorization epoch. Every consuming
-statement must retain epoch validation and canonical fallback.
-PM principal caches protect routing state only; authority I/O stays outside shared locks.
-Use the registered SQLite driver so the reference scalar functions are available
-to imports. Structured JSON contributes atoms, not whole container serialization;
-scalar text preserves even JSON-shaped IDs. Keep this distinction in new fields.
-Blob writers publish `content_refs_json` atomically with metadata. Startup never
-reads historical blobs or schedules retries. Unindexed/unavailable old blobs
-remain inaccessible; explicit maintenance is separate from readiness. Document search inherits private comments
-and revision content before MATCH/rank/limit. Series rollups retain reference
-provenance after compaction; full adapter data deletion removes that provenance. Ambiguous preview57 ledger
-atoms are conservatively retained because compacted historical states cannot be
-reconstructed; never remove them speculatively.
-Migration 111 keys revision and revision-artifact reference edges by their
-document (`document_history` source kind). A document, its revisions and their
-artifacts share one denial outcome, so superseded revisions still constrain the
-document and every revision, but each target is stored once per document rather
-than once per revision. Triggers redirect those edge inserts; an artifact shared by
-several documents or backing a card revision keeps its own edges. A bounded maintenance cursor moves
-legacy per-revision edges after startup; never drop superseded revision targets.
-Event content and navigational `ref_edges` also commit in a single transaction.
-Filtering a linked plan suppresses its stored refs and titles, not merely live
-reference previews. Never serialize a shared maintenance error to a reader.
+Hard rules in short form:
 
-All canonical, PM and command-center database access must use
-`internal/resourceaccess` handles with the request context. Scoped SELECTs use
-canonical ownership CTEs before limits, cursors, aggregates and joins. Transaction
-loaders use the same policy. Emit only relation shadows named by the SQL, while
-keeping the complete canonical ownership graph. A mutation can skip the graph
-only after proving its denied-root set empty in that same transaction snapshot. Mutations resolve handles to canonical IDs, load
-existing targets/destinations, and bind resource identities as SQL arguments;
-the database handle checks those arguments (including encoded JSON) within the
-write transaction. Never use raw connections, contextless queries, `main.` table
-qualification, SELECTs through Exec, or literal resource IDs to bypass the scope.
-A new resource table must join the policy's ownership graph and scoped relations.
-Ancillary actor/auth/host/series/secrets readers and transactional response
-loaders must retain scoped handles too. Durable authentication/grant invariants
-may read canonical authority without returning profile or business content.
-
-Migrations 64/65 add board roles and the bounded evidence projection after main's
-authorization history. Evidence records and alias keys are registered ownership
-sources, inherit their card, and constrain that card when they reference private
-resources. Their tables and views use scoped relations before lookup limits.
-`source_refs` and metadata plans inherit through `work_metadata.metadata_json`;
-card plans inherit through `card_plans.body_json`. Inbox summary counts and pages
-the scoped `derived_inbox_items` relation in SQL. Do not add independent payload
-authorization or bypass scoped handles for these projections.
-
-`internal/storage/testdata/resource_access_storage.json` classifies every live
-column (including PM/investigation schemas, generated columns and views) and
-fingerprints persistence writers plus transitive helper callers in internal/cmd.
-New fields and changed writers require an explicit storage privacy review.
-`make access-inventory` (from the repo root) refreshes fingerprints, marks new
-fields UNCLASSIFIED and reformats the file; classify them deliberately and
-retain executable ownership/filter bindings. The field-driven regression must
-cover every indexed source/column. The inventory merges per entry rather than
-per line (`.gitattributes` plus `make install-hooks`), so two branches that
-classify different columns rebase without a conflict; a rebase that lands new
-schema still needs `make access-inventory` to refresh writer fingerprints.
-
-Keep authorization separate from lifecycle filtering. Missing records may retain
-legacy semantics, but a known inaccessible record must never be treated as
-public. Never cache visibility decisions for an SSE connection. The event stream creates
-a fresh epoch-validated read snapshot per bounded page. Its internal
-`event_stream_positions` view exposes only immutable ID/timestamp traversal
-metadata, allowing bounded progress over hidden rows. Never serialize those
-positions; payloads must load through the scoped `events` relation before decoding.
-Client resume IDs must authorize through the same event relation; hidden and
-unknown IDs seed head identically. Empty pages advance silently within a fixed
-2000-candidate chunk budget. Chunks with remaining positions continue immediately after
-yielding; hidden backlog must never add poll-timer waits to visible delivery.
-Keepalive cadence and visible-count continuation markers must never depend on hidden backlog or progress.
-The event pager alone may narrow cached denial bindings to its explicit page keys
-and batch-reference keys; parent denial propagation and the consuming statement's
-epoch fallback must remain intact. Never reuse that context for a general read.
-Agent notification receipt streams must not reload a thread's full wakeup history
-on each poll: page indexed snapshot positions, then replay the append-only update
-log. Hidden or trashed positions stay inside the connection and emit no SSE controls.
-Reuse the shared bounded denial cache for stable receipt ancestry. New isolated
-wakeup leaves check current materialized exact/prose references against that
-ancestry; cross-receipt references and every existing ownership input invalidate
-it. Payload reads validate the full authorization epoch in the consuming scoped
-statement and retain canonical fallback. Visibility replay retains its position
-across epoch changes and checks the update log before each replay page. Migration
-69 installs schema and metadata only, without copying historical receipts or
-indexing populated tables. Accepted resumes page the canonical receipt table
-through its released ordering index; the update log contains only new writes.
-Shared cached projections with inaccessible contributors are unavailable to the reader;
-a reader-filtered projection must never replace canonical derived state.
-
-`CanonicalMaintenanceContext` is restricted to namespace allocation, quota
-accounting, canonical projection/blob-ledger maintenance, shared-blob reference
-counts and purge ownership retention. Purges must retain authorization before
-deleting ownership edges; tombstoned handles remain reserved. Those paths must
-not return unfiltered record data to HTTP callers. Ordinary reads and business
-mutations must retain the request scope.
-
-Usage, rebuild results and quota-error record/blob totals must use reader scope;
-quota enforcement remains canonical. Database file bytes describe shared physical
-infrastructure, not the number or contents of accessible workspace records.
-
-The route matrix in `internal/server/testdata/resource_access_routes.json` must
-classify each exact method/path in the generated contract route inventory.
-`TestResourceAccessRouteInventory` fails on new, stale or unsupported entries.
-Mounted-route checks also compare actual registration and authentication
-classifiers; direct mux additions cannot bypass the inventory. Exemptions are
-restricted to reviewed service boundaries and exercised for data disclosure.
-Every record/collection/reference-read/reference-write/stream entry is exercised against a
-private board with a public card thread, using both a stranger and an unauthorized
-agent. Identity/transport-only exemptions require an explicit rationale. Extend
-the fixture and the scoped store/SSE regressions when adding a resource relation.
-Reference-read batches authorize each candidate through scoped loaders and may
-echo requested identities without metadata. Their JSON decoding retains text,
-size and syntax validation; reference writes retain whole-body ownership checks.
+- All canonical, PM and command-center database access uses `internal/resourceaccess` handles with the request context; scoped SELECTs use canonical ownership CTEs before limits, cursors, aggregates and joins. Never use raw connections, contextless queries, `main.` table qualification, SELECTs through Exec, or literal resource IDs to bypass the scope.
+- A new resource table must join the policy's ownership graph and scoped relations; a mutation skips the graph only after proving its denied-root set empty in the same transaction snapshot.
+- A known inaccessible record must never be treated as public, visibility decisions are never cached for an SSE connection, and streams authorize each bounded page against the current epoch with canonical fallback.
+- Maintenance paths (`CanonicalMaintenanceContext`) must not return unfiltered record data to HTTP callers, and a shared maintenance error is never serialized to a reader.
+- The route matrix in `internal/server/testdata/resource_access_routes.json` must classify each exact method/path in the generated contract route inventory; `TestResourceAccessRouteInventory` fails on new, stale or unsupported entries. Extend the fixture and the scoped store/SSE regressions when adding a resource relation.
+- `internal/storage/testdata/resource_access_storage.json` classifies every live column and fingerprints persistence writers; new fields and changed writers require an explicit storage privacy review. Refresh with `make access-inventory` (repo root) and classify new fields deliberately.
+- Do not cast user input to the internally generated `ReferenceManifest` type; its validation exemption skips text validation, never authorization.
 
 ## Host bridge presence
 

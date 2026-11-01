@@ -2,33 +2,25 @@
 
 ## Scope
 
-Root onboarding and routing guide for agents working in this monorepo.
+Root onboarding and routing guide for agents working in this monorepo. Use this file for high-level context only, then drill into the relevant module guide for the local rules, invariants, and checks that matter for your change.
 
-Use this file for high-level context only. Then drill into the relevant module guide for the local rules, invariants, and checks that matter for your change.
+- Run `make freshness` before relying on this checkout; stale checkouts mislead agents.
+- [docs/map.md](docs/map.md) is the generated map of where things live; run `make map` to regenerate it, never edit it by hand.
+- Files over 800 lines may not grow (`scripts/check-file-sizes.py`); split by concern first, then run `make file-size-baseline`.
+
+## Keeping this file short
+
+Guides hold only the rules an agent needs on every task. Past the line limit, move reference detail into docs and leave a one-line pointer saying when to read it, without being asked; `scripts/check-agent-guides.py` enforces this at commit.
 
 ## Monorepo Purpose
 
-Agent Nexus is split into a small set of modules with different jobs:
-
-- `contracts/`: canonical shared contract layer. Defines the durable API and schema boundary that every other module must honor.
-- `core/`: canonical state and evidence service. Owns durable organizational truth and evidence-safe mutations.
-- `cli/`: agent-first command-line runtime. Optimized for non-interactive, script-safe, text/JSON-friendly workflows.
-- `web-ui/`: human-operator control surface. Optimized for glanceable visibility, triage, and explicit human intervention.
-- `adapters/`: independent optional generic provider adapters.
-- `runbooks/`: operational and release guidance.
+Agent Nexus is split into modules with different jobs: `contracts/` (canonical shared contract layer that every other module must honor), `core/` (canonical state and evidence service owning durable organizational truth and evidence-safe mutations), `cli/` (agent-first, non-interactive, script-safe, text/JSON-friendly command-line runtime), `web-ui/` (human-operator control surface for glanceable visibility, triage, and explicit human intervention), `adapters/` (independent optional generic provider adapters), and `runbooks/` (operational and release guidance).
 
 ## Progressive Discovery
 
 1. Read [README.md](README.md) for repo layout and root targets.
 2. Identify blast radius: `contracts/`, `core/`, `cli/`, `web-ui/`, `adapters/`.
-3. Open the nearest relevant guide before editing behavior:
-
-- [contracts/AGENTS.md](contracts/AGENTS.md)
-- [core/AGENTS.md](core/AGENTS.md)
-- [cli/AGENTS.md](cli/AGENTS.md)
-- [web-ui/AGENTS.md](web-ui/AGENTS.md)
-- Host service: `cli/internal/bridge/`, following `cli/AGENTS.md`.
-
+3. Open the nearest relevant guide before editing behavior: [contracts/AGENTS.md](contracts/AGENTS.md), [core/AGENTS.md](core/AGENTS.md), [cli/AGENTS.md](cli/AGENTS.md), [web-ui/AGENTS.md](web-ui/AGENTS.md); for the host service in `cli/internal/bridge/`, follow `cli/AGENTS.md`.
 4. If a subdirectory has its own `AGENTS.md`, treat it as a narrower local guide that supplements, rather than replaces, the parent module guide.
 5. Plan validation from component scope outward to repo-level gates.
 
@@ -42,21 +34,9 @@ Agent Nexus is split into a small set of modules with different jobs:
 
 ### Never lose user input
 
-User-authored work must survive navigation, reload, tab close, offline periods,
-timeouts and uncertain server results. Mutation forms must autosave device-only
-drafts under workspace, principal and target keys, persist each submitted request
-before sending, and reuse its client-generated idempotency key until confirmed.
-Core must atomically record mutations and replay results; do not enable automatic
-retry on a route until its replay safety is verified. Never clear an unconfirmed
-request on error or show raw upstream response bodies as ordinary UI copy.
-Definitive failures keep the text with copy/edit actions; uncertain failures retry
-with bounded backoff. One tab drains an outbox, and sign-out/principal switches
-clear device work to prevent shared-machine disclosure. Storage failure must be
-visible and must prevent sending work that has not been persisted.
+User-authored work must survive navigation, reload, tab close, offline periods, timeouts and uncertain server results. Mutation forms must autosave device-only drafts under workspace, principal and target keys, persist each submitted request before sending, and reuse its client-generated idempotency key until confirmed. Core must atomically record mutations and replay results; do not enable automatic retry on a route until its replay safety is verified. Never clear an unconfirmed request on error or show raw upstream response bodies as ordinary UI copy. Definitive failures keep the text with copy/edit actions; uncertain failures retry with bounded backoff. One tab drains an outbox, and sign-out/principal switches clear device work to prevent shared-machine disclosure. Storage failure must be visible and must prevent sending work that has not been persisted.
 
-The rollout and current coverage are tracked in
-`web-ui/docs/durable-user-work.md`. New mutation surfaces must follow this rule;
-existing gaps are rollout work, not permission to add further bypasses.
+The rollout and current coverage are tracked in `web-ui/docs/durable-user-work.md`. New mutation surfaces must follow this rule; existing gaps are rollout work, not permission to add further bypasses.
 
 - `core` is the system of record. Durable truth lives there, not in the CLI or UI.
 - `core` may consume only a generic heartbeat publisher env contract (`ANX_HEARTBEAT_PUBLISHER_URL`, `ANX_HEARTBEAT_INTERVAL`, `ANX_HEARTBEAT_AUDIENCE`, `ANX_WORKSPACE_SERVICE_ID`, `ANX_WORKSPACE_SERVICE_PRIVATE_KEY`). This is deployment config only; do not add control-plane-specific imports, URLs, or type coupling.
@@ -75,29 +55,13 @@ existing gaps are rollout work, not permission to add further bypasses.
 
 ## Validation Ladder
 
-Run the smallest relevant checks first:
-
-- `make -C core check`
-- `make cli-check`
-- `make -C web-ui check`
-
-When contracts change:
-
-- `make contract-gen`
-- `make contract-check`
-- Before push/handoff: `make contract-check-committed` (or rely on CI)
-
-Before handoff:
-
-- `make test-fast` plus targeted tests for the behavior you changed
-- CI runs all applicable integration, browser, visual and smoke checks; `ci-ok` gates merging
+Run the smallest relevant checks first: `make -C core check`, `make cli-check`, `make -C web-ui check`. When contracts change: `make contract-gen`, then `make contract-check`, and before push/handoff `make contract-check-committed` (or rely on CI). Before handoff: `make test-fast` plus targeted tests for the behavior you changed; CI runs all applicable integration, browser, visual and smoke checks, and `ci-ok` gates merging.
 
 ## Before you open a PR
 
 - Keep the OSS repo generic: no hosted/control-plane, personal, or ecosystem-specific logic. Third-party integrations must be optional and documented; setup-specific adapters belong outside this repo.
 - List every new or changed HTTP route in the PR description so hosted deployment can classify it.
-- Run `make test-fast` plus targeted tests for what you changed. Static checks run at commit; changed-module unit tests run at push. CI runs the full suite and the required `ci-ok` check gates merging.
-- Test commands at push (Go, Vitest, e2e) run under the `scripts/slot` host cap so overlapping pushes on one machine queue instead of turning load into false failures. The cap comes from `ANX_SLOTS_TESTS`, then `~/.config/hostslots.json`, then one slot per six CPUs; set `ANX_PREPUSH_FULL=1` to push with every module's suite instead of the changed packages.
+- Run `make test-fast` plus targeted tests for what you changed. Static checks run at commit; changed-module unit tests run at push, queued under the `scripts/slot` host cap so overlapping pushes on one machine do not turn load into false failures (see [docs/agents/local-checks.md](docs/agents/local-checks.md)). CI runs the full suite and the required `ci-ok` check gates merging.
 - For `web-ui`, run only the Playwright specs you changed or affected: `pnpm -C web-ui exec playwright test <spec>`. Leave the complete browser suite to CI.
 - Write Playwright tests with `async ({}, testInfo)` destructuring, never `(fixtures, testInfo)`.
 - Contracts first: update canonical contracts before implementation, then run `make contract-gen` and `make contract-check-committed`.
@@ -109,19 +73,7 @@ Before handoff:
 
 ## Per-request cost
 
-For every new or changed read path, including streaming poll ticks, describe its
-complexity in the PR: what grows with the request/page, what grows with workspace
-size, the enforced bounds, and the indexes used before filtering and pagination.
-Run the scale gate described in `core/docs/performance.md` when changing SQL,
-authorization, projections, streams, startup, or migrations. Add a budget entry
-for new reads and justify any exact query-plan exception in the checked-in
-allowlist. Do not weaken a budget to make a regression pass.
-
-Reviewers must treat hot-path O(workspace) work as a merge-blocking P1, including
-unbounded materialization, per-row queries, full ownership/graph rebuilds, and
-read-time text/JSON scans. New or changed hot paths cannot be deferred as a performance follow-up. Existing
-main hazards may use exact, finite checked-in baselines linked to their P1 repair,
-as documented in `core/docs/performance.md`; remove those entries when repaired.
+For every new or changed read path, including streaming poll ticks, describe its per-request complexity in the PR; exactly what to cover, when to run the scale gate, and budget-entry rules are in [docs/agents/per-request-cost.md](docs/agents/per-request-cost.md). Reviewers must treat hot-path O(workspace) work as a merge-blocking P1, including unbounded materialization, per-row queries, full ownership/graph rebuilds, and read-time text/JSON scans. New or changed hot paths cannot be deferred as a performance follow-up, and budgets are never weakened to make a regression pass. Existing main hazards may use exact, finite checked-in baselines linked to their P1 repair, as documented in `core/docs/performance.md`; remove those entries when repaired.
 
 ## Fast loop
 
@@ -137,25 +89,17 @@ Match the command to the change; anything wider belongs to CI.
 
 ## Local check tiers
 
-Run `make setup` once to install dependencies and `make install-hooks` after moving a worktree. `make install-hooks` also registers the per-entry merge driver for generated JSON inventories. Hooks never download dependencies; missing tooling is a setup error. Without `.venv`, the hooks run the same checks directly with `python3` instead of failing.
+Run `make setup` once to install dependencies and `make install-hooks` after moving a worktree; hooks never download dependencies, and missing tooling is a setup error.
 
-- **Pre-commit:** `make check-static` checks staged files: formatting, Go vet/type checks, UI lint, shell/Python syntax, version metadata, OSS boundary guards when present, and actionlint for workflow edits. It regenerates contracts into scratch space, type-checks their TypeScript client, and compares generated files and mirrors to the index without rewriting your files or running tests. Untracked build inputs must be staged or moved so they cannot mask errors in the committed tree. The standalone staged check rejects unstaged tracked edits; `.venv/bin/pre-commit run --hook-stage pre-commit` safely stashes them as a commit would. `make check-routes` then reports route additions, removals and reclassifications; it is advisory and never blocks the commit. Warm-cache budget: 30 seconds. Use `make check-static STATIC_ARGS=--all` for all tracked files.
-- **Pre-push:** `make test-fast` selects work relative to the merge base with `origin/main`, including committed, staged, unstaged and untracked changes. Inside a Go module it runs the changed packages first and then every package that imports them (test imports included), so failures land early; module membership and cross-module dependents derive from the tracked go.mod `require`/`replace` links, so a change under a replaced local module (for example `tests/channels`) runs that module's own suite plus the importing packages in the modules that depend on it. web-ui runs the Vitest units related to the changed files, widening to the full unit suite when untracked web-ui files exist (the `--changed` diff never lists them). Module metadata, scripts, shared build/hook/contract roots and anything it cannot attribute to a package widen to the whole module. No merge base means every module, without fetching. When every commit since that base is an exact generated `vX.Y.Z` version bump -- the `scripts/version-managed-files.sh` list, regenerated from each parent and compared by the same detector as the CI short-circuit, over a clean working tree -- it selects nothing, because the release flow gates those commits on the source commit's CI instead. A prerelease version, a hand edit to a listed file, or any uncommitted work runs the normal selection. Use `TEST_FAST_BASE=<ref> make test-fast` to choose a base or `make test-fast TEST_FAST_ARGS=--all` (or `ANX_PREPUSH_FULL=1`) to check every module. Heavy phases (Go tests, Vitest, e2e) each take a host slot from `scripts/slot`: capacity per class comes from `ANX_SLOTS_<CLASS>`, then `~/.config/hostslots.json`, then `max(1, cpus/6)`. A slot is an flock on a per-user lock file, so a killed holder releases it immediately, and lint or generation steps never take one. Idle-machine budget: 3 minutes.
-- **CI:** the existing full integration, five-shard browser, visual, build and smoke jobs remain behind `ci-ok`. Local budgets do not remove CI coverage.
+- **Pre-commit:** `make check-static` checks staged files (formatting, Go vet/type checks, UI lint, syntax, version metadata, contracts regenerated into scratch) without rewriting your files or running tests; warm-cache budget 30 seconds, `STATIC_ARGS=--all` for all tracked files. `make check-routes` is advisory and never blocks the commit.
+- **Pre-push:** `make test-fast` selects changed work from the `origin/main` merge base; idle-machine budget 3 minutes. Heavy phases queue on the `scripts/slot` host cap; `ANX_PREPUSH_FULL=1` checks every module.
+- **CI:** the full integration, five-shard browser, visual, build and smoke jobs remain behind `ci-ok`; local budgets do not remove CI coverage.
 
-The fast runner uses the CI single-fork Vitest configuration and sets `ANX_TEST_FAST=1` to exclude the Vitest real-binary CLI conformance integration; CI runs it normally.
-
-Go tests that start the full HTTP/storage stack or real sandbox/process integrations must honor `testing.Short()`; real-binary CLI integration already uses the `integration` build tag. Run targeted full tests with `go test ./path/to/package -run TestName` (without `-short`) or `go test -tags=integration ./integration/... -run TestName` inside the module. Small in-process HTTP mocks and store unit tests remain in the fast tier. Keep Playwright in CI except the specific specs you changed or affected.
+Full tier mechanics — selection rules, the version-bump short-circuit, slot configuration and fast-tier test tagging: [docs/agents/local-checks.md](docs/agents/local-checks.md).
 
 ## References
 
-- [README.md](README.md)
-- [contracts/README.md](contracts/README.md)
-- [runbooks/release.md](runbooks/release.md)
-- [core/docs/runbook.md](core/docs/runbook.md)
-- [cli/docs/runbook.md](cli/docs/runbook.md)
-- [web-ui/docs/runbook.md](web-ui/docs/runbook.md)
-- [Host bridge](cli/docs/host-bridge.md)
+[README.md](README.md) · [contracts/README.md](contracts/README.md) · [runbooks/release.md](runbooks/release.md) · [core/docs/runbook.md](core/docs/runbook.md) · [cli/docs/runbook.md](cli/docs/runbook.md) · [web-ui/docs/runbook.md](web-ui/docs/runbook.md) · [Host bridge](cli/docs/host-bridge.md)
 
 ## Common Pitfalls
 

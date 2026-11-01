@@ -44,7 +44,7 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn := pm.Turn{ID: "r6-turn", ConversationID: conv.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, AgentActorID: machine.ActorID, Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(time.Minute)}
+	turn := pm.Turn{ID: "r6-turn", ConversationID: conv.ID, WorkspaceID: p.WorkspaceID, ActorID: p.ActorID, AgentActorID: machine.ActorID, Status: pm.Sending, Revision: 1, Deadline: time.Now().Add(15 * time.Minute)}
 	body, _ := json.Marshal(turn)
 	if _, err := db.Exec(`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, turn.ID, p.WorkspaceID, p.ActorID, conv.ID, body); err != nil {
 		t.Fatal(err)

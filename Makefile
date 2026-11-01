@@ -52,9 +52,18 @@ web-ui-static-ci: ## Same steps as CI job web-ui-static-check (frozen lockfile +
 	$(MAKE) -C $(WEB_UI_DIR) check
 	pnpm -C $(WEB_UI_DIR) run build
 
-.PHONY: check-static test-fast check-routes access-inventory
+.PHONY: check-static test-fast check-routes access-inventory file-size-baseline map freshness
 check-static: ## Offline static checks of staged changes and generated-contract drift (STATIC_ARGS=--all for all files)
 	$(PYTHON) -B scripts/git-hooks/checks.py static $(STATIC_ARGS)
+
+file-size-baseline: ## Regenerate the file-size ratchet baseline; shrink-only unless ARGS='--allow-growth "<reason>"'
+	$(PYTHON) -B scripts/check-file-sizes.py --write $(ARGS)
+
+map: ## Regenerate docs/map.md, the generated where-things-live index
+	$(PYTHON) -B scripts/gen-map.py
+
+freshness: ## Read-only session-start staleness check (behind upstream, submodule drift)
+	@./scripts/agent-freshness.sh
 
 test-fast: ## Changed-package Go -short and related Vitest units; TEST_FAST_ARGS=--all (or ANX_PREPUSH_FULL=1) checks all modules
 	$(PYTHON) -B scripts/git-hooks/checks.py fast $(TEST_FAST_ARGS)

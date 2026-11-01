@@ -190,6 +190,22 @@ class RepoTest(unittest.TestCase):
         self.assertIn(self.root / "tests/channels", vetted)
         self.assertIn(self.root / "core", vetted)
 
+    def test_legibility_guards_run_at_commit_and_fail_last(self):
+        self.write("core/a.go", "package core\n")
+        self.git("add", "core/a.go")
+        with patch.object(checks, "run") as run, patch.object(checks, "contract_drift"), \
+                patch.object(checks, "route_notice"):
+            checks.static_checks(checks.changed_paths("static"))
+        commands = [call.args for call in run.call_args_list]
+        guards = [c for c in commands if c[:2] == ("python3", "-B") and c[2].startswith(
+            ("scripts/check-file-sizes.py", "scripts/gen-map.py", "scripts/check-agent-guides.py"))]
+        # All three guards run, after every other check and before contract
+        # drift, so their failure message is the last thing shown.
+        self.assertEqual([c[2] for c in guards],
+                         ["scripts/check-file-sizes.py", "scripts/gen-map.py",
+                          "scripts/check-agent-guides.py"])
+        self.assertEqual(commands[-1], ("python3", "-B", "scripts/check-agent-guides.py"))
+
     def test_untracked_files_in_a_local_module_cannot_mask_staged_errors(self):
         self.write_local_module_fixture()
         self.write("tests/channels/telegram.go",
@@ -230,6 +246,15 @@ class RepoTest(unittest.TestCase):
         with patch.object(checks, "run") as run:
             checks.fast_tests({"core/AGENTS.md", "core/docs/runbook.md"})
         self.assertEqual(run.call_args_list, [])
+
+    def test_legibility_guard_changes_run_their_tests_at_push(self):
+        commands = self.fast_commands({"scripts/check-file-sizes.py"})
+        self.assertIn(("python3", "-B", "-m", "unittest", "scripts/tests/test_check_file_sizes.py",
+                       "scripts/tests/test_gen_map.py", "scripts/tests/test_check_agent_guides.py"),
+                      commands)
+        self.assertIn(("bash", "scripts/tests/test_agent_freshness.sh"), commands)
+        # Nothing else in the repo selects a module for a scripts-only change.
+        self.assertFalse(any(c[:2] == ("go", "test") for c in commands))
 
     def test_ui_runs_related_tests_only_for_attributable_changes(self):
         related = ("pnpm", "-C", "web-ui", "exec", "vitest", "run", "--changed", "abc123",

@@ -32,6 +32,14 @@ ROUTE_INVENTORY = "contracts/gen/meta/routes.json"
 # The release-managed version files, and the detector CI uses to confirm a bump.
 VERSION_MANAGED_LIST = "scripts/version-managed-files.sh"
 RELEASE_BASE_DETECTOR = "scripts/ci-release-base.py"
+# The legibility guards and their tests, run together at push when any moves.
+LEGIBILITY_GUARDS = {
+    "scripts/check-file-sizes.py", "scripts/file-size-baseline.json",
+    "scripts/gen-map.py", "docs/map.md", "scripts/check-agent-guides.py",
+    "scripts/agent-freshness.sh", ".claude/settings.json",
+    "scripts/tests/test_check_file_sizes.py", "scripts/tests/test_gen_map.py",
+    "scripts/tests/test_check_agent_guides.py", "scripts/tests/test_agent_freshness.sh",
+}
 
 
 def git(*args):
@@ -483,7 +491,8 @@ def static_checks(changed, all_files=False):
                     {".md", ".yaml", ".yml", ".json", ".js", ".mjs", ".cjs", ".css", ".svelte", ".ts"}
                     and not p.startswith(("contracts/", "cli/internal/registry/",
                                           "cli/docs/generated/", "web-ui/src/lib/generated/"))
-                and p != "mcp/docs/tool-coverage.md"]  # Verified byte-for-byte by check-tool-policy below.
+                and p != "mcp/docs/tool-coverage.md"  # Verified byte-for-byte by check-tool-policy below.
+                and p != "docs/map.md"]  # Verified byte-for-byte by gen-map.py --check below.
     if format_files:
         run("pnpm", "-C", "web-ui", "exec", "prettier", "--check",
             *["../" + p for p in format_files])
@@ -520,6 +529,11 @@ def static_checks(changed, all_files=False):
         if not (ROOT / ".bin/actionlint").is_file():
             raise RuntimeError("Missing .bin/actionlint; run make setup before committing workflows.")
         run(ROOT / ".bin/actionlint")
+    # Repo-wide legibility guards, placed last so their failures are the final
+    # thing a committer reads. Together they stay under about a second.
+    run("python3", "-B", "scripts/check-file-sizes.py")
+    run("python3", "-B", "scripts/gen-map.py", "--check")
+    run("python3", "-B", "scripts/check-agent-guides.py")
     contract_drift(staged=not all_files)
     route_notice()
 
@@ -665,6 +679,10 @@ def fast_tests(changed, base=None):
     if any(p in {"scripts/slot", "scripts/tests/test_slot.py",
                  "scripts/git-hooks/checks.py"} for p in changed):
         run("python3", "-B", "-m", "unittest", "scripts/tests/test_slot.py")
+    if changed & LEGIBILITY_GUARDS:
+        run("python3", "-B", "-m", "unittest", "scripts/tests/test_check_file_sizes.py",
+            "scripts/tests/test_gen_map.py", "scripts/tests/test_check_agent_guides.py")
+        run("bash", "scripts/tests/test_agent_freshness.sh")
     if any(p.startswith(("contracts/", "scripts/contract-", "core/cmd/contract-gen/",
                          "core/cmd/route-inventory/")) or p == "scripts/check-enum-conformance.mjs"
            for p in changed):
