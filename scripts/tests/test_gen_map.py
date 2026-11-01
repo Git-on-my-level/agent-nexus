@@ -10,6 +10,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+# A git hook exports GIT_DIR and friends, which would point the checkers' own
+# git calls at the real repository instead of these fixtures.
+for _name in [name for name in os.environ if name.startswith("GIT_")]:
+    del os.environ[_name]
+
 
 spec = importlib.util.spec_from_file_location(
     "gen_map", Path(__file__).resolve().parents[1] / "gen-map.py")
