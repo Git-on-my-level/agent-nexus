@@ -3935,3 +3935,20 @@ func computeRevisionHash(contentHash, prevRevisionHash, documentID string, revis
 	fmt.Fprintf(h, "created_by:%s\n", createdBy)
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// mutationTxBegin is a seam only so tests can cancel between the moment a
+// mutation's transaction takes the workspace writer and its first statement;
+// production always begins directly.
+var mutationTxBegin = func(ctx context.Context, db *accessDB) (*accessTx, error) {
+	return db.BeginTx(ctx, nil)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
