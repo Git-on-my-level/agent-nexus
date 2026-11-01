@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -327,4 +328,12 @@ func uniqueNonEmptyStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func defaultMetaCommandsPathCandidates() []string {
+	return []string{
+		"../contracts/gen/meta/commands.json",
+		filepath.Join("..", "..", "..", "contracts", "gen", "meta", "commands.json"),
+		filepath.Join("contracts", "gen", "meta", "commands.json"),
+	}
 }
