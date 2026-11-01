@@ -1,3 +1,8 @@
+// The `anx human` attention command: usage, escalation request parsing and
+// dispatch (runHumanAttentionCommand), subject grounding, and brief deadline
+// counting. Ask-template validation lives in human_ask_templates.go, shared
+// argv helpers in command_args.go.
+
 package app
 
 import (
@@ -723,62 +728,6 @@ func splitTypedRef(ref string) (prefix string, id string, err error) {
 		return "", "", fmt.Errorf("typed ref %q must be in \"<prefix>:<value>\" form", ref)
 	}
 	return strings.TrimSpace(ref[:idx]), strings.TrimSpace(ref[idx+1:]), nil
-}
-
-func uniqueStringsInOrder(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func splitLeadingPositionals(args []string) (leading []string, rest []string) {
-	leading = make([]string, 0, len(args))
-	for idx, arg := range args {
-		if strings.HasPrefix(strings.TrimSpace(arg), "-") {
-			return leading, args[idx:]
-		}
-		leading = append(leading, arg)
-	}
-	return leading, []string{}
-}
-
-func hasAskTemplate(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--template" || strings.HasPrefix(arg, "--template=") {
-			return true
-		}
-		// String flag values can themselves be "--template". Leave unknown flags
-		// to normal usage validation; the only boolean authoring flags are below.
-		if strings.HasPrefix(arg, "--") && !strings.Contains(arg, "=") && arg != "--force" && arg != "--dry-run" && arg != "--preview" {
-			i++
-		}
-	}
-	return false
-}
-func validateAskTemplate(args []string) error {
-	if (len(args) == 2 && args[0] == "--template" && args[1] == "decision") || (len(args) == 1 && args[0] == "--template=decision") {
-		return nil
-	}
-	return errnorm.Usage("invalid_flags", "usage: anx ask --template decision (prints Markdown; cannot combine with publishing flags)")
-}
-func askAuthoringWarnings(warnings []string) []output.Warning {
-	out := make([]output.Warning, 0, len(warnings))
-	for _, warning := range warnings {
-		out = append(out, output.Warning{Code: "ask_authoring", Message: warning})
-	}
-	return out
 }
 
 // briefDeadlineDecisions counts open decisions with a decide_by in one brief.v1
