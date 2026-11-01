@@ -25,6 +25,7 @@ func askBatchUsageText() string {
 Files 2-10 related asks as one batch. The human inbox shows ONE item with one decision section per ask and a single submit; every answer records atomically and releases together to each ask's delivery mode.
 asks.json holds {"asks":[...]} where each entry accepts title (required), situation, impact, recommendation {action,why} (required by lint), alternatives [{action,consequence}], if_no_answer, details, body, subject_ref, thread_id, refs, recommend (required), alts, request_id, coverage_hint, evidence [{label,url}], supersedes, and a per-ask delivery override. A top-level "delivery" is the default mode. "-" reads the JSON from stdin.
 Every ask passes the same authoring lint as ` + "`anx ask`" + ` (--force --reason overrides it for the whole batch), and all asks must share one backing thread.
+Repeats: a batch whose asks are all open or answered on the card returns them instead of filing again, so retrying is safe. If only some are, nothing is filed. --again files a new batch when the facts changed.
 Follow-up: anx inbox list --status answered, or anx await --answers for batch delivery.
 `)
 }
@@ -51,6 +52,7 @@ type askBatchEntry struct {
 
 	proposals      []any               `json:"-"`
 	decided        askDeliveryDecision `json:"-"`
+	deliveryInput  askDeliveryInput    `json:"-"`
 	eventID        string              `json:"-"`
 	thread         string              `json:"-"`
 	subject        string              `json:"-"`
@@ -70,6 +72,7 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		forceFlag    trackedBool
 		reasonFlag   trackedString
 		dryRunFlag   trackedBool
+		againFlag    trackedBool
 		actorIDFlag  trackedString
 		onAnswerFlag trackedString
 	)
@@ -80,6 +83,7 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 	fs.Var(&reasonFlag, "reason", "Recorded authoring override reason")
 	fs.Var(&actorIDFlag, "actor-id", "Actor id for the batch author")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render the batch without sending it")
+	fs.Var(&againFlag, "again", "File a new batch even though these questions are already open or answered on the card")
 	if err := fs.Parse(args); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -149,6 +153,12 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		}
 	}
 
+	if !againFlag.value && !dryRunFlag.value {
+		if repeat, err := a.repeatedAskBatch(ctx, cfg, entries, sharedThread); repeat != nil || err != nil {
+			return repeat, err
+		}
+	}
+
 	members := make([]map[string]any, 0, len(entries))
 	for index := range entries {
 		members = append(members, a.buildAskBatchMember(&entries[index]))
@@ -205,12 +215,16 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 	}
 	result.Warnings = append(result.Warnings, askBatchWarnings(entries)...)
 	if registrationFailures > 0 {
-		result.Warnings = append(result.Warnings, output.Warning{
-			Code:    "registration_failed",
-			Message: fmt.Sprintf("%d ask(s) were created but their resume registration failed; delivery falls back to anx inbox list --status answered", registrationFailures),
-		})
+		result.Warnings = append(result.Warnings, askBatchRegistrationWarning(registrationFailures))
 	}
 	return result, nil
+}
+
+func askBatchRegistrationWarning(failures int) output.Warning {
+	return output.Warning{
+		Code:    "registration_failed",
+		Message: fmt.Sprintf("%d ask(s) were created but their resume registration failed; delivery falls back to anx inbox list --status answered", failures),
+	}
 }
 
 const askBatchMinMembers = 2
@@ -388,13 +402,14 @@ func (a *App) prepareAskBatchEntry(
 	if strings.TrimSpace(onAnswer) == "" {
 		onAnswer = onAnswerFlag.value
 	}
-	decision, err := a.resolveAskDelivery(cfg, askDeliveryInput{
+	entry.deliveryInput = askDeliveryInput{
 		Explicit:     explicitDelivery,
 		ExplicitSet:  explicitSet,
 		OnAnswer:     onAnswer,
 		OnAnswerFlag: strings.TrimSpace(onAnswer) != "",
 		AskID:        entry.eventID,
-	})
+	}
+	decision, err := a.resolveAskDelivery(cfg, entry.deliveryInput)
 	if err != nil {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %v", index, err))
 	}
