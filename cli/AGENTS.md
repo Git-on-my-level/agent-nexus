@@ -94,6 +94,7 @@ If an old command path conflicts with this model, prefer a clean replacement and
 - Command behavior changes should preserve command identity, compatibility expectations, and output invariants unless an intentional contract change is being made.
 - Auth, host identity, transport, output, and streaming changes should be reviewed for automation safety first, then for default text clarity.
 - Dogfood-only workflow rules belong in narrower local guides such as [dogfood/pi/AGENTS.md](dogfood/pi/AGENTS.md).
+- Adding result actions: add command side effect classification in `internal/app/output_contract.go` and generated command classification in `internal/registry/registry.go`. Add bounded, concrete result-state rules to `deriveNextActions`: inspect the flattened result, require a real ref or cursor, and construct exact argv accepted by the parser. Include `mutates` and `side_effect_class` through the shared `action` constructor. Add error repairs to `deriveErrorActions`, warnings to `resultWarnings`, and verify both JSON and text projection. Never infer a target from a title or a partial ref.
 
 ## Validation
 
@@ -105,30 +106,14 @@ If an old command path conflicts with this model, prefer a clean replacement and
 
 ## Maintenance Guidance
 
-- Keep this file centered on agent ergonomics, runtime boundaries, and stable output rules.
-- Put exhaustive command examples and refactor notes in runbooks or generated docs, not here.
+- Keep this file centered on agent ergonomics, runtime boundaries, and stable output rules; put exhaustive command examples and refactor notes in runbooks or generated docs, not here.
 - Update this guide when CLI behavior changes in ways that affect automation assumptions.
-
-## Adding result actions
-
-Add command side effect classification in `internal/app/output_contract.go` and generated command classification in `internal/registry/registry.go`. Add bounded, concrete result-state rules to `deriveNextActions`: inspect the flattened result, require a real ref or cursor, and construct exact argv accepted by the parser. Include `mutates` and `side_effect_class` through the shared `action` constructor. Add error repairs to `deriveErrorActions`, warnings to `resultWarnings`, and verify both JSON and text projection. Never infer a target from a title or a partial ref.
 
 ## Host bridge
 
-One canonical OS-user service and lock under `~/.config/anx/bridge` cover all
-registered workspace/agent jobs. `bridge add` pins identities and credential roots;
-run never creates per-agent units. Preserve legacy resume namespaces in place.
-Test install and migration only with temporary HOME and fake service managers.
-Never infer wake coverage from an answer consumer or a live host alone.
+One canonical OS-user service and lock under `~/.config/anx/bridge` cover all registered workspace/agent jobs; `bridge add` pins identities and credential roots, and run never creates per-agent units. Full install, migration, rollback-executor, presence and file-transport contracts: [docs/host-bridge.md](docs/host-bridge.md) and [docs/file-transport.md](docs/file-transport.md).
 
-Restored per-agent `bridge run` argv remain runnable as answers-only rollback
-executors. They share the host service's namespace consumer lock and publish no
-host heartbeat. New units clear `ANX_AS`; preserve this rollback path while the
-installer restores original legacy units on failure.
-
-File jobs are independently opt-in through `sync enable` with canonical cards and
-pinned enrollment. Producers receive only the mounted outbox, never credentials,
-intake or frozen state. Preserve producer UUIDs, original bytes and replay keys;
-remove denied cards from generated mirrors and clear all caches on identity denial.
-Test sandbox delivery against a fresh
-core with sandbox-exec/bubblewrap; never install the real host service for tests.
+- Preserve legacy resume namespaces in place. Restored per-agent `bridge run` argv remain runnable as answers-only rollback executors; new units clear `ANX_AS`, and the installer restores original legacy units on failure.
+- Never infer wake coverage from an answer consumer or a live host alone.
+- File jobs are independently opt-in through `sync enable` with canonical cards and pinned enrollment. Producers receive only the mounted outbox, never credentials, intake or frozen state; preserve producer UUIDs, original bytes and replay keys, remove denied cards from generated mirrors, and clear all caches on identity denial.
+- Test install and migration only with temporary HOME and fake service managers; test sandbox delivery against a fresh core with sandbox-exec/bubblewrap. Never install the real host service for tests.

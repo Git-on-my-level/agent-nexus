@@ -88,6 +88,8 @@ Treat **Command (⌘) and Control (Ctrl)** as equivalent for modifier shortcuts:
 
 **Decide answers:** `DecisionCard` (shared by `/decide`, `/decide/{id}` and the initiative page) sends through `lib/inboxResponseQueue.js` (undo window) rather than calling `respondInboxItem` directly; its reply `<form>` uses Layer A. `j`/`k` move focus between rows and `c` copies the focused row's ref.
 
+## Validation
+
 - `make -C web-ui check`
 - `./scripts/test`
 - Add or update unit and e2e coverage for affected operator flows.
