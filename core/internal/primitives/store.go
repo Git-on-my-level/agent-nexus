@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -323,4 +324,49 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func anyStringValue(raw any) string {
+	text, _ := raw.(string)
+	return strings.TrimSpace(text)
+}
+
+func decodeStoredJSONList(raw string, field string) ([]string, error) {
+	values := make([]string, 0)
+	if strings.TrimSpace(raw) == "" {
+		return values, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", field, err)
+	}
+	if values == nil {
+		values = []string{}
+	}
+	return values, nil
+}
+
+func nullableString(raw string) sql.NullString {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: raw, Valid: true}
+}
+
+func nullStringValue(raw sql.NullString) string {
+	if !raw.Valid {
+		return ""
+	}
+	return strings.TrimSpace(raw.String)
+}
+
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	// Match unique-index failures only. A trigger RAISE(ABORT, ...) is also
+	// reported as "constraint failed" and must stay an internal error so the
+	// handler logs the chain.
+	return strings.Contains(text, "unique constraint")
 }
