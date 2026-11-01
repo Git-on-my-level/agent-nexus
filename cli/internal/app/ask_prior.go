@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 	"agent-nexus-cli/internal/output"
 )
 
@@ -27,22 +29,33 @@ func askQuestionKey(title string) string {
 
 func askLifecycleNames(ev, ask map[string]any) bool {
 	payload := asMap(ev["payload"])
-	names := []string{"event:" + anyString(ask["id"]), anyString(ask["ref"])}
+	names := []string{"event:" + anyString(ask["id"])}
+	// An absent ref must not match an event that names no ask.
+	if ref := anyString(ask["ref"]); ref != "" {
+		names = append(names, ref)
+	}
 	if slices.Contains(names, anyString(payload["request_event_ref"])) || slices.Contains(names, "event:"+anyString(payload["request_event_id"])) {
 		return true
 	}
 	return slices.Contains(names, responseAskID(payload))
 }
 
-// findPriorAsk reads events newest first. Prior-ask lookup is advisory: a failed
-// read must not stop an agent reaching a human, so it reports nothing found.
 func (a *App) findPriorAsk(ctx context.Context, cfg config.Resolved, threadID, title string) *priorAsk {
+	return priorAskIn(a.priorAskEvents(ctx, cfg, threadID), title)
+}
+
+// priorAskEvents reads events newest first. Prior-ask lookup is advisory: a failed
+// read must not stop an agent reaching a human, so it reports nothing found.
+func (a *App) priorAskEvents(ctx context.Context, cfg config.Resolved, threadID string) []any {
 	path := "/events?thread_id=" + url.QueryEscape(threadID) + "&type=human_attention_requested,human_attention_responded,human_attention_withdrawn,human_attention_retired,human_attention_reopened,human_attention_revised&limit=" + askPriorEventLimit
 	result, err := a.invokeRawJSON(ctx, cfg, "ask prior", "GET", path, nil)
 	if err != nil {
 		return nil
 	}
-	events := asSlice(commandResultBody(result)["events"])
+	return asSlice(commandResultBody(result)["events"])
+}
+
+func priorAskIn(events []any, title string) *priorAsk {
 	want := askQuestionKey(title)
 	revisedTitles := map[string]string{}
 	var replaced []string
@@ -117,6 +130,73 @@ func priorAskResult(prior *priorAsk, subjectRef, kind string) *commandResult {
 		Warnings:    []output.Warning{askWarning("ask_already_open", "this question on this card is already open; nothing new was filed", []string{"anx", "await", prior.ref})},
 		NextActions: []output.NextAction{action("Wait for the answer", "anx", "await", prior.ref)},
 	}
+}
+
+// repeatedAskBatch answers a batch already on the card without filing it twice.
+// The server files a batch atomically, so a retry after a lost response finds every
+// ask. Finding only some means the batch changed, and filing the rest would hide
+// that from the agent, so nothing is filed until it decides. A nil result means none
+// of the asks exist yet.
+func (a *App) repeatedAskBatch(ctx context.Context, cfg config.Resolved, entries []askBatchEntry, threadID string) (*commandResult, error) {
+	events := a.priorAskEvents(ctx, cfg, threadID)
+	priors := make([]*priorAsk, len(entries))
+	repeated := []string{}
+	for index := range entries {
+		if priors[index] = priorAskIn(events, entries[index].Title); priors[index] != nil {
+			repeated = append(repeated, fmt.Sprintf("asks[%d] is %s", index, priors[index].ref))
+		}
+	}
+	if len(repeated) == 0 {
+		return nil, nil
+	}
+	if len(repeated) < len(entries) {
+		return nil, errnorm.Usage("invalid_request", "nothing was filed: "+strings.Join(repeated, ", ")+" already on this card; remove them from the batch, or pass --again if the facts changed")
+	}
+	result := &commandResult{}
+	askViews := make([]map[string]any, 0, len(entries))
+	registrationFailures := 0
+	for index := range entries {
+		entry, prior := &entries[index], priors[index]
+		repeat := priorAskResult(prior, entry.subject, "ask")
+		for _, warning := range repeat.Warnings {
+			warning.Message = fmt.Sprintf("asks[%d]: %s", index, warning.Message)
+			result.Warnings = append(result.Warnings, warning)
+		}
+		result.NextActions = append(result.NextActions, repeat.NextActions...)
+		view := asMap(repeat.Data)
+		delete(view, "event")
+		view["title"] = entry.Title
+		askViews = append(askViews, view)
+		// Another agent's ask delivers to that agent, so this call has nothing to report.
+		if cfg.ActorID == "" || anyString(asMap(prior.event["payload"])["requester_actor_id"]) != cfg.ActorID {
+			continue
+		}
+		// The lost response may have cost the resume registration too, and only this
+		// retry can restore it.
+		entry.deliveryInput.AskID = strings.TrimPrefix(prior.ref, "event:")
+		decided, err := a.resolveAskDelivery(cfg, entry.deliveryInput)
+		if err != nil {
+			return nil, errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %v", index, err))
+		}
+		entry.decided = decided
+		view["delivery"] = askDeliveryResultView(decided, prior.ref)
+		if decided.Mode == askDeliveryResume && prior.response == nil {
+			if err := a.registerAskBatchResume(ctx, cfg, entry, prior.ref); err != nil {
+				registrationFailures++
+				view["registration_error"] = err.Error()
+			}
+		}
+	}
+	if registrationFailures > 0 {
+		result.Warnings = append(result.Warnings, askBatchRegistrationWarning(registrationFailures))
+	}
+	result.Data = map[string]any{
+		"batch_id":  anyString(asMap(priors[0].event["payload"])["batch_id"]),
+		"ask_count": len(askViews),
+		"asks":      askViews,
+		"created":   false,
+	}
+	return result, nil
 }
 
 // priorRulings warns about decisions already recorded on the subject, which is

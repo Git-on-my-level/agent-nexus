@@ -159,7 +159,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 			"from-file": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
 			"on-answer": {kind: preflightFlagString}, "force": {kind: preflightFlagBool},
 			"reason": {kind: preflightFlagString}, "actor-id": {kind: preflightFlagString},
-			"dry-run": {kind: preflightFlagBool},
+			"dry-run": {kind: preflightFlagBool}, "again": {kind: preflightFlagBool},
 		})
 	}
 	if isWorkTreeCommand(args) {
