@@ -53,6 +53,10 @@ func newGrantExchangeHarness(t *testing.T, extra ...HandlerOption) grantExchange
 			append([]HandlerOption{
 				WithAuthStore(auth.NewStore(workspace.DB())),
 				WithWorkspaceHumanGrantVerifier(subjectGrantVerifier{}),
+				// Production budgets at slower refill: these tests assert the bursts, and at
+				// the real rates a loaded host refills a bucket mid-test.
+				WithWorkspaceGrantRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1, AuthBurst: 10, WriteRequestsPerMinute: 1, WriteBurst: 1}),
+				WithWorkspaceGrantSubjectRateLimits(RouteRateLimits{AuthRequestsPerMinute: 1, AuthBurst: defaultWorkspaceGrantSubjectBurst, WriteRequestsPerMinute: 1, WriteBurst: 1}),
 			}, extra...)...,
 		),
 		db: workspace.DB(),
