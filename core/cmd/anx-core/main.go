@@ -1,15 +1,17 @@
+// anx-core binary entrypoint: flag and environment wiring, server assembly,
+// startup, and shutdown. The deployment default constants sit beside main()
+// because main is their only reader. Support pieces live in scheduler.go,
+// healthcheck_cli.go, env_config.go, dev_auth_bypass.go, and pm_config.go.
+
 package main
 
 import (
-	"agent-nexus-core/internal/delivery"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -27,6 +29,7 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/heartbeat"
 	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/observation"
@@ -64,10 +67,6 @@ const (
 	defaultWriteRouteRateLimitPerMinute       = 1200
 	defaultWriteRouteRateBurst                = 200
 )
-
-// Local-only marker that must exist in the workspace root before the passkey
-// dev bypass (synthetic human onboarding) is honored.
-const devPasskeyBypassMarkerName = ".anx-dev-insecure-auth"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -928,242 +927,6 @@ func main() {
 	}
 }
 
-// authRowPurgeTimeout bounds one auth row purge run; batches commit
-// individually, so a run cut short keeps what it deleted.
-const authRowPurgeTimeout = 5 * time.Minute
-
-// runEvery runs fn once per interval, each run bounded by timeout.
-func runEvery(ctx context.Context, interval time.Duration, timeout time.Duration, fn func(context.Context)) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			runCtx, cancel := context.WithTimeout(ctx, timeout)
-			fn(runCtx)
-			cancel()
-		}
-	}
-}
-
-func runDailyAtUTC(ctx context.Context, hour int, minute int, fn func(context.Context)) {
-	if fn == nil {
-		return
-	}
-	timer := time.NewTimer(durationUntilNextUTCRun(time.Now().UTC(), hour, minute))
-	defer timer.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-			runCtx, cancel := context.WithTimeout(ctx, time.Minute)
-			fn(runCtx)
-			cancel()
-			timer.Reset(durationUntilNextUTCRun(time.Now().UTC(), hour, minute))
-		}
-	}
-}
-
-func durationUntilNextUTCRun(now time.Time, hour int, minute int) time.Duration {
-	now = now.UTC()
-	next := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
-	if !next.After(now) {
-		next = next.Add(24 * time.Hour)
-	}
-	return next.Sub(now)
-}
-
-// runHealthcheckCLI performs an HTTP GET to /livez for the configured listen address.
-// Used by container HEALTHCHECK (distroless images have no curl).
-func runHealthcheckCLI() int {
-	addr := strings.TrimSpace(os.Getenv("ANX_LISTEN_ADDR"))
-	if addr == "" {
-		host := strings.TrimSpace(os.Getenv("ANX_HOST"))
-		if host == "" {
-			host = defaultHost
-		}
-		port := defaultPort
-		if portStr := strings.TrimSpace(os.Getenv("ANX_PORT")); portStr != "" {
-			parsed, err := strconv.Atoi(portStr)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "healthcheck: invalid ANX_PORT %q: %v\n", portStr, err)
-				return 1
-			}
-			port = parsed
-		}
-		addr = net.JoinHostPort(host, strconv.Itoa(port))
-	}
-	if strings.Contains(addr, "://") {
-		fmt.Fprintln(os.Stderr, "healthcheck: ANX_LISTEN_ADDR must be host:port, not a URL")
-		return 1
-	}
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "healthcheck: parse listen address %q: %v\n", addr, err)
-		return 1
-	}
-	// When the server binds 0.0.0.0 or ::, dialing that address from the client is
-	// unreliable inside containers; use loopback for the probe instead.
-	dialHost := host
-	switch host {
-	case "0.0.0.0", "":
-		dialHost = "127.0.0.1"
-	case "::":
-		dialHost = "::1"
-	}
-	url := "http://" + net.JoinHostPort(dialHost, portStr) + "/livez"
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "healthcheck: build request: %v\n", err)
-		return 1
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: %v\n", url, err)
-		return 1
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(os.Stderr, "healthcheck: GET %s: status %d\n", url, resp.StatusCode)
-		return 1
-	}
-	return 0
-}
-
-func envString(name string, fallback string) string {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-	return value
-}
-
-func envCSV(name string) []string {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return nil
-	}
-	parts := strings.Split(value, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		values = append(values, part)
-	}
-	return values
-}
-
-func envInt(name string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
-		os.Exit(1)
-	}
-	return parsed
-}
-
-func envInt64(name string, fallback int64) int64 {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid integer value for %s: %q\n", name, value)
-		os.Exit(1)
-	}
-	return parsed
-}
-
-func envDuration(name string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid duration value for %s: %q\n", name, value)
-		os.Exit(1)
-	}
-	return parsed
-}
-
-func envBool(name string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.ParseBool(value)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "invalid boolean value for %s: %q\n", name, value)
-		os.Exit(1)
-	}
-	return parsed
-}
-
-func validateDevAuthBypassConfig(addr string, enableDevActorMode bool, allowUnauthenticatedWrites bool) error {
-	if !enableDevActorMode && !allowUnauthenticatedWrites {
-		return nil
-	}
-	if strings.TrimSpace(os.Getenv("ANX_HOSTED_DEV_MODE")) != "1" {
-		return fmt.Errorf("ANX_ENABLE_DEV_ACTOR_MODE and ANX_ALLOW_UNAUTHENTICATED_WRITES are local-only bypasses; set ANX_HOSTED_DEV_MODE=1 and bind anx-core to loopback for deliberate local development")
-	}
-	if !isLoopbackListenAddress(addr) {
-		return fmt.Errorf("ANX_ENABLE_DEV_ACTOR_MODE and ANX_ALLOW_UNAUTHENTICATED_WRITES require a loopback listen address; got %q", addr)
-	}
-	return nil
-}
-
-func isLoopbackListenAddress(addr string) bool {
-	addr = strings.TrimSpace(addr)
-	if addr == "" || strings.Contains(addr, "://") {
-		return false
-	}
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return false
-	}
-	host = strings.Trim(strings.TrimSpace(host), "[]")
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
-
-func defaultCoreBaseURL(addr string) string {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return "http://127.0.0.1:8000"
-	}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "http://" + addr
-	}
-	host = strings.Trim(strings.TrimSpace(host), "[]")
-	switch host {
-	case "", "0.0.0.0", "::":
-		host = "127.0.0.1"
-	}
-	return "http://" + net.JoinHostPort(host, port)
-}
-
 func asMapAny(value any) map[string]any {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -1180,24 +943,4 @@ func asMapAny(value any) map[string]any {
 		return map[string]any{}
 	}
 	return decoded
-}
-
-func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
-// configuredPMActor warns once at startup while leaving read-only PM records available.
-func configuredPMActor(stderr io.Writer) string {
-	actor := envString("ANX_PM_AGENT_ACTOR_ID", "")
-	if actor == "" {
-		fmt.Fprintln(stderr, "WARNING: ANX_PM_AGENT_ACTOR_ID is empty; select a local PM with anx --as pm pm install on your computer")
-	}
-	return actor
 }

@@ -3,8 +3,11 @@ package server
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
+
+	contractenums "agent-nexus-contracts-go-client/enums"
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/handles"
@@ -370,4 +373,229 @@ func setAddBoardCardRawSummary(raw map[string]any, summary string) {
 	if _, exists := raw["summary"]; exists {
 		raw["summary"] = summary
 	}
+}
+func validateBoardCardCreateRequest(cardID, parentThreadID, legacyThreadID, columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID string, pinnedDocumentID *string) error {
+	if strings.TrimSpace(parentThreadID) != "" {
+		return errors.New("parent_thread must not be set on board card create; use related_refs with a thread ref instead")
+	}
+	if strings.TrimSpace(legacyThreadID) != "" {
+		return errors.New("thread_id must not be set on board card create")
+	}
+	if strings.TrimSpace(beforeThreadID) != "" || strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id must not be set on board card create; use before_card_id / after_card_id")
+	}
+	if cardID = strings.TrimSpace(cardID); cardID != "" {
+		if strings.Contains(cardID, "/") || strings.Contains(cardID, `\`) {
+			return errors.New("card_id contains invalid path characters")
+		}
+	}
+	if strings.TrimSpace(columnKey) != "" {
+		if !contractenums.IsBoardColumnKey(strings.TrimSpace(columnKey)) {
+			return errors.New("column_key must be one of: " + strings.Join(contractenums.BoardColumnKeyValues, ", "))
+		}
+	}
+	if strings.TrimSpace(beforeCardID) != "" && strings.TrimSpace(afterCardID) != "" {
+		return errors.New("before_card_id and after_card_id are mutually exclusive")
+	}
+	if strings.TrimSpace(beforeThreadID) != "" && strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id are mutually exclusive")
+	}
+	if pinnedDocumentID != nil {
+		value := strings.TrimSpace(*pinnedDocumentID)
+		if value != "" {
+			if err := validateDocumentID(value); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parseBoardCardPatchInput(w http.ResponseWriter, patch map[string]any) (primitives.UpdateBoardCardInput, []string, bool) {
+	if patch == nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "patch is required")
+		return primitives.UpdateBoardCardInput{}, nil, false
+	}
+	if rejectMixedBoardCardPatchAliases(w, patch) {
+		return primitives.UpdateBoardCardInput{}, nil, false
+	}
+
+	var (
+		input         primitives.UpdateBoardCardInput
+		changedFields []string
+	)
+	appendChanged := func(field string) {
+		changedFields = append(changedFields, field)
+	}
+	for field, raw := range patch {
+		switch field {
+		case "board_id", "board_ref", "column_key", "rank":
+			writeError(w, http.StatusBadRequest, "invalid_request", "patch."+field+" is not writable; use the move endpoint for board placement changes")
+			return primitives.UpdateBoardCardInput{}, nil, false
+		case "title":
+			value := strings.TrimSpace(anyString(raw))
+			if value == "" {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.title must not be empty")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.Title = &value
+			appendChanged(field)
+		case "summary":
+			value := strings.TrimSpace(anyString(raw))
+			input.Body = &value
+			appendChanged("summary")
+		case "parent_thread", "thread_id":
+			writeError(w, http.StatusBadRequest, "invalid_request", "patch."+field+" is not writable; use related_refs for associations")
+			return primitives.UpdateBoardCardInput{}, nil, false
+		case "assignee_refs":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee_refs must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			for _, ref := range uniqueSortedStrings(value) {
+				if actors.IsReservedServiceActorAssigneeRef(ref) {
+					writeError(w, http.StatusBadRequest, "invalid_request", "patch.assignee_refs must not include the reserved system actor")
+					return primitives.UpdateBoardCardInput{}, nil, false
+				}
+			}
+			if len(value) == 0 {
+				empty := ""
+				input.Assignee = &empty
+			} else {
+				// The first ref is the selected accountable owner. Sorting the
+				// list can silently keep an old owner instead of applying the choice.
+				input.Assignee = assigneeStorageStringFromRefs(value)
+			}
+			appendChanged("assignee_refs")
+		case "due_at":
+			value := strings.TrimSpace(anyString(raw))
+			input.DueAt = &value
+			appendChanged(field)
+		case "definition_of_done":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.definition_of_done must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.DefinitionOfDone = &value
+			appendChanged(field)
+		case "resolution":
+			value := strings.TrimSpace(anyString(raw))
+			if value != "" {
+				if err := validateCardResolution(value, false); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					return primitives.UpdateBoardCardInput{}, nil, false
+				}
+			}
+			input.Resolution = &value
+			appendChanged(field)
+		case "resolution_refs":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.resolution_refs must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.ResolutionRefs = &value
+			appendChanged(field)
+		case "related_refs":
+			value, err := extractStringSlice(raw)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.related_refs must be a list of strings")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			sorted := uniqueSortedStrings(value)
+			input.Refs = &sorted
+			appendChanged("related_refs")
+		case "document_ref":
+			ref := strings.TrimSpace(anyString(raw))
+			idPtr, err := pinnedDocumentIDFromTypedRef(ref)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.PinnedDocumentID = idPtr
+			appendChanged("document_ref")
+		case "risk":
+			value := strings.TrimSpace(anyString(raw))
+			switch value {
+			case "low", "medium", "high", "critical":
+			default:
+				writeError(w, http.StatusBadRequest, "invalid_request", "patch.risk must be one of: low, medium, high, critical")
+				return primitives.UpdateBoardCardInput{}, nil, false
+			}
+			input.Risk = &value
+			appendChanged(field)
+		default:
+			continue
+		}
+	}
+	sort.Strings(changedFields)
+	changedFields = compactSortedStrings(changedFields)
+	return input, changedFields, true
+}
+
+func validateBoardCardMoveRequest(columnKey, beforeCardID, afterCardID, beforeThreadID, afterThreadID string) error {
+	if strings.TrimSpace(beforeThreadID) != "" || strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id must not be set on card move; use before_card_id / after_card_id")
+	}
+	if strings.TrimSpace(columnKey) == "" {
+		return errors.New("column_key is required")
+	}
+	if err := validateBoardPlacementRequest(columnKey, "", "", nil); err != nil {
+		return err
+	}
+	if err := primitives.ValidateBoardPlacementAnchors(beforeCardID, afterCardID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCardResolution(resolution string, allowEmpty bool) error {
+	value := strings.TrimSpace(resolution)
+	if value == "" && allowEmpty {
+		return nil
+	}
+	switch value {
+	case "done":
+		return nil
+	default:
+		return errors.New("resolution must be done")
+	}
+}
+
+func validateMoveCardResolutionRefs(resolution string, resolutionRefs []string) error {
+	resolution = strings.TrimSpace(resolution)
+	if len(resolutionRefs) == 0 {
+		return errors.New("resolution_refs are required when resolution is set")
+	}
+	switch resolution {
+	case "done":
+		if !containsTypedRefPrefix(resolutionRefs, "artifact") && !containsTypedRefPrefix(resolutionRefs, "event") {
+			return errors.New("resolution_refs must include at least one artifact: or event: ref for resolution done")
+		}
+	default:
+		return errors.New("resolution must be done")
+	}
+	return nil
+}
+
+func validateBoardPlacementRequest(columnKey, beforeThreadID, afterThreadID string, pinnedDocumentID *string) error {
+	if strings.TrimSpace(columnKey) != "" {
+		if !contractenums.IsBoardColumnKey(strings.TrimSpace(columnKey)) {
+			return errors.New("column_key must be one of: " + strings.Join(contractenums.BoardColumnKeyValues, ", "))
+		}
+	}
+	if strings.TrimSpace(beforeThreadID) != "" && strings.TrimSpace(afterThreadID) != "" {
+		return errors.New("before_thread_id and after_thread_id are mutually exclusive")
+	}
+	if pinnedDocumentID != nil {
+		documentID := strings.TrimSpace(*pinnedDocumentID)
+		if documentID != "" {
+			if err := validateDocumentID(documentID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
