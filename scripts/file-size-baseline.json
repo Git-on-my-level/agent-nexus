@@ -20,7 +20,7 @@
   "core/internal/server/handler.go": 2314,
   "core/internal/server/report_handlers.go": 837,
   "core/internal/server/stream_handlers.go": 959,
-  "core/internal/storage/migrations.go": 1297,
+  "core/internal/storage/migrations.go": 1280,
   "mcp/executor/executor.go": 892,
   "web-ui/scripts/game-dev-studio-seed-data.mjs": 1016,
   "web-ui/scripts/qa-capture.mjs": 926,

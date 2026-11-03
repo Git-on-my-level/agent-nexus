@@ -175,7 +175,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `13`
+- Commands: `14`
 - Command IDs:
   - `cards.archive` (`cards archive`)
   - `cards.create` (`cards create`)
@@ -186,6 +186,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.purge` (`cards purge`)
   - `cards.restore` (`cards restore`)
   - `cards.revisions.create` (`cards revise`)
+  - `cards.revisions.diff` (`cards revision diff`)
   - `cards.revisions.get` (`cards revision get`)
   - `cards.revisions.list` (`cards history`)
   - `cards.timeline` (`cards timeline`)

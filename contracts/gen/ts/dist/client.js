@@ -4744,6 +4744,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -4961,6 +4962,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5005,6 +5007,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5045,6 +5048,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5157,6 +5161,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5277,6 +5282,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5333,6 +5339,7 @@ export const commandRegistry = [
             "cards.patch",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5393,6 +5400,7 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5408,6 +5416,7 @@ export const commandRegistry = [
         "path": "/cards/{card_id}/revisions",
         "operation_id": "createCardRevision",
         "summary": "Create card revision",
+        "description": "The stored summary (after markdown normalization and trimming) must be at most 65536 bytes (64 KiB) of UTF-8; a larger summary returns 400 `invalid_request` naming the limit. The whole JSON request body is separately capped at 1 MiB (413 `request_too_large`). A card that already holds a larger summary stays readable, but every new revision of it fails until its summary is under the limit.",
         "why": "Append a new immutable card content revision and advance the card head.",
         "input_mode": "json-body",
         "streaming": {
@@ -5488,12 +5497,63 @@ export const commandRegistry = [
             "cards.patch",
             "cards.purge",
             "cards.restore",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
         ],
         "go_method": "CardsRevisionsCreate",
         "ts_method": "cardsRevisionsCreate"
+    },
+    {
+        "command_id": "cards.revisions.diff",
+        "cli_path": "cards revision diff",
+        "group": "cards",
+        "method": "GET",
+        "path": "/cards/{card_id}/revisions/{revision_id}/diff",
+        "operation_id": "diffCardRevisions",
+        "summary": "Diff two card revisions",
+        "description": "Compares the revision with `base` (default: its previous revision; the first revision compares with empty content). Both revisions must belong to the card. Title changes are returned whole, definition of done as added/removed lines, and the summary as a unified line diff with three lines of context. The line diff stops searching after 512 edits (then reports the differing middle as one replaced block, `minimal: false`) and its text is capped at 256 KiB (`truncated: true`).",
+        "why": "Show what one card revision changed, without transferring either full summary.",
+        "input_mode": "query",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ card_ref, card_handle, base_revision, revision, identical, title?, definition_of_done?, summary }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "cards",
+            "revisions"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Read-only and safe to retry. Prefer this over fetching two full revisions; use `cards revision get` only when the whole summary is needed.",
+        "path_params": [
+            "card_id",
+            "revision_id"
+        ],
+        "adjacent_commands": [
+            "cards.archive",
+            "cards.create",
+            "cards.get",
+            "cards.revisions.list",
+            "cards.list",
+            "cards.move",
+            "cards.patch",
+            "cards.purge",
+            "cards.restore",
+            "cards.revisions.create",
+            "cards.revisions.get",
+            "cards.timeline",
+            "cards.trash"
+        ],
+        "go_method": "CardsRevisionsDiff",
+        "ts_method": "cardsRevisionsDiff"
     },
     {
         "command_id": "cards.revisions.get",
@@ -5503,7 +5563,7 @@ export const commandRegistry = [
         "path": "/cards/{card_id}/revisions/{revision_id}",
         "operation_id": "getCardRevision",
         "summary": "Get card revision",
-        "why": "Resolve one immutable card content revision.",
+        "why": "Resolve one immutable card content revision with its full title, summary and definition of done.",
         "input_mode": "none",
         "streaming": {
             "mode": "none"
@@ -5535,6 +5595,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.timeline",
             "cards.trash"
         ],
@@ -5549,14 +5610,16 @@ export const commandRegistry = [
         "path": "/cards/{card_id}/revisions",
         "operation_id": "listCardRevisions",
         "summary": "List card revisions",
-        "why": "Enumerate immutable content revisions for one card lineage.",
-        "input_mode": "none",
+        "description": "Metadata only: each revision carries its ref, number, author, time and content/summary sizes, never its title, summary or definition of done. Read one revision's content with GET /cards/{card_id}/revisions/{revision_id}, or compare two with GET /cards/{card_id}/revisions/{revision_id}/diff. Revisions are newest first; continue with `cursor=\u003cnext_cursor\u003e` until `next_cursor` is empty. Cost is one indexed range scan of at most limit+1 rows, independent of history length and summary size.",
+        "why": "Page through the immutable content revisions of one card lineage, newest first, as metadata only.",
+        "input_mode": "query",
         "streaming": {
             "mode": "none"
         },
-        "output_envelope": "Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.",
+        "output_envelope": "Returns `{ card_ref, card_handle, revisions, next_cursor }`; internal card_id may appear for admin/debug compatibility.",
         "error_codes": [
             "auth_required",
+            "invalid_request",
             "invalid_token",
             "not_found"
         ],
@@ -5579,6 +5642,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline",
             "cards.trash"
@@ -5625,6 +5689,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.trash"
         ],
@@ -5691,6 +5756,7 @@ export const commandRegistry = [
             "cards.purge",
             "cards.restore",
             "cards.revisions.create",
+            "cards.revisions.diff",
             "cards.revisions.get",
             "cards.timeline"
         ],
@@ -17254,6 +17320,9 @@ export class AnxClient {
     }
     cardsRevisionsCreate(pathParams, options = {}) {
         return this.invoke("cards.revisions.create", pathParams, options);
+    }
+    cardsRevisionsDiff(pathParams, options = {}) {
+        return this.invoke("cards.revisions.diff", pathParams, options);
     }
     cardsRevisionsGet(pathParams, options = {}) {
         return this.invoke("cards.revisions.get", pathParams, options);

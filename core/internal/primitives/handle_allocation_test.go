@@ -389,7 +389,7 @@ func TestInsertCardArtifactUniqueViolationIsConflict(t *testing.T) {
 		RevisionNumber: 2,
 		ArtifactID:     artifactID,
 		CreatedAt:      "2026-01-02T00:00:00Z",
-		ContentHash:    "hash",
+		ContentHash:    sha256Hex([]byte(`{}`)),
 		RefsJSON:       "[]",
 		MetadataJSON:   "{}",
 		EncodedContent: []byte(`{}`),

@@ -117,6 +117,10 @@ func TestPurgeArchivedBoardCardKeepsBlobReusedBeforeCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := anyStringValue(card.Card["id"])
+	// Card revisions no longer write blobs, but cards created before
+	// migration 130 still have one per revision, and purging the card
+	// collects it. Recreate that legacy blob.
+	writeLegacyCardRevisionBlobs(t, ctx, s, id)
 	if _, err = s.ArchiveBoardCard(ctx, "writer", "", id, RemoveBoardCardInput{}); err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +129,41 @@ func TestPurgeArchivedBoardCardKeepsBlobReusedBeforeCollection(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertReusedBlobsSurvive(t, ctx, s, *created)
+}
+
+// writeLegacyCardRevisionBlobs stores each revision's content as a blob, the
+// way card revisions were written before migration 130.
+func writeLegacyCardRevisionBlobs(t *testing.T, ctx context.Context, s *Store, cardID string) {
+	t.Helper()
+	rows, err := s.db.QueryContext(CanonicalMaintenanceContext(ctx), `SELECT artifact_id FROM card_revisions WHERE card_id = ?`, cardID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifactIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		artifactIDs = append(artifactIDs, id)
+	}
+	rows.Close()
+	for _, id := range artifactIDs {
+		content, _, err := s.GetArtifactContent(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		staged, err := s.blob.Write(ctx, sha256Hex(content), content)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := staged.Promote(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.RebuildBlobUsageLedger(ctx); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPurgeTrashedArtifactDeletesUnreferencedBlob(t *testing.T) {
@@ -284,42 +323,46 @@ func TestContentPromotionFailureCommitsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cardsBefore := countRows(t, ctx, s, `SELECT COUNT(*) FROM cards`)
+	documentsBefore := countRows(t, ctx, s, `SELECT COUNT(*) FROM documents`)
 	artifactsBefore := countRows(t, ctx, s, `SELECT COUNT(*) FROM artifacts`)
-	asksBefore := countRows(t, ctx, s, `SELECT COUNT(*) FROM events WHERE type = 'human_attention_requested'`)
 	s.blob = promoteFailBackend{s.blob}
 
-	if _, err := s.CreateBoardCard(ctx, "writer", boardID, AddBoardCardInput{Title: "single", Body: "single body", ColumnKey: "ready"}); err == nil {
-		t.Fatal("card create succeeded although its content failed to promote")
+	if _, _, err := s.CreateDocument(ctx, "writer", map[string]any{"title": "doc"}, "document body", "text", nil); err == nil {
+		t.Fatal("document create succeeded although its content failed to promote")
 	} else {
 		var unknown *MutationOutcomeUnknown
 		if errors.As(err, &unknown) {
 			t.Fatalf("pre-commit promotion failure reported an unknown outcome: %v", err)
 		}
 	}
-	if _, err := s.CreateBoardCardsBatch(ctx, "writer", boardID, nil, []AddBoardCardInput{
-		{Title: "batch one", Body: "batch body one", ColumnKey: "ready"},
-		{Title: "batch two", Body: "batch body two", ColumnKey: "ready"},
-	}); err == nil {
-		t.Fatal("card batch succeeded although its content failed to promote")
-	}
-	ask := func() map[string]any {
-		return map[string]any{"type": "human_attention_requested", "thread_id": topic.Topic["thread_id"], "refs": []string{fmt.Sprint(topic.Topic["ref"])}, "payload": map[string]any{"subject_ref": topic.Topic["ref"], "title": "ask", "requester_actor_id": "writer"}}
-	}
-	if _, err := s.AppendTaskAttentionEvent(ctx, "writer", ask()); err == nil {
-		t.Fatal("ask succeeded although its content failed to promote")
-	}
-	if _, _, err := s.AppendTaskAttentionEventBatch(ctx, "writer", "", "", []map[string]any{ask(), ask()}); err == nil {
-		t.Fatal("ask batch succeeded although its content failed to promote")
-	}
-
-	if got := countRows(t, ctx, s, `SELECT COUNT(*) FROM cards`); got != cardsBefore {
-		t.Fatalf("cards committed despite promotion failure: %d -> %d", cardsBefore, got)
+	if got := countRows(t, ctx, s, `SELECT COUNT(*) FROM documents`); got != documentsBefore {
+		t.Fatalf("documents committed despite promotion failure: %d -> %d", documentsBefore, got)
 	}
 	if got := countRows(t, ctx, s, `SELECT COUNT(*) FROM artifacts`); got != artifactsBefore {
 		t.Fatalf("artifacts committed despite promotion failure: %d -> %d", artifactsBefore, got)
 	}
-	if got := countRows(t, ctx, s, `SELECT COUNT(*) FROM events WHERE type = 'human_attention_requested'`); got != asksBefore {
-		t.Fatalf("asks committed despite promotion failure: %d -> %d", asksBefore, got)
+
+	// Card and ask revisions keep their content in card_revisions, inside the
+	// write transaction, so a failing blob store cannot affect them.
+	if _, err := s.CreateBoardCard(ctx, "writer", boardID, AddBoardCardInput{Title: "single", Body: "single body", ColumnKey: "ready"}); err != nil {
+		t.Fatalf("card create depends on the blob store: %v", err)
+	}
+	if _, err := s.CreateBoardCardsBatch(ctx, "writer", boardID, nil, []AddBoardCardInput{
+		{Title: "batch one", Body: "batch body one", ColumnKey: "ready"},
+		{Title: "batch two", Body: "batch body two", ColumnKey: "ready"},
+	}); err != nil {
+		t.Fatalf("card batch depends on the blob store: %v", err)
+	}
+	ask := func() map[string]any {
+		return map[string]any{"type": "human_attention_requested", "thread_id": topic.Topic["thread_id"], "refs": []string{fmt.Sprint(topic.Topic["ref"])}, "payload": map[string]any{"subject_ref": topic.Topic["ref"], "title": "ask", "requester_actor_id": "writer"}}
+	}
+	if _, err := s.AppendTaskAttentionEvent(ctx, "writer", ask()); err != nil {
+		t.Fatalf("ask depends on the blob store: %v", err)
+	}
+	if _, _, err := s.AppendTaskAttentionEventBatch(ctx, "writer", "", "", []map[string]any{ask(), ask()}); err != nil {
+		t.Fatalf("ask batch depends on the blob store: %v", err)
+	}
+	if got := countRows(t, ctx, s, `SELECT COUNT(*) FROM card_revisions WHERE content_encoding IS NULL`); got != 0 {
+		t.Fatalf("%d card revisions stored without content", got)
 	}
 }

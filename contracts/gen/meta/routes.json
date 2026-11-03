@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 270,
+  "route_count": 271,
   "routes": [
     {
       "method": "GET",
@@ -545,6 +545,11 @@
     {
       "method": "GET",
       "path": "/cards/{card_id}/revisions/{revision_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/cards/{card_id}/revisions/{revision_id}/diff",
       "access_class": "workspace_business_surface"
     },
     {

@@ -1119,7 +1119,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID: "cards.create",
@@ -1130,7 +1130,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"cards", "boards", "write"},
-		Adjacent:  []string{"cards.archive", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:  []string{"cards.archive", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.get",
@@ -1142,7 +1142,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID: "cards.list",
@@ -1153,7 +1153,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"cards"},
-		Adjacent:  []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:  []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.move",
@@ -1165,7 +1165,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "boards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.patch",
@@ -1177,7 +1177,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write", "concurrency"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.purge",
@@ -1189,7 +1189,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.restore",
@@ -1201,7 +1201,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.revisions.create",
@@ -1213,7 +1213,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "revisions", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
+	},
+	{
+		CommandID:  "cards.revisions.diff",
+		CLIPath:    "cards revision diff",
+		Group:      "cards",
+		Method:     "GET",
+		Path:       "/cards/{card_id}/revisions/{revision_id}/diff",
+		PathParams: []string{"card_id", "revision_id"},
+		InputMode:  "query",
+		Stability:  "beta",
+		Concepts:   []string{"cards", "revisions"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.revisions.get",
@@ -1225,7 +1237,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "revisions"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.revisions.list",
@@ -1234,10 +1246,10 @@ var CommandRegistry = []CommandSpec{
 		Method:     "GET",
 		Path:       "/cards/{card_id}/revisions",
 		PathParams: []string{"card_id"},
-		InputMode:  "none",
+		InputMode:  "query",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "revisions"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.timeline",
@@ -1249,7 +1261,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "timeline"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.trash"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.trash"},
 	},
 	{
 		CommandID:  "cards.trash",
@@ -1261,7 +1273,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"cards", "write"},
-		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.get", "cards.timeline"},
+		Adjacent:   []string{"cards.archive", "cards.create", "cards.get", "cards.revisions.list", "cards.list", "cards.move", "cards.patch", "cards.purge", "cards.restore", "cards.revisions.create", "cards.revisions.diff", "cards.revisions.get", "cards.timeline"},
 	},
 	{
 		CommandID: "curation.candidates",
@@ -4129,6 +4141,10 @@ func (c *Client) CardsRestore(ctx context.Context, pathParams map[string]string,
 
 func (c *Client) CardsRevisionsCreate(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "cards.revisions.create", pathParams, opts)
+}
+
+func (c *Client) CardsRevisionsDiff(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "cards.revisions.diff", pathParams, opts)
 }
 
 func (c *Client) CardsRevisionsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

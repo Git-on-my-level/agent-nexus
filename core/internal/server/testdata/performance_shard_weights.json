@@ -132,6 +132,10 @@
     "milliseconds": 4429
   },
   {
+    "key": "GET /cards/{card_id}/revisions/{revision_id}/diff",
+    "milliseconds": 4429
+  },
+  {
     "key": "GET /cards/{card_id}/timeline",
     "milliseconds": 5269
   },

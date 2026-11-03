@@ -251,70 +251,6 @@ func scanBoardCardRow(scanner interface{ Scan(dest ...any) error }, extra ...any
 	return row, nil
 }
 
-type boardCardVersionRow struct {
-	RevisionID           string
-	CardID               string
-	CardHandle           string
-	Version              int
-	PrevRevisionID       sql.NullString
-	ArtifactID           string
-	RevisionHash         string
-	BoardID              string
-	BoardHandle          string
-	ColumnKey            string
-	Rank                 string
-	Title                string
-	Body                 string
-	ThreadID             sql.NullString
-	ParentThreadID       sql.NullString
-	DueAt                sql.NullString
-	DefinitionOfDoneJSON string
-	PinnedDocumentID     sql.NullString
-	Assignee             sql.NullString
-	Risk                 string
-	Resolution           sql.NullString
-	ResolutionRefsJSON   string
-	RefsJSON             string
-	CreatedAt            string
-	CreatedBy            string
-	ProvenanceJSON       string
-}
-
-func scanBoardCardVersionRow(scanner interface{ Scan(dest ...any) error }) (boardCardVersionRow, error) {
-	row := boardCardVersionRow{}
-	if err := scanner.Scan(
-		&row.RevisionID,
-		&row.CardID,
-		&row.CardHandle,
-		&row.Version,
-		&row.PrevRevisionID,
-		&row.ArtifactID,
-		&row.RevisionHash,
-		&row.BoardID,
-		&row.BoardHandle,
-		&row.ThreadID,
-		&row.Title,
-		&row.Body,
-		&row.DueAt,
-		&row.DefinitionOfDoneJSON,
-		&row.ColumnKey,
-		&row.Rank,
-		&row.ParentThreadID,
-		&row.PinnedDocumentID,
-		&row.Assignee,
-		&row.Risk,
-		&row.Resolution,
-		&row.ResolutionRefsJSON,
-		&row.RefsJSON,
-		&row.CreatedAt,
-		&row.CreatedBy,
-		&row.ProvenanceJSON,
-	); err != nil {
-		return boardCardVersionRow{}, fmt.Errorf("scan board card version row: %w", err)
-	}
-	return row, nil
-}
-
 func (r boardCardRow) toMap() (map[string]any, error) {
 	provenance := map[string]any{}
 	if strings.TrimSpace(r.ProvenanceJSON) != "" {
@@ -381,59 +317,6 @@ func (r boardCardRow) toMap() (map[string]any, error) {
 	}
 	lifecycleFieldsFromSQLColumns(r.ArchivedAt, r.ArchivedBy, r.TrashedAt, r.TrashedBy, r.TrashReason).apply(m)
 	return m, nil
-}
-
-func (r boardCardVersionRow) toMap() (map[string]any, error) {
-	provenance := map[string]any{}
-	if strings.TrimSpace(r.ProvenanceJSON) != "" {
-		if err := json.Unmarshal([]byte(r.ProvenanceJSON), &provenance); err != nil {
-			return nil, fmt.Errorf("decode board card revision provenance: %w", err)
-		}
-	}
-	threadID := strings.TrimSpace(firstNonEmpty(r.ThreadID.String, r.ParentThreadID.String))
-	refs, err := decodeStoredJSONList(r.RefsJSON, "card_revision.refs")
-	if err != nil {
-		return nil, err
-	}
-	definitionOfDone, err := decodeStoredJSONList(r.DefinitionOfDoneJSON, "card_revision.definition_of_done")
-	if err != nil {
-		return nil, err
-	}
-	resolutionRefs, err := decodeStoredJSONList(r.ResolutionRefsJSON, "card_revision.resolution_refs")
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"id":                 r.RevisionID,
-		"revision_id":        r.RevisionID,
-		"card_id":            r.CardID,
-		"card_ref":           "card:" + strings.TrimSpace(firstNonEmpty(r.CardHandle, r.CardID)),
-		"card_handle":        strings.TrimSpace(firstNonEmpty(r.CardHandle, r.CardID)),
-		"revision_number":    r.Version,
-		"prev_revision_ref":  boardTypedRefOrNil("card_revision", r.PrevRevisionID.String),
-		"artifact_ref":       "artifact:" + strings.TrimSpace(r.ArtifactID),
-		"revision_hash":      r.RevisionHash,
-		"title":              r.Title,
-		"summary":            r.Body,
-		"board_id":           r.BoardID,
-		"board_ref":          "board:" + strings.TrimSpace(firstNonEmpty(r.BoardHandle, r.BoardID)),
-		"board_handle":       strings.TrimSpace(firstNonEmpty(r.BoardHandle, r.BoardID)),
-		"thread_id":          nullableBoardString(threadID),
-		"document_ref":       boardTypedRefOrNil("document", r.PinnedDocumentID.String),
-		"risk":               canonicalBoardCardRisk(r.Risk),
-		"due_at":             nullableBoardString(r.DueAt.String),
-		"definition_of_done": definitionOfDone,
-		"assignee_refs":      boardCardAssigneeRefs(r.Assignee.String),
-		"related_refs":       boardCardRelatedRefs(refs, r.ParentThreadID.String),
-		"column_key":         r.ColumnKey,
-		"rank":               r.Rank,
-		"resolution":         canonicalizeCardResolutionForAPI(r.Resolution.String),
-		"resolution_refs":    resolutionRefs,
-		"refs":               refs,
-		"created_at":         r.CreatedAt,
-		"created_by":         r.CreatedBy,
-		"provenance":         provenance,
-	}, nil
 }
 
 func boardCardAssigneeRefs(rawAssignee string) []string {

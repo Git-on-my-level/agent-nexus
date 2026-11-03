@@ -45,7 +45,9 @@ var cardsSubcommandSpec = subcommandSpec{
 		"anx cards messages card:implement-login",
 		"anx cards reply card:implement-login --to <message-id> --body-file reply.md",
 		"anx cards revise card:implement-login --body-file card.md",
-		"anx cards history card:implement-login",
+		"anx cards history card:implement-login --limit 20",
+		"anx cards revision get card:implement-login card_revision:implement-login-r3",
+		"anx cards revision diff card:implement-login card_revision:implement-login-r3",
 		"anx cards assign card:implement-login --assignee-ref \"${ANX_ASSIGNEE_REF:?set this to the intended actor ref}\"",
 		"anx cards resolve card:implement-login --reason \"ok\" --body \"Validated in staging\"",
 		"anx cards move card:implement-login --column review",
@@ -314,18 +316,26 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 		result, callErr := a.invokeTypedJSON(ctx, cfg, "cards reply", "events.create", nil, nil, body)
 		return a.decorateMessageWriteResult(result, callErr, cfg, "cards.reply", card), "cards reply", callErr
 	case "history":
-		id, err := parseResourceIDArg(args[1:], "card-id", "card id", "card")
+		id, query, err := parseCardHistoryInput(args[1:], "cards history")
 		if err != nil {
 			return nil, "cards history", err
 		}
-		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards history", "cards.revisions.list", "card_id", id, cardIDLookupSpec, nil, nil)
+		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards history", "cards.revisions.list", "card_id", id, cardIDLookupSpec, query, nil)
 		return result, "cards history", callErr
 	case "revision":
 		if len(args) < 2 || isHelpToken(args[1]) {
-			return nil, "cards revision", errnorm.Usage("missing_subcommand", "`anx cards revision` requires subcommand `get`")
+			return nil, "cards revision", errnorm.Usage("missing_subcommand", "`anx cards revision` requires subcommand `get` or `diff`")
+		}
+		if args[1] == "diff" {
+			cardID, revisionID, query, err := parseCardRevisionDiffInput(args[2:], "cards revision diff")
+			if err != nil {
+				return nil, "cards revision diff", err
+			}
+			result, callErr := a.invokeTypedJSON(ctx, cfg, "cards revision diff", "cards.revisions.diff", map[string]string{"card_id": cardID, "revision_id": revisionID}, query, nil)
+			return result, "cards revision diff", callErr
 		}
 		if args[1] != "get" {
-			return nil, "cards revision", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown `anx cards revision` subcommand %q; expected `get`", args[1]))
+			return nil, "cards revision", errnorm.Usage("unknown_subcommand", fmt.Sprintf("unknown `anx cards revision` subcommand %q; expected `get` or `diff`", args[1]))
 		}
 		cardID, revisionID, err := parseCardRevisionGetInput(args[2:], "cards revision get")
 		if err != nil {

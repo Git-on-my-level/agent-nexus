@@ -97,6 +97,9 @@ type Store struct {
 	// blobPreloadedHook is a test seam that runs after a create preloads its
 	// blobs and before its write transaction begins.
 	blobPreloadedHook func(hashes []string)
+	// cardSummaryLimit is a test seam for building legacy oversized cards;
+	// zero means MaxCardSummaryBytes.
+	cardSummaryLimit int
 }
 
 type queryRower interface {

@@ -80,6 +80,10 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 		Command:   "cards revision get",
 		CommandID: "cards.revisions.get",
 	},
+	"cards revision diff": {
+		Command:   "cards revision diff",
+		CommandID: "cards.revisions.diff",
+	},
 	"docs revision get": {
 		Command:   "docs revision get",
 		CommandID: "docs.revisions.get",

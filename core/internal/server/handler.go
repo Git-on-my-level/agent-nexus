@@ -1705,7 +1705,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		if strings.Contains(remainder, "/revisions/") {
 			parts := strings.Split(remainder, "/revisions/")
-			if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || strings.Contains(parts[1], "/") {
+			if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" || strings.Contains(strings.TrimSuffix(parts[1], "/diff"), "/") {
 				writeError(w, http.StatusNotFound, "not_found", "endpoint not found")
 				return
 			}
@@ -1713,7 +1713,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 				writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only GET is supported")
 				return
 			}
-			handleGetCardRevision(w, r, opts, parts[0], parts[1])
+			handleCardRevisionRead(w, r, opts, parts[0], parts[1])
 			return
 		}
 		if strings.HasSuffix(remainder, "/archive") {

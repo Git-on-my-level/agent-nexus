@@ -22,6 +22,7 @@ type revisionFailureBlob struct {
 	blob.Backend
 	fail    bool
 	cleaned bool
+	writes  int
 }
 type revisionFailureStage struct {
 	blob.StagedWrite
@@ -29,6 +30,7 @@ type revisionFailureStage struct {
 }
 
 func (b *revisionFailureBlob) Write(ctx context.Context, hash string, data []byte) (blob.StagedWrite, error) {
+	b.writes++
 	stage, err := b.Backend.Write(ctx, hash, data)
 	if err != nil {
 		return nil, err
@@ -115,18 +117,13 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 		}
 		return strings.Join(all, "\n")
 	}
-	// Force first-use ledger rebuild inside the replay writer. Failure must also
-	// roll back its initialization, and the next attempt must rebuild successfully.
-	for _, table := range []string{"blob_usage_ledger", "blob_usage_totals"} {
-		if _, err := env.workspace.DB().Exec("DELETE FROM " + table); err != nil {
-			t.Fatal(err)
-		}
-	}
+	// Card revision content lives in card_revisions (#510), so no trigger on the
+	// blob ledger applies: every failing statement below is inside the revision
+	// transaction and must roll back everything.
 	for _, trigger := range []string{
 		`CREATE TRIGGER reject_revision BEFORE INSERT ON card_revisions BEGIN SELECT RAISE(ABORT,'revision failed'); END`,
 		`CREATE TRIGGER reject_revision BEFORE UPDATE OF head_revision_id ON cards BEGIN SELECT RAISE(ABORT,'head failed'); END`,
 		`CREATE TRIGGER reject_revision BEFORE UPDATE ON boards BEGIN SELECT RAISE(ABORT,'board failed'); END`,
-		`CREATE TRIGGER reject_revision BEFORE INSERT ON blob_usage_ledger BEGIN SELECT RAISE(ABORT,'ledger failed'); END`,
 		`CREATE TRIGGER reject_revision BEFORE INSERT ON idempotency_replays WHEN NEW.scope='cards.revisions.create' BEGIN SELECT RAISE(ABORT,'receipt failed'); END`,
 	} {
 		before := snapshot()
@@ -144,14 +141,9 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	before := snapshot()
-	backend.cleaned = false
+	// A blob backend that fails every promotion cannot affect a card revision:
+	// revision writes stage no blobs at all.
 	backend.fail = true
-	out := write(body, anyString(work["ref"]))
-	backend.fail = false
-	if out.Code != 500 || !backend.cleaned || snapshot() != before {
-		t.Fatal("promotion failure left canonical state or staging", out.Code, out.Body.String())
-	}
 	responses := make(chan *httptest.ResponseRecorder, 8)
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -227,21 +219,12 @@ func TestCardRevisionAtomicReplayOriginalBodyHeadBlobAndAuthority(t *testing.T) 
 	delete(legacy, "request_key")
 	legacy["if_base_revision"] = currentCard["head_revision_ref"]
 	legacy["revision"] = map[string]any{"summary": "Legacy unkeyed content"}
-	for _, table := range []string{"blob_usage_ledger", "blob_usage_totals"} {
-		if _, err := env.workspace.DB().Exec("DELETE FROM " + table); err != nil {
-			t.Fatal(err)
-		}
-	}
-	before = snapshot()
-	backend.fail = true
-	backend.cleaned = false
-	legacyFailure := write(legacy, anyString(work["ref"]))
-	backend.fail = false
-	if legacyFailure.Code != 500 || !backend.cleaned || snapshot() != before {
-		t.Fatal("legacy promotion escaped rollback", legacyFailure.Code, legacyFailure.Body.String())
-	}
 	if out := write(legacy, anyString(work["ref"])); out.Code != 201 {
 		t.Fatal("legacy revision failed", out.Code, out.Body.String())
+	}
+	backend.fail = false
+	if backend.writes != 0 || backend.cleaned {
+		t.Fatalf("card revisions touched the blob backend: writes=%d cleaned=%v", backend.writes, backend.cleaned)
 	}
 	primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{MaxArtifacts: 1})(store)
 	if out := write(body, anyString(work["ref"])); out.Code != 201 || out.Body.String() != first {

@@ -285,7 +285,9 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			"if-updated-at": valueFlag,
 			"actor-id":      valueFlag,
 		},
-		"cards revise": {"card-id": valueFlag, "body-file": valueFlag, "from-file": valueFlag},
+		"cards revise":        {"card-id": valueFlag, "body-file": valueFlag, "from-file": valueFlag},
+		"cards history":       {"card-id": valueFlag, "limit": valueFlag, "cursor": valueFlag},
+		"cards revision diff": {"card-id": valueFlag, "revision": valueFlag, "revision-id": valueFlag, "base": valueFlag},
 		"cards move": {
 			"board": valueFlag, "reason": valueFlag,
 			"card-id":             valueFlag,

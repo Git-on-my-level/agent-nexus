@@ -25,6 +25,7 @@ hosted_default_commands:
   - "boards.workspace"
   - "cards.get"
   - "cards.list"
+  - "cards.revisions.diff"
   - "cards.revisions.get"
   - "cards.revisions.list"
   - "cards.timeline"
@@ -389,6 +390,9 @@ commands:
   "cards.revisions.create":
     classification: exposed_write
     reason: "ordinary card revision creation"
+  "cards.revisions.diff":
+    classification: exposed_read
+    reason: "bounded line diff between two card revisions"
   "cards.revisions.get":
     classification: exposed_read
     reason: "card revision read"

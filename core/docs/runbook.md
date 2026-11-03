@@ -428,6 +428,10 @@ Technical limits stay active in both modes: `ANX_REQUEST_BODY_LIMIT_BYTES`,
 `ANX_AUTH_REQUEST_BODY_LIMIT_BYTES`, `ANX_CONTENT_REQUEST_BODY_LIMIT_BYTES`,
 `ANX_ATTACHMENT_MAX_UPLOAD_BYTES`, auth/write rate limits, and blob integrity
 and reference checks. Disabling capacity quotas does not disable these limits.
+The 64 KiB card summary limit is a fixed core limit, not a quota: it applies
+with or without quotas and next to the 1 MiB default request-body cap. A card
+stored before the limit stays readable; its next content revision returns
+`400 invalid_request` naming the limit until the summary is shortened.
 
 ## Document search cutover
 

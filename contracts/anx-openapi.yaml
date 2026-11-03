@@ -5502,22 +5502,41 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.revisions.list
       x-anx-cli-path: cards history
-      x-anx-why: Enumerate immutable content revisions for one card lineage.
-      x-anx-input-mode: none
+      x-anx-why: Page through the immutable content revisions of one card lineage, newest first, as metadata only.
+      description: >-
+        Metadata only: each revision carries its ref, number, author, time and content/summary sizes, never
+        its title, summary or definition of done. Read one revision's content with
+        GET /cards/{card_id}/revisions/{revision_id}, or compare two with
+        GET /cards/{card_id}/revisions/{revision_id}/diff. Revisions are newest first; continue with
+        `cursor=<next_cursor>` until `next_cursor` is empty. Cost is one indexed range scan of at most
+        limit+1 rows, independent of history length and summary size.
+      x-anx-input-mode: query
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility."
-      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      x-anx-output-envelope: "Returns `{ card_ref, card_handle, revisions, next_cursor }`; internal card_id may appear for admin/debug compatibility."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
       x-anx-concepts: [cards, revisions]
       x-anx-stability: beta
       parameters:
         - $ref: '#/components/parameters/CardID'
+        - name: limit
+          in: query
+          required: false
+          description: Revisions per page, 1-200 (default 50).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque `next_cursor` from the previous page. Omit for the newest page.
+          schema: { type: string }
       responses:
         '200':
-          description: Card revisions
+          description: One page of card revision metadata
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardRevisionsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -5530,6 +5549,11 @@ paths:
       x-anx-command-id: cards.revisions.create
       x-anx-cli-path: cards revise
       x-anx-why: Append a new immutable card content revision and advance the card head.
+      description: >-
+        The stored summary (after markdown normalization and trimming) must be at most 65536 bytes (64 KiB) of
+        UTF-8; a larger summary returns 400 `invalid_request` naming the limit. The whole JSON request body is
+        separately capped at 1 MiB (413 `request_too_large`). A card that already holds a larger summary stays
+        readable, but every new revision of it fails until its summary is under the limit.
       x-anx-input-mode: json-body
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card, revision }`."
@@ -5568,7 +5592,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: cards.revisions.get
       x-anx-cli-path: cards revision get
-      x-anx-why: Resolve one immutable card content revision.
+      x-anx-why: Resolve one immutable card content revision with its full title, summary and definition of done.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ card_ref, card_handle, revision }`; internal card_id may appear for admin/debug compatibility."
@@ -5585,6 +5609,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardRevisionResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /cards/{card_id}/revisions/{revision_id}/diff:
+    get:
+      operationId: diffCardRevisions
+      summary: Diff two card revisions
+      tags: [cards]
+      x-anx-surface: canonical
+      x-anx-command-id: cards.revisions.diff
+      x-anx-cli-path: cards revision diff
+      x-anx-why: Show what one card revision changed, without transferring either full summary.
+      description: >-
+        Compares the revision with `base` (default: its previous revision; the first revision compares with
+        empty content). Both revisions must belong to the card. Title changes are returned whole, definition
+        of done as added/removed lines, and the summary as a unified line diff with three lines of context.
+        The line diff stops searching after 512 edits (then reports the differing middle as one replaced
+        block, `minimal: false`) and its text is capped at 256 KiB (`truncated: true`).
+      x-anx-input-mode: query
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ card_ref, card_handle, base_revision, revision, identical, title?, definition_of_done?, summary }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, not_found]
+      x-anx-concepts: [cards, revisions]
+      x-anx-stability: beta
+      x-anx-agent-notes: Read-only and safe to retry. Prefer this over fetching two full revisions; use `cards revision get` only when the whole summary is needed.
+      parameters:
+        - $ref: '#/components/parameters/CardID'
+        - $ref: '#/components/parameters/RevisionID'
+        - name: base
+          in: query
+          required: false
+          description: Revision to compare against (`card_revision:<handle>`, handle or id). Defaults to the previous revision.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Card revision diff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardRevisionDiffResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
@@ -13609,10 +13677,59 @@ components:
         prev_revision_ref: { $ref: '#/components/schemas/TypedRef' }
         artifact_ref: { $ref: '#/components/schemas/TypedRef' }
         revision_number: { type: integer }
-        summary: { type: string }
+        revision_hash: { type: string, description: Hash chaining this revision's content hash to its predecessor. }
+        content_hash: { type: string, description: SHA-256 of the canonical revision content; equals the revision artifact's content_hash. }
+        content_bytes: { type: integer, description: Size of the canonical revision content in bytes. }
+        summary_bytes: { type: integer, description: Size of the revision summary in UTF-8 bytes. }
+        title: { type: string, description: Present on single-revision reads and revision create responses; omitted from history pages. }
+        summary: { type: string, description: Present on single-revision reads and revision create responses; omitted from history pages. }
+        definition_of_done:
+          type: array
+          items: { type: string }
+          description: Present on single-revision reads and revision create responses; omitted from history pages.
         created_at: { type: string, format: date-time }
         created_by: { type: string }
       required: [ref, handle, card_ref, artifact_ref, revision_number, created_at, created_by]
+
+    CardRevisionDiffResponse:
+      type: object
+      properties:
+        card_ref: { $ref: '#/components/schemas/ResourceRef' }
+        card_handle: { $ref: '#/components/schemas/ResourceHandle' }
+        card_id:
+          allOf:
+            - $ref: '#/components/schemas/InternalResourceUUID'
+          description: Internal card UUID/debug id retained for admin/verbose compatibility.
+        base_revision:
+          allOf:
+            - $ref: '#/components/schemas/CardRevision'
+          nullable: true
+          description: Metadata of the compared-against revision; null when the first revision is compared with empty content.
+        revision: { $ref: '#/components/schemas/CardRevision' }
+        identical: { type: boolean, description: True when title, summary and definition of done are all unchanged. }
+        title:
+          type: object
+          description: Present only when the title changed.
+          properties:
+            before: { type: string }
+            after: { type: string }
+        definition_of_done:
+          type: object
+          description: Present only when acceptance lines changed.
+          properties:
+            added: { type: array, items: { type: string } }
+            removed: { type: array, items: { type: string } }
+        summary:
+          type: object
+          properties:
+            changed: { type: boolean }
+            unified: { type: string, description: Unified line diff with three lines of context. }
+            added_lines: { type: integer }
+            removed_lines: { type: integer }
+            minimal: { type: boolean, description: False when the 512-edit search budget was exhausted and the differing middle is shown as one replaced block. }
+            truncated: { type: boolean, description: True when the unified text was cut at 256 KiB; the line counts still cover the whole change. }
+          required: [changed]
+      required: [card_ref, card_handle, base_revision, revision, identical, summary]
 
     BoardSummary:
       type: object
@@ -14103,7 +14220,7 @@ components:
         topic_ref: { $ref: '#/components/schemas/TypedRef' }
         document_ref: { $ref: '#/components/schemas/TypedRef' }
         title: { type: string }
-        summary: { type: string }
+        summary: { type: string, description: "Card summary prose. At most 65536 bytes (64 KiB) of UTF-8 after normalization; larger summaries return 400 invalid_request naming the limit. Keep structured evidence on source_refs or in a document." }
         column_key:
           type: string
           enum: [backlog, ready, in_progress, blocked, review, done]
@@ -14173,7 +14290,7 @@ components:
       type: object
       properties:
         title: { type: string }
-        summary: { type: string }
+        summary: { type: string, description: "Card summary prose. At most 65536 bytes (64 KiB) of UTF-8 after normalization; larger summaries return 400 invalid_request naming the limit. Keep structured evidence on source_refs or in a document." }
         definition_of_done:
           type: array
           items: { type: string }
@@ -15521,8 +15638,10 @@ components:
           description: Internal card UUID/debug id retained for admin/verbose compatibility.
         revisions:
           type: array
+          description: Newest first; metadata only (no title, summary or definition of done).
           items: { $ref: '#/components/schemas/CardRevision' }
-      required: [card_ref, card_handle, revisions]
+        next_cursor: { type: string, description: Opaque cursor for the next (older) page; empty on the last page. }
+      required: [card_ref, card_handle, revisions, next_cursor]
 
     CardRevisionResponse:
       type: object

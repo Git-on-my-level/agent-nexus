@@ -200,41 +200,6 @@ func TestCreatesRestoreBlobsPurgedAfterPreload(t *testing.T) {
 				return err
 			},
 		},
-		{
-			name:    "card",
-			content: func(t *testing.T) []byte { return mustCardContent(t, "card title", "card body") },
-			create: func(t *testing.T, ctx context.Context, s *Store) error {
-				_, err := s.CreateBoardCard(ctx, "writer", testBoardID(t, ctx, s), AddBoardCardInput{Title: "card title", Body: "card body", ColumnKey: "ready"})
-				return err
-			},
-		},
-		{
-			name:    "card batch",
-			content: func(t *testing.T) []byte { return mustCardContent(t, "batch title", "batch body") },
-			create: func(t *testing.T, ctx context.Context, s *Store) error {
-				_, err := s.CreateBoardCardsBatch(ctx, "writer", testBoardID(t, ctx, s), nil, []AddBoardCardInput{
-					{Title: "batch title", Body: "batch body", ColumnKey: "ready"},
-					{Title: "other title", Body: "other body", ColumnKey: "ready"},
-				})
-				return err
-			},
-		},
-		{
-			name:    "ask",
-			content: func(t *testing.T) []byte { return mustCardContent(t, "ask title", "") },
-			create: func(t *testing.T, ctx context.Context, s *Store) error {
-				_, err := s.AppendTaskAttentionEvent(ctx, "writer", testAsk(t, ctx, s, "ask title"))
-				return err
-			},
-		},
-		{
-			name:    "ask batch",
-			content: func(t *testing.T) []byte { return mustCardContent(t, "batch ask", "") },
-			create: func(t *testing.T, ctx context.Context, s *Store) error {
-				_, _, err := s.AppendTaskAttentionEventBatch(ctx, "writer", "", "", []map[string]any{testAsk(t, ctx, s, "batch ask"), testAsk(t, ctx, s, "other ask")})
-				return err
-			},
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -344,7 +309,10 @@ func assertBlobsAbsent(t *testing.T, ctx context.Context, s *Store, hashes ...st
 	}
 }
 
-func TestFailedCardBatchDiscardsPreloadedBlobs(t *testing.T) {
+// Card and ask revisions store their content in card_revisions, so their
+// writes stage no blob: nothing is preloaded, nothing is left behind when the
+// write fails, and a blob store that fails every preload does not affect them.
+func TestCardAndAskWritesStageNoBlobs(t *testing.T) {
 	t.Parallel()
 	inputs := []AddBoardCardInput{
 		{Title: "first", Body: "first body", ColumnKey: "ready"},
@@ -356,7 +324,7 @@ func TestFailedCardBatchDiscardsPreloadedBlobs(t *testing.T) {
 		hashes[i] = sha256Hex(mustCardContent(t, in.Title, in.Body))
 	}
 
-	t.Run("transaction fails after preload", func(t *testing.T) {
+	t.Run("failed batch leaves nothing", func(t *testing.T) {
 		t.Parallel()
 		ctx, s := newBlobGCTestStore(t)
 		newRemoteBlobBackend(s)
@@ -365,14 +333,22 @@ func TestFailedCardBatchDiscardsPreloadedBlobs(t *testing.T) {
 		}
 		assertBlobsAbsent(t, ctx, s, hashes...)
 	})
-	t.Run("later preload fails", func(t *testing.T) {
+	t.Run("writes never preload", func(t *testing.T) {
 		t.Parallel()
 		ctx, s := newBlobGCTestStore(t)
 		board := testBoardID(t, ctx, s)
+		ask := testAsk(t, ctx, s, "ask title")
 		backend := newRemoteBlobBackend(s)
-		backend.failPreloadOn = 2
-		if _, err := s.CreateBoardCardsBatch(ctx, "writer", board, nil, inputs); err == nil {
-			t.Fatal("batch with a failed preload succeeded")
+		backend.failPreloadOn = 1
+		s.blobPreloadedHook = func(hashes []string) { t.Errorf("card or ask write preloaded blobs %v", hashes) }
+		if _, err := s.CreateBoardCardsBatch(ctx, "writer", board, nil, inputs); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.CreateBoardCard(ctx, "writer", board, AddBoardCardInput{Title: "single", Body: "single body", ColumnKey: "ready"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.AppendTaskAttentionEvent(ctx, "writer", ask); err != nil {
+			t.Fatal(err)
 		}
 		assertBlobsAbsent(t, ctx, s, hashes...)
 	})

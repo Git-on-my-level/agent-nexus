@@ -245,6 +245,15 @@ var docsRevisionSubcommandSpec = subcommandSpec{
 	examples: []string{"anx docs revision get doc:runbook <revision-id>"},
 }
 
+var cardsRevisionSubcommandSpec = subcommandSpec{
+	command: "cards revision",
+	valid:   []string{"get", "diff"},
+	examples: []string{
+		"anx cards revision get card:implement-login card_revision:implement-login-r3",
+		"anx cards revision diff card:implement-login card_revision:implement-login-r3 --base card_revision:implement-login-r1",
+	},
+}
+
 var docsCommentsSubcommandSpec = subcommandSpec{
 	command: "docs comments",
 	valid:   []string{"reply", "edit", "delete"},

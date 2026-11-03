@@ -59,7 +59,8 @@ The schema of objects is defined by `../contracts/anx-schema.yaml`.
 - Error responses use a stable envelope:
   - `{ "error": { "code": "...", "message": "...", "recoverable": <bool>, "hint": "..." } }`
 - Request-size, quota, and abuse-control failures use explicit stable codes:
-  - `request_too_large` with HTTP `413` and a `request_body.limit_bytes` detail when the request body exceeds the configured limit.
+  - `request_too_large` with HTTP `413` and a `request_body.limit_bytes` detail when the request body exceeds the configured limit (default 1 MiB, `ANX_REQUEST_BODY_LIMIT_BYTES`).
+  - A card summary is limited to 64 KiB (65536 bytes, `primitives.MaxCardSummaryBytes`) after normalization, on card create, batch create, ask cards and `POST /cards/{card_id}/revisions`. A longer summary returns HTTP `400` `invalid_request`; the message names the summary's size and the limit. Keep long evidence in a document or in `source_refs` and link it from the summary. Cards stored before the limit stay readable, but their next content revision fails until its summary fits.
   - `workspace_quota_exceeded` with HTTP `507` and a `quota` detail object containing `metric`, `limit`, `current`, and `projected` when a workspace write would exceed configured storage or count limits.
   - `rate_limited` with HTTP `429`, a `Retry-After` header, and a `rate_limit` detail object containing `bucket` and `retry_after_seconds`.
 - Core conservatively normalizes documented user-visible markdown/prose fields before storage, including event summaries/message text, topic/board/card/document summaries, document markdown content, card revision summaries, and inbox response text. Mutation responses include `markdown_hygiene` only when normalization produced warnings; core does not recursively rewrite arbitrary JSON strings. Hard markdown hygiene failures use `invalid_markdown` only for unsupported control characters or extremely long single lines.
@@ -148,6 +149,21 @@ Drift from the live router is gated in CI: `core` runs `TestExactRegisterRoutesC
   `cards_truncated` and `resources_truncated` indicate omitted preview rows;
   use collection/detail APIs for complete resources. Documents include metadata,
   without scanning revision content or generating whole-history metrics.
+- **Card history**: `GET /cards/{card_id}` returns the current card only; it
+  never includes revision history. `GET /cards/{card_id}/revisions` returns
+  revision metadata newest first (`revision_number`, `created_at`, `created_by`,
+  `content_bytes`, `summary_bytes`, hashes and refs, no content), `limit` 1–200
+  (default 50) with `next_cursor`; a request reads at most `limit + 1` index
+  rows and no content. Content comes from one revision,
+  `GET /cards/{card_id}/revisions/{revision_id}` (title, summary and definition
+  of done of that revision), or from
+  `GET /cards/{card_id}/revisions/{revision_id}/diff[?base=<revision_id>]`, a
+  line diff of the summary (default base: the previous revision) plus title and
+  definition-of-done changes. Each reads at most two revisions, and each
+  revision decodes at most one keyframe and one delta. The diff stops searching
+  after 512 line edits and reports the rest as one replaced block
+  (`summary.minimal: false`); its output is capped at 256 KiB
+  (`summary.truncated: true`).
 - **Events history**: `GET /events` is the complete event browser API. It
   supports the shared `preset=home_feed`, `event_group`, `backing_scope`,
   type/topic/thread/actor/search/time filters, and cursor pagination. Event

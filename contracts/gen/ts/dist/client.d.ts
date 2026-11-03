@@ -146,6 +146,7 @@ export declare class AnxClient {
     cardsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRevisionsCreate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    cardsRevisionsDiff(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRevisionsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsRevisionsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     cardsTimeline(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

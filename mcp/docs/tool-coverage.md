@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 288
+- Command count: 289
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -21,7 +21,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | auth | 22 |
 | boards | 13 |
 | bridge | 8 |
-| cards | 13 |
+| cards | 14 |
 | curation | 5 |
 | deliveries | 3 |
 | derived | 1 |
@@ -62,7 +62,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 95 |
+| exposed_read | 96 |
 | exposed_write | 82 |
 | gated_admin | 29 |
 | gated_sensitive | 13 |
@@ -76,8 +76,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 177 | exposed_read + exposed_write + adapted |
-| hosted default | 69 | explicit read-only private-app allowlist |
+| standalone default | 178 | exposed_read + exposed_write + adapted |
+| hosted default | 70 | explicit read-only private-app allowlist |
 | gated | 42 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 69 | not represented as direct MCP tools in v1 |
@@ -185,6 +185,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | cards.purge | cards | POST | /cards/{card_id}/purge | gated_sensitive | permanent deletion is destructive |
 | cards.restore | cards | POST | /cards/{card_id}/restore | exposed_write | ordinary reversible card lifecycle write |
 | cards.revisions.create | cards | POST | /cards/{card_id}/revisions | exposed_write | ordinary card revision creation |
+| cards.revisions.diff | cards | GET | /cards/{card_id}/revisions/{revision_id}/diff | exposed_read | bounded line diff between two card revisions |
 | cards.revisions.get | cards | GET | /cards/{card_id}/revisions/{revision_id} | exposed_read | card revision read |
 | cards.revisions.list | cards | GET | /cards/{card_id}/revisions | exposed_read | card revision inventory read |
 | cards.timeline | cards | GET | /cards/{card_id}/timeline | exposed_read | bounded card timeline projection |

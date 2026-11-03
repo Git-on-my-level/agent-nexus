@@ -3098,7 +3098,7 @@ Generated Help: cards get
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards create`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -3122,12 +3122,12 @@ Generated Help: cards history
 - HTTP: `GET /cards/{card_id}/revisions`
 - Side effect class: `read_only`
 - Stability: `beta`
-- Input mode: `none`
-- Why: Enumerate immutable content revisions for one card lineage.
-- Output: Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.
-- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Input mode: `query`
+- Why: Page through the immutable content revisions of one card lineage, newest first, as metadata only.
+- Output: Returns `{ card_ref, card_handle, revisions, next_cursor }`; internal card_id may appear for admin/debug compatibility.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `cards`, `revisions`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -3156,7 +3156,7 @@ Generated Help: cards archive
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `already_trashed`, `quota_exceeded`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -3194,7 +3194,7 @@ Generated Help: cards purge
 - Output: Returns `{ purged, card_ref, card_handle }`; internal card_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -3227,7 +3227,7 @@ Generated Help: cards restore
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -3259,7 +3259,7 @@ Generated Help: cards timeline
 - Output: Returns `{ card, events, artifacts, cards, documents, threads }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `cards`, `timeline`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards trash`
 
 Inputs:
   Required:
@@ -7970,7 +7970,7 @@ Generated Help: cards list
 - Output: Returns `{ cards }`.
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `cards`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Local Help: cards list
 
@@ -8550,7 +8550,7 @@ Generated Help: cards create
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards archive`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -8644,7 +8644,7 @@ Generated Help: cards patch
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`, `concurrency`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -8807,7 +8807,7 @@ Generated Help: cards revise
 - Output: Returns `{ card, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `revisions`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -8932,7 +8932,7 @@ Generated Help: cards move
 - Output: Returns `{ card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `outcome_unknown`, `busy`, `quota_exceeded`
 - Concepts: `cards`, `boards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`, `cards trash`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`, `cards trash`
 
 Inputs:
   Required:
@@ -9090,7 +9090,7 @@ Generated Help: cards trash
 - Output: Returns `{ board, card }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `cards`, `write`
-- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision get`, `cards timeline`
+- Adjacent commands: `cards archive`, `cards create`, `cards get`, `cards history`, `cards list`, `cards move`, `cards patch`, `cards purge`, `cards restore`, `cards revise`, `cards revision diff`, `cards revision get`, `cards timeline`
 
 Inputs:
   Required:

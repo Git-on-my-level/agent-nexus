@@ -89,7 +89,7 @@ func handleGetBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return
 	}
 	closeRead() // Release the WAL snapshot before writing to a potentially slow client.
-	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardPayload(card)})
+	writeJSON(w, http.StatusOK, map[string]any{"card": publicCardView(card)})
 }
 
 func handleAddBoardCard(w http.ResponseWriter, r *http.Request, opts handlerOptions, boardID string) {
