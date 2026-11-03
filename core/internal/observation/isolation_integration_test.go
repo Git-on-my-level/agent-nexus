@@ -281,15 +281,49 @@ int main(void){ int fd=socket(AF_INET,SOCK_STREAM,0); if(fd>=0) fcntl(fd,F_SETFL
 		t.Logf("tcp denial: %v", err)
 		requireIsolationError(t, err)
 	})
-	t.Run("fork", func(t *testing.T) {
+	t.Run("fork-bomb", func(t *testing.T) {
+		// The process budget is per sandbox, not per host user: the reader may
+		// spawn up to Processes tasks, and a fork bomb must be stopped there.
 		src := `#include <stdio.h>
 #include <unistd.h>
-int main(void){ pid_t p=fork(); if(p>=0){ puts("{\"facts\":{\"fork\":true},\"uncertainty\":[]}"); return 0;} return 14;}
+int main(void){ for(int i=0;i<64;i++){ pid_t p=fork(); if(p<0) return 14; if(p==0){ pause(); _exit(0);} } puts("{\"facts\":{\"fork\":true},\"uncertainty\":[]}"); return 0;}
 `
 		bin := compileIsolatedFixture(t, dir, "fork-bomb", src)
 		_, err := runner.Run(context.Background(), bin, []byte(`{}`), limits)
-		t.Logf("fork denial: %v", err)
+		t.Logf("fork bomb denial: %v", err)
 		requireIsolationError(t, err)
+	})
+	t.Run("fork-at-budget-one", func(t *testing.T) {
+		if runtime.GOOS != "linux" {
+			t.Skip("process budget is enforced by bubblewrap on Linux; Seatbelt denies fork outright")
+		}
+		src := `#include <stdio.h>
+#include <unistd.h>
+int main(void){ pid_t p=fork(); if(p>=0){ if(p==0) _exit(0); puts("{\"facts\":{\"fork\":true},\"uncertainty\":[]}"); return 0;} return 14;}
+`
+		bin := compileIsolatedFixture(t, dir, "fork-once", src)
+		one := limits
+		one.Processes = 1
+		_, err := runner.Run(context.Background(), bin, []byte(`{}`), one)
+		t.Logf("fork denial at budget one: %v", err)
+		requireIsolationError(t, err)
+	})
+	t.Run("forks-within-budget", func(t *testing.T) {
+		if runtime.GOOS != "linux" {
+			t.Skip("Seatbelt denies fork outright")
+		}
+		// Regression: the budget must not count the runner account's other
+		// processes and threads, which once made every Linux sandbox fail.
+		src := `#include <stdio.h>
+#include <unistd.h>
+#include <sys/wait.h>
+int main(void){ for(int i=0;i<3;i++){ pid_t p=fork(); if(p<0) return 14; if(p==0) _exit(0); waitpid(p,0,0);} puts("{\"facts\":{\"forked\":true},\"uncertainty\":[]}"); return 0;}
+`
+		bin := compileIsolatedFixture(t, dir, "fork-within", src)
+		raw, err := runner.Run(context.Background(), bin, []byte(`{}`), limits)
+		if err != nil || !strings.Contains(string(raw), `"forked":true`) {
+			t.Fatalf("reader within its process budget failed: %s %v", raw, err)
+		}
 	})
 	t.Run("output-budget", func(t *testing.T) {
 		src := `#include <stdio.h>
