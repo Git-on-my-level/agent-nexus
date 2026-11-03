@@ -253,12 +253,6 @@ jobs:
           go-version-file: core/go.mod
           cache-dependency-path: core/go.sum
 
-      # ubuntu-26.04 runners ship bwrap, so the observation isolation tests run
-      # instead of skipping; allow the unprivileged user namespaces they need
-      # (same setting as the CLI integration job).
-      - name: Allow observation sandbox
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
       - name: Run core partition
         working-directory: core
         # Use the 4-vCPU runner; keep fixtures at -parallel=2 and execute every run.
