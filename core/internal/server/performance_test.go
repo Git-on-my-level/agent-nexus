@@ -19,6 +19,7 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
@@ -331,8 +332,10 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 			pool.Close()
 			t.Fatal(err)
 		}
+		// The delivery routes need their store; without it they answer 503 before
+		// any work, so the measured request would not be the route under test.
 		var configured *handlerOptions
-		h := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secrets.NewStore(pool, encryptor)), WithActorRegistry(actors.NewStore(pool)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: pool, Auth: as}), WithRunStore(commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
+		h := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secrets.NewStore(pool, encryptor)), WithActorRegistry(actors.NewStore(pool)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: pool, Auth: as}), WithRunStore(commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool})), WithDeliveryStore(&delivery.Store{DB: pool, AccessContext: DeliveryAccessContext}), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
 		return h, capture, configured.agentChanges, func() { pool.Close() }
 	}
 	return result
