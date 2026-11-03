@@ -255,6 +255,26 @@ func TestCardRevisionContentMigrationRoundTrip(t *testing.T) {
 
 	ws = reopenWorkspace(t, ctx, ws, root)
 	store = NewStore(ws.DB(), backend, ws.Layout().ArtifactContentDir)
+	ids := make([]string, 0, len(legacy))
+	for _, r := range legacy {
+		ids = append(ids, r.revisionID)
+	}
+	batched, err := cardcontent.LoadRevisionContents(ctx, ws.DB(), ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batched) != len(legacy) {
+		t.Fatalf("batched load returned %d revisions, want %d", len(batched), len(legacy))
+	}
+	for _, r := range legacy {
+		got, err := cardcontent.LoadRevisionContent(ctx, ws.DB(), r.revisionID)
+		if err != nil {
+			t.Fatalf("revision %s: %v", r.revisionID, err)
+		}
+		if string(batched[r.revisionID]) != string(got) {
+			t.Fatalf("batched load of revision %s differs from LoadRevisionContent", r.revisionID)
+		}
+	}
 	for _, r := range legacy {
 		got, err := cardcontent.LoadRevisionContent(ctx, ws.DB(), r.revisionID)
 		if err != nil {

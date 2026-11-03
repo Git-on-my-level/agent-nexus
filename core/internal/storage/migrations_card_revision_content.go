@@ -90,33 +90,11 @@ func cardRevisionContentMigrationChunk(ctx context.Context, tx *sql.Tx) (bool, e
 		return false, nil
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT cr.revision_id, cr.card_id, cr.revision_number
-		  FROM card_revisions cr INDEXED BY idx_card_revisions_content_pending
-		 WHERE cr.content_encoding IS NULL
-		 ORDER BY cr.card_id, cr.revision_number
-		 LIMIT ?`, cardContentMigrationBatch)
+	work, err := loadCardRevisionContentWork(ctx, tx)
 	if err != nil {
 		return false, err
 	}
-	type pending struct {
-		revisionID, cardID string
-		number             int
-	}
-	var batch []pending
-	for rows.Next() {
-		var p pending
-		if err := rows.Scan(&p.revisionID, &p.cardID, &p.number); err != nil {
-			rows.Close()
-			return false, err
-		}
-		batch = append(batch, p)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return false, err
-	}
-	if len(batch) == 0 {
+	if len(work) == 0 {
 		// The usage triggers on card_revisions predate the content columns
 		// until startup reinstalls them, so mark the cached usage totals
 		// stale for the bytes this migration added.
@@ -131,10 +109,8 @@ func cardRevisionContentMigrationChunk(ctx context.Context, tx *sql.Tx) (bool, e
 		}
 		return true, nil
 	}
-	for _, p := range batch {
-		if err := migrateCardRevisionContent(ctx, tx, p.revisionID, p.cardID, p.number); err != nil {
-			return false, fmt.Errorf("card revision %s: %w", p.revisionID, err)
-		}
+	if err := migrateCardRevisionContentChunk(ctx, tx, work); err != nil {
+		return false, err
 	}
 	return false, nil
 }
@@ -181,55 +157,303 @@ func LegacyCardRevisionContent(metadataJSON sql.NullString, cardTitle, cardSumma
 	return content, summary, err
 }
 
-func migrateCardRevisionContent(ctx context.Context, tx *sql.Tx, revisionID, cardID string, number int) error {
-	var (
-		artifactID, artifactHash, metadata sql.NullString
-		contentRefs                        sql.NullString
-		cardTitle, cardSummary, cardDoD    sql.NullString
-	)
-	if err := tx.QueryRowContext(ctx, `SELECT a.id, a.content_hash, a.metadata_json, a.content_refs_json, c.title, c.summary, c.definition_of_done_json
-		  FROM card_revisions cr
+// cardRevisionContentWork is one pending revision of a chunk with the values
+// its planning and verification need.
+type cardRevisionContentWork struct {
+	revisionID, cardID string
+	number             int
+	artifactID         sql.NullString
+	artifactHash       sql.NullString
+	contentRefs        sql.NullString
+	content            []byte
+	hash               string
+	summary            string
+	record             cardcontent.Record
+}
+
+// loadCardRevisionContentWork reads one chunk of pending revisions in revision
+// order, with their artifact and card values, and rebuilds each content. A
+// revision whose artifact an earlier revision of the chunk already writes ends
+// the chunk: that write changes the artifact the later read would see, so the
+// later revision waits for the next chunk, as it did when rows were read one
+// at a time.
+func loadCardRevisionContentWork(ctx context.Context, tx *sql.Tx) ([]cardRevisionContentWork, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT cr.revision_id, cr.card_id, cr.revision_number, a.id, a.content_hash, a.metadata_json, a.content_refs_json, c.title, c.summary, c.definition_of_done_json
+		  FROM card_revisions cr INDEXED BY idx_card_revisions_content_pending
 		  LEFT JOIN cards c ON c.id = cr.card_id
 		  LEFT JOIN artifacts a ON a.id = cr.artifact_id
-		 WHERE cr.revision_id = ?`, revisionID).Scan(&artifactID, &artifactHash, &metadata, &contentRefs, &cardTitle, &cardSummary, &cardDoD); err != nil {
-		return err
+		 WHERE cr.content_encoding IS NULL
+		 ORDER BY cr.card_id, cr.revision_number
+		 LIMIT ?`, cardContentMigrationBatch)
+	if err != nil {
+		return nil, err
 	}
-	content, summary, err := LegacyCardRevisionContent(metadata, cardTitle.String, cardSummary.String, cardDoD.String)
+	defer rows.Close()
+	var work []cardRevisionContentWork
+	artifacts := map[string]bool{}
+	for rows.Next() {
+		var (
+			w                               cardRevisionContentWork
+			metadata                        sql.NullString
+			cardTitle, cardSummary, cardDoD sql.NullString
+		)
+		if err := rows.Scan(&w.revisionID, &w.cardID, &w.number, &w.artifactID, &w.artifactHash, &metadata, &w.contentRefs, &cardTitle, &cardSummary, &cardDoD); err != nil {
+			return nil, err
+		}
+		if w.artifactID.Valid {
+			if artifacts[w.artifactID.String] {
+				break
+			}
+			artifacts[w.artifactID.String] = true
+		}
+		content, summary, err := LegacyCardRevisionContent(metadata, cardTitle.String, cardSummary.String, cardDoD.String)
+		if err != nil {
+			return nil, fmt.Errorf("card revision %s: %w", w.revisionID, err)
+		}
+		w.content, w.summary = content, summary
+		w.hash = cardcontent.Hash(content)
+		work = append(work, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return work, nil
+}
+
+// cardRevisionRef is an earlier stored revision of a card, as planning needs it.
+type cardRevisionRef struct {
+	revisionID   string
+	number       int
+	content      []byte // snapshots only
+	payloadBytes int    // snapshots only
+}
+
+type cardContentHash struct{ cardID, hash string }
+
+// migrateCardRevisionContentChunk plans every revision of the chunk in order
+// against the rows the chunk sees, then writes them with one statement per
+// table. Planning reads exactly what PlanForCard reads (a card's earlier rows
+// with the same content hash, and its latest earlier snapshot), with the rows
+// that earlier revisions of this chunk plan standing in for their stored rows.
+//
+// The batch is what keeps this fast: the statement-level cost of an UPDATE on
+// card_revisions and artifacts (preparing the statement and compiling the row
+// triggers that fire on it) is paid once per chunk instead of once per
+// revision. Each row still fires its triggers, so the side effects are the same.
+func migrateCardRevisionContentChunk(ctx context.Context, tx *sql.Tx, work []cardRevisionContentWork) error {
+	cardIDs, hashes := []string{}, []string{}
+	seenCard, seenHash := map[string]bool{}, map[string]bool{}
+	for _, w := range work {
+		if !seenCard[w.cardID] {
+			seenCard[w.cardID] = true
+			cardIDs = append(cardIDs, w.cardID)
+		}
+		if !seenHash[w.hash] {
+			seenHash[w.hash] = true
+			hashes = append(hashes, w.hash)
+		}
+	}
+	cardsJSON, err := json.Marshal(cardIDs)
 	if err != nil {
 		return err
 	}
-	record, err := cardcontent.PlanForCard(ctx, tx, cardID, number, content)
+	hashesJSON, err := json.Marshal(hashes)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE card_revisions
-		    SET content_encoding = ?, content_codec = ?, content_base_revision_id = ?, content_hash = ?, content_bytes = ?, summary_bytes = ?, content_payload = ?
-		  WHERE revision_id = ? AND content_encoding IS NULL`,
-		record.Encoding, nullIfEmpty(record.Codec), nullIfEmpty(record.BaseRevisionID), record.ContentHash, record.ContentBytes, len(summary), record.Payload, revisionID); err != nil {
+
+	// Earlier stored rows of the chunk's cards with the chunk's hashes, for the
+	// duplicate lookup. Refs are never duplicate targets.
+	dupRefs := map[cardContentHash][]cardRevisionRef{}
+	dup, err := tx.QueryContext(ctx, `SELECT card_id, content_hash, revision_id, revision_number FROM card_revisions
+		 WHERE card_id IN (SELECT value FROM json_each(?)) AND content_hash IN (SELECT value FROM json_each(?)) AND content_encoding IN ('snapshot','delta')`,
+		string(cardsJSON), string(hashesJSON))
+	if err != nil {
+		return fmt.Errorf("find duplicate card revision content: %w", err)
+	}
+	for dup.Next() {
+		var (
+			cardID, hash string
+			ref          cardRevisionRef
+		)
+		if err := dup.Scan(&cardID, &hash, &ref.revisionID, &ref.number); err != nil {
+			dup.Close()
+			return err
+		}
+		key := cardContentHash{cardID, hash}
+		dupRefs[key] = append(dupRefs[key], ref)
+	}
+	if err := dup.Err(); err != nil {
+		dup.Close()
 		return err
 	}
-	// Verify the stored row, not just the planned record.
-	got, err := cardcontent.LoadRevisionContent(ctx, tx, revisionID)
+	dup.Close()
+
+	// Earlier stored snapshots of the chunk's cards, for the keyframe lookup.
+	snapshotRefs := map[string][]cardRevisionRef{}
+	snaps, err := tx.QueryContext(ctx, `SELECT card_id, revision_id, revision_number, COALESCE(length(content_payload), 0) FROM card_revisions
+		 WHERE card_id IN (SELECT value FROM json_each(?)) AND content_encoding = 'snapshot'`, string(cardsJSON))
+	if err != nil {
+		return fmt.Errorf("find card content keyframes: %w", err)
+	}
+	for snaps.Next() {
+		var (
+			cardID string
+			ref    cardRevisionRef
+		)
+		if err := snaps.Scan(&cardID, &ref.revisionID, &ref.number, &ref.payloadBytes); err != nil {
+			snaps.Close()
+			return err
+		}
+		snapshotRefs[cardID] = append(snapshotRefs[cardID], ref)
+	}
+	if err := snaps.Err(); err != nil {
+		snaps.Close()
+		return err
+	}
+	snaps.Close()
+
+	// The keyframe a pending revision can use is the latest stored snapshot
+	// before it. Only those are decoded, and only when the chunk needs one.
+	keyframeIDs := []string{}
+	seenKeyframe := map[string]bool{}
+	for _, w := range work {
+		var latest *cardRevisionRef
+		for i := range snapshotRefs[w.cardID] {
+			ref := &snapshotRefs[w.cardID][i]
+			if ref.number < w.number && (latest == nil || ref.number > latest.number) {
+				latest = ref
+			}
+		}
+		if latest != nil && !seenKeyframe[latest.revisionID] {
+			seenKeyframe[latest.revisionID] = true
+			keyframeIDs = append(keyframeIDs, latest.revisionID)
+		}
+	}
+	if len(keyframeIDs) > 0 {
+		keyframes, err := cardcontent.LoadRevisionContents(ctx, tx, keyframeIDs)
+		if err != nil {
+			return fmt.Errorf("load card content keyframes: %w", err)
+		}
+		for card := range snapshotRefs {
+			for i := range snapshotRefs[card] {
+				if content, ok := keyframes[snapshotRefs[card][i].revisionID]; ok {
+					snapshotRefs[card][i].content = content
+				}
+			}
+		}
+	}
+
+	// Plan in revision order. Each planned row joins the lookups for the
+	// revisions after it, exactly as the stored row would once written.
+	for i := range work {
+		w := &work[i]
+		var duplicateOf string
+		best := 0
+		for _, ref := range dupRefs[cardContentHash{w.cardID, w.hash}] {
+			if ref.number < w.number && (duplicateOf == "" || ref.number > best) {
+				duplicateOf, best = ref.revisionID, ref.number
+			}
+		}
+		in := cardcontent.PlanInput{Content: w.content, RevisionNumber: w.number, DuplicateOf: duplicateOf}
+		if duplicateOf == "" {
+			var latest *cardRevisionRef
+			for i := range snapshotRefs[w.cardID] {
+				ref := &snapshotRefs[w.cardID][i]
+				if ref.number < w.number && (latest == nil || ref.number > latest.number) {
+					latest = ref
+				}
+			}
+			if latest != nil && w.number-latest.number < cardcontent.KeyframeInterval {
+				if latest.content == nil {
+					return fmt.Errorf("card revision %s: keyframe %s content not loaded", w.revisionID, latest.revisionID)
+				}
+				in.Keyframe = &cardcontent.Keyframe{RevisionID: latest.revisionID, RevisionNumber: latest.number, Content: latest.content, PayloadBytes: latest.payloadBytes}
+			}
+		}
+		record, err := cardcontent.Plan(in)
+		if err != nil {
+			return fmt.Errorf("card revision %s: %w", w.revisionID, err)
+		}
+		w.record = record
+		if record.Encoding != cardcontent.EncodingRef {
+			key := cardContentHash{w.cardID, w.hash}
+			dupRefs[key] = append(dupRefs[key], cardRevisionRef{revisionID: w.revisionID, number: w.number})
+		}
+		if record.Encoding == cardcontent.EncodingSnapshot {
+			snapshotRefs[w.cardID] = append(snapshotRefs[w.cardID], cardRevisionRef{revisionID: w.revisionID, number: w.number, content: w.content, payloadBytes: len(record.Payload)})
+		}
+	}
+
+	// One statement writes every planned row. Rows that matched the guard are
+	// the ones this migration may still own.
+	const rowColumns = 8
+	args := make([]any, 0, len(work)*rowColumns)
+	for _, w := range work {
+		args = append(args, w.revisionID, w.record.Encoding, nullIfEmpty(w.record.Codec), nullIfEmpty(w.record.BaseRevisionID), w.record.ContentHash, w.record.ContentBytes, len(w.summary), w.record.Payload)
+	}
+	if _, err := tx.ExecContext(ctx, `WITH v(revision_id, content_encoding, content_codec, content_base_revision_id, content_hash, content_bytes, summary_bytes, content_payload) AS (VALUES `+valuesRows(len(work), rowColumns)+`)
+		UPDATE card_revisions
+		    SET content_encoding = v.content_encoding, content_codec = v.content_codec, content_base_revision_id = v.content_base_revision_id, content_hash = v.content_hash, content_bytes = v.content_bytes, summary_bytes = v.summary_bytes, content_payload = v.content_payload
+		   FROM v
+		  WHERE card_revisions.revision_id = v.revision_id AND card_revisions.content_encoding IS NULL`, args...); err != nil {
+		return fmt.Errorf("write card revision content: %w", err)
+	}
+
+	// Verify the stored rows, not just the planned records.
+	ids := make([]string, 0, len(work))
+	for _, w := range work {
+		ids = append(ids, w.revisionID)
+	}
+	got, err := cardcontent.LoadRevisionContents(ctx, tx, ids)
 	if err != nil {
 		return err
 	}
-	if string(got) != string(content) {
-		return fmt.Errorf("stored content does not round-trip")
+	var verified []cardRevisionContentWork
+	for _, w := range work {
+		if string(got[w.revisionID]) != string(w.content) {
+			return fmt.Errorf("card revision %s: stored content does not round-trip", w.revisionID)
+		}
+		if !w.artifactID.Valid || w.artifactHash.String != w.record.ContentHash {
+			continue
+		}
+		atoms := resourceaccess.ContentReferenceAtomsJSON(string(w.content), "structured")
+		if w.contentRefs.Valid && w.contentRefs.String != string(atoms) {
+			// Written by another rule; leave this artifact's access inputs alone.
+			continue
+		}
+		verified = append(verified, w)
 	}
-	if !artifactID.Valid || artifactHash.String != record.ContentHash {
+	if len(verified) == 0 {
 		return nil
 	}
-	// Verified: these are the blob's bytes. Index them exactly as the write
+	// Verified: these are the blobs' bytes. Index them exactly as the write
 	// path does, then drop the duplicated fields from metadata.
-	atoms := resourceaccess.ContentReferenceAtomsJSON(string(content), "structured")
-	if contentRefs.Valid && contentRefs.String != string(atoms) {
-		// Written by another rule; leave this artifact's access inputs alone.
-		return nil
+	args = args[:0]
+	for _, w := range verified {
+		args = append(args, w.artifactID.String, string(resourceaccess.ContentReferenceAtomsJSON(string(w.content), "structured")))
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE artifacts
-		    SET content_refs_json = ?, metadata_json = json_remove(metadata_json, '$.summary', '$.definition_of_done')
-		  WHERE id = ?`, string(atoms), artifactID.String)
-	return err
+	if _, err := tx.ExecContext(ctx, `WITH v(artifact_id, content_refs_json) AS (VALUES `+valuesRows(len(verified), 2)+`)
+		UPDATE artifacts
+		    SET content_refs_json = v.content_refs_json, metadata_json = json_remove(artifacts.metadata_json, '$.summary', '$.definition_of_done')
+		   FROM v
+		  WHERE artifacts.id = v.artifact_id`, args...); err != nil {
+		return fmt.Errorf("index card revision artifacts: %w", err)
+	}
+	return nil
+}
+
+// valuesRows renders n tuples of cols placeholders for a VALUES list.
+func valuesRows(n, cols int) string {
+	tuple := "(" + strings.TrimSuffix(strings.Repeat("?,", cols), ",") + ")"
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(tuple)
+	}
+	return b.String()
 }
 
 func nullIfEmpty(s string) any {

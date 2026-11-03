@@ -3,6 +3,7 @@ package cardcontent
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,6 +71,144 @@ func LoadRevisionContent(ctx context.Context, q Querier, revisionID string) ([]b
 		}
 		if base, err = DecodeRecord(snapshot.Record, nil); err != nil {
 			return nil, err
+		}
+	}
+	return DecodeRecord(row.Record, base)
+}
+
+// RowQuerier is the batched read handle of the caller's transaction.
+type RowQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// LoadRevisionContents returns the canonical content of many revisions. Each
+// revision is verified exactly as LoadRevisionContent verifies it, but the
+// stored rows are read in one statement per link of the chains (a revision,
+// then a ref's target, then a delta's snapshot), not one statement per row.
+// The first revision that does not load or verify fails the whole call.
+func LoadRevisionContents(ctx context.Context, q RowQuerier, revisionIDs []string) (map[string][]byte, error) {
+	ids := make([]string, 0, len(revisionIDs))
+	requested := make(map[string]bool, len(revisionIDs))
+	for _, id := range revisionIDs {
+		id = strings.TrimSpace(id)
+		if !requested[id] {
+			requested[id] = true
+			ids = append(ids, id)
+		}
+	}
+	rows := make(map[string]storedRow, len(ids))
+	for frontier := ids; len(frontier) > 0; {
+		if err := loadStoredRows(ctx, q, frontier, rows); err != nil {
+			return nil, err
+		}
+		frontier = nil
+		for _, id := range ids {
+			// An id that is still missing after its own round is never asked
+			// for again; resolveStoredRow reports it.
+			if next := nextChainRow(id, rows); next != "" && !requested[next] {
+				requested[next] = true
+				frontier = append(frontier, next)
+			}
+		}
+	}
+	out := make(map[string][]byte, len(ids))
+	bases := map[string][]byte{}
+	for _, id := range ids {
+		content, err := resolveStoredRow(id, rows, bases)
+		if err != nil {
+			return nil, fmt.Errorf("revision %s: %w", id, err)
+		}
+		out[id] = content
+	}
+	return out, nil
+}
+
+// loadStoredRows adds the content rows named by ids to rows. Ids without a row
+// stay absent.
+func loadStoredRows(ctx context.Context, q RowQuerier, ids []string, rows map[string]storedRow) error {
+	raw, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	found, err := q.QueryContext(ctx, `SELECT `+loadColumns+` FROM card_revisions WHERE revision_id IN (SELECT value FROM json_each(?))`, string(raw))
+	if err != nil {
+		return err
+	}
+	defer found.Close()
+	for found.Next() {
+		var row storedRow
+		if err := found.Scan(&row.RevisionID, &row.Encoding, &row.Codec, &row.BaseRevisionID, &row.ContentHash, &row.ContentBytes, &row.Payload); err != nil {
+			return err
+		}
+		row.Record.Encoding = row.Encoding.String
+		rows[row.RevisionID] = row
+	}
+	return found.Err()
+}
+
+// nextChainRow names the first row that resolving id still needs and that is
+// not loaded yet, or "" when every row on its chain is loaded.
+func nextChainRow(id string, rows map[string]storedRow) string {
+	row, ok := rows[id]
+	if !ok {
+		return id
+	}
+	if !row.Encoding.Valid {
+		return ""
+	}
+	if row.Record.Encoding == EncodingRef {
+		target, ok := rows[row.BaseRevisionID]
+		if !ok {
+			return row.BaseRevisionID
+		}
+		row = target
+	}
+	if row.Record.Encoding == EncodingDelta {
+		if _, ok := rows[row.BaseRevisionID]; !ok {
+			return row.BaseRevisionID
+		}
+	}
+	return ""
+}
+
+// resolveStoredRow applies LoadRevisionContent's rules to rows that
+// loadStoredRows has already read. bases caches decoded delta snapshots.
+func resolveStoredRow(id string, rows map[string]storedRow, bases map[string][]byte) ([]byte, error) {
+	row, ok := rows[id]
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	if !row.Encoding.Valid {
+		return nil, ErrNotStored
+	}
+	if row.Record.Encoding == EncodingRef {
+		target, ok := rows[row.BaseRevisionID]
+		if !ok {
+			return nil, fmt.Errorf("%w: ref target %s: %v", ErrCorrupt, row.BaseRevisionID, sql.ErrNoRows)
+		}
+		if target.Record.Encoding == EncodingRef || target.ContentHash != row.ContentHash {
+			return nil, fmt.Errorf("%w: invalid ref target %s", ErrCorrupt, row.BaseRevisionID)
+		}
+		row = target
+	}
+	var base []byte
+	if row.Record.Encoding == EncodingDelta {
+		if cached, ok := bases[row.BaseRevisionID]; ok {
+			base = cached
+		} else {
+			snapshot, ok := rows[row.BaseRevisionID]
+			if !ok {
+				return nil, fmt.Errorf("%w: delta base %s: %v", ErrCorrupt, row.BaseRevisionID, sql.ErrNoRows)
+			}
+			if snapshot.Record.Encoding != EncodingSnapshot {
+				return nil, fmt.Errorf("%w: delta base %s is not a snapshot", ErrCorrupt, row.BaseRevisionID)
+			}
+			decoded, err := DecodeRecord(snapshot.Record, nil)
+			if err != nil {
+				return nil, err
+			}
+			bases[row.BaseRevisionID] = decoded
+			base = decoded
 		}
 	}
 	return DecodeRecord(row.Record, base)
