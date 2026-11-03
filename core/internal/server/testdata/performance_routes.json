@@ -371,6 +371,17 @@
   },
   {
     "method": "GET",
+    "path": "/cards/{card_id}/revisions/{revision_id}/diff",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/cards/{card_id}/timeline",
     "max_queries": 100,
     "max_rows": 1024,

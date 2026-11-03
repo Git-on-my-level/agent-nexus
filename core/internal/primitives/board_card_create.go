@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-
-	"agent-nexus-core/internal/blob"
 )
 
 func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, input AddBoardCardInput) (mutationResult BoardCardMutationResult, mutationErr error) {
@@ -35,11 +33,6 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if err != nil {
 		return BoardCardMutationResult{}, err
 	}
-	preload, err := s.preloadCardContent(ctx, prep)
-	if err != nil {
-		return BoardCardMutationResult{}, fmt.Errorf("preload card content: %w", err)
-	}
-	defer preload.discardUnlessCommitted()
 	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return BoardCardMutationResult{}, fmt.Errorf("begin board card create transaction: %w", err)
@@ -47,7 +40,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	// A statement that fails before Commit, once Rollback succeeds, changed
 	// nothing. Leave that error intact so the handler can log it as a 500
 	// (or 503 when SQLite is busy or locked). Only Commit is an
-	// unknown outcome; content is promoted before it.
+	// unknown outcome.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -77,11 +70,8 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, err
 	}
-	boardRow, cardRow, stagedContent, err := s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
+	boardRow, cardRow, err := s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
 	if err != nil {
-		if stagedContent != nil {
-			_ = stagedContent.Cleanup()
-		}
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
@@ -103,9 +93,6 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	if input.WorkMetadata != nil {
 		if err := insertWorkMetadata(ctx, tx, cardRow.CardID, actorID, input.WorkMetadata); err != nil {
 			_ = tx.Rollback()
-			if stagedContent != nil {
-				_ = stagedContent.Cleanup()
-			}
 			return BoardCardMutationResult{}, err
 		}
 	}
@@ -113,24 +100,15 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 	// The full board collection is available through its paged read endpoints.
 	typedRefs, err := decodeStoredJSONList(boardRow.RefsJSON, "board.refs")
 	if err != nil {
-		if stagedContent != nil {
-			_ = stagedContent.Cleanup()
-		}
 		return BoardCardMutationResult{}, err
 	}
 	boardMap, err := boardRow.boardToMapWithRefData(typedRefs, []string{"card:" + cardRow.CardID})
 	if err != nil {
-		if stagedContent != nil {
-			_ = stagedContent.Cleanup()
-		}
 		return BoardCardMutationResult{}, err
 	}
 	boardMap["card_refs_truncated"] = true
 	cardMap, err := cardRow.toMap()
 	if err != nil {
-		if stagedContent != nil {
-			_ = stagedContent.Cleanup()
-		}
 		return BoardCardMutationResult{}, err
 	}
 	creation := workClone(input.WorkMetadata)
@@ -157,18 +135,7 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 			_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_replays(scope,actor_id,request_key,request_hash,response_status,response_json) VALUES(?,?,?,?,201,?)`, replay.Scope, actorID, replay.Key, replay.Hash, string(raw))
 		}
 		if err != nil {
-			if stagedContent != nil {
-				_ = stagedContent.Cleanup()
-			}
 			return BoardCardMutationResult{}, err
-		}
-	}
-	// Promote before committing so a committed card always has its content; a
-	// failed promote rolls the card back.
-	if stagedContent != nil {
-		if err := stagedContent.Promote(); err != nil {
-			_ = stagedContent.Cleanup()
-			return BoardCardMutationResult{}, fmt.Errorf("finalize card content: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -177,7 +144,6 @@ func (s *Store) CreateBoardCard(ctx context.Context, actorID, boardID string, in
 		}
 		return BoardCardMutationResult{}, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board card create transaction: %w", err)}
 	}
-	preload.markCommitted()
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap, ReplayCommitted: input.CreateReplay != nil}, nil
 }
 
@@ -213,17 +179,12 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		}
 		preps[i] = prep
 	}
-	preload, err := s.preloadCardContent(ctx, preps...)
-	if err != nil {
-		return nil, fmt.Errorf("preload card content: %w", err)
-	}
-	defer preload.discardUnlessCommitted()
 	tx, err := mutationTxBegin(ctx, s.db)
 	if err != nil {
 		return nil, fmt.Errorf("begin board cards batch transaction: %w", err)
 	}
 	// Same rule as CreateBoardCard: a rolled-back statement is not an
-	// unknown outcome. Only Commit is; content is promoted before it.
+	// unknown outcome. Only Commit is.
 	defer func() {
 		if mutationErr != nil {
 			mutationErr = classifyBoardCardRequestError(mutationErr)
@@ -243,48 +204,28 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 		return nil, err
 	}
 	results := make([]BoardCardMutationResult, 0, len(preps))
-	stagedWrites := make([]blob.StagedWrite, 0, len(preps))
 	for i, prep := range preps {
 		var cardRow boardCardRow
-		var stagedContent blob.StagedWrite
-		boardRow, cardRow, stagedContent, err = s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
+		boardRow, cardRow, err = s.execBoardCardInsert(ctx, tx, boardRow, actorID, boardID, prep)
 		if err != nil {
-			if stagedContent != nil {
-				_ = stagedContent.Cleanup()
-			}
-			for _, staged := range stagedWrites {
-				_ = staged.Cleanup()
-			}
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
 			}
 			return nil, fmt.Errorf("items[%d]: %w", i, err)
 		}
-		if stagedContent != nil {
-			stagedWrites = append(stagedWrites, stagedContent)
-		}
 		if inputs[i].Under != "" {
 			parentRef, groupErr := s.groupWorkTx(ctx, tx, actorID, cardRow, inputs[i].Under, inputs[i].After, "")
 			if groupErr != nil {
-				for _, staged := range stagedWrites {
-					_ = staged.Cleanup()
-				}
 				_ = tx.Rollback()
 				return nil, fmt.Errorf("items[%d]: %w", i, groupErr)
 			}
 			inputs[i].Under = parentRef
 		} else if inputs[i].Initiative {
 			if _, err := tx.ExecContext(ctx, `UPDATE cards SET needs_home=0 WHERE id=?`, cardRow.CardID); err != nil {
-				for _, staged := range stagedWrites {
-					_ = staged.Cleanup()
-				}
 				_ = tx.Rollback()
 				return nil, fmt.Errorf("items[%d]: %w", i, err)
 			}
 		} else if inputs[i].After != "" {
-			for _, staged := range stagedWrites {
-				_ = staged.Cleanup()
-			}
 			_ = tx.Rollback()
 			return nil, workInvalid("after requires under")
 		}
@@ -294,18 +235,12 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
 			}
-			for _, staged := range stagedWrites {
-				_ = staged.Cleanup()
-			}
 			return nil, terr
 		}
 		cardMap, terr := cardRow.toMap()
 		if terr != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Printf("tx rollback failed: %v", rbErr)
-			}
-			for _, staged := range stagedWrites {
-				_ = staged.Cleanup()
 			}
 			return nil, terr
 		}
@@ -315,24 +250,12 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 
 		results = append(results, BoardCardMutationResult{Board: boardMap, Card: cardMap})
 	}
-	// Promote before committing so committed cards always have their content;
-	// a failed promote rolls the whole batch back.
-	if err := promoteStagedBlobs(stagedWrites); err != nil {
-		for _, pending := range stagedWrites {
-			_ = pending.Cleanup()
-		}
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
-		}
-		return nil, fmt.Errorf("finalize card content: %w", err)
-	}
 	if err := tx.Commit(); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Printf("tx rollback failed: %v", rbErr)
 		}
 		return nil, &MutationOutcomeUnknown{Cause: fmt.Errorf("commit board cards batch transaction: %w", err)}
 	}
-	preload.markCommitted()
 	return results, nil
 }
 

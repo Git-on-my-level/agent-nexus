@@ -193,39 +193,6 @@ func publicCardsView(cards []map[string]any) []map[string]any {
 	return out
 }
 
-// publicCardPayload is like publicCardView but preserves optional card history with the same shaping.
-func publicCardPayload(card map[string]any) map[string]any {
-	pub := publicCardView(card)
-	if pub == nil {
-		return nil
-	}
-	if hist, ok := card["history"]; ok && hist != nil {
-		pub["history"] = publicCardHistoryList(hist)
-	}
-	return pub
-}
-
-func publicCardHistoryList(raw any) any {
-	switch h := raw.(type) {
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(h))
-		for _, item := range h {
-			out = append(out, publicCardView(item))
-		}
-		return out
-	case []any:
-		out := make([]map[string]any, 0, len(h))
-		for _, item := range h {
-			if m, ok := item.(map[string]any); ok {
-				out = append(out, publicCardView(m))
-			}
-		}
-		return out
-	default:
-		return raw
-	}
-}
-
 func documentRefForPublicCard(card map[string]any) string {
 	return strings.TrimSpace(anyString(card["document_ref"]))
 }

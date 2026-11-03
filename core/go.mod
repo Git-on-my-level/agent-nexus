@@ -54,9 +54,6 @@ require (
 	github.com/yuin/goldmark v1.7.8 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
@@ -71,6 +68,10 @@ require agent-nexus-contracts-go-client v0.0.0
 
 replace agent-nexus-contracts-go-client => ../contracts/gen/go
 
-require agent-nexus-markdownhygiene v0.0.0
+require (
+	agent-nexus-markdownhygiene v0.0.0
+	github.com/klauspost/compress v1.18.0
+	golang.org/x/sys v0.34.0
+)
 
 replace agent-nexus-markdownhygiene => ../contracts/markdownhygiene

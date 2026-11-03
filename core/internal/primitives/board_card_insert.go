@@ -1,5 +1,5 @@
 // Input types and insert machinery for adding a card to a board: insert
-// preparation, blob content preloading, and the transactional insert body.
+// preparation and the transactional insert body.
 
 package primitives
 
@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"agent-nexus-core/internal/blob"
 )
 
 type CardCreateReplay struct {
@@ -82,24 +80,6 @@ type boardCardInsertPrep struct {
 	ResolutionRefsJSON   []byte
 	BeforeCardID         string
 	AfterCardID          string
-}
-
-// preloadCardContent preloads the first-revision content of cards about to be
-// inserted. A card without a title takes one from its thread inside the
-// transaction, so its content is only known there; it is promoted there.
-func (s *Store) preloadCardContent(ctx context.Context, preps ...boardCardInsertPrep) (*blobPreload, error) {
-	contents := make([]blobContent, 0, len(preps))
-	for _, prep := range preps {
-		if strings.TrimSpace(prep.Title) == "" {
-			continue
-		}
-		data, err := cardRevisionContent(prep.Title, prep.Body, prep.DefinitionOfDone)
-		if err != nil {
-			return nil, err
-		}
-		contents = append(contents, blobContent{hash: sha256Hex(data), data: data})
-	}
-	return s.preloadBlobContent(ctx, contents...)
 }
 
 func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error) {
@@ -249,14 +229,14 @@ func prepareBoardCardInsert(input AddBoardCardInput) (boardCardInsertPrep, error
 	}, nil
 }
 
-func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, blob.StagedWrite, error) {
+func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow boardRow, actorID, boardID string, prep boardCardInsertPrep) (boardRow, boardCardRow, error) {
 	if prep.ColumnKey == "done" {
 		if err := validateResolutionRefs(ctx, tx, prep.ResolutionRefs); err != nil {
-			return boardRow, boardCardRow{}, nil, err
+			return boardRow, boardCardRow{}, err
 		}
 	}
 	if err := ensureBoardColumnAllowed(boardRow, prep.ColumnKey); err != nil {
-		return boardRow, boardCardRow{}, nil, err
+		return boardRow, boardCardRow{}, err
 	}
 	cardID := prep.CardID
 	columnKey := prep.ColumnKey
@@ -277,55 +257,55 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 
 	if sourceThreadID != "" {
 		if err := ensureThreadExists(ctx, tx, sourceThreadID); err != nil {
-			return boardRow, boardCardRow{}, nil, err
+			return boardRow, boardCardRow{}, err
 		}
 		if sourceThreadID == boardRow.ThreadID {
-			return boardRow, boardCardRow{}, nil, invalidBoardRequest("board.thread_id cannot be added as a board card")
+			return boardRow, boardCardRow{}, invalidBoardRequest("board.thread_id cannot be added as a board card")
 		}
 		if err := ensureBoardCardParentThreadAvailable(ctx, tx, boardID, sourceThreadID, ""); err != nil {
-			return boardRow, boardCardRow{}, nil, err
+			return boardRow, boardCardRow{}, err
 		}
 	}
 	if title == "" {
 		if derivedTitle, err := loadThreadTitleForBoardCard(ctx, tx, sourceThreadID); err == nil {
 			title = derivedTitle
 		} else if !errors.Is(err, ErrNotFound) {
-			return boardRow, boardCardRow{}, nil, err
+			return boardRow, boardCardRow{}, err
 		}
 	}
 	if title == "" {
 		title = cardID
 	}
 	if title == "" {
-		return boardRow, boardCardRow{}, nil, invalidBoardRequest("card.title is required")
+		return boardRow, boardCardRow{}, invalidBoardRequest("card.title is required")
 	}
 	if pinnedDocumentID != nil {
 		if err := ensureDocumentExists(ctx, tx, *pinnedDocumentID); err != nil {
-			return boardRow, boardCardRow{}, nil, err
+			return boardRow, boardCardRow{}, err
 		}
 	}
 
 	beforeCardID, afterCardID, err := resolveBoardPlacementAnchors(ctx, tx, boardID, prep.BeforeCardID, prep.AfterCardID)
 	if err != nil {
-		return boardRow, boardCardRow{}, nil, err
+		return boardRow, boardCardRow{}, err
 	}
 	rank, err := s.allocateBoardCardRank(ctx, tx, boardID, columnKey, beforeCardID, afterCardID, "")
 	if err != nil {
-		return boardRow, boardCardRow{}, nil, err
+		return boardRow, boardCardRow{}, err
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	provenanceJSON := inferredProvenanceJSON()
 	if err := ensureCardBackingThreadTx(ctx, tx, actorID, cardID, backingThreadID, title, now); err != nil {
-		return boardRow, boardCardRow{}, nil, err
+		return boardRow, boardCardRow{}, err
 	}
-	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardID, 1, sql.NullString{}, backingThreadID, title, body, definitionOfDone, refs)
+	revision, err := s.prepareCardRevisionInsert(actorID, cardID, 1, sql.NullString{}, backingThreadID, title, body, definitionOfDone, refs)
 	if err != nil {
-		return boardRow, boardCardRow{}, nil, err
+		return boardRow, boardCardRow{}, err
 	}
 	cardHandle, err := allocateCardHandleTx(ctx, tx, prep.Handle, title, "card-"+cardID)
 	if err != nil {
-		return boardRow, boardCardRow{}, stagedContent, fmt.Errorf("allocate card handle: %w", err)
+		return boardRow, boardCardRow{}, fmt.Errorf("allocate card handle: %w", err)
 	}
 
 	if _, err := tx.ExecContext(
@@ -365,38 +345,38 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		boardRow.Role != "initiatives",
 	); err != nil {
 		if isUniqueViolation(err) {
-			return boardRow, boardCardRow{}, stagedContent, ErrConflict
+			return boardRow, boardCardRow{}, ErrConflict
 		}
-		return boardRow, boardCardRow{}, stagedContent, fmt.Errorf("insert card: %w", err)
+		return boardRow, boardCardRow{}, fmt.Errorf("insert card: %w", err)
 	}
 
 	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardID, cardHandle, backingThreadID, revision); err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 
 	if err := upsertBoardCardRefEdge(ctx, tx, boardID, cardID, columnKey, rank); err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 	cardTargets := typedRefEdgeTargets(refEdgeTypeRef, refs)
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardParentThread, "thread", sourceThreadID)
 	cardTargets = appendRefEdgeTarget(cardTargets, refEdgeTypeCardPinnedDocument, "document", derefBoardString(pinnedDocumentID))
 	if err := replaceRefEdges(ctx, tx, "card", cardID, cardTargets); err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 	cardRow, err := s.loadBoardCardByIdentifier(ctx, tx, boardID, cardID, true)
 	if err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 	if err := registerCardTrackingTx(ctx, tx, actorID, &cardRow); err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
 	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
-		return boardRow, boardCardRow{}, stagedContent, err
+		return boardRow, boardCardRow{}, err
 	}
-	return boardRow, cardRow, stagedContent, nil
+	return boardRow, cardRow, nil
 }

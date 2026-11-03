@@ -1196,6 +1196,7 @@ var migrations = []migration{
 	{Version: 128, AfterApply: repairBriefNoteExcerpts},
 	// Core's own reminders have only a summary, and showed as blank notes.
 	{Version: 129, AfterApply: repairBriefNoteExcerpts},
+	{Version: 130, ApplyChunk: cardRevisionContentMigrationChunk, Verify: verifyCardRevisionContentMigration},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
@@ -1276,22 +1277,4 @@ func loadAppliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) 
 	}
 
 	return applied, nil
-}
-
-func sqliteTableExists(ctx context.Context, tx *sql.Tx, name string) (bool, error) {
-	var n int
-	err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n)
-	if err != nil {
-		return false, err
-	}
-	return n > 0, nil
-}
-
-func sqliteTableHasColumn(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
-	var n int
-	err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n)
-	if err != nil {
-		return false, err
-	}
-	return n > 0, nil
 }

@@ -1,5 +1,5 @@
-// Card read paths: workspace-wide and per-board card lists, fetching a card
-// by identifier, and card revision history.
+// Card read paths: workspace-wide and per-board card lists and fetching a
+// card by identifier. Revision history reads live in card_revision_reads.go.
 
 package primitives
 
@@ -194,22 +194,15 @@ func (s *Store) ListCards(ctx context.Context, filter CardListFilter) ([]map[str
 	return out, nil
 }
 
+// GetBoardCard loads the scoped current card row. It never reads revision
+// history: use ListCardRevisions, GetCardRevision or DiffCardRevisions.
 func (s *Store) GetBoardCard(ctx context.Context, boardID, identifier string) (map[string]any, error) {
-	card, err := s.GetBoardCardCurrent(ctx, boardID, identifier)
-	if err != nil {
-		return nil, err
-	}
-	history, err := s.ListBoardCardHistory(ctx, card["id"].(string))
-	if err != nil {
-		return nil, err
-	}
-	card["history"] = history
-	return card, nil
+	return s.GetBoardCardCurrent(ctx, boardID, identifier)
 }
 
 // GetBoardCardCurrent loads the scoped current row, including lifecycle fields,
-// without materializing revision history. Like GetBoardCard, it borrows an
-// enclosing mutation transaction from ctx when present.
+// without materializing revision history. It borrows an enclosing mutation
+// transaction from ctx when present.
 func (s *Store) GetBoardCardCurrent(ctx context.Context, boardID, identifier string) (map[string]any, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
@@ -245,55 +238,6 @@ func SoleThreadRefIDFromRefs(refs []string) (string, error) {
 			return "", fmt.Errorf("ambiguous thread refs in refs")
 		}
 		out = id
-	}
-	return out, nil
-}
-
-func (s *Store) ListBoardCardHistory(ctx context.Context, cardID string) ([]map[string]any, error) {
-	if s == nil || s.db == nil {
-		return nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	return s.listBoardCardHistoryTx(ctx, s.db, cardID)
-}
-
-func (s *Store) listBoardCardHistoryTx(ctx context.Context, q sqlRowsQuerier, cardID string) ([]map[string]any, error) {
-	rows, err := q.QueryContext(
-		ctx,
-		`SELECT cr.revision_id, cr.card_id, c.handle, cr.revision_number, cr.prev_revision_id, cr.artifact_id, cr.revision_hash,
-		        c.board_id, b.handle, cr.thread_id,
-		        COALESCE(json_extract(a.metadata_json, '$.title'), c.title),
-		        COALESCE(json_extract(a.metadata_json, '$.summary'), c.summary),
-		        c.due_at,
-		        COALESCE(json_extract(a.metadata_json, '$.definition_of_done'), c.definition_of_done_json),
-		        c.column_key, c.rank, c.parent_thread_id, c.pinned_document_id, c.assignee, c.risk, c.resolution, c.resolution_refs_json, c.refs_json,
-		        cr.created_at, cr.created_by, c.provenance_json
-		   FROM card_revisions cr
-		   JOIN cards c ON c.id = cr.card_id
-		   LEFT JOIN boards b ON b.id = c.board_id
-		   JOIN artifacts a ON a.id = cr.artifact_id
-		  WHERE cr.card_id = ?
-		  ORDER BY cr.revision_number ASC`,
-		strings.TrimSpace(cardID),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query board card history: %w", err)
-	}
-	defer rows.Close()
-
-	out := make([]map[string]any, 0)
-	for rows.Next() {
-		versionRow, scanErr := scanBoardCardVersionRow(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		version, mapErr := versionRow.toMap()
-		if mapErr != nil {
-			return nil, mapErr
-		}
-		out = append(out, version)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate board card history: %w", err)
 	}
 	return out, nil
 }

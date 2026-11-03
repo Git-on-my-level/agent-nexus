@@ -137,7 +137,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `88`
+- Commands: `89`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -162,6 +162,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.purge`
   - `cards.restore`
   - `cards.revisions.create`
+  - `cards.revisions.diff`
   - `cards.revisions.get`
   - `cards.revisions.list`
   - `cards.timeline`
@@ -556,9 +557,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `revisions`
 
-- Commands: `6`
+- Commands: `7`
 - Command IDs:
   - `cards.revisions.create`
+  - `cards.revisions.diff`
   - `cards.revisions.get`
   - `cards.revisions.list`
   - `docs.revisions.create`

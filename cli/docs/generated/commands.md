@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `288`
+- Commands: `289`
 
 ## `actors.create`
 
@@ -1258,6 +1258,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Output: Returns `{ card, revision }`.
 
+## `cards.revisions.diff`
+
+- CLI path: `cards revision diff`
+- HTTP: `GET /cards/{card_id}/revisions/{revision_id}/diff`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `query`
+- Why: Show what one card revision changed, without transferring either full summary.
+- Concepts: `cards`, `revisions`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ card_ref, card_handle, base_revision, revision, identical, title?, definition_of_done?, summary }`.
+- Agent notes: Read-only and safe to retry. Prefer this over fetching two full revisions; use `cards revision get` only when the whole summary is needed.
+
 ## `cards.revisions.get`
 
 - CLI path: `cards revision get`
@@ -1265,7 +1278,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `none`
-- Why: Resolve one immutable card content revision.
+- Why: Resolve one immutable card content revision with its full title, summary and definition of done.
 - Concepts: `cards`, `revisions`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ card_ref, card_handle, revision }`; internal card_id may appear for admin/debug compatibility.
@@ -1276,11 +1289,11 @@ Generated from `contracts/anx-openapi.yaml`.
 - HTTP: `GET /cards/{card_id}/revisions`
 - Stability: `beta`
 - Surface: `canonical`
-- Input mode: `none`
-- Why: Enumerate immutable content revisions for one card lineage.
+- Input mode: `query`
+- Why: Page through the immutable content revisions of one card lineage, newest first, as metadata only.
 - Concepts: `cards`, `revisions`
-- Error codes: `auth_required`, `invalid_token`, `not_found`
-- Output: Returns `{ card_ref, card_handle, revisions }`; internal card_id may appear for admin/debug compatibility.
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
+- Output: Returns `{ card_ref, card_handle, revisions, next_cursor }`; internal card_id may appear for admin/debug compatibility.
 
 ## `cards.timeline`
 

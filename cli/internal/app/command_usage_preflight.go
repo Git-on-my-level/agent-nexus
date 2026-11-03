@@ -389,7 +389,12 @@ func preflightKnownCommandShape(args []string) error {
 	case "ref-edges":
 		return preflightSubcommand(args[1:], refEdgesSubcommandSpec)
 	case "cards":
-		return preflightSubcommand(args[1:], cardsSubcommandSpec)
+		if err := preflightSubcommand(args[1:], cardsSubcommandSpec); err != nil {
+			return err
+		}
+		if len(args) >= 3 && cardsSubcommandSpec.normalize(args[1]) == "revision" {
+			return preflightSubcommand(args[2:], cardsRevisionSubcommandSpec)
+		}
 	case "artifacts":
 		return preflightSubcommand(args[1:], artifactsSubcommandSpec)
 	case "boards":
@@ -471,6 +476,10 @@ func preflightShapeCommandName(args []string) string {
 	case "boards":
 		if len(args) >= 3 && boardsSubcommandSpec.normalize(args[1]) == "cards" {
 			return "boards cards"
+		}
+	case "cards":
+		if len(args) >= 3 && cardsSubcommandSpec.normalize(args[1]) == "revision" {
+			return "cards revision"
 		}
 	case "docs":
 		if len(args) >= 3 && docsSubcommandSpec.normalize(args[1]) == "revision" {

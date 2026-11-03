@@ -434,6 +434,11 @@ func (s *Store) GetArtifactContent(ctx context.Context, id string) ([]byte, stri
 	if contentHash == "" {
 		return nil, "", ErrNotFound
 	}
+	if body, ok, err := s.cardRevisionArtifactContent(ctx, id, contentHash); err != nil {
+		return nil, "", fmt.Errorf("read card revision content: %w", err)
+	} else if ok {
+		return body, contentType, nil
+	}
 
 	body, err := s.blob.Read(ctx, contentHash)
 	if err != nil {

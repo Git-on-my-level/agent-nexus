@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -317,6 +318,75 @@ func (a *App) parseCardReviseInput(ctx context.Context, args []string, cfg confi
 		return "", nil, err
 	}
 	return cardID, body, nil
+}
+
+// parseCardHistoryInput parses `cards history <card> [--limit N] [--cursor C]`.
+// History pages are metadata only; the server bounds limit to 1..200.
+func parseCardHistoryInput(args []string, commandName string) (string, []queryParam, error) {
+	leadingID, args := popLeadingPositional(args)
+	fs := newSilentFlagSet(commandName)
+	var cardIDFlag, cursorFlag trackedString
+	var limitFlag trackedInt
+	fs.Var(&cardIDFlag, "card-id", "Card ref, handle, or id")
+	fs.Var(&limitFlag, "limit", "Revisions per page (1-200, default 50)")
+	fs.Var(&cursorFlag, "cursor", "Continue from next_cursor of the previous page")
+	if err := fs.Parse(args); err != nil {
+		return "", nil, errnorm.Usage("invalid_flags", err.Error())
+	}
+	positionals := fs.Args()
+	raw := firstNonEmpty(strings.TrimSpace(cardIDFlag.value), leadingID)
+	if raw == "" && len(positionals) > 0 {
+		raw, positionals = strings.TrimSpace(positionals[0]), positionals[1:]
+	}
+	if len(positionals) > 0 {
+		return "", nil, errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
+	}
+	cardID, err := normalizeResourceIDInput(raw, "card", "card id")
+	if err != nil {
+		return "", nil, err
+	}
+	if err := validateID(cardID, "card id"); err != nil {
+		return "", nil, err
+	}
+	var query []queryParam
+	if limitFlag.set {
+		if limitFlag.value < 1 || limitFlag.value > 200 {
+			return "", nil, errnorm.Usage("invalid_flags", "--limit must be between 1 and 200")
+		}
+		query = append(query, queryParam{name: "limit", values: []string{strconv.Itoa(limitFlag.value)}})
+	}
+	if cursor := strings.TrimSpace(cursorFlag.value); cursor != "" {
+		query = append(query, queryParam{name: "cursor", values: []string{cursor}})
+	}
+	return cardID, query, nil
+}
+
+// parseCardRevisionDiffInput parses `cards revision diff <card> <revision> [--base <revision>]`.
+func parseCardRevisionDiffInput(args []string, commandName string) (string, string, []queryParam, error) {
+	var base string
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--base" && i+1 < len(args):
+			base = strings.TrimSpace(args[i+1])
+			i++
+		case args[i] == "--base":
+			return "", "", nil, errnorm.Usage("invalid_flags", "--base requires a card revision ref, handle or id")
+		case strings.HasPrefix(args[i], "--base="):
+			base = strings.TrimSpace(strings.TrimPrefix(args[i], "--base="))
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	cardID, revisionID, err := parseCardRevisionGetInput(rest, commandName)
+	if err != nil {
+		return "", "", nil, err
+	}
+	var query []queryParam
+	if base != "" {
+		query = append(query, queryParam{name: "base", values: []string{base}})
+	}
+	return cardID, revisionID, query, nil
 }
 
 func parseCardRevisionGetInput(args []string, commandName string) (string, string, error) {

@@ -851,7 +851,7 @@ const adapterCommandTable = [
   [
     "getCardHistory",
     "cards.revisions.list",
-    (cardId) => p(pathParams({ card_id: cardId })),
+    (cardId, page) => pq(pathParams({ card_id: cardId }), page),
   ],
   [
     "getCardRevision",

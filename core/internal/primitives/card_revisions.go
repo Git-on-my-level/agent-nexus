@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"agent-nexus-core/internal/blob"
+	"agent-nexus-core/internal/cardcontent"
 )
 
 type cardRevisionInsert struct {
@@ -25,13 +25,14 @@ type cardRevisionInsert struct {
 	RevisionHash   string
 	CreatedAt      string
 	ContentHash    string
-	BlobPlan       blobLedgerWritePlan
+	SummaryBytes   int
 	RefsJSON       string
 	MetadataJSON   string
 	EncodedContent []byte
 }
 
-// cardRevisionContent is the stored blob content of a card revision.
+// cardRevisionContent is the canonical content of a card revision. Its
+// SHA-256 is the revision artifact's content_hash.
 func cardRevisionContent(title, summary string, definitionOfDone []string) ([]byte, error) {
 	return encodeContent(map[string]any{
 		"title":              strings.TrimSpace(title),
@@ -40,24 +41,20 @@ func cardRevisionContent(title, summary string, definitionOfDone []string) ([]by
 	}, "structured")
 }
 
-func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID string, revisionNumber int, prevRevisionID sql.NullString, threadID, title, summary string, definitionOfDone []string, refs []string) (cardRevisionInsert, blob.StagedWrite, error) {
-	if s == nil || s.blob == nil {
-		return cardRevisionInsert{}, nil, fmt.Errorf("blob backend is not configured")
-	}
+func (s *Store) prepareCardRevisionInsert(actorID, cardID string, revisionNumber int, prevRevisionID sql.NullString, threadID, title, summary string, definitionOfDone []string, refs []string) (cardRevisionInsert, error) {
 	cardID = strings.TrimSpace(cardID)
 	actorID = strings.TrimSpace(actorID)
+	if err := s.checkCardSummarySize(summary); err != nil {
+		return cardRevisionInsert{}, err
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	revisionID := uuid.NewString()
 	artifactID := revisionID
 	encodedContent, err := cardRevisionContent(title, summary, definitionOfDone)
 	if err != nil {
-		return cardRevisionInsert{}, nil, err
+		return cardRevisionInsert{}, err
 	}
 	contentHash := sha256Hex(encodedContent)
-	blobPlan := blobLedgerWritePlan{contentHash: contentHash, sizeBytes: int64(len(encodedContent))}
-	if err := s.checkWorkspaceWriteQuota(ctx, int64(len(encodedContent)), quotaWriteDelta{artifacts: 1, revisions: 1}, blobPlan); err != nil {
-		return cardRevisionInsert{}, nil, err
-	}
 	revisionRefs := append([]string(nil), refs...)
 	if strings.TrimSpace(threadID) != "" {
 		revisionRefs = append(revisionRefs, "thread:"+strings.TrimSpace(threadID))
@@ -66,39 +63,35 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 	revisionRefs = uniqueSortedStrings(revisionRefs)
 	refsJSON, err := json.Marshal(revisionRefs)
 	if err != nil {
-		return cardRevisionInsert{}, nil, fmt.Errorf("marshal card revision refs: %w", err)
+		return cardRevisionInsert{}, fmt.Errorf("marshal card revision refs: %w", err)
 	}
 	prevID := ""
 	if prevRevisionID.Valid {
 		prevID = strings.TrimSpace(prevRevisionID.String)
 	}
 	revisionHash := computeRevisionHash(contentHash, prevID, cardID, revisionNumber, now, actorID)
+	// The summary and definition of done live only in the revision content
+	// (card_revisions.content_*); metadata keeps small descriptive fields.
 	artifactMetadata := map[string]any{
-		"id":                 artifactID,
-		"kind":               "card",
-		"created_at":         now,
-		"created_by":         actorID,
-		"content_type":       "structured",
-		"content_hash":       contentHash,
-		"refs":               revisionRefs,
-		"card_id":            cardID,
-		"revision_id":        revisionID,
-		"revision_number":    revisionNumber,
-		"prev_revision_id":   nil,
-		"title":              strings.TrimSpace(title),
-		"summary":            strings.TrimSpace(summary),
-		"definition_of_done": uniqueSortedStrings(definitionOfDone),
+		"id":               artifactID,
+		"kind":             "card",
+		"created_at":       now,
+		"created_by":       actorID,
+		"content_type":     "structured",
+		"content_hash":     contentHash,
+		"refs":             revisionRefs,
+		"card_id":          cardID,
+		"revision_id":      revisionID,
+		"revision_number":  revisionNumber,
+		"prev_revision_id": nil,
+		"title":            strings.TrimSpace(title),
 	}
 	if prevID != "" {
 		artifactMetadata["prev_revision_id"] = prevID
 	}
 	metadataJSON, err := json.Marshal(artifactMetadata)
 	if err != nil {
-		return cardRevisionInsert{}, nil, fmt.Errorf("marshal card artifact metadata: %w", err)
-	}
-	stagedContent, err := s.blob.Write(ctx, contentHash, encodedContent)
-	if err != nil {
-		return cardRevisionInsert{}, nil, fmt.Errorf("stage card content: %w", err)
+		return cardRevisionInsert{}, fmt.Errorf("marshal card artifact metadata: %w", err)
 	}
 	return cardRevisionInsert{
 		RevisionID:     revisionID,
@@ -108,14 +101,28 @@ func (s *Store) prepareCardRevisionInsert(ctx context.Context, actorID, cardID s
 		RevisionHash:   revisionHash,
 		CreatedAt:      now,
 		ContentHash:    contentHash,
-		BlobPlan:       blobPlan,
+		SummaryBytes:   len(strings.TrimSpace(summary)),
 		RefsJSON:       string(refsJSON),
 		MetadataJSON:   string(metadataJSON),
 		EncodedContent: encodedContent,
-	}, stagedContent, nil
+	}, nil
 }
 
 func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID, cardID, cardHandle, threadID string, revision cardRevisionInsert) error {
+	// Content is stored once, as a bounded keyframe/delta record on the
+	// revision row; no blob is written. Planning reads only this card's latest
+	// snapshot and a content-hash match.
+	record, err := cardcontent.PlanForCard(ctx, tx, cardID, revision.RevisionNumber, revision.EncodedContent)
+	if err != nil {
+		return fmt.Errorf("encode card revision content: %w", err)
+	}
+	if record.ContentHash != revision.ContentHash {
+		return fmt.Errorf("card revision content hash mismatch")
+	}
+	// Stored bytes count toward the storage quota through database accounting.
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{artifacts: 1, revisions: 1, dbBytes: int64(len(record.Payload) + len(revision.MetadataJSON) + len(revision.RefsJSON))}, blobLedgerWritePlan{}); err != nil {
+		return err
+	}
 	parent := firstNonEmpty(strings.TrimSpace(cardHandle), cardID)
 	artifactHandle, err := uniqueHandleTx(ctx, tx, "artifact", revisionArtifactDesiredHandle(parent, revision.RevisionNumber), "artifact-"+revision.ArtifactID)
 	if err != nil {
@@ -147,14 +154,12 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 	if err := replaceRefEdges(ctx, tx, "artifact", revision.ArtifactID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
 		return err
 	}
-	if err := s.applyBlobLedgerWritePlanTx(ctx, tx, revision.BlobPlan); err != nil {
-		return err
-	}
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO card_revisions(
-			revision_id, card_id, revision_number, prev_revision_id, artifact_id, thread_id, refs_json, revision_hash, created_at, created_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			revision_id, card_id, revision_number, prev_revision_id, artifact_id, thread_id, refs_json, revision_hash, created_at, created_by,
+			content_encoding, content_codec, content_base_revision_id, content_hash, content_bytes, summary_bytes, content_payload
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		revision.RevisionID,
 		cardID,
 		revision.RevisionNumber,
@@ -165,6 +170,13 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		revision.RevisionHash,
 		revision.CreatedAt,
 		actorID,
+		record.Encoding,
+		nullableString(record.Codec),
+		nullableString(record.BaseRevisionID),
+		record.ContentHash,
+		record.ContentBytes,
+		revision.SummaryBytes,
+		record.Payload,
 	); err != nil {
 		return fmt.Errorf("insert card revision: %w", err)
 	}
@@ -184,9 +196,6 @@ type CreateCardRevisionInput struct {
 func (s *Store) CreateCardRevision(ctx context.Context, actorID, cardID string, input CreateCardRevisionInput) (BoardCardMutationResult, map[string]any, error) {
 	if s == nil || s.db == nil {
 		return BoardCardMutationResult{}, nil, fmt.Errorf("primitives store database is not initialized")
-	}
-	if s.blob == nil {
-		return BoardCardMutationResult{}, nil, fmt.Errorf("blob backend is not configured")
 	}
 	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
@@ -282,13 +291,12 @@ func (s *Store) createCardRevision(ctx context.Context, actorID, cardID string, 
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
-	revision, stagedContent, err := s.prepareCardRevisionInsert(ctx, actorID, cardRow.CardID, nextRevisionNumber, prevRevision, threadID, nextTitle, nextSummary, nextDefinition, nextRefs)
+	revision, err := s.prepareCardRevisionInsert(actorID, cardRow.CardID, nextRevisionNumber, prevRevision, threadID, nextTitle, nextSummary, nextDefinition, nextRefs)
 	if err != nil {
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
 	if err := s.insertCardRevisionTx(ctx, tx, actorID, cardRow.CardID, cardRow.Handle.String, threadID, revision); err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
@@ -299,49 +307,36 @@ func (s *Store) createCardRevision(ctx context.Context, actorID, cardID string, 
 		  WHERE id = ?`,
 		nextTitle, nextSummary, string(nextDefinitionJSON), nextRevisionNumber, revision.RevisionID, nextRevisionNumber, now, actorID, cardRow.CardID,
 	); err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, fmt.Errorf("update card revision head: %w", err)
 	}
 	boardRow, err := loadBoardRow(ctx, tx, cardRow.BoardID)
 	if err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
 	boardRow, err = touchBoardRow(ctx, tx, boardRow, actorID)
 	if err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
 	cardRow, err = s.loadBoardCardByGlobalID(ctx, tx, cardRow.CardID, true)
 	if err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
-	revisions, err := s.listBoardCardHistoryTx(ctx, tx, cardRow.CardID)
+	// Echo only the new revision; never materialize the card's history.
+	revisionMap, err := s.loadCardRevisionTx(ctx, tx, cardRow.CardID, revision.RevisionID, true)
 	if err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
 	if err := markBoardCardProjectionDirtyTx(ctx, tx, cardRow); err != nil {
-		_ = stagedContent.Cleanup()
 		_ = tx.Rollback()
 		return BoardCardMutationResult{}, nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		_ = stagedContent.Cleanup()
 		return BoardCardMutationResult{}, nil, fmt.Errorf("commit card revision transaction: %w", err)
-	}
-	// With replay, this savepoint has released but the outer transaction is
-	// still open. Promotion must succeed before the HTTP receipt can commit.
-	// A later outer failure may leave an unreferenced content-addressed blob.
-	if err := stagedContent.Promote(); err != nil {
-		_ = stagedContent.Cleanup()
-		return BoardCardMutationResult{}, nil, fmt.Errorf("finalize card content: %w", err)
 	}
 	boardMap, err := boardRowToAPI(ctx, s.db, boardRow)
 	if err != nil {
@@ -350,10 +345,6 @@ func (s *Store) createCardRevision(ctx context.Context, actorID, cardID string, 
 	cardMap, err := cardRow.toMap()
 	if err != nil {
 		return BoardCardMutationResult{}, nil, err
-	}
-	revisionMap := map[string]any{}
-	if len(revisions) > 0 {
-		revisionMap = revisions[len(revisions)-1]
 	}
 	return BoardCardMutationResult{Board: boardMap, Card: cardMap}, revisionMap, nil
 }

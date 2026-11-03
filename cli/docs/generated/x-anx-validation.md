@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `288`
+- Command operations: `289`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `237`
+- Missing recommended examples: `238`
 
 ## Baseline gap counts
 
@@ -231,6 +231,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `cards.purge` `POST /cards/{card_id}/purge`
 - `cards.restore` `POST /cards/{card_id}/restore`
 - `cards.revisions.create` `POST /cards/{card_id}/revisions`
+- `cards.revisions.diff` `GET /cards/{card_id}/revisions/{revision_id}/diff`
 - `cards.revisions.get` `GET /cards/{card_id}/revisions/{revision_id}`
 - `cards.revisions.list` `GET /cards/{card_id}/revisions`
 - `cards.timeline` `GET /cards/{card_id}/timeline`

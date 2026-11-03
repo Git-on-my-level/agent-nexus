@@ -578,6 +578,11 @@
   },
   {
     "method": "GET",
+    "path": "/cards/{card_id}/revisions/{revision_id}/diff",
+    "policy": "record"
+  },
+  {
+    "method": "GET",
     "path": "/cards/{card_id}/timeline",
     "policy": "record"
   },

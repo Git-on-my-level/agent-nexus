@@ -37,7 +37,15 @@ func (s *Store) BackfillArtifactAccess(ctx context.Context) error {
 	}
 	var failures []error
 	for _, e := range entries {
-		body, err := s.blob.Read(ctx, e.hash)
+		// Card revisions keep their content in card_revisions, not in a blob.
+		body, ok, err := s.cardRevisionArtifactContent(ctx, e.id, e.hash)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("index card revision content %s: %w", e.id, err))
+			continue
+		}
+		if !ok {
+			body, err = s.blob.Read(ctx, e.hash)
+		}
 		if err != nil {
 			failures = append(failures, fmt.Errorf("index artifact content %s: %w", e.id, err))
 			continue

@@ -61,8 +61,14 @@ func formatCommandSummary(commandID string, body any) string {
 		return formatEventsList(body)
 	case "inbox.list":
 		return formatInboxList(body)
-	case "docs.history", "docs.revisions.list", "cards.revisions.list":
+	case "docs.history", "docs.revisions.list":
 		return formatNamedList(body, "revisions", "Revisions", "revision", renderRevisionListItem)
+	case "cards.revisions.list":
+		return formatCardRevisionsPage(body)
+	case "cards.revisions.get":
+		return formatCardRevisionRecord(extractNestedMap(body, "revision"))
+	case "cards.revisions.diff":
+		return formatCardRevisionDiff(body)
 	case "topics.get", "topics.create", "topics.patch":
 		return formatTopicRecord(extractNestedMap(body, "topic"))
 	case "topics.timeline":
@@ -141,7 +147,7 @@ func formatCommandSummary(commandID string, body any) string {
 		return messageWriteText(body, "Topic")
 	case "topics.messages":
 		return formatTopicMessages(body)
-	case "docs.revision.get", "docs.revisions.get", "cards.revisions.get":
+	case "docs.revision.get", "docs.revisions.get":
 		return formatRevisionRecord(extractNestedMap(body, "revision"))
 	case "provenance.walk":
 		return formatProvenanceWalkSummary(asMap(body))
