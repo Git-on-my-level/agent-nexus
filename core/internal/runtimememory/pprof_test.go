@@ -17,12 +17,28 @@ func TestPprofExplicitAddress(t *testing.T) {
 		}
 	}
 	for _, addr := range []string{"127.0.0.1:0", "[::1]:0", "0.0.0.0:0"} {
+		if addr == "[::1]:0" && !ipv6LoopbackAvailable() {
+			t.Logf("skipping %s: IPv6 loopback unavailable on this host", addr)
+			continue
+		}
 		d, err := StartPprof(addr, addr == "0.0.0.0:0")
 		if err != nil {
 			t.Fatal(err)
 		}
 		d.Close()
 	}
+}
+
+// ipv6LoopbackAvailable reports whether this host can bind [::1]. Some
+// sandboxes and containers ship without IPv6, where the bind fails with
+// "address family not supported" for reasons unrelated to StartPprof.
+func ipv6LoopbackAvailable() bool {
+	l, err := net.Listen("tcp", "[::1]:0")
+	if err != nil {
+		return false
+	}
+	l.Close()
+	return true
 }
 
 func TestPprofDedicatedMux(t *testing.T) {
