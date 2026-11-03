@@ -171,6 +171,16 @@ jobs:
   web-ui-e2e-perf:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Same official Playwright image as the gating browser jobs in ci.yml, so
+    # the setup-playwright check sees the matching bundled Chromium.
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # The official image runs as root; only the trusted fixture renderer
+      # opts out of the sandbox, exactly as in ci.yml.
+      ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -186,9 +196,6 @@ jobs:
 
       - name: Setup Playwright Chromium
         uses: ./.github/actions/setup-playwright
-
-      - name: Allow sandboxed Chromium on Ubuntu runners
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Run browser timing budgets
         env:
