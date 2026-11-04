@@ -323,7 +323,11 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAccessAdmissionGraph, installAdmissionCanonicalVertices, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installHistoricalWakeupAdmission, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
+	// The canonical vertex backfill writes links before the graph's triggers
+	// exist. The graph is then counted from those links in one set-based pass,
+	// instead of paying a graph upsert for every link row. Spellings read the
+	// finished graph, so they must stay after it.
+	for _, install := range []func(context.Context, *sql.Tx) error{installAccessAdmissionRootCounts, installAccessAdmissionRoots, installAdmissionCanonicalVertices, installAccessAdmissionGraph, installAccessAdmissionSpellings, installAccessAdmissionReach, installAccessAdmissionOwners, installHistoricalWakeupAdmission, installWorkLifecycle, restrictAdmissionEvidenceWrites, restrictAdmissionUpdates} {
 		if err := install(ctx, tx); err != nil {
 			return err
 		}
