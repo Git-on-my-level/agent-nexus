@@ -108,6 +108,37 @@ func proseStarts(atom string) []proseProbe {
 	return out
 }
 
+// ProseProbe is one step of the chained prose walk. The Go admission walk and
+// the anx_resource_prose_starts/next SQL functions share these digests, so the
+// keys and prefixes they produce are identical for every atom.
+type ProseProbe struct {
+	Keys   []string
+	Prefix string
+	text   string
+	probe  proseProbe
+}
+
+// ProseStarts returns the first probes of atom's prose walk, in SQL order.
+func ProseStarts(atom string) []ProseProbe {
+	text := strings.TrimPrefix(atom, textReferencePrefix)
+	starts := proseStarts(atom)
+	out := make([]ProseProbe, 0, len(starts))
+	for _, p := range starts {
+		out = append(out, ProseProbe{Keys: p.Keys, Prefix: p.Prefix, text: text, probe: p})
+	}
+	return out
+}
+
+// Next continues the walk from p's prefix, exactly as anx_resource_prose_next.
+func (p ProseProbe) Next() (ProseProbe, error) {
+	h := sha256.New()
+	if err := h.(encoding.BinaryUnmarshaler).UnmarshalBinary(p.probe.State); err != nil {
+		return ProseProbe{}, err
+	}
+	next := nextProseProbe(p.text, p.probe, h)
+	return ProseProbe{Keys: next.Keys, Prefix: next.Prefix, text: p.text, probe: next}, nil
+}
+
 func ProseKeySQL(value string) string { return "anx_resource_prose_key(CAST(" + value + " AS BLOB))" }
 func ProsePrefixesSQL(value string) string {
 	return "anx_resource_prose_prefixes(CAST(" + value + " AS BLOB))"
