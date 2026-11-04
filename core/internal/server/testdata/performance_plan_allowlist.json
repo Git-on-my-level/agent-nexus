@@ -9663,5 +9663,45 @@
     "reason": "brief.v1 (GET /brief) materialized-fact read: every brief_* table access is an indexed seek with a LIMIT (or a json_each-bounded primary-key/handle lookup of at most 1000 ids through idx_cards_handle_unique). A PM-private thread is excluded before that LIMIT, and from both initiative ask counts, by a threads primary-key lookup (sqlite_autoindex_threads_1) of pm_actor_id empty or equal to the reader, so another owner's rows cannot fill the window or a count. The only finding is the access layer's scoped-relation wrapper, anx_point_snapshot_denied, evaluated per joined row against the epoch-validated denial snapshot. Measured: authorized phases and unauthorized warm stay inside the standard 100-statement/50000-VM-step budget. Only this exact SQL/full ordered-plan pair is permitted.",
     "issue": "SCA-663",
     "issue_url": "mention://issue/01a110fa-d613-7266-8b29-df68f0bb26d2"
+  },
+  {
+    "sql_sha256": "c1de71fd1114920d26a215e5bb4f879219b7c3ad075f94d9bbd9dbb44e8a70a6",
+    "plan_sha256": "1ad627144ddd1418972e1b4402facd75f63dd510c3506c637699d75f7e484443",
+    "findings": [
+      "SEARCH _row USING COVERING INDEX idx_document_revisions_document_id_revision_id (document_id=?)",
+      "SEARCH _row USING INDEX idx_documents_trashed_updated_at (trashed_at=?)",
+      "SEARCH _row USING INDEX idx_events_message_thread_key (<expr>=?)",
+      "SEARCH _row USING INDEX sqlite_autoindex_artifacts_1 (id=?) LEFT-JOIN",
+      "SEARCH _row USING INDEX sqlite_autoindex_document_revisions_1 (revision_id=?) LEFT-JOIN",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=? AND owner<?)",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=? AND owner>?)",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=?)",
+      "SEARCH ranked USING AUTOMATIC PARTIAL COVERING INDEX (rn=? AND tid=?) LEFT-JOIN",
+      "SEARCH rc USING AUTOMATIC COVERING INDEX (document_id=?) LEFT-JOIN",
+      "SEARCH tmc USING AUTOMATIC COVERING INDEX (tid=?) LEFT-JOIN"
+    ],
+    "issue": "PR #522 review",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/522#issuecomment-6639687674",
+    "reason": "Reviewed in PR #522 storage privacy and query-plan review (https://github.com/Git-on-my-level/agent-nexus/pull/522#issuecomment-6639687674), measured at head e2f62d13 (migration 131), captured by GET /docs (authorized). Source: core/internal/primitives/document_list.go buildListDocumentsQuery. Comment aggregates drive from the page's distinct non-empty thread keys (doc_threads, at most limit+1) and seek idx_events_message_thread_key by equality per key, replacing the type-wide idx_events_overview_answers (type=?) read of every message. Each remaining SEARCH is a point or per-page-key lookup; the r PRIMARY KEY searches are admission-ledger probes; the AUTOMATIC indexes cover page-sized materialized rc/tmc/ranked. No SCAN of a large relation. Work per request is proportional to the page's thread message counts, not to workspace size. Only this exact SQL/plan pair and findings are permitted."
+  },
+  {
+    "sql_sha256": "e55daf835cd6d0ded2696c9fba5f4fff8654c10ecd635736445617ef2f38a531",
+    "plan_sha256": "1ad627144ddd1418972e1b4402facd75f63dd510c3506c637699d75f7e484443",
+    "findings": [
+      "SEARCH _row USING COVERING INDEX idx_document_revisions_document_id_revision_id (document_id=?)",
+      "SEARCH _row USING INDEX idx_documents_trashed_updated_at (trashed_at=?)",
+      "SEARCH _row USING INDEX idx_events_message_thread_key (<expr>=?)",
+      "SEARCH _row USING INDEX sqlite_autoindex_artifacts_1 (id=?) LEFT-JOIN",
+      "SEARCH _row USING INDEX sqlite_autoindex_document_revisions_1 (revision_id=?) LEFT-JOIN",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=? AND owner<?)",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=? AND owner>?)",
+      "SEARCH r USING PRIMARY KEY (ledger=? AND kind=? AND id=? AND unconditional=?)",
+      "SEARCH ranked USING AUTOMATIC PARTIAL COVERING INDEX (rn=? AND tid=?) LEFT-JOIN",
+      "SEARCH rc USING AUTOMATIC COVERING INDEX (document_id=?) LEFT-JOIN",
+      "SEARCH tmc USING AUTOMATIC COVERING INDEX (tid=?) LEFT-JOIN"
+    ],
+    "issue": "PR #522 review",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/522#issuecomment-6639687674",
+    "reason": "Reviewed in PR #522 storage privacy and query-plan review (https://github.com/Git-on-my-level/agent-nexus/pull/522#issuecomment-6639687674), measured at head e2f62d13 (migration 131), captured by GET /docs (unauthorized). Source: core/internal/primitives/document_list.go buildListDocumentsQuery. Comment aggregates drive from the page's distinct non-empty thread keys (doc_threads, at most limit+1) and seek idx_events_message_thread_key by equality per key, replacing the type-wide idx_events_overview_answers (type=?) read of every message. Each remaining SEARCH is a point or per-page-key lookup; the r PRIMARY KEY searches are admission-ledger probes; the AUTOMATIC indexes cover page-sized materialized rc/tmc/ranked. No SCAN of a large relation. Work per request is proportional to the page's thread message counts, not to workspace size. Only this exact SQL/plan pair and findings are permitted."
   }
 ]

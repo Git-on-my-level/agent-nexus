@@ -1197,6 +1197,13 @@ var migrations = []migration{
 	// Core's own reminders have only a summary, and showed as blank notes.
 	{Version: 129, AfterApply: repairBriefNoteExcerpts},
 	{Version: 130, ApplyChunk: cardRevisionContentMigrationChunk, Verify: verifyCardRevisionContentMigration},
+	// The document list counts each page document's comments and reads its
+	// latest one by the trimmed thread key. Index that exact expression so the
+	// aggregate seeks the page's threads instead of scanning every message.
+	// Index only: stored thread_id values (NULL, padded) are left as written.
+	{Version: 131, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_events_message_thread_key ON events(trim(COALESCE(thread_id,'')),ts DESC,id DESC) WHERE type='message_posted';`,
+	}},
 }
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
