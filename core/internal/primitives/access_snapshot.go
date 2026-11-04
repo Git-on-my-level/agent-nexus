@@ -21,6 +21,11 @@ type denialSnapshot struct {
 	candidateChanges   int64
 	candidateAllPublic bool
 	inventory          bool
+	// candidateSeek keeps every per-row admission predicate a canonical indexed
+	// seek on resource_access_admission_owners, without the request-local memo
+	// functions. Pages that join large relations row by row (document search)
+	// set it so no custom SQL function is evaluated inside their WHERE clauses.
+	candidateSeek      bool
 	candidateMu        sync.Mutex
 	candidateIndex     map[denialTarget]bool
 	candidateComplete  map[denialTarget]struct{}
