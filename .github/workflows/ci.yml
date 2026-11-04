@@ -399,7 +399,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Browser-based visual QA against committed baselines (after static checks).
+  # Browser-based visual QA against committed baselines. It shares no inputs or
+  # outputs with web-ui-static-check, so it runs beside it; ci-ok still requires
+  # both to succeed.
   web-ui-visual-check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -414,9 +416,7 @@ jobs:
       # The official image runs as root. Only the trusted fixture renderer
       # explicitly opts out; its default/fallback sandbox contract stays intact.
       ANX_TEST_REPORT_CHROMIUM_SANDBOX: "false"
-    needs:
-      - changes
-      - web-ui-static-check
+    needs: changes
     if: needs.changes.outputs.web_ui == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.node_shared == 'true'
     steps:
       - name: Checkout
