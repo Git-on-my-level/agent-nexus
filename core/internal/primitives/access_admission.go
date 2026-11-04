@@ -2,8 +2,13 @@ package primitives
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"agent-nexus-core/internal/resourceaccess"
@@ -201,8 +206,172 @@ func candidateCleanRefSQL(scope AccessScope, value string, proofs ...*denialSnap
 	return candidateTextProofSQL(`NOT EXISTS(SELECT 1 FROM main.resource_access_admission_spellings k WHERE k.ref=`+value+` AND k.is_ref=1 AND NOT (`+candidateVisibleSQL(scope, "k.kind", "k.id", proofs...)+`))`, "ref", value, proofs...)
 }
 
-func candidateValueCheckSQL(scope AccessScope) string {
-	return `WITH RECURSIVE ` + admissionLedgerCTE(scope) + ` SELECT CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 0 ELSE EXISTS(SELECT 1 FROM json_each(?) j WHERE NOT (` + candidateCleanAtomSQL(scope, "j.value") + `)) END`
+// candidateValuesDenied reports whether any atom in atomsJSON is denied to scope.
+// Exact and prose candidates are selected by Go-side walks: each statement is
+// indexed on spelling keys and contains no custom function in its WHERE. A
+// *sql.DB runs every statement of one check inside a single read transaction,
+// so the walk sees one snapshot; an existing transaction is used as is.
+func candidateValuesDenied(ctx context.Context, q queryRower, scope AccessScope, atomsJSON string) (bool, error) {
+	var atoms []string
+	if err := json.Unmarshal([]byte(atomsJSON), &atoms); err != nil {
+		return false, err
+	}
+	rows, ok := q.(candidateRows)
+	if !ok {
+		return false, errors.New("candidate admission requires a query handle")
+	}
+	db, ok := q.(*sql.DB)
+	if !ok {
+		return candidateWalk(ctx, rows, scope, atoms)
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	denied, err := candidateWalk(ctx, tx, scope, atoms)
+	if err != nil {
+		return false, err
+	}
+	return denied, tx.Commit()
+}
+
+// candidateRows is the query surface of a *sql.DB or *sql.Tx.
+type candidateRows interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+type candidateProbe struct {
+	atom  int
+	probe resourceaccess.ProseProbe
+}
+
+// candidateWalk evaluates the exact and prose candidates of atoms. Probes are
+// expanded in Go and extended only where SQL prefix membership proves a longer
+// spelling may exist, so the walk performs one statement per prose level.
+func candidateWalk(ctx context.Context, q candidateRows, scope AccessScope, atoms []string) (bool, error) {
+	exact := make([]string, 0, len(atoms))
+	seenExact := map[string]bool{}
+	var probes []candidateProbe
+	for i, atom := range atoms {
+		key := resourceaccess.AtomKey(atom)
+		if !seenExact[key] {
+			seenExact[key] = true
+			exact = append(exact, key)
+		}
+		for _, p := range resourceaccess.ProseStarts(atom) {
+			probes = append(probes, candidateProbe{atom: i, probe: p})
+		}
+	}
+	exactJSON, err := json.Marshal(exact)
+	if err != nil {
+		return false, err
+	}
+	statement := candidateWalkSQL(scope)
+	for level := 0; ; level++ {
+		keyAtoms := map[string][]int{}
+		var keys, prefixes []string
+		seenPrefix := map[string]bool{}
+		for _, cp := range probes {
+			for _, key := range cp.probe.Keys {
+				if _, ok := keyAtoms[key]; !ok {
+					keys = append(keys, key)
+				}
+				if !slices.Contains(keyAtoms[key], cp.atom) {
+					keyAtoms[key] = append(keyAtoms[key], cp.atom)
+				}
+			}
+			if cp.probe.Prefix != "" && !seenPrefix[cp.probe.Prefix] {
+				seenPrefix[cp.probe.Prefix] = true
+				prefixes = append(prefixes, cp.probe.Prefix)
+			}
+		}
+		keysJSON, err := json.Marshal(keys)
+		if err != nil {
+			return false, err
+		}
+		prefixesJSON, err := json.Marshal(prefixes)
+		if err != nil {
+			return false, err
+		}
+		exactArg := "[]"
+		if level == 0 {
+			exactArg = string(exactJSON)
+		}
+		denied, present, err := candidateWalkLevel(ctx, q, statement, exactArg, string(keysJSON), string(prefixesJSON), keyAtoms, atoms)
+		if err != nil || denied {
+			return denied, err
+		}
+		var next []candidateProbe
+		for _, cp := range probes {
+			if cp.probe.Prefix == "" || !present[cp.probe.Prefix] {
+				continue
+			}
+			advanced, err := cp.probe.Next()
+			if err != nil {
+				return false, err
+			}
+			next = append(next, candidateProbe{atom: cp.atom, probe: advanced})
+		}
+		if len(next) == 0 {
+			return false, nil
+		}
+		probes = next
+	}
+}
+
+// candidateWalkLevel runs one statement for a probe level. It reports a denied
+// exact or prose spelling, and which probe prefixes exist in the ledger.
+func candidateWalkLevel(ctx context.Context, q candidateRows, statement, exactArg, keysArg, prefixesArg string, keyAtoms map[string][]int, atoms []string) (bool, map[string]bool, error) {
+	rows, err := q.QueryContext(ctx, statement, exactArg, keysArg, prefixesArg)
+	if err != nil {
+		return false, nil, err
+	}
+	defer rows.Close()
+	present := map[string]bool{}
+	denied := false
+	for rows.Next() {
+		var tag, a, b string
+		if err := rows.Scan(&tag, &a, &b); err != nil {
+			return false, nil, err
+		}
+		switch tag {
+		case "x":
+			denied = true
+		case "p":
+			ref, err := hex.DecodeString(b)
+			if err != nil {
+				return false, nil, err
+			}
+			for _, i := range keyAtoms[strings.ToLower(a)] {
+				if resourceaccess.TextHasReference(atoms[i], string(ref)) {
+					denied = true
+				}
+			}
+		case "f":
+			present[strings.ToLower(a)] = true
+		}
+		if denied {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, nil, err
+	}
+	return denied, present, nil
+}
+
+// candidateWalkSQL returns denied exact spellings ('x'), prose spellings whose
+// key the walk supplied ('p', with its hex key and reference bytes), and probe
+// prefixes that exist in the ledger ('f'). Each member is guarded by the same
+// inactive-ledger rule as the legacy statement, and visibility is unchanged.
+func candidateWalkSQL(scope AccessScope) string {
+	active := `COALESCE((SELECT active FROM _anx_admission_ledger)=0,0)=0`
+	visible := candidateVisibleSQL(scope, "k.kind", "k.id")
+	return `WITH RECURSIVE ` + admissionLedgerCTE(scope) + `
+SELECT 'x' AS tag,'' AS a,'' AS b WHERE ` + active + ` AND EXISTS(SELECT 1 FROM json_each(?) e JOIN main.resource_access_admission_spellings k ON k.atom=unhex(e.value) WHERE NOT (` + visible + `))
+UNION ALL SELECT 'p',hex(k.prose_atom),hex(k.ref) FROM json_each(?) e JOIN main.resource_access_admission_spellings k ON k.prose_atom=unhex(e.value) WHERE k.is_ref=1 AND ` + active + ` AND NOT (` + visible + `)
+UNION ALL SELECT 'f',hex(n.atom),'' FROM main.resource_access_admission_prose_prefixes n WHERE ` + active + ` AND n.atom IN (SELECT unhex(e.value) FROM json_each(?) e)`
 }
 
 // Full inventories already seek the root index in bulk. Avoid filling a fresh

@@ -68,6 +68,10 @@ func textHasReference(atom, target string) bool {
 	return false
 }
 
+// TextHasReference is the Go form of anx_resource_text_has_ref. Callers that
+// have already selected a prose candidate use it on the same bytes.
+func TextHasReference(atom, target string) bool { return textHasReference(atom, target) }
+
 // The LIKE range selects only prose candidates from the indexed atom ledger.
 func TextReferenceCandidateSQL(atom string) string {
 	return atom + " LIKE '" + textReferencePrefix + "%'"

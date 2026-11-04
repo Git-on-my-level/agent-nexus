@@ -2,7 +2,6 @@ package primitives
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -459,16 +458,14 @@ func requireAccessibleValues(ctx context.Context, q queryRower, values any) erro
 		return nil
 	}
 	if state, requested := ctx.Value(denialRequestKey{}).(*denialRequestState); !mutation && requested && state.candidateMode {
-		var denied sql.NullBool
-		if err := q.QueryRowContext(ctx, candidateValueCheckSQL(scope), atoms).Scan(&denied); err != nil {
+		denied, err := candidateValuesDenied(ctx, q, scope, atoms)
+		if err != nil {
 			return err
 		}
-		if denied.Valid && denied.Bool {
+		if denied {
 			return ErrNotFound
 		}
-		if denied.Valid {
-			return nil
-		}
+		return nil
 	}
 	// This check uses the mutation's own transaction snapshot. Without denied
 	// roots there can be no denied descendants; skip constructing the expensive
