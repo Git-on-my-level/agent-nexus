@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
 	"agent-nexus-core/internal/series"
+	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testutil/perfguard"
 )
 
@@ -174,6 +176,7 @@ func requirePerformanceTest(t *testing.T) {
 
 type performanceEnv struct {
 	store            *primitives.Store
+	workspace        *storage.Workspace
 	handler          http.Handler
 	db               *sql.DB // uninstrumented EXPLAIN connection
 	capture          *perfguard.Capture
@@ -256,21 +259,6 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		t.Fatal(err)
 	}
 
-	// Certify the real head/comment reader before measuring routes. Fixture
-	// construction uses raw canonical imports, exactly the online backfill case.
-	for i := 0; ; i++ {
-		if i > 20000 {
-			t.Fatal("document search fixture did not certify")
-		}
-		done, err := store.MaintainDocumentSearchBatch(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if done {
-			break
-		}
-	}
-
 	observed, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)&_txlock=immediate")
 	if err != nil {
 		t.Fatal(err)
@@ -317,7 +305,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	}
 	var configured *handlerOptions
 	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
-	result := performanceEnv{store: store, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
+	result := performanceEnv{store: store, workspace: env.workspace, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
 		"{ask_id}", "scale-task-ask", "{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{conversation_id}", conversation.ID, "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{turn_id}", "scale-target-turn", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
 	result.fresh = func(t *testing.T) (http.Handler, *perfguard.Capture, *agentChangeHub, func()) {
 		t.Helper()
@@ -339,6 +327,41 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		return h, capture, configured.agentChanges, func() { pool.Close() }
 	}
 	return result
+}
+
+// drainPerformanceSearchReadiness runs the same batch steps as the server's
+// background comment and document search maintenance until SearchDocuments
+// admits reads. It runs serially in each case's setup, after all fixture
+// writes and before that case's measured pool exists. The server's background
+// loops are not started here: a writer overlapping measured requests would
+// make their SQLite upgrades fail with SQLITE_BUSY.
+func drainPerformanceSearchReadiness(t *testing.T, workspace *storage.Workspace, store *primitives.Store) {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; ; i++ {
+		if i > 20000 {
+			t.Fatal("document search fixture did not certify")
+		}
+		commentsDone, err := workspace.MaintainCommentSearchBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		documentsDone, err := store.MaintainDocumentSearchBatch(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !commentsDone || !documentsDone {
+			continue
+		}
+		_, _, err = store.SearchDocuments(ctx, primitives.DocumentSearchFilter{Query: "Synthetic"})
+		if errors.Is(err, primitives.ErrSearchRepairPending) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
 }
 
 type performanceWriter struct {
@@ -549,6 +572,9 @@ func TestPerformanceRoutes(t *testing.T) {
 				defer persistReport()
 				env.setupHandler = env.handler
 				preparePerformanceVisit(t, env, b, principal, pi)
+				// Certify search after every fixture write, including the stream
+				// corpus, and before this case's measured pool exists.
+				drainPerformanceSearchReadiness(t, env.workspace, env.store)
 				h, capture, hub, closePool := env.fresh(t)
 				defer closePool()
 				env.handler, env.capture, env.hub = h, capture, hub
