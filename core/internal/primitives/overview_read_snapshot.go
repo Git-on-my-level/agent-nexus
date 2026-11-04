@@ -64,7 +64,8 @@ func (s *Store) BeginOverviewRead(ctx context.Context) (context.Context, func(),
 			// Candidate admission evaluates current indexed ancestry inside this
 			// transaction; no workspace closure needs capturing before the page.
 			inventory, _ := ctx.Value(inventoryAdmissionKey{}).(bool)
-			snapshot := &denialSnapshot{inventory: inventory, candidates: true, candidateIndex: make(map[denialTarget]bool)}
+			seek, _ := ctx.Value(seekAdmissionKey{}).(bool)
+			snapshot := &denialSnapshot{inventory: inventory, candidateSeek: seek, candidates: true, candidateIndex: make(map[denialTarget]bool)}
 			var active bool
 			if err := db.QueryRowContext(ctx, `WITH `+admissionLedgerCTE(scope)+` SELECT COALESCE((SELECT version FROM main.resource_access_epoch WHERE singleton=1),-1),total_changes(),active FROM _anx_admission_ledger`).Scan(&snapshot.epoch, &snapshot.candidateChanges, &active); err != nil {
 				return ctx, err

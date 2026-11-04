@@ -43,6 +43,12 @@ func candidateVisibleSQL(scope AccessScope, kind, id string, proofs ...*denialSn
 		// constructing per-row identity arguments for that same empty-root fact.
 		return `COALESCE((SELECT valid FROM _anx_candidate_public_guard),` + canonical + `)`
 	}
+	if proof.candidateSeek {
+		// The canonical expression is the same decision the memo returns under
+		// its guard. It seeks the owner primary key by (ledger,kind,id) from the
+		// candidate row, with no custom function inside the caller's WHERE.
+		return canonical
+	}
 	key := fmt.Sprint(proof.pointToken) + `,CAST(` + kind + ` AS BLOB),CAST(` + id + ` AS BLOB)`
 	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_lookup(` + key + `),anx_candidate_remember(` + key + `,` + canonical + `)) ELSE ` + canonical + ` END`
 }
@@ -56,6 +62,9 @@ func candidateTextProofSQL(scopeSQL, mode, value string, proofs ...*denialSnapsh
 		return scopeSQL
 	}
 	proof := proofs[0]
+	if proof.candidateSeek {
+		return scopeSQL
+	}
 	key := fmt.Sprint(proof.pointToken) + `,CAST('` + mode + `' AS BLOB),CAST(` + value + ` AS BLOB)`
 	return `CASE WHEN ` + candidateProofGuardSQL(proof) + ` THEN COALESCE(anx_candidate_text_lookup(` + key + `),anx_candidate_text_remember(` + key + `,` + scopeSQL + `)) ELSE ` + scopeSQL + ` END`
 }
@@ -380,4 +389,12 @@ type inventoryAdmissionKey struct{}
 
 func WithInventoryAdmission(ctx context.Context) context.Context {
 	return context.WithValue(ctx, inventoryAdmissionKey{}, true)
+}
+
+// Seek admission pins a candidate page whose per-row visibility predicates are
+// canonical indexed seeks only. See denialSnapshot.candidateSeek.
+type seekAdmissionKey struct{}
+
+func withSeekAdmission(ctx context.Context) context.Context {
+	return context.WithValue(ctx, seekAdmissionKey{}, true)
 }
