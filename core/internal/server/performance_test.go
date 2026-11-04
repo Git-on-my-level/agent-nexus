@@ -364,6 +364,39 @@ func drainPerformanceSearchReadiness(t *testing.T, workspace *storage.Workspace,
 	}
 }
 
+// performanceSearchLargeTables returns the large-table map for one case.
+// A document or comment search table is large if either the corpus sample or
+// the post-drain sample is large, so the re-sample can only add tables. The one
+// exception is document_search_links_pending: the drain empties that queue
+// before the request runs, so it uses the post-drain sample alone. Every other
+// table keeps the corpus sample, and corpus itself is not modified.
+func performanceSearchLargeTables(t *testing.T, db *sql.DB, corpus map[string]bool) map[string]bool {
+	t.Helper()
+	current, err := perfguard.LargeTables(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[string]bool, len(corpus)+len(current))
+	for name, large := range corpus {
+		if large && name != performanceDrainedSearchQueue {
+			out[name] = true
+		}
+	}
+	for name, large := range current {
+		if large && (performanceSearchTable(name) || name == performanceDrainedSearchQueue) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// performanceDrainedSearchQueue holds only work the per-case drain finishes.
+const performanceDrainedSearchQueue = "document_search_links_pending"
+
+func performanceSearchTable(name string) bool {
+	return strings.HasPrefix(name, "document_search_") || strings.HasPrefix(name, "comment_search_")
+}
+
 type performanceWriter struct {
 	*httptest.ResponseRecorder
 	cancel        context.CancelFunc
@@ -575,6 +608,12 @@ func TestPerformanceRoutes(t *testing.T) {
 				// Certify search after every fixture write, including the stream
 				// corpus, and before this case's measured pool exists.
 				drainPerformanceSearchReadiness(t, env.workspace, env.store)
+				// Re-sample the search tables after the drain above. Their queues hold
+				// the imported backlog until this drain runs, and the measured request
+				// sees the drained state. A search table stays large if either sample
+				// is large; only the links queue, which the drain empties, is
+				// classified by the post-drain sample alone.
+				large := performanceSearchLargeTables(t, env.db, large)
 				h, capture, hub, closePool := env.fresh(t)
 				defer closePool()
 				env.handler, env.capture, env.hub = h, capture, hub
