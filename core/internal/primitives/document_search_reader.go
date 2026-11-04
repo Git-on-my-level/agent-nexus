@@ -66,7 +66,13 @@ func (s *Store) SearchDocuments(ctx context.Context, filter DocumentSearchFilter
 	var generation, authority int64
 	var key []byte
 	var dirty bool
-	if err = s.db.QueryRowContext(ctx, `SELECT generation,cursor_key,(SELECT version FROM resource_access_epoch WHERE singleton=1),EXISTS(SELECT 1 FROM document_search_dirty LIMIT 1),
+	// Only the aggregate fallback consults its dirty backlog. The independent
+	// reader never reads that value, so it does not probe the aggregate queue.
+	dirtyProbe := `0`
+	if !independent {
+		dirtyProbe = `EXISTS(SELECT 1 FROM document_search_dirty LIMIT 1)`
+	}
+	if err = s.db.QueryRowContext(ctx, `SELECT generation,cursor_key,(SELECT version FROM resource_access_epoch WHERE singleton=1),`+dirtyProbe+`,
  (SELECT done AND normalization_version=2 FROM comment_search_job WHERE singleton=1) AND done AND normalization_version=2 AND NOT EXISTS(SELECT 1 FROM comment_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_pending_heads LIMIT 1) AND NOT EXISTS(SELECT 1 FROM document_search_links_pending LIMIT 1)
  FROM document_search_state WHERE singleton=1`).Scan(&generation, &key, &authority, &dirty, &ready); err != nil {
 		return nil, "", err
@@ -146,7 +152,9 @@ func (s *Store) beginDocumentSearchRead(ctx context.Context) (context.Context, f
 		if _, request := ctx.Value(denialRequestKey{}).(*denialRequestState); !request {
 			ctx = WithRequestAccessScope(ctx, scope)
 		}
-		next, close, err := s.BeginResourceRead(ctx)
+		// Search joins postings, resources and heads row by row. Keep each
+		// candidate visibility check an indexed owner seek (no WHERE memo).
+		next, close, err := s.BeginResourceRead(withSeekAdmission(ctx))
 		if err != nil {
 			return next, close, err
 		}
