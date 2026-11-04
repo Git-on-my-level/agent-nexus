@@ -69,7 +69,17 @@ func buildListDocumentsQuery(filter DocumentListFilter) (string, []any) {
 		return `WITH doc_page AS (` + inner + `) SELECT dp.*,NULL,NULL,NULL,NULL,NULL FROM doc_page dp`, args
 	}
 	// Scoped aggregates keyed to the current limit page avoid scanning all revisions/events.
-	query := `WITH doc_page AS (` + inner + `)
+	// Event thread keys are matched through trim(COALESCE(thread_id,'')), the
+	// exact expression idx_events_message_thread_key indexes (migration 131).
+	// SQLite seeks an expression index by equality but not by IN, so each
+	// aggregate drives from the page's distinct thread keys with CROSS JOIN
+	// (fixed join order) and seeks events per key instead of scanning every
+	// message. doc_threads never holds '', which excludes threadless and
+	// blank-thread events as before.
+	query := `WITH doc_page AS (` + inner + `),
+doc_threads(tid) AS (
+	SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE trim(COALESCE(thread_id,'')) <> ''
+)
 SELECT dp.*,
 	COALESCE(rc.revision_cnt, 0),
 	COALESCE(tmc.timeline_msg_cnt, 0),
@@ -81,28 +91,22 @@ LEFT JOIN (
 	GROUP BY dr2.document_id
 ) rc ON dp.id = rc.document_id
 LEFT JOIN (
-	SELECT trim(COALESCE(e.thread_id,'')) AS tid, COUNT(*) AS timeline_msg_cnt FROM events e
+	SELECT t.tid, COUNT(*) AS timeline_msg_cnt FROM doc_threads t
+	CROSS JOIN events e ON trim(COALESCE(e.thread_id,'')) = t.tid
 	WHERE e.type = 'message_posted'
-	  AND COALESCE(trim(e.thread_id),'') <> ''
 	  AND COALESCE(trim(e.trashed_at),'') = ''
-	  AND trim(COALESCE(e.thread_id,'')) IN (
-		SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
-	  )
-	GROUP BY tid
+	GROUP BY t.tid
 ) tmc ON trim(COALESCE(dp.thread_id,'')) = tmc.tid
 LEFT JOIN (
 	SELECT tid, last_body, last_at, last_by FROM (
-		SELECT trim(COALESCE(e.thread_id,'')) AS tid,
+		SELECT t.tid,
 			TRIM(COALESCE(NULLIF(json_extract(e.payload_json, '$.text'), ''), json_extract(e.payload_json, '$.summary'))) AS last_body,
 			e.ts AS last_at, e.actor_id AS last_by,
-			ROW_NUMBER() OVER (PARTITION BY trim(COALESCE(e.thread_id,'')) ORDER BY e.ts DESC, e.id DESC) AS rn
-		FROM events e
+			ROW_NUMBER() OVER (PARTITION BY t.tid ORDER BY e.ts DESC, e.id DESC) AS rn
+		FROM doc_threads t
+		CROSS JOIN events e ON trim(COALESCE(e.thread_id,'')) = t.tid
 		WHERE e.type = 'message_posted'
-		  AND COALESCE(trim(e.thread_id),'') <> ''
 		  AND COALESCE(trim(e.trashed_at),'') = ''
-		  AND trim(COALESCE(e.thread_id,'')) IN (
-			SELECT DISTINCT trim(COALESCE(thread_id,'')) FROM doc_page WHERE COALESCE(trim(thread_id),'') <> ''
-		  )
 	) ranked WHERE rn = 1
 ) tml ON trim(COALESCE(dp.thread_id,'')) = tml.tid`
 	return query, args
@@ -266,14 +270,17 @@ func (s *Store) batchHeadRevisionCharacterCountsByDocumentIDs(ctx context.Contex
 	for _, id := range uniq {
 		args = append(args, id)
 	}
+	// The ids come from the listed rows, and ledger keys are the canonical
+	// hashes blob_usage writes, so both lookups seek their primary keys
+	// instead of trimming (and scanning) every document and ledger row.
 	q := fmt.Sprintf(
 		`SELECT trim(d.id), trim(a.content_hash), l.size_bytes
 			FROM documents d
 			INNER JOIN document_revisions dr ON dr.revision_id = d.head_revision_id
 			INNER JOIN artifacts a ON a.id = dr.artifact_id
 				AND trim(COALESCE(a.trashed_at, '')) = ''
-			LEFT JOIN blob_usage_ledger l ON trim(l.content_hash) = trim(a.content_hash)
-			WHERE trim(d.id) IN (%s)`,
+			LEFT JOIN blob_usage_ledger l ON l.content_hash = trim(a.content_hash)
+			WHERE d.id IN (%s)`,
 		ph,
 	)
 
