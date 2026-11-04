@@ -364,6 +364,33 @@ func drainPerformanceSearchReadiness(t *testing.T, workspace *storage.Workspace,
 	}
 }
 
+// performanceSearchLargeTables returns corpus with the document and comment
+// search tables re-sampled from the current database. Only those tables change
+// size during drainPerformanceSearchReadiness; corpus itself is not modified.
+func performanceSearchLargeTables(t *testing.T, db *sql.DB, corpus map[string]bool) map[string]bool {
+	t.Helper()
+	current, err := perfguard.LargeTables(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[string]bool, len(corpus))
+	for name, large := range corpus {
+		if !performanceSearchTable(name) {
+			out[name] = large
+		}
+	}
+	for name, large := range current {
+		if performanceSearchTable(name) {
+			out[name] = large
+		}
+	}
+	return out
+}
+
+func performanceSearchTable(name string) bool {
+	return strings.HasPrefix(name, "document_search_") || strings.HasPrefix(name, "comment_search_")
+}
+
 type performanceWriter struct {
 	*httptest.ResponseRecorder
 	cancel        context.CancelFunc
@@ -575,6 +602,12 @@ func TestPerformanceRoutes(t *testing.T) {
 				// Certify search after every fixture write, including the stream
 				// corpus, and before this case's measured pool exists.
 				drainPerformanceSearchReadiness(t, env.workspace, env.store)
+				// Sample the search tables after the drain above, not with the rest
+				// of the corpus before it. Their queues hold the imported backlog
+				// until this drain runs; the measured request sees the drained
+				// state, so classify these tables by the size the route reads.
+				// Every other table keeps the corpus-wide sample.
+				large := performanceSearchLargeTables(t, env.db, large)
 				h, capture, hub, closePool := env.fresh(t)
 				defer closePool()
 				env.handler, env.capture, env.hub = h, capture, hub
