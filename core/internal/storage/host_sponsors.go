@@ -16,7 +16,8 @@ import (
 // Existing hosts are backfilled once from the audit log, because completed
 // host_enrollments rows are deleted an hour after creation. Historical device
 // approvals carry no proof the approver operated the host, so they are
-// backfilled only when the workspace has exactly one active human now. A host
+// backfilled only when exactly one human was active both at approval and at
+// completion (judged from principal created_at/revoked_at). A host
 // whose sponsor cannot be proven stays unsponsored: that only withholds
 // delegation (fail closed).
 func installHostSponsors(ctx context.Context, tx *sql.Tx) error {
@@ -42,13 +43,13 @@ func installHostSponsors(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 	now := `strftime('%Y-%m-%dT%H:%M:%fZ','now')`
-	soleHuman := `(SELECT count(*) FROM agents h WHERE h.revoked_at IS NULL AND ` + resourceaccess.HumanPrincipalSQL("h") + `)=1`
 	// Approvals still awaiting completion keep their approver for the live path.
 	if err := exec(`UPDATE host_enrollments SET approved_by_actor_id=(
  SELECT a.actor_id FROM auth_audit_events ev JOIN agents a ON a.id=ev.actor_agent_id AND a.actor_id=ev.actor_actor_id
  WHERE ev.event_type='host_enroll_approved' AND json_extract(ev.metadata_json,'$.enrollment_id')=host_enrollments.id AND a.revoked_at IS NULL AND ` + resourceaccess.HumanPrincipalSQL("a") + `
+  AND ` + resourceaccess.SoleHumanSQL("ev.occurred_at") + `
  ORDER BY ev.occurred_at DESC,ev.id DESC LIMIT 1)
- WHERE approved_by_actor_id IS NULL AND status='approved' AND ` + soleHuman); err != nil {
+ WHERE approved_by_actor_id IS NULL AND status='approved'`); err != nil {
 		return err
 	}
 	// Headless enrollment: the human who issued the consumed token.
@@ -65,12 +66,13 @@ func installHostSponsors(ctx context.Context, tx *sql.Tx) error {
 	// ten-minute enrollment lifetime (plus a minute of clock slack). Hosts that
 	// consumed a token are excluded (already sponsored or deliberately not).
 	return exec(`INSERT OR IGNORE INTO host_sponsors(host_id,sponsor_actor_id,source,recorded_at)
- SELECT h.id,(SELECT a.actor_id FROM auth_audit_events ap JOIN agents a ON a.id=ap.actor_agent_id AND a.actor_id=ap.actor_actor_id
+ SELECT hs.id,(SELECT a.actor_id FROM auth_audit_events ap JOIN agents a ON a.id=ap.actor_agent_id AND a.actor_id=ap.actor_actor_id
    WHERE ap.event_type='host_enroll_approved' AND json_extract(ap.metadata_json,'$.slug')=json_extract(c.metadata_json,'$.slug')
     AND julianday(ap.occurred_at)<=julianday(c.occurred_at) AND julianday(c.occurred_at)-julianday(ap.occurred_at)<=11.0/1440
     AND a.actor_id<>'' AND a.revoked_at IS NULL AND ` + resourceaccess.HumanPrincipalSQL("a") + `
+    AND ` + resourceaccess.SoleHumanSQL("ap.occurred_at") + ` AND ` + resourceaccess.SoleHumanSQL("c.occurred_at") + `
    ORDER BY ap.occurred_at DESC,ap.id DESC LIMIT 1) AS sponsor,'device_approval',` + now + `
- FROM auth_audit_events c JOIN hosts h ON h.id=json_extract(c.metadata_json,'$.host_id')
- WHERE c.event_type='host_enroll_completed' AND sponsor IS NOT NULL AND ` + soleHuman + `
-  AND NOT EXISTS(SELECT 1 FROM auth_audit_events t WHERE t.event_type='host_enrollment_token_consumed' AND json_extract(t.metadata_json,'$.host_id')=h.id)`)
+ FROM auth_audit_events c JOIN hosts hs ON hs.id=json_extract(c.metadata_json,'$.host_id')
+ WHERE c.event_type='host_enroll_completed' AND sponsor IS NOT NULL
+  AND NOT EXISTS(SELECT 1 FROM auth_audit_events t WHERE t.event_type='host_enrollment_token_consumed' AND json_extract(t.metadata_json,'$.host_id')=hs.id)`)
 }

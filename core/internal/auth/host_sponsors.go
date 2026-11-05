@@ -27,19 +27,21 @@ import (
 const approverActorSQL = `(SELECT a.actor_id FROM agents a WHERE ?<>0 AND a.id=? AND a.actor_id=? AND a.actor_id<>'' AND a.revoked_at IS NULL AND `
 
 func approverActor() string {
-	return approverActorSQL + resourceaccess.HumanPrincipalSQL("a") + ` AND (SELECT count(*) FROM agents h WHERE h.revoked_at IS NULL AND ` + resourceaccess.HumanPrincipalSQL("h") + `)=1)`
+	return approverActorSQL + resourceaccess.HumanPrincipalSQL("a") + ` AND ` + resourceaccess.SoleHumanSQL("") + `)`
 }
 
 // completeEnrollmentTx marks a device enrollment completed and records its
-// recorded approver, if any, as the new host's sponsor. Recording a sponsor
-// grants nothing by itself: every Trends request re-checks, live, that the
-// reader is still an active human (trendsAdmissionSQL).
+// recorded approver, if any, as the new host's sponsor. The sole-human
+// condition is checked again here, so a second human who joins between
+// approval and completion cancels the sponsorship. Recording a sponsor grants
+// nothing by itself: every Trends request re-checks, live, that the reader is
+// still an active human (trendsAdmissionSQL).
 func completeEnrollmentTx(ctx context.Context, tx Transaction, enrollmentID, hostID string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE host_enrollments SET status='completed',completed_host_id=? WHERE id=?`, hostID, enrollmentID); err != nil {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO host_sponsors(host_id,sponsor_actor_id,source,recorded_at)
- SELECT ?,approved_by_actor_id,'device_approval',? FROM host_enrollments WHERE id=? AND COALESCE(approved_by_actor_id,'')<>''`, hostID, hostNow(), enrollmentID)
+ SELECT ?,approved_by_actor_id,'device_approval',? FROM host_enrollments WHERE id=? AND COALESCE(approved_by_actor_id,'')<>'' AND `+resourceaccess.SoleHumanSQL(""), hostID, hostNow(), enrollmentID)
 	return err
 }
 

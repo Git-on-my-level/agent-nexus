@@ -9,7 +9,7 @@ import (
 // hostSponsorFixture seeds hosts and only audit history: completed
 // host_enrollments rows are deleted an hour after creation, so the backfill
 // must not depend on them.
-func hostSponsorFixture(t *testing.T, humans ...string) *sql.DB {
+func hostSponsorFixture(t *testing.T, extra []string, humans ...string) *sql.DB {
 	t.Helper()
 	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
 	if err != nil {
@@ -42,6 +42,7 @@ func hostSponsorFixture(t *testing.T, humans ...string) *sql.DB {
 	for _, human := range humans {
 		statements = append(statements, `INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('p-`+human+`','`+human+`','`+human+`','`+now+`','`+now+`','{"principal_kind":"human"}')`)
 	}
+	statements = append(statements, extra...)
 	for _, q := range statements {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatal(err)
@@ -82,7 +83,7 @@ func hostSponsorRows(t *testing.T, db *sql.DB) map[string]string {
 // audit pairs; agent approvers, completions outside the enrollment lifetime
 // and token-enrolled hosts are not device sponsors.
 func TestInstallHostSponsorsBackfillsSingleHumanDeviceHosts(t *testing.T) {
-	got := hostSponsorRows(t, hostSponsorFixture(t, "human"))
+	got := hostSponsorRows(t, hostSponsorFixture(t, nil, "human"))
 	want := map[string]string{"h-device": "human:device_approval", "h-token": "human:enrollment_token"}
 	if len(got) != len(want) || got["h-device"] != want["h-device"] || got["h-token"] != want["h-token"] {
 		t.Fatalf("sponsors=%v want %v", got, want)
@@ -92,8 +93,22 @@ func TestInstallHostSponsorsBackfillsSingleHumanDeviceHosts(t *testing.T) {
 // With two humans, historical device approvals prove nothing about who runs the
 // host (any human could approve), so only token issuers are backfilled.
 func TestInstallHostSponsorsSkipsDeviceHistoryWithTwoHumans(t *testing.T) {
-	got := hostSponsorRows(t, hostSponsorFixture(t, "human", "other"))
+	got := hostSponsorRows(t, hostSponsorFixture(t, nil, "human", "other"))
 	if len(got) != 1 || got["h-token"] != "human:enrollment_token" {
 		t.Fatalf("sponsors=%v want only the token host", got)
+	}
+}
+
+// "Sole human" is judged when the approval happened, not at migration time: a
+// second human who was active then (even if revoked since) blocks the device
+// backfill, while one who joined only afterwards does not.
+func TestInstallHostSponsorsJudgesSoleHumanAtApprovalTime(t *testing.T) {
+	revoked := []string{`INSERT INTO agents(id,username,actor_id,created_at,updated_at,revoked_at,metadata_json) VALUES('p-gone','gone','gone','2026-09-01T00:00:00Z','2026-09-01T00:00:00Z','2026-10-01T00:30:00Z','{"principal_kind":"human"}')`}
+	if got := hostSponsorRows(t, hostSponsorFixture(t, revoked, "human")); len(got) != 1 || got["h-token"] != "human:enrollment_token" {
+		t.Fatalf("since-revoked second human: sponsors=%v want only the token host", got)
+	}
+	later := []string{`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('p-later','later','later','2026-10-02T00:00:00Z','2026-10-02T00:00:00Z','{"principal_kind":"human"}')`}
+	if got := hostSponsorRows(t, hostSponsorFixture(t, later, "human")); len(got) != 2 || got["h-device"] != "human:device_approval" {
+		t.Fatalf("human who joined later: sponsors=%v want the device host sponsored", got)
 	}
 }

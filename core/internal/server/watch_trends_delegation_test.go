@@ -168,6 +168,37 @@ func TestWatchTrendsHostSponsorDelegationHTTP(t *testing.T) {
 }
 
 // An auth-admin agent can approve hosts, but sponsors nothing.
+// A second human who joins between approval and completion cancels the sole
+// approver's sponsorship: completion re-checks the condition.
+func TestHostSponsorRecheckedAtCompletion(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	db := env.workspace.DB()
+	david := seedHumanPrincipalForLockoutTest(t, ctx, db, "david", "david", "david", "david-token")
+	public, private, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := auth.HostEnrollmentInput{PublicKey: base64.StdEncoding.EncodeToString(public), RequestedSlug: "window", OSUser: "test", Hostname: "window", DiscoveredAdapters: []string{}, RequestNonce: base64.RawURLEncoding.EncodeToString(public[:16]), Adoptions: []auth.AdoptionProof{}}
+	request, err := env.authStore.StartHostEnrollment(ctx, in, "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.authStore.DecideHostEnrollment(ctx, request.EnrollmentID, true, auth.Principal{AgentID: david.AgentID, ActorID: david.ActorID}); err != nil {
+		t.Fatal(err)
+	}
+	seedHumanPrincipalForLockoutTest(t, ctx, db, "erin", "erin", "erin", "erin-token")
+	host, err := env.authStore.CompleteHostEnrollment(ctx, request.EnrollmentID, request.PollToken, hostSign(private, "anx-host-enroll-complete|"+request.EnrollmentID+"|"+request.PollToken))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM host_sponsors WHERE host_id=?`, host.ID).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("sponsor survived a second human joining before completion: %d %v", n, err)
+	}
+}
+
 func TestHostSponsorRequiresHumanApprover(t *testing.T) {
 	requireIntegrationTest(t)
 	env, _, agent, _ := securityEnv(t)

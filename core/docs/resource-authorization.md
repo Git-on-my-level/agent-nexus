@@ -125,10 +125,16 @@ issued its enrollment token. A device-flow host's sponsor is its approver only
 when the approver is the workspace's sole active human at approval time: any
 human may approve any pending enrollment by ID and the pending list shows every
 user code, so approval proves nothing about who runs the host once a second
-human exists (approval still admits the host; it records no sponsor). An
-auth-admin agent sponsors nothing. The backfill reads the audit log (completed
-enrollment rows expire after an hour): token issuers always, device approvals
-paired with their completion only in a workspace with exactly one active human.
+human exists (approval still admits the host; it records no sponsor). The
+condition is checked at approval and again at completion, with a count bounded
+at two rows. An auth-admin agent sponsors nothing. Residual: a sole human who
+approves a machine that belongs to someone not yet in the workspace (an
+invitee who joins later) becomes that host's sponsor; the host was approved
+while nobody else could have operated it as a workspace member. The backfill
+reads the audit log (completed enrollment rows expire after an hour): token
+issuers always, and device approvals paired with their completion only when
+exactly one human was active at both the approval and the completion, judged
+from principal `created_at`/`revoked_at`.
 
 For that admission bit only, an active human reader also counts as owner of
 private roots (threads, tombstones) owned by a non-human principal bound
