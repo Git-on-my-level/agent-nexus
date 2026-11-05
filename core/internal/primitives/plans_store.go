@@ -259,11 +259,8 @@ func (s *Store) loadPlans(ctx context.Context, ids []string) (map[string]plans.P
 func (s *Store) loadPlansAt(ctx context.Context, ids []string, now time.Time) (map[string]plans.Plan, map[string]cardHealthInput, map[string]any, error) {
 	ids = uniqueSortedStrings(ids)
 	ps, inputs, refs := map[string]plans.Plan{}, map[string]cardHealthInput{}, map[string]any{}
-	for start := 0; start < len(ids); start += summaryBatchSize {
-		end := start + summaryBatchSize
-		if end > len(ids) {
-			end = len(ids)
-		}
+	for start := 0; start < len(ids); start += planLoadBatchSize {
+		end := min(start+planLoadBatchSize, len(ids))
 		batch, movement, sources, err := s.loadPlansBatch(ctx, ids[start:end])
 		if err != nil {
 			return nil, nil, nil, err
@@ -274,14 +271,16 @@ func (s *Store) loadPlansAt(ctx context.Context, ids []string, now time.Time) (m
 				cadenceIDs = append(cadenceIDs, id)
 			}
 		}
-		loops, _, err := s.loadBriefLoopStates(ctx, cadenceIDs, now)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		for id, loop := range loops {
-			input := movement[id]
-			input.Loop = loop
-			movement[id] = input
+		for from := 0; from < len(cadenceIDs); from += summaryBatchSize {
+			loops, _, err := s.loadBriefLoopStates(ctx, cadenceIDs[from:min(from+summaryBatchSize, len(cadenceIDs))], now)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			for id, loop := range loops {
+				input := movement[id]
+				input.Loop = loop
+				movement[id] = input
+			}
 		}
 		for id, p := range batch {
 			ps[id] = p
@@ -396,7 +395,7 @@ func (s *Store) loadPlansBatch(ctx context.Context, ids []string) (map[string]pl
 	if err = rows.Err(); err != nil {
 		return nil, nil, nil, err
 	}
-	// Note promises: one bounded statement per batch (ids <= summaryBatchSize).
+	// Note promises: one bounded statement per batch (ids <= planLoadBatchSize).
 	notes, texts, err := s.promiseNotesBatch(ctx, ids)
 	if err != nil {
 		return nil, nil, nil, err

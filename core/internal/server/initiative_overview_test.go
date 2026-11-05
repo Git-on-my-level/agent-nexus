@@ -223,8 +223,9 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 				t.Fatalf("items=%d truncated=%v", len(d.Items), d.Truncated)
 			}
 			// Each full 200-row page needs an empty-page check for previews and plan facts;
-			// each 50-card plan batch loads its promise notes in one statement.
-			wantQueries := int64(7 + 2*(i/200) + 2*((i+49)/50-1) + (i+49)/50)
+			// each 200-card plan batch reads plan rows and promise notes in one statement
+			// each, and cadence loop states are read in 50-card chunks.
+			wantQueries := int64(7 + 2*(i/200) + ((i+199)/200 - 1) + ((i+49)/50 - 1) + (i+199)/200)
 			// Main captures the immutable denial snapshot on the first read only;
 			// later writes use its statement-level epoch fallback without recapture.
 			if i == 1 {
