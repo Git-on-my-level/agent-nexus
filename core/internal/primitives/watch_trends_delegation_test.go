@@ -29,8 +29,13 @@ func TestWatchTrendsDelegatedAdmissionPlanIsBounded(t *testing.T) {
 		}
 		plan = append(plan, detail)
 	}
-	walked := map[string]bool{"_anx_trends_allowed": true, "_anx_trends_gaps": true, "_anx_trends_reader": true, "g": true, "CONSTANT": true, "main.sqlite_schema": true}
+	walked := map[string]bool{"_anx_trends_allowed": true, "_anx_trends_gaps": true, "_anx_trends_reader": true, "_anx_trends_sole": true, "g": true, "CONSTANT": true, "main.sqlite_schema": true}
 	for _, step := range plan {
+		// The sole-human count reads at most two rows of the active-humans
+		// partial index (LIMIT 2, no deduplication).
+		if strings.Contains(step, "idx_agents_active_humans") {
+			continue
+		}
 		if fields := strings.Fields(step); len(fields) > 1 && fields[0] == "SCAN" && !walked[fields[1]] && !strings.HasPrefix(fields[1], "(") {
 			t.Fatalf("admission scans %q\n%s", step, strings.Join(plan, "\n"))
 		}
@@ -71,16 +76,34 @@ func (f *trendsFixture) trendsErr(actor string) error {
 	return nil
 }
 
-// Reproduces the single-human lockout: an agent acting for the only human owns
-// a private thread, and before delegation the human is refused Trends.
-func TestWatchTrendsSingleHumanLockedOutByUndelegatedAgent(t *testing.T) {
+// The only human is never locked out of Trends: an agent that is not on a
+// host they sponsored owning a private thread, or a legacy artifact with an
+// unknown content manifest, no longer blocks them. A second active human
+// restores the ordinary rule, and no agent gains the admission.
+func TestWatchTrendsSoleHumanAlwaysAdmitted(t *testing.T) {
 	t.Parallel()
 	f := newTrendsFixture(t)
 	f.seedPrincipal("principal-owner", "owner", "human")
 	f.seedHost("host-unsponsored", "", "pm-agent")
 	f.ask(f.card("Agent's private conversation", "pm-agent", nil), "pm-agent", time.Hour, 0)
+	f.exec(`INSERT INTO artifacts(id,kind,created_at,created_by,content_type,content_hash,content_refs_json) VALUES('unknown','text',?,'owner','text/plain','unknown',NULL)`, loopTS(f.now))
+	if err := f.trendsErr("owner"); err != nil {
+		t.Fatalf("sole human must be admitted: %v", err)
+	}
+	if err := f.trendsErr("pm-agent"); err != ErrForbidden {
+		t.Fatalf("agent must not inherit sole-human admission: %v", err)
+	}
+	f.seedPrincipal("second-human", "second-human", "human")
 	if err := f.trendsErr("owner"); err != ErrForbidden {
-		t.Fatalf("undelegated agent's private thread must still block the human: %v", err)
+		t.Fatalf("a second active human must end sole-human admission: %v", err)
+	}
+	f.exec(`UPDATE agents SET revoked_at=? WHERE id='second-human'`, loopTS(f.now))
+	if err := f.trendsErr("owner"); err != nil {
+		t.Fatalf("revoked second human must not block: %v", err)
+	}
+	f.seedPrincipal("principal-other", "other", "human")
+	if err := f.trendsErr("owner"); err != ErrForbidden {
+		t.Fatalf("second human must restore the ordinary rule: %v", err)
 	}
 }
 
@@ -163,6 +186,7 @@ func TestWatchTrendsDelegationKeepsNumericOwnersDenied(t *testing.T) {
 	t.Parallel()
 	f := newTrendsFixture(t)
 	f.seedPrincipal("principal-owner", "owner", "human")
+	f.seedPrincipal("principal-peer", "peer", "human") // not the sole human
 	f.seedHost("host-owner", "owner", "42")
 	f.exec(`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('numeric-root',?,'x','{"pm_actor_id":42}')`, loopTS(f.now))
 	if err := f.trendsErr("owner"); err != ErrForbidden {
@@ -181,6 +205,7 @@ func TestWatchTrendsDelegateEdgeCases(t *testing.T) {
 	t.Parallel()
 	f := newTrendsFixture(t)
 	f.seedPrincipal("principal-owner", "owner", "human")
+	f.seedPrincipal("principal-peer", "peer", "human") // not the sole human
 	f.seedHost("host-owner", "owner", "retired-persona")
 	f.seedHost("host-archived", "owner", "old-agent")
 	f.card("Retired persona's notes", "retired-persona", nil)

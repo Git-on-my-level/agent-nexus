@@ -105,6 +105,8 @@ func TestWatchTrendsDenialRootsRefreshEveryRequest(t *testing.T) {
 		t.Run(root.name, func(t *testing.T) {
 			env := newAuthIntegrationEnv(t, authIntegrationOptions{})
 			viewer := seedHumanPrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "root-viewer", "root-viewer", "root-viewer", "root-viewer-token")
+			// A second human: the only human is always admitted (sole owner).
+			seedHumanPrincipalForLockoutTest(t, context.Background(), env.workspace.DB(), "root-peer", "root-peer", "root-peer", "root-peer-token")
 			read := func(status int) {
 				for _, group := range primitives.WatchTrendGroups {
 					trendsResponseBody(t, env.server.URL+"/watch/trends?group="+group, viewer.AccessToken, status)

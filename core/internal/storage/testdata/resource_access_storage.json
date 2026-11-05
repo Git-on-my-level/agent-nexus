@@ -3905,6 +3905,7 @@
     "../storage/migrations_legacy_schema.go:applyMigration22TrashCanceledResolutionCards": "d965795c779c4267eb136685d6b4821c9fc1639579541fa2af85e17e9e9bdb01",
     "../storage/migrations_legacy_schema.go:applyMigration24HomeGroupCursors": "824c64ef200984913f98bef4927bbf67d8b38edb199e7175d6b098662bf7bf74",
     "../storage/migrations_legacy_schema.go:applyMigration9LegacyStatusCleanup": "172a9e3cbfaa1d21271d1a68af37534e2755bd991502956bd7aa4160c7149cf6",
+    "../storage/migrations_recent.go:recentMigrations": "78141667eed2a9333979410f0069d8b4c97d212a4e2d243be0ad53bc93966b0d",
     "../storage/migrations_resource_access.go:installCompleteResourceAccess": "1e311d078576d5f1402ca716a8552622b3452a73bfa2613ba9ee365ef2477425",
     "../storage/migrations_resource_access.go:installResourceAccess": "8fe1eb78cb6239f7a42a284af85ba7b8b04758e25014bc34fc4bffdc156d7de8",
     "../storage/migrations_resource_access.go:installResourceAccessEdges": "ab8b33a19d16566b21d1208e25454a69a0789a06d225c14490a6b1c0c2792cbf",

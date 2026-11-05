@@ -34,4 +34,13 @@ var recentMigrations = []migration{
 	// Trends admission treats that host's agents as acting for the sponsor.
 	{Version: 132, AfterApply: installHostSponsors},
 	{Version: 133, AfterApply: installHostPersonaArchive}, // host_personas.go
+	// Legacy passkey holders predate the explicit principal kind and were
+	// humans only through resourceaccess.HumanPrincipalSQL's passkey fallback.
+	// Record the kind they already had, so active humans are exactly the rows
+	// of idx_agents_active_humans and counting them never walks agents or
+	// credentials. Every current writer sets the kind explicitly.
+	{Version: 134, Statements: []string{
+		`UPDATE agents SET metadata_json=json_set(COALESCE(NULLIF(metadata_json,''),'{}'),'$.principal_kind','human') WHERE NULLIF(json_extract(metadata_json,'$.principal_kind'),'') IS NULL AND EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id=agents.id)`,
+		`CREATE INDEX IF NOT EXISTS idx_agents_active_humans ON agents(actor_id) WHERE revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human'`,
+	}},
 }
