@@ -170,8 +170,8 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 		return h, ErrHostRevoked
 	}
 	var agentID, actorID string
-	var archived, revoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT ha.agent_id,a.actor_id,ha.archived_at,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, h.ID, name).Scan(&agentID, &actorID, &archived, &revoked)
+	var archived, reason, revoked sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT ha.agent_id,a.actor_id,ha.archived_at,ha.archived_reason,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, h.ID, name).Scan(&agentID, &actorID, &archived, &reason, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, ErrHostNotFound
 	}
@@ -181,12 +181,20 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 	if revoked.Valid {
 		return h, ErrAgentRevoked
 	}
-	if archived.Valid == archive {
+	// A human archiving a sweep-archived persona makes the archive manual, so
+	// the name becomes reserved instead of coming back on its next use.
+	promote := archive && archived.Valid && reason.String != ArchiveReasonManual
+	if archived.Valid == archive && !promote {
 		return h, nil // already in the requested state
 	}
 	now := hostNow()
 	event := "host_agent_restored"
-	if archive {
+	if promote {
+		event = "host_agent_archived"
+		if _, err = tx.ExecContext(ctx, `UPDATE host_agents SET archived_reason=? WHERE host_id=? AND name=? AND archived_at IS NOT NULL`, ArchiveReasonManual, h.ID, name); err != nil {
+			return h, err
+		}
+	} else if archive {
 		event = "host_agent_archived"
 		if _, err = tx.ExecContext(ctx, `UPDATE host_agents SET archived_at=?,archived_reason=? WHERE host_id=? AND name=? AND archived_at IS NULL`, now, ArchiveReasonManual, h.ID, name); err != nil {
 			return h, err
@@ -200,6 +208,9 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 	audit := AuthAuditEventInput{EventType: event, ActorAgentID: admin.AgentID, ActorActorID: admin.ActorID, SubjectAgentID: agentID, SubjectActorID: actorID, Metadata: map[string]any{"host_id": h.ID, "name": name}}
 	if archive {
 		audit.Metadata["reason"] = ArchiveReasonManual
+	}
+	if promote {
+		audit.Metadata["previous_reason"] = reason.String
 	}
 	if err = s.recordAuthAuditEventTx(ctx, tx, audit); err != nil {
 		return h, err

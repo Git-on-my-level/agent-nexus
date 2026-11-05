@@ -1679,7 +1679,7 @@
     "../auth/host_personas.go:*Store:archiveInactivePersona": "d4dabacb7f36771cf7aa64a58aba065bc3edc7327dfec46d3252862d7d0361d9",
     "../auth/host_personas.go:*Store:personaSweepPage": "157f64ac8ad8a83b5572419ecd0c1217e47ad74957818f9be656ff538fcc5fae",
     "../auth/host_personas.go:*Store:reuseArchivedNameTx": "78bf0678ff9a2367fe09dab048564efdd9500333c3029750a0bf10c6803691da",
-    "../auth/host_personas.go:*Store:setHostAgentArchive": "2345d1a08ce57028b0c4e5a6c74342367513e5cd866371dfb8d98302d956c07f",
+    "../auth/host_personas.go:*Store:setHostAgentArchive": "d0ad99daf31528310182e62c4c0dc8a19a0a3dde2f885041b1296f4395e3654f",
     "../auth/host_personas.go:revokeChildSessions": "19195b14c02e850853a490b579e6fa48d86e7bb5a67531aa580f229014288733",
     "../auth/host_personas.go:similarHostNames": "d0b5308e0e0828fc81a347a9485066a7336b0304d7a696a4653ddebaa7e89760",
     "../auth/host_personas.go:type:HostAgent": "cbf9cdc8162966b5e436945e621a6caf9183526e1e909fd178d551cd9c9068c2",
