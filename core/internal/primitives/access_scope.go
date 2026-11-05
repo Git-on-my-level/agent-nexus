@@ -245,12 +245,36 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 	// A rollup must not expose a private contributor through counts or last
 	// values. Remove the whole label stream before admission, buckets or limits.
 	if needed["series_adapters"] || needed["series_labels"] || needed["series_points"] || needed["series_daily"] || needed["series_live_daily"] {
-		graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT json_extract(id,'$[0]'),json_extract(id,'$[1]') FROM _anx_denied WHERE kind='series' UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
+		candidates := snapshot != nil && snapshot.candidates
+		privateDefinition := "EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=def.name)"
+		if candidates {
+			// Range-seek this definition's denied stream identities
+			// (json_array(name,labels) shares the prefix ["name",") in the
+			// persisted owner index, plus its unreconstructable streams while
+			// any root is denied: the canonical _anx_private_series membership.
+			prefix := "substr(json_array(def.name),1,length(json_array(def.name))-1)||','"
+			owner := "r.unconditional=1"
+			if scope.ActorID == "" || scope.ActorID != scope.PMActorID {
+				owner += " OR r.owner<>'" + strings.ReplaceAll(scope.ActorID, "'", "''") + "'"
+			}
+			privateDefinition = "CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 0 WHEN (SELECT ledger FROM _anx_admission_ledger)=-2 THEN 1 ELSE EXISTS (SELECT 1 FROM main.resource_access_admission_owners r WHERE r.ledger=(SELECT ledger FROM _anx_admission_ledger) AND r.kind='series' AND r.id>=" + prefix + "||'\"' AND r.id<" + prefix + "||'#' AND (" + owner + ")) OR EXISTS (SELECT 1 FROM main.resource_access_series_unknown u WHERE u.series=def.name) END"
+		} else {
+			graph += ", _anx_private_series(series,labels) AS MATERIALIZED (SELECT json_extract(id,'$[0]'),json_extract(id,'$[1]') FROM _anx_denied WHERE kind='series' UNION SELECT series,labels FROM main.resource_access_series_unknown WHERE EXISTS (SELECT 1 FROM _anx_denied))"
+		}
 		if needed["series_adapters"] {
-			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def LEFT JOIN _anx_private_series p ON p.series=def.name WHERE def.adapter=_row.name AND (p.series IS NOT NULL OR NOT (" + denied("filter/series_definitions", "def.name") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + denied("filter/series_adapters", "_row.name") + ")"
+			graph += ", series_adapters AS (SELECT name,description,agent_id,host_id,expected_interval,created_at,revoked_at,deleted_at,CASE WHEN EXISTS (SELECT 1 FROM main.series_definitions def WHERE def.adapter=_row.name AND (" + privateDefinition + " OR NOT (" + denied("filter/series_definitions", "def.name") + "))) THEN NULL ELSE last_push END AS last_push FROM main.series_adapters _row WHERE " + denied("filter/series_adapters", "_row.name") + ")"
+		}
+		privateSeries := "NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)"
+		if candidates {
+			// Candidate admission seeks this stream's own (series,labels)
+			// identity in the persisted owner index instead of materializing
+			// the workspace denial closure. Streams with unreconstructable
+			// provenance stay hidden whenever any root is denied to the reader,
+			// exactly as the canonical EXISTS(_anx_denied) guard decides.
+			privateSeries = candidateVisibleSQL(scope, "'series'", "json_array(_row.series,_row.labels)", snapshot) + " AND CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 ELSE NOT EXISTS (SELECT 1 FROM main.resource_access_series_unknown u WHERE u.series=_row.series AND u.labels=_row.labels) END"
 		}
 		for _, table := range []string{"series_labels", "series_points", "series_daily", "series_live_daily"} {
-			add(table, "CASE WHEN _row.labels='{}' THEN 1 ELSE ("+cleanJSON("_row.labels")+") END"+" AND NOT EXISTS (SELECT 1 FROM _anx_private_series p WHERE p.series=_row.series AND p.labels=_row.labels)")
+			add(table, "CASE WHEN _row.labels='{}' THEN 1 ELSE ("+cleanJSON("_row.labels")+") END"+" AND "+privateSeries)
 		}
 	}
 	// An unused ownership graph does not filter any row, but SQLite still has

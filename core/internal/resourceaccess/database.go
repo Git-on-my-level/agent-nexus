@@ -289,6 +289,13 @@ func (t *Tx) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Ro
 // PrepareReadContext binds visibility at preparation for request-local repeated
 // reads. Never share the statement across principals or use it for mutations.
 func (t *Tx) PrepareReadContext(ctx context.Context, q string) (*sql.Stmt, error) {
+	if p, ok := PolicyFrom(ctx); ok && p.TransactionRead != nil {
+		// A transaction-local rewrite that needs no policy binding is a complete
+		// statement; one that prepends a binding keeps the canonical rewrite.
+		if scoped, args := p.TransactionRead(ctx, t.raw, q, nil); len(args) == 0 {
+			return t.raw.PrepareContext(ctx, scoped)
+		}
+	}
 	return t.raw.PrepareContext(ctx, ReadQuery(ctx, q))
 }
 func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {

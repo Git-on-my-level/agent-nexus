@@ -128,6 +128,7 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 	// ReadOnly makes modernc SQLite use BEGIN (a WAL read snapshot), overriding
 	// the workspace DSN's immediate mode for writes. Maintenance compacts data
 	// independently; this snapshot sees each point in raw or rolled-up form.
+	ctx = readTransactionPolicy(ctx)
 	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return out, err
@@ -296,4 +297,16 @@ func (s Store) Query(ctx context.Context, name string, labels map[string]string,
 		out.Streams = append(out.Streams, stream)
 	}
 	return out, tx.Commit()
+}
+
+// A read-only series snapshot admits each statement like a pooled request read:
+// candidate admission seeks the persisted owner index for this stream's own
+// identities instead of rebuilding the workspace denial closure per statement.
+// Contexts without request admission keep their canonical transaction policy.
+func readTransactionPolicy(ctx context.Context) context.Context {
+	if policy, ok := resourceaccess.PolicyFrom(ctx); ok && policy.TransactionRead == nil && policy.ReadOnDB != nil {
+		policy.TransactionRead = policy.ReadOnDB
+		ctx = resourceaccess.WithPolicy(ctx, policy)
+	}
+	return ctx
 }

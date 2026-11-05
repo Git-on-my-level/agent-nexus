@@ -22,6 +22,7 @@ func (s Store) Timeline(ctx context.Context, name string, labels map[string]stri
 	if _, err := Labels(labels); err != nil {
 		return result, false, err
 	}
+	ctx = readTransactionPolicy(ctx)
 	tx, err := resourceaccess.NewDB(s.DB).BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return result, false, err
