@@ -119,14 +119,14 @@
 <style>
   .trend-card {
     min-width: 0;
-    padding: 0.875rem 1rem;
+    padding: 1rem 1.125rem;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--panel);
   }
   .value {
     color: var(--fg);
-    font-size: 1.5rem;
+    font-size: 1.875rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
@@ -157,7 +157,7 @@
   .spark {
     display: block;
     width: 100%;
-    height: 40px;
+    height: 72px;
     overflow: visible;
   }
   .line {

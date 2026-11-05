@@ -38,7 +38,10 @@ const panel = (id, title) => ({
   rows: [],
 });
 
-beforeEach(() => client.getWatchTrends.mockReset());
+// A block body: a returned spy would run as a cleanup hook after each test.
+beforeEach(() => {
+  client.getWatchTrends.mockReset();
+});
 afterEach(cleanup);
 
 it("loads each group on its own and keeps the others when one fails", async () => {
@@ -66,4 +69,23 @@ it("loads each group on its own and keeps the others when one fails", async () =
   screen.getByRole("button", { name: "Retry" }).click();
   await settled();
   expect(container.querySelector('[data-trend="loops_panel"]')).not.toBeNull();
+});
+
+it("explains a restricted workspace once, without Initiatives and Loops", async () => {
+  client.getWatchTrends.mockImplementation(async () => {
+    throw Object.assign(new Error("forbidden"), {
+      body: { error: { code: "restricted_trends", message: "detail" } },
+    });
+  });
+  const { container } = render(TrendsView, { days: 30 });
+  await settled();
+  const notes = container.querySelectorAll("[data-trend-restricted]");
+  expect(notes).toHaveLength(1);
+  expect(notes[0].textContent.replace(/\s+/g, " ")).toContain(
+    "need access to all of it. Some items here aren't visible to you.",
+  );
+  expect(container.textContent).not.toContain("Initiatives and Loops");
+  expect(container.textContent).not.toContain("detail");
+  expect(container.querySelectorAll("[data-trend-group]")).toHaveLength(0);
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
 });

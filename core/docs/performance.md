@@ -2486,8 +2486,14 @@ Missing HTTP scope and unprovable visibility callbacks fail closed. Auth-admin
 is not an access grant; eligibility follows the canonical scope policy.
 
 The admission probe uses the primary key `(unconditional,owner)` of
-`resource_access_admission_root_owners`: at most three indexed EXISTS seeks,
-for unconditional denial and conditional owners below/above the viewer. These
+`resource_access_admission_root_owners`: one unconditional seek plus one range
+seek below, above and between the sorted allowed owners, which are the viewer
+and, for an active human viewer, the agents on hosts they sponsored. Finding
+those delegates is one unique `agents(actor_id)` seek, one
+`host_sponsors(sponsor_actor_id)` index seek and primary-key joins into
+`host_agents` and `agents`, capped at 256 delegates. Per request that is
+O((1+d) log N) for d delegates of the viewer, independent of hidden resources
+and workspace size; a viewer without sponsored hosts keeps the three seeks. These
 synchronous canonical root counters cover private backing threads, inherited
 references, retained tombstones and unknown artifacts. Zero denied roots implies
 zero denied descendants without enumerating roots or rebuilding their closure.

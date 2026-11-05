@@ -118,8 +118,8 @@ type trendsBuild struct {
 }
 
 // WatchTrends returns one group of watch_trends.v1 over days (7, 30 or 90).
-// Scoped callers must first prove full visibility in the calculation's read
-// snapshot; any denied resource rejects the whole read.
+// Scoped callers must first pass trendsAdmissionSQL in the calculation's read
+// snapshot (no root denied, delegated roots excepted) or the read is rejected.
 func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
 	// A separate callback could hide contributors beyond the canonical scope.
 	if reader.Visible != nil {
@@ -127,16 +127,16 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 	}
 	if scope, scoped := accessScopeFrom(ctx); scoped {
 		// Probe canonical roots, not descendants: without a denied root there
-		// cannot be a denied descendant. The root-owner primary key bounds all
-		// three EXISTS seeks independently of the number of hidden resources.
-		// Pin both proof and calculation to the same SQLite read snapshot so a
-		// concurrent transfer cannot invalidate admission midway through a read.
-		// Admission reads only the canonical root counters. Skip ordinary page
-		// policy preparation (and its optional caches) before opening the snapshot.
+		// cannot be a denied descendant. Root-owner primary-key range seeks
+		// (trendsAdmissionSQL; a human also owns their delegated agents' roots)
+		// stay independent of the number of hidden resources. Pin proof and
+		// calculation to one read snapshot so a concurrent transfer cannot
+		// invalidate admission midway. Skip ordinary page policy preparation.
+		q, args := trendsAdmissionSQL(scope)
 		read, finish, err := s.db.PinReads(resourceaccess.WithoutPolicy(ctx), func(c context.Context, db resourceaccess.QueryRower) (context.Context, error) {
 			var active bool
 			var ledger int
-			if err := db.QueryRowContext(c, `WITH `+admissionLedgerCTE(scope)+` SELECT active,ledger FROM _anx_admission_ledger`).Scan(&active, &ledger); err != nil {
+			if err := db.QueryRowContext(c, q, args...).Scan(&active, &ledger); err != nil {
 				return c, err
 			}
 			if active || ledger < 1 {
@@ -145,8 +145,8 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 			if hook, ok := c.Value(watchTrendsProofHookKey{}).(func(context.Context)); ok {
 				hook(c)
 			}
-			// This snapshot has no inaccessible resources. Only this admitted
-			// calculation may use unscoped relations; no capability escapes it.
+			// Admitted: no denied root except the reader's delegated agents'. Only
+			// this calculation may use unscoped relations; no capability escapes.
 			return resourceaccess.WithoutPolicy(context.WithValue(c, accessScopeKey{}, struct{}{})), nil
 		})
 		if err != nil {
@@ -159,12 +159,12 @@ func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group strin
 }
 
 // watchTrendsProofHookKey addresses a test-only hook that runs inside the
-// pinned read snapshot after the full-visibility proof; only in-package
-// tests set it.
+// pinned read snapshot after the admission proof; only in-package tests
+// set it.
 type watchTrendsProofHookKey struct{}
 
 // buildWatchTrends is the admitted unscoped calculation, not a read API: it may
-// examine every record, so only WatchTrends after full-visibility admission
+// examine every record (aggregates only), so only WatchTrends after admission
 // (or an equivalently authorized internal caller) may reach it.
 func (s *Store) buildWatchTrends(ctx context.Context, group string, days int, now time.Time) (map[string]any, error) {
 	b := &trendsBuild{briefBuild: &briefBuild{s: s, ctx: ctx, now: now.UTC(), actors: map[string]bool{}}, w: newTrendWindow(days, now)}

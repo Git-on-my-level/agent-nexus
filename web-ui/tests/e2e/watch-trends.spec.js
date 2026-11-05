@@ -280,6 +280,17 @@ for (const [name, viewport] of [
       page.locator('[data-trend="loop_runs"] [data-trend-partial]'),
     ).toBeVisible();
     expect(seen.sort()).toEqual(["decisions:30", "initiatives:30", "loops:30"]);
+    // Charts stack one per row at full width.
+    const cards = page.locator('[data-trend-group="decisions"] [data-trend]');
+    const [first, second] = [
+      await cards.nth(0).boundingBox(),
+      await cards.nth(1).boundingBox(),
+    ];
+    const group = await page
+      .locator('[data-trend-group="decisions"]')
+      .boundingBox();
+    expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
+    expect(Math.abs(first.width - group.width)).toBeLessThanOrEqual(1);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth + 1,
@@ -397,12 +408,13 @@ test("restricted trends explain unavailability without retrying", async ({
     ),
   );
   await page.goto(`${WATCH}?tab=trends`);
-  await expect(page.locator("[data-trend-restricted]")).toHaveCount(3);
-  await expect(
-    page.getByText("Trends are unavailable with your current access.", {
-      exact: false,
-    }),
-  ).toHaveCount(3);
+  // One workspace-wide check: told once, with no group sections or banner.
+  await expect(page.locator("[data-trend-restricted]")).toHaveCount(1);
+  await expect(page.locator("[data-trend-restricted]")).toHaveText(
+    "Trends are worked out from every item in this workspace, so they need access to all of it. Some items here aren't visible to you.",
+  );
+  await expect(page.locator("[data-trend-group]")).toHaveCount(0);
+  await expect(page.getByText("Initiatives and Loops")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Retry", exact: true }),
   ).toHaveCount(0);

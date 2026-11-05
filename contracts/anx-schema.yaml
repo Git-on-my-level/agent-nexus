@@ -257,7 +257,7 @@ actor:
 
 primitives:
   host:
-    description: Workspace-local machine principal with exactly one active Ed25519 key. No auth-admin capability or bearer session; can sign for its own derived agents and update its own display name/exclusions. Host revocation cascades to all child credentials in one transaction and emits one audit entry.
+    description: Workspace-local machine principal with exactly one active Ed25519 key. No auth-admin capability or bearer session; can sign for its own derived agents and update its own display name/exclusions. Host revocation cascades to all child credentials in one transaction and emits one audit entry. Core records, internally and never in host responses, the human who sponsored the host, meaning the issuer of its headless enrollment token, or its device-enrollment approver when that approver was the workspace's sole active human (approval by ID proves nothing about who runs the host once there are two humans); an auth-admin agent sponsors nothing. The sponsor is fixed at enrollment and only affects watch_trends admission.
     fields:
       id: { type: string, required: true }
       ref: { type: typed_ref, required: true }
@@ -1405,6 +1405,7 @@ watch_trends:
     - When a cap is reached the panel is truncated and buckets older than the oldest admitted record are null, never zero.
     - Answered counts and answer time are measured by when the answer was given, including answers to asks raised before the window. Withdrawals count only for asks raised inside the window. Promises are judged against each initiative's current promise.
     - Admission is snapshot-bound: the caller's effective access scope must deny no workspace resource, proven by indexed root-owner existence seeks inside the same read-only snapshot that computes the aggregates. Any viewer with a denied resource receives the fixed 403 restricted_trends response, byte-identical for every restricted caller of that group and range. Scoped aggregates are never served; canonical projections can incorporate invisible contributors.
+    - Delegated ownership applies to this admission only. An active human reader also counts as owner of private resources owned by the non-human principals bound to hosts that reader sponsored (issued the headless enrollment token, or approved the device enrollment as the sole active human), whose actor was created for that principal. Revoked delegates still count. It never runs from an agent to its human or to a sibling agent, and it grants no item-level read; every other private owner, including another human or their agents, still restricts the reader.
     - A period missing records has no summary: answer time, loop health, rankings and other shares are null or empty rather than computed from the part that was read.
     - Loop health applies the brief's rule (reported within two cadences) at each bucket end; a bucket whose lookback precedes the read is null.
     - No cache of any kind: every request recomputes eligibility and aggregates in a fresh snapshot (Cache-Control no-store on both statuses). Transfers, grants and revocations apply on the next request. The 200-versus-403 outcome itself discloses whether the caller is denied any resource in the workspace, without identifying it.

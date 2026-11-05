@@ -464,7 +464,7 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 	} else {
 		e.Status = "denied"
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=? WHERE id=? AND status IN ('pending','approved')`, e.Status, id)
+	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=?,approved_by_actor_id=`+approverActor()+` WHERE id=? AND status IN ('pending','approved')`, e.Status, approve, admin.AgentID, admin.ActorID, id)
 	if err != nil {
 		return e, err
 	}
@@ -610,7 +610,7 @@ func (s *Store) CompleteHostEnrollment(ctx context.Context, id, poll, signature 
 	if err != nil {
 		return Host{}, err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status='completed',completed_host_id=? WHERE id=?`, h.ID, id)
+	err = completeEnrollmentTx(ctx, tx, id, h.ID)
 	if err != nil {
 		return Host{}, err
 	}
@@ -645,7 +645,7 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	if err != nil {
 		return Host{}, err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollment_tokens SET consumed_at=? WHERE id=? AND consumed_at IS NULL`, hostNow(), id)
+	err = consumeEnrollmentTokenTx(ctx, tx, id, h.ID)
 	if err != nil {
 		return Host{}, err
 	}
