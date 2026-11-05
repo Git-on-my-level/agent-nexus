@@ -716,6 +716,7 @@
       client: coreClient,
       debounceMs: 600,
       onChange: () => loadHosts(),
+      skipInitial: true,
     });
     const poll = setInterval(() => {
       now = Date.now();
