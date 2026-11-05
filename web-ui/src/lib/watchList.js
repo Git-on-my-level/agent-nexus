@@ -127,15 +127,18 @@ const SUMMARY = [
 
 /**
  * The header line, every count on one basis (open initiatives): "5 open ·
- * 2 need you · 3 lagging · 1 stale". Zero counts are left out.
+ * 2 need you · 3 lagging · 1 stale". Zero counts are left out. When core
+ * truncated the initiatives section the open count reads "50+ open".
  *
  * @returns {{ key: string, text: string, field: string }[]}
  */
-export function watchSummary(rows) {
+export function watchSummary(rows, { truncated = false } = {}) {
   const counts = sectionCounts(rows);
   const open = rows.length - counts.done;
+  // Core caps the section; a capped list is a lower bound, not a total.
+  const more = truncated ? "+" : "";
   return [
-    { key: "open", text: `${open} open`, field: "initiatives.state" },
+    { key: "open", text: `${open}${more} open`, field: "initiatives.state" },
     ...SUMMARY.filter(([key]) => counts[key]).map(([key, field]) => ({
       key,
       text: `${counts[key]} ${SECTIONS[RANK[key]].word}`,

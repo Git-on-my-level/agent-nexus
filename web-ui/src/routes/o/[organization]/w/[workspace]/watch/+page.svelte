@@ -111,7 +111,9 @@
   // Top-level initiatives with their children rolled in, each in its
   // section; loops and children are not rows of their own.
   let rollup = $derived(watchRows(initiatives, now));
-  let summary = $derived(watchSummary(rollup));
+  let summary = $derived(
+    watchSummary(rollup, { truncated: Boolean(brief?.truncated?.initiatives) }),
+  );
   let digestCollection = $derived(
     collectionFromDailyDigest(brief?.dailyDigest, { href: initiativeHref }),
   );

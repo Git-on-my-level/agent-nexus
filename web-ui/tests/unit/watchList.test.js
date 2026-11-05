@@ -187,6 +187,10 @@ describe("watchRows on the mockup brief", () => {
       "1 lagging",
     ]);
   });
+
+  it("marks the open count as a lower bound when core truncated", () => {
+    expect(watchSummary(rows, { truncated: true })[0].text).toBe("6+ open");
+  });
 });
 
 describe("row parts", () => {
