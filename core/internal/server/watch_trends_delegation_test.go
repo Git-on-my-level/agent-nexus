@@ -235,3 +235,47 @@ func TestHostSponsorRequiresHumanApprover(t *testing.T) {
 		t.Fatalf("agent approval sponsored %d hosts: %v", n, err)
 	}
 }
+
+// The workspace's only human keeps Watch Trends even when a legacy artifact
+// has an unknown content manifest (denied to every reader item by item) and an
+// agent that is not on a host they sponsored owns a private thread. A second
+// human restores the ordinary admission rule, and agents never gain it.
+func TestWatchTrendsSoleHumanAdmittedHTTP(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{})
+	ctx := context.Background()
+	db := env.workspace.DB()
+	store := env.primitiveStore.(*primitives.Store)
+	david := seedHumanPrincipalForLockoutTest(t, ctx, db, "david", "david", "david", "david-token")
+	read := func(token string, status int) {
+		t.Helper()
+		for _, group := range primitives.WatchTrendGroups {
+			trendsResponseBody(t, env.server.URL+"/watch/trends?group="+group, token, status)
+		}
+	}
+
+	artifact, err := store.CreateArtifact(ctx, david.ActorID, map[string]any{"kind": "doc", "summary": "legacy", "refs": []string{}}, "legacy body", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`UPDATE artifacts SET content_refs_json=NULL WHERE id=?`, anyString(artifact["id"])); err != nil {
+		t.Fatal(err)
+	}
+	board, err := store.CreateBoard(ctx, "unsponsored-agent", map[string]any{"title": "Agent private board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PatchThread(ctx, "unsponsored-agent", anyString(board["thread_id"]), map[string]any{"pm_actor_id": "unsponsored-agent"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	read("david-token", http.StatusOK)
+
+	// Item-level reads keep their rules: the unknown artifact stays hidden.
+	if status, _ := hostHTTP(t, http.MethodGet, env.server.URL+"/artifacts/"+anyString(artifact["id"]), "david-token", nil); status == http.StatusOK {
+		t.Fatal("sole-human admission widened item reads")
+	}
+
+	seedHumanPrincipalForLockoutTest(t, ctx, db, "erin", "erin", "erin", "erin-token")
+	read("david-token", http.StatusForbidden)
+	read("erin-token", http.StatusForbidden)
+}

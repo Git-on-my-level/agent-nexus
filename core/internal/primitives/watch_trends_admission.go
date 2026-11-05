@@ -24,6 +24,17 @@ const trendsDelegateCap = 256
 // admission bit only. admissionLedgerCTE, ordinary reads, candidate admission
 // and mutations keep the exact-owner rule, so nobody gains item-level access.
 //
+// Sole owner: when the reader is the only active human principal in the
+// workspace, every root, including another agent's private thread and a legacy
+// artifact whose content manifest is unknown (unconditional), was produced by
+// that human, their agents or the system on their behalf. Trends returns
+// aggregates only, so such a reader is always admitted: the workspace's only
+// person must never be locked out of their own trends. Item-level reads keep
+// their rules. Humans are counted from the partial index of active explicit
+// humans (idx_agents_active_humans) plus legacy passkey holders without a
+// principal kind (resourceaccess.HumanPrincipalSQL), so the count walks human
+// rows only, never agents, and stops at two.
+//
 // Cost: the reader check is one unique-index seek on agents(actor_id). The
 // delegates are an index seek on host_sponsors(sponsor_actor_id) followed by
 // primary-key seeks into host_agents and agents, capped at trendsDelegateCap.
@@ -45,11 +56,13 @@ func trendsAdmissionSQL(scope AccessScope) (string, []any) {
 	sql := `WITH _anx_trends_reader(human) AS MATERIALIZED (SELECT EXISTS(SELECT 1 FROM main.agents r WHERE r.actor_id=?1 AND r.revoked_at IS NULL AND ` + resourceaccess.HumanPrincipalSQL("r") + `)),
 _anx_trends_allowed(owner) AS MATERIALIZED (SELECT ?1||'' UNION SELECT owner FROM (SELECT a.actor_id||'' AS owner FROM main.host_sponsors s JOIN main.host_agents ha ON ha.host_id=s.host_id JOIN main.agents a ON a.id=ha.agent_id
  WHERE s.sponsor_actor_id=?1 AND (SELECT human FROM _anx_trends_reader) AND a.actor_id=a.id AND NOT (` + resourceaccess.HumanPrincipalSQL("a") + `) LIMIT ` + strconv.Itoa(trendsDelegateCap) + `)),
+_anx_trends_sole(sole) AS MATERIALIZED (SELECT (SELECT human FROM _anx_trends_reader) AND (SELECT count(*) FROM (SELECT h.id FROM main.agents h WHERE h.revoked_at IS NULL AND json_extract(h.metadata_json,'$.principal_kind')='human'
+ UNION SELECT h.id FROM main.passkey_credentials pc JOIN main.agents h ON h.id=pc.agent_id WHERE h.revoked_at IS NULL AND NULLIF(json_extract(h.metadata_json,'$.principal_kind'),'') IS NULL LIMIT 2))=1),
 _anx_trends_gaps(lo,hi) AS MATERIALIZED (SELECT * FROM (SELECT LAG(owner) OVER (ORDER BY owner) AS lo,owner AS hi FROM _anx_trends_allowed) WHERE lo IS NOT NULL)
-SELECT EXISTS(SELECT 1 FROM ` + roots + ` WHERE unconditional=1 LIMIT 1)
+SELECT NOT (SELECT sole FROM _anx_trends_sole) AND (EXISTS(SELECT 1 FROM ` + roots + ` WHERE unconditional=1 LIMIT 1)
  OR EXISTS(SELECT 1 FROM ` + roots + ` WHERE unconditional=0 AND owner<(SELECT min(owner) FROM _anx_trends_allowed) LIMIT 1)
  OR EXISTS(SELECT 1 FROM ` + roots + ` WHERE unconditional=0 AND owner>(SELECT max(owner) FROM _anx_trends_allowed) LIMIT 1)
- OR EXISTS(SELECT 1 FROM _anx_trends_gaps g WHERE EXISTS(SELECT 1 FROM ` + roots + ` r WHERE r.unconditional=0 AND r.owner>g.lo AND r.owner<g.hi LIMIT 1)),
+ OR EXISTS(SELECT 1 FROM _anx_trends_gaps g WHERE EXISTS(SELECT 1 FROM ` + roots + ` r WHERE r.unconditional=0 AND r.owner>g.lo AND r.owner<g.hi LIMIT 1))),
  ` + admissionLedgerSQL
 	return sql, []any{scope.ActorID}
 }
