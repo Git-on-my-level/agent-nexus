@@ -133,16 +133,20 @@ func resolveRevisionResourceRef(ctx context.Context, q queryRower, typ, value st
 }
 
 func resolveDocumentRevisionRef(ctx context.Context, q queryRower, value string) (ResolvedResourceRef, error) {
-	normalized := handles.Normalize(value)
-	if normalized != "" {
+	if parent, number, ok := splitRevisionHandle(handles.Normalize(value)); ok {
 		var revisionID, docHandle string
 		var revisionNumber int
+		// The computed handle parent-rN routes by its parent (handle or id)
+		// and number through the (document_id, revision_number) index; the
+		// residual predicate keeps the original computed-handle semantics.
 		err := q.QueryRowContext(ctx, `
 			SELECT dr.revision_id, COALESCE(d.handle, d.id, dr.document_id), dr.revision_number
 			  FROM document_revisions dr
 			  LEFT JOIN documents d ON d.id = dr.document_id
-			 WHERE lower(COALESCE(d.handle, d.id, dr.document_id) || '-r' || dr.revision_number) = ?`,
-			normalized,
+			 WHERE dr.document_id IN (SELECT id FROM documents WHERE handle = ? AND handle IS NOT NULL AND trim(handle)<>'' UNION ALL SELECT ?)
+			   AND dr.revision_number = ?
+			   AND lower(COALESCE(d.handle, d.id, dr.document_id)) = ?`,
+			parent, parent, number, parent,
 		).Scan(&revisionID, &docHandle, &revisionNumber)
 		if err == nil {
 			handle := revisionHandle(docHandle, revisionNumber)
@@ -173,16 +177,17 @@ func resolveDocumentRevisionRef(ctx context.Context, q queryRower, value string)
 }
 
 func resolveCardRevisionRef(ctx context.Context, q queryRower, value string) (ResolvedResourceRef, error) {
-	normalized := handles.Normalize(value)
-	if normalized != "" {
+	if parent, number, ok := splitRevisionHandle(handles.Normalize(value)); ok {
 		var revisionID, cardHandle string
 		var revisionNumber int
 		err := q.QueryRowContext(ctx, `
 			SELECT cr.revision_id, COALESCE(c.handle, c.id), cr.revision_number
 			  FROM card_revisions cr
 			  JOIN cards c ON c.id = cr.card_id
-			 WHERE lower(COALESCE(c.handle, c.id) || '-r' || cr.revision_number) = ?`,
-			normalized,
+			 WHERE cr.card_id IN (SELECT id FROM cards WHERE handle = ? AND handle IS NOT NULL AND trim(handle)<>'' UNION ALL SELECT ?)
+			   AND cr.revision_number = ?
+			   AND lower(COALESCE(c.handle, c.id)) = ?`,
+			parent, parent, number, parent,
 		).Scan(&revisionID, &cardHandle, &revisionNumber)
 		if err == nil {
 			handle := revisionHandle(cardHandle, revisionNumber)
