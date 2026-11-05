@@ -44,7 +44,7 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 		if err != nil {
 			return nil, "", err
 		}
-		threadMap, err := row.ToThreadMapPublic(ctx, s.db)
+		threadMap, err := row.ToThreadMap()
 		if err != nil {
 			return nil, "", err
 		}
@@ -54,6 +54,7 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("iterate threads: %w", err)
 	}
+	rows.Close()
 
 	var nextCursor string
 	if filter.Limit != nil && len(threads) > *filter.Limit {
@@ -63,6 +64,18 @@ func (s *Store) ListThreads(ctx context.Context, filter ThreadListFilter) ([]map
 			offset, _ = decodeCursor(filter.Cursor)
 		}
 		nextCursor = encodeCursor(offset + *filter.Limit)
+	}
+
+	// Resolve public ref handles for the whole page in one chunked, scoped
+	// batch instead of one lookup per row; per-row rewriting then hits the
+	// page-local cache only.
+	page := make([]any, len(threads))
+	for i, thread := range threads {
+		page[i] = thread
+	}
+	ctx = batchPublicRefValue(ctx, s.db, page)
+	for i, thread := range threads {
+		threads[i] = publicRefsInValue(ctx, s.db, thread).(map[string]any)
 	}
 
 	return threads, nextCursor, nil

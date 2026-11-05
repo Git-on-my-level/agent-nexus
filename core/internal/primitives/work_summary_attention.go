@@ -7,6 +7,13 @@ import (
 )
 
 const summaryBatchSize = 50
+
+// planLoadBatchSize bounds each plan/movement statement. Paged readers pass at
+// most summaryBatchSize ids, so it only coalesces the legacy unpaged card list
+// (GET /cards without summary=1), matching its 200-card access and hierarchy
+// batches. Each statement is still an id-keyed seek over at most 200 cards;
+// cadence loop reads stay chunked at summaryBatchSize.
+const planLoadBatchSize = 200
 const summaryAskCandidates = 11
 
 // Sample at most eleven oldest candidates per alias and audience, before

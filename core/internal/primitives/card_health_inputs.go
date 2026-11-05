@@ -84,7 +84,7 @@ func latestCardActivity(values ...string) time.Time {
 }
 
 // promiseNotesBatch loads the newest plans.MaxPromiseNotes promise notes per
-// card for one loadPlans batch (at most summaryBatchSize ids) in a single
+// card for one loadPlans batch (at most planLoadBatchSize ids) in a single
 // statement over idx_brief_notes_card_ts: the bound grows with the batch,
 // never with workspace size or note history. The same statement also reads
 // the newest live note's payload, one indexed seek per card id, so the

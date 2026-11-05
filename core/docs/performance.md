@@ -62,6 +62,23 @@ go test -C core ./internal/primitives \
   -count=1 -v -timeout=40m
 ```
 
+## Legacy unpaged card list
+
+`GET /cards` without `summary=1` still returns every visible card (its
+contract is unpaged; `summary=1` is the bounded keyset page). Its plan and
+movement enrichment (`loadPlansAt`: plan/health row read plus promise notes)
+now uses 200-card statements (`planLoadBatchSize`), matching the 200-card
+access and hierarchy batches of the same request; cadence loop reads stay
+chunked at 50. Paged readers pass at most 50 ids, so their statements are
+unchanged. Each statement remains an id-keyed seek over at most 200 cards.
+On the 4096-card scale corpus the authorized request drops from 273 to 151
+statements (3,352,123 to 3,333,945 VM steps; about 1.7s to 1.1s locally) with
+a byte-identical body. The route stays O(visible cards) and remains on its
+SCA-663 baseline; no budget or allowlist entry changes.
+`TestCardsListBatchesEnrichmentAndIgnoresHiddenCorpus` asserts three plan
+statements for 450 visible cards, at most 25 statements, and that 4096 private
+cards of an unrelated owner add no statements and only selector-scan VM work.
+
 ## Card mutation grouping echoes
 
 Patch, revision, move and lifecycle echoes reload one scoped current card row
