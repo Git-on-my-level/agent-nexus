@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeBrief } from "../../src/lib/brief.js";
 import {
-  bucketCounts,
-  bucketOf,
   childSegments,
   childrenLine,
   decisionIndex,
@@ -13,9 +11,6 @@ import {
   nextCell,
   nextLine,
   outcomeLine,
-  promisesCell,
-  rollupRows,
-  rollupSummary,
   SEGMENT_CAP,
   segmentsLabel,
   shortCodes,
@@ -26,57 +21,6 @@ import { mockupBrief } from "../fixtures/watchMockupSeed.js";
 const NOW = Date.parse("2026-10-24T12:00:00Z");
 const brief = normalizeBrief(mockupBrief("2026-10-24T12:00:00Z"));
 const row = (ref) => brief.initiatives.find((r) => r.ref === ref);
-
-describe("rollupRows", () => {
-  it("lists top-level initiatives by what needs the reader", () => {
-    const rows = rollupRows(brief.initiatives);
-    expect(rows.map((r) => [r.ref, r.bucket])).toEqual([
-      ["card:capture", "needs_you"],
-      ["card:margin", "needs_you"],
-      ["card:security", "needs_you"],
-      ["card:retention", "slipping"],
-      ["card:smarter", "moving"],
-      ["card:firmware", "quiet"],
-      ["card:docs-site", "done"],
-    ]);
-    expect(bucketCounts(rows)).toMatchObject({
-      needs_you: 3,
-      slipping: 1,
-      moving: 1,
-      quiet: 1,
-      done: 1,
-    });
-    expect(rollupSummary(rows)).toBe(
-      "7 initiatives · 29 cards rolled up into them",
-    );
-  });
-
-  it("never makes a child or a loop a row", () => {
-    const rows = rollupRows([
-      ...brief.initiatives,
-      { ...row("card:smarter"), ref: "card:kid", parentRef: "card:capture" },
-      ...brief.loops,
-    ]);
-    expect(rows.map((r) => r.ref)).not.toContain("card:kid");
-    expect(rows.map((r) => r.ref)).not.toContain("card:weekly-digest");
-  });
-
-  it("buckets a decision for the reader as needs you before slipping", () => {
-    expect(
-      bucketOf({ state: "past_promise", waitingOnYouCount: 1, rollup: {} }),
-    ).toBe("needs_you");
-    expect(
-      bucketOf({
-        state: "moving",
-        waitingOnYouCount: 0,
-        rollup: { needingViewer: 0, pastPromise: 2 },
-      }),
-    ).toBe("slipping");
-    expect(bucketOf({ state: "done", waitingOnYouCount: 3, rollup: {} })).toBe(
-      "done",
-    );
-  });
-});
 
 describe("children", () => {
   it("draws one segment per child, done first, needs you before not started", () => {
@@ -282,19 +226,6 @@ describe("row cells", () => {
       "no promise",
       "last evidence 3d ago",
     ]);
-  });
-
-  it("counts promises from the children, else the initiative's own", () => {
-    expect(promisesCell(row("card:capture"))).toMatchObject({
-      text: "2 of 9 past",
-      tone: "warn",
-    });
-    expect(promisesCell(row("card:smarter")).text).toBe("on track");
-    expect(promisesCell(row("card:retention"))).toMatchObject({
-      text: "1d past",
-      tone: "warn",
-    });
-    expect(promisesCell(row("card:docs-site")).text).toBe("done");
   });
 
   it("names the reader, else the owner, else nobody", () => {

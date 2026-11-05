@@ -24,7 +24,7 @@
   "mcp/executor/executor.go": 892,
   "web-ui/scripts/game-dev-studio-seed-data.mjs": 1016,
   "web-ui/scripts/qa-capture.mjs": 926,
-  "web-ui/scripts/qa-visual.mjs": 2276,
+  "web-ui/scripts/qa-visual.mjs": 2275,
   "web-ui/scripts/seed-core-from-mock.mjs": 1893,
   "web-ui/src/lib/anxCoreClient.js": 1570,
   "web-ui/src/lib/brief.js": 982,

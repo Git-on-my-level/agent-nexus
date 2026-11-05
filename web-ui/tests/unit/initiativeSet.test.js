@@ -3,13 +3,11 @@ import { describe, expect, it } from "vitest";
 import briefFixture from "../../../contracts/fixtures/brief/brief.v1.json" with { type: "json" };
 import { normalizeBrief } from "../../src/lib/brief.js";
 import {
-  budgetIndicator,
   changeLine,
   changeVerb,
-  changesStartOpen,
   overTargetAsk,
-  overTargetLine,
 } from "../../src/lib/watchRollup.js";
+import { overTargetNotice, recentChanges } from "../../src/lib/watchList.js";
 
 const NOW = Date.parse("2026-10-24T12:00:00Z");
 const membership = (initiative, board = "board:tasks") => ({
@@ -83,37 +81,14 @@ describe("initiative set normalization", () => {
   });
 });
 
-describe("budgetIndicator", () => {
-  it("counts against the target", () => {
-    expect(budgetIndicator({ count: 6, target: 15, truncated: false })).toEqual(
-      {
-        text: "Initiatives: 6 of 15",
-        label: "6 initiatives against a target of 15",
-        title: "",
-      },
-    );
-  });
-
-  it("marks a lower bound", () => {
-    const out = budgetIndicator({ count: 17, target: 15, truncated: true });
-    expect(out.text).toBe("Initiatives: 17+ of 15");
-    expect(out.label).toBe("At least 17 initiatives against a target of 15");
-    expect(out.title).toMatch(/At least this many/);
-  });
-
+describe("budget", () => {
   it("treats a target of 0 as a real target", () => {
     const budget = normalizeBrief({
       initiative_budget: { count: 2, target: 0, truncated: false },
     }).initiativeBudget;
     expect(budget).toEqual({ count: 2, target: 0, truncated: false });
-    const indicator = budgetIndicator(budget);
-    expect(indicator.text).toBe("Initiatives: 2 of 0");
-    expect(indicator.label).toBe("2 initiatives against a target of 0");
-    // The chip and the over-target line state the same target.
-    const over = normalizeBrief({
-      over_target: { count: 2, target: 0, truncated: false, next_actions: [] },
-    }).overTarget;
-    expect(overTargetLine(over)).toBe("2 initiatives against a target of 0.");
+    const rows = [{ section: "moving" }, { section: "proposed" }];
+    expect(overTargetNotice(rows, budget)).toEqual({ open: 2, target: 0 });
   });
 
   it("keeps the legacy default of 15 only for an absent target", () => {
@@ -121,10 +96,6 @@ describe("budgetIndicator", () => {
       normalizeBrief({ initiative_budget: { count: 3, truncated: false } })
         .initiativeBudget,
     ).toEqual({ count: 3, target: 15, truncated: false });
-  });
-
-  it("shows just the count with no budget", () => {
-    expect(budgetIndicator(null, [{}, {}]).text).toBe("Initiatives: 2");
   });
 });
 
@@ -136,12 +107,23 @@ describe("over target", () => {
     ask: "Initiatives exceed the target: fold this initiative or keep it?",
   };
 
-  it("states the facts", () => {
-    expect(overTargetLine(over)).toBe("6 initiatives against a target of 5.");
-    expect(overTargetLine({ ...over, truncated: true })).toBe(
-      "At least 6 initiatives against a target of 5.",
+  it("counts open initiatives against the target, with no lower bound", () => {
+    const rows = [
+      ...Array.from({ length: 6 }, () => ({ section: "moving" })),
+      { section: "done" },
+    ];
+    const budget = { count: 9, target: 5, truncated: true };
+    expect(overTargetNotice(rows, budget, over)).toEqual({
+      open: 6,
+      target: 5,
+    });
+    // Done rows never count; within target there is no notice.
+    expect(overTargetNotice(rows.slice(1), { ...budget, target: 6 })).toBe(
+      null,
     );
-    expect(overTargetLine(null)).toBe("");
+    // Core's flag alone is not the count: the same basis decides.
+    expect(overTargetNotice(rows.slice(2), budget, over)).toBe(null);
+    expect(overTargetNotice(rows, null, null)).toBe(null);
   });
 
   it("links nothing by title alone when core named no subject", () => {
@@ -251,10 +233,16 @@ describe("change lines", () => {
     expect(line.title).toBe("card:battery");
   });
 
-  it("starts open only while the newest change is under a week old", () => {
-    const at = (ts) => ({ items: [{ ts }], truncated: false });
-    expect(changesStartOpen(at("2026-10-20T12:00:00Z"), NOW)).toBe(true);
-    expect(changesStartOpen(at("2026-10-15T09:00:00Z"), NOW)).toBe(false);
-    expect(changesStartOpen({ items: [], truncated: false }, NOW)).toBe(false);
+  it("keeps only the last seven days of changes", () => {
+    const items = [
+      { ref: "a", ts: "2026-10-24T09:00:00Z" },
+      { ref: "b", ts: "2026-10-17T12:00:00Z" },
+      { ref: "c", ts: "2026-10-17T11:59:00Z" },
+      { ref: "d", ts: "" },
+    ];
+    expect(
+      recentChanges({ items, truncated: true }, NOW).map((c) => c.ref),
+    ).toEqual(["a", "b"]);
+    expect(recentChanges(null, NOW)).toEqual([]);
   });
 });

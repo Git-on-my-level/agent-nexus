@@ -102,12 +102,17 @@ test("the empty state still reads recent changes to the initiative set", async (
   await expect(page.locator("[data-watch-empty]")).toBeVisible();
   const changes = page.locator("[data-initiative-changes]");
   await expect(changes).toBeVisible();
+  // Collapsed by default, with this week's count.
+  await expect(changes.locator("[data-initiative-changes-count]")).toHaveText(
+    "1 in 7 days",
+  );
+  await changes.locator("[data-initiative-changes-toggle]").click();
   await expect(changes).toContainText("Retired");
   await expect(changes).toContainText("Observability");
   await expect(page.locator("[data-rollup-list]")).toHaveCount(0);
 });
 
-test("digest-only work stays visible in the Initiatives list", async ({
+test("digest-only work points to Lanes from the Initiatives list", async ({
   page,
   context,
 }) => {
@@ -120,32 +125,29 @@ test("digest-only work stays visible in the Initiatives list", async ({
     }),
   );
   await page.goto(WATCH);
-  await expect(
-    page.getByRole("heading", {
-      name: `Needs an owner's look (${brief.daily_digest.length})`,
-    }),
-  ).toBeVisible();
-  for (const card of brief.daily_digest) {
-    const row = page.locator(`[data-collection-row="${card.ref}"]`);
-    await expect(row).toBeVisible();
-    await expect(row).toContainText(card.title);
-    await expect(row.locator("a").first()).toHaveAttribute(
-      "href",
-      `${WATCH.replace("/watch", "")}/initiatives/${card.ref.slice(5)}`,
-    );
+  // The list shows initiatives only: cards waiting for an owner are not
+  // rows here, and a line says where they read.
+  await expect(page.locator("[data-watch-empty]")).toBeVisible();
+  const hidden = page.locator("[data-watch-digest-hidden]");
+  await expect(hidden).toContainText(
+    `Cards awaiting an owner · ${brief.daily_digest.length}`,
+  );
+  await expect(hidden).toHaveAttribute("href", `${WATCH}?view=lanes`);
+  await expect(page.getByRole("region", { name: "Daily digest" })).toHaveCount(
+    0,
+  );
+  for (const card of brief.daily_digest)
     await expect(
-      row.locator('[data-source="computed:daily_digest.reason"]').last(),
-    ).toBeVisible();
-  }
-  await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+      page.locator(`[data-collection-row="${card.ref}"]`),
+    ).toHaveCount(0);
 });
 
 test("recent changes read beside digest-only work with no initiatives", async ({
   page,
   context,
 }) => {
-  // The rollup is empty but the digest is not, so neither the empty state
-  // nor the rollup list draws; the changes feed must still read, once.
+  // The rollup is empty and the digest is not; the empty state, the line
+  // pointing to Lanes and the changes feed all read, the feed once.
   await setup(context, (route) =>
     json(route, {
       ...brief,
@@ -175,22 +177,19 @@ test("recent changes read beside digest-only work with no initiatives", async ({
     }),
   );
   await page.goto(WATCH);
-  await expect(
-    page.getByRole("heading", {
-      name: `Needs an owner's look (${brief.daily_digest.length})`,
-    }),
-  ).toBeVisible();
-  await expect(page.locator("[data-watch-empty]")).toHaveCount(0);
+  await expect(page.locator("[data-watch-digest-hidden]")).toBeVisible();
+  await expect(page.locator("[data-watch-empty]")).toBeVisible();
   await expect(page.locator("[data-rollup-list]")).toHaveCount(0);
   const changes = page.locator("[data-initiative-changes]");
   await expect(changes).toBeVisible();
   await expect(changes).toHaveCount(1);
+  await changes.locator("[data-initiative-changes-toggle]").click();
   await expect(changes).toContainText("Retired");
   await expect(changes).toContainText("Observability");
 });
 
 for (const layout of ["list", "lanes"]) {
-  test(`mixed ordinary and digest work stays visible in ${layout}`, async ({
+  test(`mixed ordinary and digest work reads right in ${layout}`, async ({
     page,
     context,
   }) => {
@@ -206,13 +205,21 @@ for (const layout of ["list", "lanes"]) {
       ).toBeVisible();
     }
     const digest = page.getByRole("region", { name: "Daily digest" });
-    await expect(digest).toBeVisible();
-    await digest.scrollIntoViewIfNeeded();
-    await expect(digest).toBeInViewport();
-    for (const card of brief.daily_digest) {
-      await expect(
-        digest.locator(`[data-collection-row="${card.ref}"]`),
-      ).toContainText(card.title);
+    if (layout === "list") {
+      // The list is initiatives only; the digest reads in Lanes.
+      await expect(digest).toHaveCount(0);
+      const hidden = page.locator("[data-watch-digest-hidden]");
+      await hidden.scrollIntoViewIfNeeded();
+      await expect(hidden).toBeInViewport();
+    } else {
+      await expect(digest).toBeVisible();
+      await digest.scrollIntoViewIfNeeded();
+      await expect(digest).toBeInViewport();
+      for (const card of brief.daily_digest) {
+        await expect(
+          digest.locator(`[data-collection-row="${card.ref}"]`),
+        ).toContainText(card.title);
+      }
     }
     if (process.env.WATCH_SHOTS) {
       await page.screenshot({
@@ -240,8 +247,15 @@ test("lists initiatives by computed state with sources tagged", async ({
     page.locator('[data-collection-row="card:battery-measurement"]'),
   ).toHaveCount(0);
   const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
-  await expect(fleet.locator("[data-rollup-next]")).toHaveText(
-    "next: enroll m6 · Oct 16",
+  await expect(fleet.locator("[data-rollup-next]")).toContainText(
+    "next: enroll m6",
+  );
+  await expect(fleet.locator("[data-rollup-promises]")).toContainText(
+    "Waiting on you",
+  );
+  // One count basis in the header: open initiatives.
+  await expect(page.locator("[data-watch-summary]")).toContainText(
+    "4 open · 2 need you",
   );
   await expect(
     page.locator('[data-source="computed:generated_at"]'),
@@ -254,8 +268,8 @@ test("lists initiatives by computed state with sources tagged", async ({
   await expect(
     page.locator('[data-collection-row="card:docs-refresh"]'),
   ).toBeVisible();
-  // Watch is read-only: the header points to Decide.
-  await expect(page.locator("[data-watch-decide-link]")).toBeVisible();
+  // No Decide button on Watch: the nav carries it.
+  await expect(page.locator("[data-watch-decide-link]")).toHaveCount(0);
   if (process.env.WATCH_SHOTS) {
     await page.setViewportSize({ width: 1400, height: 900 });
     await page.screenshot({
@@ -269,8 +283,8 @@ test("lists initiatives by computed state with sources tagged", async ({
     });
     await page.setViewportSize({ width: 1280, height: 720 });
   }
-  // "You" in the next column links into Decide for that initiative.
-  await fleet.locator("[data-rollup-owner] a").click();
+  // "Waiting on you" links into Decide for that initiative.
+  await fleet.locator("[data-rollup-status]").click();
   await expect(page).toHaveURL(
     /\/decide\?initiative=card%3Afleet-onboarding|\/decide\?initiative=card:fleet-onboarding/,
   );
@@ -386,7 +400,7 @@ test.describe("lanes", () => {
         '[data-lane-ref="card:observability"] [data-work-ref="card:runbook"]',
       ),
     ).toBeVisible();
-    // The tray and the budget chip come with it; Decide stays in the header.
+    // The tray and the budget chip come with it.
     // The chip carries the board's target (the fixture's 5), not the legacy
     // default, so it reads over target and offers folds.
     await expect(board.locator("[data-swimlane-tray]")).toContainText(
@@ -395,7 +409,7 @@ test.describe("lanes", () => {
     await expect(board.locator("[data-initiative-budget]")).toHaveText(
       "Initiatives 6/5 · suggest folds",
     );
-    await expect(page.locator("[data-watch-decide-link]")).toHaveCount(1);
+    await expect(page.locator("[data-watch-decide-link]")).toHaveCount(0);
     await expect(board.getByText(/in Decide →/)).toHaveCount(0);
     if (process.env.WATCH_SHOTS)
       await page.screenshot({
@@ -427,10 +441,9 @@ test("a row opens inline on click and closes on the next", async ({
   await setup(context, (route) => json(route, briefWithRollup()));
   const reads = await routeObservabilityWork(context);
   await page.goto(WATCH);
-  // Rows that need the reader start open, without reading anything.
+  // Every row starts closed.
   const fleet = page.locator('[data-collection-row="card:fleet-onboarding"]');
-  await expect(fleet).toHaveAttribute("data-expanded", "true");
-  await expect(fleet.locator("[data-details-load]")).toBeVisible();
+  await expect(fleet).toHaveAttribute("data-expanded", "false");
 
   const row = page.locator('[data-collection-row="card:observability"]');
   const title = row.locator("[data-collection-toggle]");
@@ -440,7 +453,7 @@ test("a row opens inline on click and closes on the next", async ({
 
   // Anywhere on the row: here, the empty middle of it.
   await row
-    .locator(".grid-row")
+    .locator(".row")
     .first()
     .click({ position: { x: 600, y: 12 } });
   const details = row.locator("[data-collection-details]");
@@ -472,9 +485,10 @@ test("a row opens inline on click and closes on the next", async ({
     });
 
   // Several rows can be open; each closes on its own.
+  await fleet.locator("[data-collection-toggle]").click();
   await expect(fleet).toHaveAttribute("data-expanded", "true");
   await row
-    .locator(".grid-row")
+    .locator(".row")
     .first()
     .click({ position: { x: 600, y: 12 } });
   await expect(details).toHaveCount(0);
@@ -604,7 +618,7 @@ test.describe("phone", () => {
     await page.goto(WATCH);
     const row = page.locator('[data-collection-row="card:observability"]');
     await row
-      .locator(".grid-row")
+      .locator(".row")
       .first()
       .tap({ position: { x: 200, y: 12 } });
     const details = row.locator("[data-collection-details]");

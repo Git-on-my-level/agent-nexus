@@ -122,14 +122,18 @@ for (const [name, viewport] of [
       const list = page.locator("[data-rollup-list]");
       await expect(list.locator("[data-collection-row]")).toHaveCount(5);
       await expect(page.locator("[data-watch-summary]")).toContainText(
-        "5 initiatives",
+        "5 open",
       );
       const outcome = list.locator(
         '[data-collection-row="card:empty-outcome"]',
       );
       await expect(outcome).toContainText("Unowned outcome");
+      await expect(outcome).toHaveAttribute("data-bucket", "moving");
+      await expect(outcome.locator("[data-rollup-owner]")).toContainText(
+        "Unassigned",
+      );
       await expect(outcome.locator("[data-rollup-children]")).toHaveText(
-        "no children yet",
+        "No children",
       );
     });
 
@@ -140,12 +144,13 @@ for (const [name, viewport] of [
       await setup(page, context, initiativeSetBrief(NOW));
       await page.goto(WATCH);
       const list = page.locator("[data-rollup-list]");
-      await expect(list.locator("[data-initiative-budget]")).toHaveText(
-        "Initiatives: 7 of 5",
+      // One basis: six open initiatives (done never counts), no "at least".
+      await expect(page.locator("[data-watch-summary]")).toContainText(
+        "6 open · 3 need you · 1 lagging",
       );
       const over = list.locator("[data-over-target]");
       await expect(over).toContainText(
-        "Over target 7 initiatives against a target of 5.",
+        "Over target: 6 open against a target of 5.",
       );
       await expect(over.locator("[data-over-target-ask]")).toHaveAttribute(
         "href",
@@ -156,6 +161,16 @@ for (const [name, viewport] of [
 
       const changes = list.locator("[data-initiative-changes]");
       const rows = changes.locator("[data-initiative-change]");
+      const toggle = changes.getByRole("button", { name: /Recent changes/ });
+      // Collapsed by default, with this week's count.
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect(rows).toHaveCount(0);
+      await expect(
+        changes.locator("[data-initiative-changes-count]"),
+      ).toHaveText("3 in 7 days");
+      await toggle.focus();
+      await page.keyboard.press("Enter");
+      await expect(toggle).toHaveAttribute("aria-expanded", "true");
       await expect(rows).toHaveCount(3);
       await expect(rows.nth(0)).toContainText(
         "Added Security & trust — by lead: Separate outcome with its own owner",
@@ -168,16 +183,8 @@ for (const [name, viewport] of [
         "href",
         "/o/local/w/local/initiatives/security",
       );
-      const toggle = changes.getByRole("button", {
-        name: /Recent changes to initiatives/,
-      });
-      await expect(toggle).toHaveAttribute("aria-expanded", "true");
-      await toggle.focus();
       await page.keyboard.press("Enter");
-      await expect(toggle).toHaveAttribute("aria-expanded", "false");
       await expect(rows).toHaveCount(0);
-      await page.keyboard.press("Enter");
-      await expect(rows).toHaveCount(3);
 
       await shot(page, `impl-initiative-set-${name}`);
       await expectCleanLayout(page, `watch initiative set ${name}`);
@@ -187,7 +194,7 @@ for (const [name, viewport] of [
       expect(axe.violations).toEqual([]);
     });
 
-    test(`the list reads like the Rollup mockup (${name})`, async ({
+    test(`the list reads like the Watch mockup (${name})`, async ({
       page,
       context,
     }) => {
@@ -195,20 +202,20 @@ for (const [name, viewport] of [
       await page.goto(WATCH);
       const list = page.locator("[data-rollup-list]");
       await expect(list).toBeVisible();
-      // Header: top-level initiatives and the cards rolled into them.
+      // Header: one line of counts, no tiles, no Decide button.
       await expect(page.locator("[data-watch-summary]")).toContainText(
-        "7 initiatives · 29 cards rolled up into them",
+        "6 open · 3 need you · 1 lagging",
       );
-      // Chips: need you, slipping, moving; and how the list is sorted.
-      await expect(list.locator("[data-collection-filter]")).toHaveText([
-        "3 need you",
-        "1 slipping",
-        "1 moving",
+      await expect(page.locator("[data-watch-decide-link]")).toHaveCount(0);
+      await expect(list.locator("[data-collection-filter]")).toHaveCount(0);
+      // Sections in reading order; done folded; children never rows.
+      await expect(list.locator("[data-watch-section] > h2")).toHaveText([
+        "Needs you · 3",
+        "Lagging · 1",
+        "Moving · 1",
+        "Proposed · 1",
+        /Done · 1/,
       ]);
-      await expect(list).toContainText(
-        "Sorted by what needs you · children fold into their initiative",
-      );
-      // Rows in bucket order, done folded away, children never rows.
       expect(
         await list
           .locator("[data-collection-row]")
@@ -218,32 +225,44 @@ for (const [name, viewport] of [
         "card:margin",
         "card:security",
         "card:retention",
-        "card:smarter",
         "card:firmware",
+        "card:smarter",
       ]);
       const capture = list.locator('[data-collection-row="card:capture"]');
       await expect(capture.locator("[data-rollup-next]")).toContainText(
+        "2 of 9 past",
+      );
+      await expect(capture.locator("[data-rollup-next]")).toContainText(
         "next: legacy queues gone, no silent loss",
       );
-      await expect(capture.locator("[data-rollup-children]")).toContainText(
-        "9 children in 3 workstreams",
+      await expect(capture.locator("[data-rollup-progress]")).toBeVisible();
+      await expect(capture.locator("[data-rollup-children]")).toHaveText(
+        "9 children",
       );
-      // The outcome reads under the title; a proposed initiative says so.
+      await expect(capture.locator("[data-rollup-status]")).toHaveText(
+        "Waiting on you",
+      );
+      // Secondary text is readable: nothing on a row under 13px.
+      const sizes = await capture
+        .locator(
+          "[data-rollup-next], [data-rollup-owner], [data-rollup-status]",
+        )
+        .evaluateAll((els) =>
+          els.map((el) => parseFloat(getComputedStyle(el).fontSize)),
+        );
+      for (const size of sizes) expect(size).toBeGreaterThanOrEqual(13);
+      await expect(
+        list.locator(
+          '[data-collection-row="card:smarter"] [data-rollup-status]',
+        ),
+      ).toHaveText("Not started");
+      // Every row starts closed; the outcome reads once it opens.
+      await expect(capture).toHaveAttribute("data-expanded", "false");
+      await expect(capture.locator("[data-rollup-outcome]")).toHaveCount(0);
+      await capture.locator("[data-collection-toggle]").click();
       await expect(capture.locator("[data-rollup-outcome]")).toHaveText(
         "every recording synced on the record lane · legacy queues gone · no silent loss · right speaker",
       );
-      await expect(
-        list.locator(
-          '[data-collection-row="card:smarter"] [data-rollup-proposed]',
-        ),
-      ).toHaveText("proposed");
-      await expect(
-        list.locator(
-          '[data-collection-row="card:smarter"] [data-rollup-promises]',
-        ),
-      ).toHaveText("on track");
-      // Rows that need the reader open by default, with workstream kid rows.
-      await expect(capture).toHaveAttribute("data-expanded", "true");
       await expect(capture.locator("[data-rollup-kid]")).toHaveCount(3);
       // Each workstream from its own rollup: codes, cards, state, promise.
       const lane = capture.locator('[data-rollup-kid="card:record-lane"]');
@@ -254,45 +273,25 @@ for (const [name, viewport] of [
       await expect(lane.locator("[data-kid-state]")).toHaveText(
         "4 moving · 1 review",
       );
-      await expect(
-        list.locator(
-          '[data-collection-row="card:margin"] [data-rollup-kid="card:pricing-ladder"] [data-kid-state]',
-        ),
-      ).toHaveText("1 needs you · 1 moving");
-      await expect(
-        list.locator('[data-collection-row="card:smarter"]'),
-      ).toHaveAttribute("data-expanded", "false");
       if (name === "desktop") {
-        await expect(capture.locator("[data-rollup-promises]")).toHaveText(
-          "2 of 9 past",
-        );
         await expect(lane.locator("[data-kid-promise]")).toHaveText(
           "due Oct 25",
         );
         await expect(lane.locator("[data-kid-owner]")).toHaveText("lead");
         await expect(
-          capture.locator(
-            '[data-rollup-kid="card:speaker-id"] [data-kid-promise]',
-          ),
-        ).toHaveText("10h past");
-        await expect(
-          capture.locator('[data-rollup-kid="card:custody"] [data-kid-owner]'),
-        ).toHaveText("agents");
-        await expect(
           list.locator(
             '[data-collection-row="card:smarter"] [data-rollup-owner]',
           ),
-        ).toHaveText("agents");
-        await expect(
-          list.locator(
-            '[data-collection-row="card:margin"] [data-rollup-owner]',
-          ),
-        ).toHaveText("You");
+        ).toContainText("agents");
       } else {
-        // A phone drops Promises and Next, as the mockup does under 900px.
-        await expect(capture.locator("[data-rollup-promises]")).toBeHidden();
+        // A phone drops the kid rows' promise and owner columns.
         await expect(lane.locator("[data-kid-promise]")).toBeHidden();
       }
+      // Done opens from its fold.
+      await list.locator("[data-collection-folded]").click();
+      await expect(
+        list.locator('[data-collection-row="card:docs-site"]'),
+      ).toBeVisible();
       await shot(page, `impl-rollup-${name}`);
       await expectCleanLayout(page, `watch rollup ${name}`);
       const axe = await new AxeBuilder({ page })

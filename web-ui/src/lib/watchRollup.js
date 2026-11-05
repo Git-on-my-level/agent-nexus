@@ -16,59 +16,6 @@ import {
 } from "$lib/brief.js";
 import { formatAgo } from "$lib/time/format.js";
 import { countWord, label as phaseLabel } from "$lib/pm/presentation.js";
-import { buildLanes } from "$lib/swimlanes.js";
-
-/**
- * One bucket per initiative, in reading order. "Needs you" is an open
- * decision or a child waiting on the reader; "slipping" is a promise past
- * due, the initiative's own or a child's.
- */
-export const BUCKETS = [
-  { key: "needs_you", label: "need you", tone: "danger" },
-  { key: "slipping", label: "slipping", tone: "warn" },
-  { key: "moving", label: "moving", tone: "accent" },
-  { key: "quiet", label: "no promise", tone: "muted" },
-  { key: "done", label: "done", tone: "muted" },
-];
-const BUCKET_RANK = Object.fromEntries(BUCKETS.map((b, i) => [b.key, i]));
-
-export function bucketOf(row) {
-  if (row.state === "done") return "done";
-  if (row.waitingOnYouCount > 0 || row.rollup?.needingViewer > 0)
-    return "needs_you";
-  if (row.state === "past_promise" || row.rollup?.pastPromise > 0)
-    return "slipping";
-  if (row.state === "moving") return "moving";
-  return "quiet";
-}
-
-/**
- * Top-level initiatives (loops and children never count), sorted by what
- * needs the reader, then core's order.
- */
-export function rollupRows(initiatives) {
-  return buildLanes(initiatives)
-    .map((row, index) => ({ row, index, bucket: bucketOf(row) }))
-    .sort(
-      (a, b) =>
-        BUCKET_RANK[a.bucket] - BUCKET_RANK[b.bucket] || a.index - b.index,
-    )
-    .map(({ row, bucket }) => ({ ...row, bucket }));
-}
-
-/** `{ needs_you, slipping, moving, quiet, done }` counts. */
-export function bucketCounts(rows) {
-  const counts = Object.fromEntries(BUCKETS.map((b) => [b.key, 0]));
-  for (const row of rows) counts[row.bucket] += 1;
-  return counts;
-}
-
-/** "10 initiatives · 126 cards rolled up into them". */
-export function rollupSummary(rows, { truncated = false } = {}) {
-  const cards = rows.reduce((sum, row) => sum + (row.rollup?.total ?? 0), 0);
-  const more = truncated ? "+" : "";
-  return `${rows.length}${more} ${rows.length === 1 ? "initiative" : "initiatives"} · ${cards} ${cards === 1 ? "card" : "cards"} rolled up into them`;
-}
 
 // ---------------------------------------------------------------------------
 // Children
@@ -376,39 +323,6 @@ export function nextLine(row, now = Date.now()) {
   return parts;
 }
 
-/** The Promises column. */
-export function promisesCell(row) {
-  const total = row.rollup?.total ?? 0;
-  const past = row.rollup?.pastPromise ?? 0;
-  if (past > 0)
-    return {
-      text: total ? `${past} of ${total} past` : `${past} past`,
-      tone: "warn",
-      field: "initiatives.rollup.past_promise",
-    };
-  if (row.state === "past_promise")
-    return {
-      text: `${formatSpan(row.pastPromiseFor)} past`,
-      tone: "warn",
-      field: "initiatives.past_promise_for",
-    };
-  if (row.state === "done")
-    return { text: "done", tone: "muted", field: "initiatives.state" };
-  if (total > 0)
-    return {
-      text: "on track",
-      tone: "muted",
-      field: "initiatives.rollup.past_promise",
-    };
-  if (row.promise?.at)
-    return {
-      text: `by ${formatDay(row.promise.at)}`,
-      tone: "muted",
-      field: "initiatives.promise",
-    };
-  return { text: "—", tone: "muted", field: "" };
-}
-
 /**
  * Who acts next: the reader when something waits on them, else the owner
  * core names (resolved to a name by the caller), else nobody.
@@ -502,33 +416,6 @@ export function needsYouItems(lane, index) {
 }
 
 /**
- * "Initiatives: 6 of 15", "6+ of 15" when the count is a lower bound, or
- * "Initiatives: 6" with no target. A target of 0 is real and reads "of 0".
- * Without a budget from core, the rows on screen are the count.
- */
-export function budgetIndicator(budget, rows = []) {
-  const count = budget ? budget.count : rows.length;
-  const plus = budget?.truncated ? "+" : "";
-  const target = budget?.target;
-  const hasTarget = target != null;
-  return {
-    text: `Initiatives: ${count}${plus}${hasTarget ? ` of ${target}` : ""}`,
-    label: hasTarget
-      ? `${plus ? "At least " : ""}${count} initiatives against a target of ${target}`
-      : `${plus ? "At least " : ""}${count} initiatives`,
-    title: plus
-      ? "At least this many. Some initiatives may be outside your view."
-      : "",
-  };
-}
-
-/** "6 initiatives against a target of 5." */
-export function overTargetLine(over) {
-  if (!over) return "";
-  return `${over.truncated ? "At least " : ""}${over.count} initiatives against a target of ${over.target}.`;
-}
-
-/**
  * The reader's open ask about the initiative count: the question core
  * recommends, once an agent has asked it. Every brief decision is already
  * open, so among several matches — the same fixed question re-asked — the
@@ -578,16 +465,4 @@ export function changeLine(change, actorLabel = (id) => id, now = Date.now()) {
     reason: change.reason,
     time: formatAgo(change.ts, now),
   };
-}
-
-export const CHANGES_FRESH_DAYS = 7;
-export const CHANGES_PREVIEW = 5;
-
-/** Open by default only while the newest change is under a week old. */
-export function changesStartOpen(changes, now = Date.now()) {
-  const newest = Math.max(
-    ...(changes?.items ?? []).map((c) => Date.parse(c.ts) || 0),
-    0,
-  );
-  return newest > 0 && now - newest < CHANGES_FRESH_DAYS * 86_400_000;
 }
