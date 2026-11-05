@@ -293,8 +293,9 @@ function enrollStep(index, { base, token, expiry, agentName }) {
       ? [
           "   If it fails, set `--as <name>` or `ANX_AS=<name>` to the lowercase",
           "   name of the agent tool you are running in. Reuse a name this host",
-          "   already has when one fits (doctor lists them); a new name becomes a",
-          "   new persona on its first call, so never invent one per task.",
+          "   already has when one fits (doctor lists the names known on this",
+          "   machine); a new name becomes a new persona on its first call, so",
+          "   never invent one per task.",
           "   Stop only if you cannot tell which agent tool you are running in;",
           "   otherwise rerun doctor with that identity.",
         ]

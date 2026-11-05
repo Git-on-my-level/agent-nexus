@@ -14,22 +14,29 @@ import (
 //
 // Agents mint host personas freely (the first host_assertion for a new name
 // creates agent, actor and host_agents rows), so a host's roster grows with
-// one-off names. Archive is the human answer to that sprawl. It is neither
-// revoke (permanent, principal-wide) nor delete (history must keep its
-// attribution):
+// one-off names. Archive is the answer to that sprawl. It is not revoke
+// (permanent) nor delete (history must keep its attribution), but it is
+// principal-wide in effect: it cuts every credential of the principal behind
+// the persona, which for an adopted persona is the adopted principal itself.
 //
 //   - host_agents.archived_at is stamped; the agent, actor, events and runs
-//     stay untouched, and the (host_id, name) row keeps the name reserved.
+//     stay untouched, and the (host_id, name) row keeps the name.
 //   - In the same transaction every access token and refresh session of the
 //     principal is revoked, exactly as an exclusion does.
 //   - While archived, AuthenticateAccessToken refuses the principal
-//     (ErrAgentArchived), IssueHostAgentToken returns ErrAgentArchived for the
-//     name instead of minting or re-creating it, bridge check-ins naming the
-//     actor are refused like exclusions, wake presence ignores it, and wake
-//     routing treats it as excluded.
+//     (ErrAgentArchived), bridge check-ins naming the actor are refused like
+//     exclusions, wake presence ignores it, and wake routing treats it as
+//     excluded.
+//   - A manual (human) archive keeps the name reserved: IssueHostAgentToken
+//     returns ErrAgentArchived instead of minting or re-creating it. An
+//     inactive (sweep) archive only hides the persona: the next valid
+//     host-signed assertion for the name unarchives it (audit
+//     host_agent_unarchived, reason reused) and mints normally.
 //
-// Restore clears the stamp. Revoked tokens stay revoked; the next
-// host_assertion mints a fresh token for the same actor.
+// Restore clears the stamp and sets restored_at, which the sweep counts as
+// use. Revoked tokens stay revoked; the next host_assertion mints a fresh
+// token for the same actor. A revoked principal cannot be archived or
+// restored (ErrAgentRevoked).
 
 var ErrAgentArchived = errors.New("agent_archived")
 
@@ -163,13 +170,16 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 		return h, ErrHostRevoked
 	}
 	var agentID, actorID string
-	var archived sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT ha.agent_id,a.actor_id,ha.archived_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, h.ID, name).Scan(&agentID, &actorID, &archived)
+	var archived, revoked sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT ha.agent_id,a.actor_id,ha.archived_at,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, h.ID, name).Scan(&agentID, &actorID, &archived, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, ErrHostNotFound
 	}
 	if err != nil {
 		return h, err
+	}
+	if revoked.Valid {
+		return h, ErrAgentRevoked
 	}
 	if archived.Valid == archive {
 		return h, nil // already in the requested state
@@ -184,7 +194,7 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 		if err = revokeChildSessions(ctx, tx, agentID, now); err != nil {
 			return h, err
 		}
-	} else if _, err = tx.ExecContext(ctx, `UPDATE host_agents SET archived_at=NULL,archived_reason=NULL WHERE host_id=? AND name=?`, h.ID, name); err != nil {
+	} else if _, err = tx.ExecContext(ctx, `UPDATE host_agents SET archived_at=NULL,archived_reason=NULL,restored_at=? WHERE host_id=? AND name=?`, now, h.ID, name); err != nil {
 		return h, err
 	}
 	audit := AuthAuditEventInput{EventType: event, ActorAgentID: admin.AgentID, ActorActorID: admin.ActorID, SubjectAgentID: agentID, SubjectActorID: actorID, Metadata: map[string]any{"host_id": h.ID, "name": name}}
@@ -198,6 +208,28 @@ func (s *Store) setHostAgentArchive(ctx context.Context, hostRef, name string, a
 		return h, err
 	}
 	return s.GetHost(ctx, h.ID)
+}
+
+// reuseArchivedNameTx runs inside IssueHostAgentToken after the host
+// assertion is verified and recorded. It returns nil for an unarchived name.
+// A manual archive stays refused (ErrAgentArchived). An inactive archive is
+// cleared, with restored_at and an audit event, so the caller mints normally.
+func (s *Store) reuseArchivedNameTx(ctx context.Context, tx Transaction, hostID, name, agentID, actorID string, archived, reason sql.NullString) error {
+	if !archived.Valid {
+		return nil
+	}
+	if reason.String != ArchiveReasonInactive {
+		return ErrAgentArchived
+	}
+	now := hostNow()
+	res, err := tx.ExecContext(ctx, `UPDATE host_agents SET archived_at=NULL,archived_reason=NULL,restored_at=? WHERE host_id=? AND name=? AND archived_reason=?`, now, hostID, name, ArchiveReasonInactive)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return ErrAgentArchived
+	}
+	return s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_agent_unarchived", SubjectAgentID: agentID, SubjectActorID: actorID, Metadata: map[string]any{"host_id": hostID, "name": name, "reason": "reused", "archived_at": archived.String}})
 }
 
 // PersonaSweepCursor is the (host_id, name) position after the last persona
@@ -225,14 +257,14 @@ type PersonaSweepResult struct {
 // ArchiveInactivePersonas archives derived personas nobody has used for
 // InactiveFor. It reads at most BatchSize*MaxBatches host_agents rows by
 // primary-key keyset, each with indexed point lookups, and archives each
-// eligible persona in its own short transaction that re-checks inactivity.
+// eligible persona in its own short transaction that re-checks every rule.
 //
 // A persona is eligible only when all of these hold:
 //   - derived (never adopted), not archived, not revoked, host not revoked;
 //   - not a known adapter name and not an adapter the host discovered;
 //   - the host bridge serves no job for its actor;
-//   - its newest access token (kept by the purge) exists and is older than
-//     the cutoff, and its presence and newest run are older too.
+//   - its newest access token (kept by the purge) exists, and it and the
+//     last restore are older than the cutoff, as are presence and newest run.
 //
 // A persona with no recorded token is never archived: no evidence is not
 // evidence of disuse.
@@ -285,13 +317,10 @@ func (s *Store) personaSweepPage(ctx context.Context, after PersonaSweepCursor, 
 	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.host_id,ha.name,ha.agent_id,a.actor_id,
  ha.identity_kind='derived' AND ha.archived_at IS NULL AND a.revoked_at IS NULL AND h.revoked_at IS NULL,
  h.discovered_adapters_json,
- COALESCE((SELECT MAX(t.created_at) FROM auth_access_tokens t WHERE t.agent_id=ha.agent_id),''),
- EXISTS(SELECT 1 FROM host_bridge_jobs j WHERE j.host_id=ha.host_id AND j.actor_id=a.actor_id),
- COALESCE((SELECT p.observed_at FROM agent_presence p WHERE p.agent_id=ha.agent_id),''),
- COALESCE((SELECT MAX(r.last_observed_at) FROM runs r WHERE r.agent_id=ha.agent_id),'')
+ `+personaActivityColumns+`
  FROM host_agents ha JOIN agents a ON a.id=ha.agent_id JOIN hosts h ON h.id=ha.host_id
- WHERE ha.host_id>? OR (ha.host_id=? AND ha.name>?)
- ORDER BY ha.host_id,ha.name LIMIT ?`, after.HostID, after.HostID, after.Name, limit)
+ WHERE (ha.host_id,ha.name)>(?,?)
+ ORDER BY ha.host_id,ha.name LIMIT ?`, after.HostID, after.Name, limit)
 	if err != nil {
 		return nil, 0, after, err
 	}
@@ -300,17 +329,15 @@ func (s *Store) personaSweepPage(ctx context.Context, after PersonaSweepCursor, 
 	scanned, last := 0, after
 	for rows.Next() {
 		var c personaSweepCandidate
-		var live, served bool
-		var adapters, lastUsed, presence, lastRun string
-		if err := rows.Scan(&c.hostID, &c.name, &c.agentID, &c.actorID, &live, &adapters, &lastUsed, &served, &presence, &lastRun); err != nil {
+		var live bool
+		var adapters string
+		var act personaActivity
+		if err := rows.Scan(&c.hostID, &c.name, &c.agentID, &c.actorID, &live, &adapters, &act.lastToken, &act.restored, &act.served, &act.presence, &act.lastRun); err != nil {
 			return nil, 0, after, err
 		}
 		scanned++
 		last = PersonaSweepCursor{HostID: c.hostID, Name: c.name}
-		if !live || served || KnownAdapterNames[c.name] || discoveredAdapter(adapters, c.name) {
-			continue
-		}
-		if !olderThan(lastUsed, cutoff) || presence != "" && !olderThan(presence, cutoff) || lastRun != "" && !olderThan(lastRun, cutoff) {
+		if !live || KnownAdapterNames[c.name] || discoveredAdapter(adapters, c.name) || !act.idleSince(cutoff) {
 			continue
 		}
 		out = append(out, c)
@@ -331,6 +358,30 @@ func discoveredAdapter(raw, name string) bool {
 	return false
 }
 
+// personaActivityColumns reads one persona's activity evidence: newest token,
+// last restore, whether the bridge serves it, presence, newest run. Each is an
+// indexed point lookup keyed by ha/a.
+const personaActivityColumns = `COALESCE((SELECT MAX(t.created_at) FROM auth_access_tokens t WHERE t.agent_id=ha.agent_id),''),
+ COALESCE(ha.restored_at,''),
+ EXISTS(SELECT 1 FROM host_bridge_jobs j WHERE j.host_id=ha.host_id AND j.actor_id=a.actor_id),
+ COALESCE((SELECT p.observed_at FROM agent_presence p WHERE p.agent_id=ha.agent_id),''),
+ COALESCE((SELECT MAX(r.last_observed_at) FROM runs r WHERE r.agent_id=ha.agent_id),'')`
+
+type personaActivity struct {
+	lastToken, restored, presence, lastRun string
+	served                                 bool
+}
+
+// idleSince reports whether the persona has a recorded token and every piece
+// of activity evidence is older than cutoff. Activity is the later of the
+// newest token and the last restore, so a just-restored persona is not swept.
+func (p personaActivity) idleSince(cutoff string) bool {
+	if p.served || !olderThan(p.lastToken, cutoff) || p.restored != "" && !olderThan(p.restored, cutoff) {
+		return false
+	}
+	return (p.presence == "" || olderThan(p.presence, cutoff)) && (p.lastRun == "" || olderThan(p.lastRun, cutoff))
+}
+
 // olderThan reports whether an RFC3339 timestamp is before cutoff. An empty
 // or unparseable value is never older.
 func olderThan(raw, cutoff string) bool {
@@ -340,25 +391,26 @@ func olderThan(raw, cutoff string) bool {
 }
 
 // archiveInactivePersona archives one candidate if, inside the write
-// transaction, it is still unarchived and its newest token is still older
-// than the cutoff. Token issue for the name runs in its own write
-// transaction, so a persona used after the page was read is never archived.
+// transaction, it is still unarchived and unrevoked, and all its activity
+// evidence (token, restore, bridge job, presence, run) is still idle. Token
+// issue, restore and bridge check-in write in their own transactions, so a
+// persona used after the page was read is never archived.
 func (s *Store) archiveInactivePersona(ctx context.Context, c personaSweepCandidate, cutoff string) (bool, error) {
 	tx, err := resourceaccess.NewDB(s.db).BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
-	var lastUsed string
+	var act personaActivity
 	var archived, revoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT ha.archived_at,a.revoked_at,COALESCE((SELECT MAX(t.created_at) FROM auth_access_tokens t WHERE t.agent_id=ha.agent_id),'') FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=? AND ha.agent_id=?`, c.hostID, c.name, c.agentID).Scan(&archived, &revoked, &lastUsed)
+	err = tx.QueryRowContext(ctx, `SELECT ha.archived_at,a.revoked_at,`+personaActivityColumns+` FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=? AND ha.agent_id=?`, c.hostID, c.name, c.agentID).Scan(&archived, &revoked, &act.lastToken, &act.restored, &act.served, &act.presence, &act.lastRun)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if archived.Valid || revoked.Valid || !olderThan(lastUsed, cutoff) {
+	if archived.Valid || revoked.Valid || !act.idleSince(cutoff) {
 		return false, nil
 	}
 	now := hostNow()
@@ -368,7 +420,7 @@ func (s *Store) archiveInactivePersona(ctx context.Context, c personaSweepCandid
 	if err = revokeChildSessions(ctx, tx, c.agentID, now); err != nil {
 		return false, err
 	}
-	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_agent_archived", SubjectAgentID: c.agentID, SubjectActorID: c.actorID, Metadata: map[string]any{"host_id": c.hostID, "name": c.name, "reason": ArchiveReasonInactive, "last_used_at": lastUsed}}); err != nil {
+	if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "host_agent_archived", SubjectAgentID: c.agentID, SubjectActorID: c.actorID, Metadata: map[string]any{"host_id": c.hostID, "name": c.name, "reason": ArchiveReasonInactive, "last_used_at": act.lastToken}}); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()

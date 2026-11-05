@@ -123,7 +123,7 @@ func TestArchivedNameErrorNamesItAndTheHostsOtherNames(t *testing.T) {
 	}
 	failure := asMap(dailyJSON(t, out)["error"])
 	message := anyString(failure["message"])
-	if anyString(failure["code"]) != "agent_archived" || !strings.Contains(message, `"codex-spkfinal-r2" is archived`) || !strings.Contains(message, "codex-spkfinal") || !strings.Contains(message, "restore it on the Access page") {
+	if anyString(failure["code"]) != "agent_archived" || !strings.Contains(message, `"codex-spkfinal-r2" was archived by a human`) || !strings.Contains(message, "names known on this machine: codex-spkfinal") || !strings.Contains(message, "restore it on the Access page") {
 		t.Fatalf("archived error: %#v", failure)
 	}
 }
@@ -136,7 +136,7 @@ func TestUnresolvedIdentityRepairListsNamesOnThisHost(t *testing.T) {
 	}
 	failure := asMap(dailyJSON(t, out)["error"])
 	message := anyString(failure["message"])
-	if anyString(failure["code"]) != "identity_unresolved" || !strings.Contains(message, "reuse a name already used on this host (codex-spkfinal") || !strings.Contains(message, "never invent one per task") {
+	if anyString(failure["code"]) != "identity_unresolved" || !strings.Contains(message, "reuse a name already used on this host (names known on this machine: codex-spkfinal") || !strings.Contains(message, "never invent one per task") {
 		t.Fatalf("repair does not point at existing names: %#v", failure)
 	}
 }

@@ -288,6 +288,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	if opts.runStore != nil {
 		roster, partial, e := opts.runStore.OverviewRoster(r.Context(), time.Now().UTC())
 		if e == nil {
+			roster = rosterForReader(r.Context(), roster)
 			payload["agents"] = map[string]any{"status": "ok", "items": roster, "truncated": partial}
 			brief.roster, brief.rosterOK, brief.rosterTruncated = roster, true, partial
 		}

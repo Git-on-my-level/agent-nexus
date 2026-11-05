@@ -36,6 +36,7 @@
   import CopyableId from "$lib/components/CopyableId.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
+  import { accessErrorMessage as message } from "$lib/accessErrors.js";
   import AccessPageSkeleton from "$lib/components/access/AccessPageSkeleton.svelte";
   import HostRoster from "$lib/components/access/HostRoster.svelte";
   import RevokedHosts from "$lib/components/access/RevokedHosts.svelte";
@@ -215,17 +216,6 @@
       !sections.hosts.forbidden &&
       activeHosts.length === 0,
   );
-
-  function message(error, fallback) {
-    if (!error) return fallback;
-    if (typeof error === "string") return error || fallback;
-    // Core's reason reads better than the transport-level message around it.
-    if (typeof error.details === "string" && error.details.trim()) {
-      return error.details;
-    }
-    if (error instanceof Error) return error.message || fallback;
-    return fallback;
-  }
 
   function nameFor(id) {
     const raw = String(id ?? "").trim();
@@ -537,9 +527,8 @@
   }
 
   // Human-only; core refuses agents. The reply carries the updated host.
-  async function setPersonaArchive(host, agent, archive) {
-    const call = archive ? "archiveHostAgent" : "restoreHostAgent";
-    const updated = (await coreClient[call](host.id, agent.name))?.host;
+  async function applyPersonaChange(request) {
+    const updated = (await request)?.host;
     if (updated) hosts = hosts.map((h) => (h.id === updated.id ? updated : h));
     void refreshAgentRoster();
   }
@@ -1047,8 +1036,14 @@
             {now}
             onexclusions={saveExclusions}
             onrevoke={revokeHost}
-            onarchive={(host, agent) => setPersonaArchive(host, agent, true)}
-            onrestore={(host, agent) => setPersonaArchive(host, agent, false)}
+            onarchive={(host, agent) =>
+              applyPersonaChange(
+                coreClient.archiveHostAgent(host.id, agent.name),
+              )}
+            onrestore={(host, agent) =>
+              applyPersonaChange(
+                coreClient.restoreHostAgent(host.id, agent.name),
+              )}
           />
         {/if}
         <RevokedHosts hosts={revokedHosts} {workspaceHref} {now} />

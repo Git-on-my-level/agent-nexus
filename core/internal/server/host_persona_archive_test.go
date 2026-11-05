@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"testing"
 	"time"
@@ -166,6 +167,42 @@ func TestHostPersonaArchiveCutsAccessAndRestore(t *testing.T) {
 	if p["agent"].(map[string]any)["id"] != agentID || p["agent"].(map[string]any)["actor_id"] != actorID {
 		t.Fatalf("restore minted a new principal: %#v", p)
 	}
-	status, p = hostHTTP(t, "GET", url+"/agents/me", p["tokens"].(map[string]any)["access_token"].(string), nil)
+	restoredAccess := p["tokens"].(map[string]any)["access_token"].(string)
+	status, p = hostHTTP(t, "GET", url+"/agents/me", restoredAccess, nil)
 	hostStatus(t, status, 200, p)
+
+	// last_used_at is for human and auth-admin readers only.
+	status, p = hostHTTP(t, "GET", url+"/hosts/"+hostID, restoredAccess, nil)
+	hostStatus(t, status, 200, p)
+	for _, item := range p["host"].(map[string]any)["agents"].([]any) {
+		if _, ok := item.(map[string]any)["last_used_at"]; ok && item.(map[string]any)["last_used_at"] != nil {
+			t.Fatalf("agent reader saw last_used_at: %#v", item)
+		}
+	}
+	status, p = hostHTTP(t, "GET", url+"/agents", restoredAccess, nil)
+	hostStatus(t, status, 200, p)
+	for _, item := range p["agents"].([]any) {
+		if item.(map[string]any)["last_used_at"] != nil {
+			t.Fatalf("agent reader saw last_used_at on /agents: %#v", item)
+		}
+	}
+
+	// An auto (inactive) archive only hides the persona: the next valid host
+	// assertion for the name unarchives it and mints for the same principal.
+	if _, err := db.Exec(`UPDATE host_agents SET archived_at=?,archived_reason='inactive' WHERE host_id=? AND name='codex-spkfinal'`, time.Now().UTC().Format(time.RFC3339Nano), hostID); err != nil {
+		t.Fatal(err)
+	}
+	status, p = grant("codex-spkfinal")
+	hostStatus(t, status, 200, p)
+	if p["agent"].(map[string]any)["id"] != unusedID || p["registered"] != nil {
+		t.Fatalf("auto-archived name reuse: %#v", p)
+	}
+	var archivedAt, restoredAt sql.NullString
+	if err := db.QueryRow(`SELECT archived_at,restored_at FROM host_agents WHERE host_id=? AND name='codex-spkfinal'`, hostID).Scan(&archivedAt, &restoredAt); err != nil || archivedAt.Valid || !restoredAt.Valid {
+		t.Fatalf("auto unarchive state: archived=%v restored=%v err=%v", archivedAt, restoredAt, err)
+	}
+	var unarchived int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM auth_audit_events WHERE event_type='host_agent_unarchived' AND json_extract(metadata_json,'$.reason')='reused'`).Scan(&unarchived); err != nil || unarchived != 1 {
+		t.Fatalf("unarchive audit: %d %v", unarchived, err)
+	}
 }

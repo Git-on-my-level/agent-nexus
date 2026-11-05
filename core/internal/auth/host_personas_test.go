@@ -235,3 +235,80 @@ func TestManualArchiveIsHumanOnlyAndRejectsTheName(t *testing.T) {
 		t.Fatalf("audit events: %d %v", events, err)
 	}
 }
+
+// A restore counts as use: the sweep must not re-archive a persona a human
+// just restored, even though its newest token is still old. Once the restore
+// itself is older than the cutoff, the persona is eligible again.
+func TestSweepDoesNotReArchiveRestoredPersona(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db := ws.DB()
+	now := time.Now().UTC()
+	day := 24 * time.Hour
+	seedPersonas(t, db, now, []personaSeed{{host: "host-a", name: "occasional", kind: "derived", tokenAge: 40 * day}})
+	seedHuman(t, db)
+	store := auth.NewStore(db)
+	human := auth.Principal{AgentID: "human", ActorID: "human", PrincipalKind: "human"}
+	sweep := func() int {
+		t.Helper()
+		result, err := store.ArchiveInactivePersonas(ctx, auth.PersonaSweepOptions{InactiveFor: 30 * day, Now: now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.Archived
+	}
+	if sweep() != 1 {
+		t.Fatal("stale persona was not archived")
+	}
+	if _, err := store.RestoreHostAgent(ctx, "host-a", "occasional", human); err != nil {
+		t.Fatal(err)
+	}
+	if n := sweep(); n != 0 || len(archivedReasons(t, db)) != 0 {
+		t.Fatalf("sweep re-archived a just-restored persona: %d %v", n, archivedReasons(t, db))
+	}
+	if _, err := db.Exec(`UPDATE host_agents SET restored_at=? WHERE name='occasional'`, now.Add(-31*day).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if sweep() != 1 {
+		t.Fatal("persona idle since its old restore was not archived")
+	}
+}
+
+func TestArchiveAndRestoreRefuseRevokedPrincipal(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db := ws.DB()
+	seedPersonas(t, db, time.Now().UTC(), []personaSeed{{host: "host-a", name: "gone", kind: "derived", tokenAge: time.Hour}})
+	seedHuman(t, db)
+	if _, err := db.Exec(`UPDATE agents SET revoked_at='2026-01-01T00:00:00Z' WHERE id='host-a-gone'`); err != nil {
+		t.Fatal(err)
+	}
+	store := auth.NewStore(db)
+	human := auth.Principal{AgentID: "human", ActorID: "human", PrincipalKind: "human"}
+	if _, err := store.ArchiveHostAgent(ctx, "host-a", "gone", human); !errors.Is(err, auth.ErrAgentRevoked) {
+		t.Fatalf("archive of revoked principal: %v", err)
+	}
+	if _, err := store.RestoreHostAgent(ctx, "host-a", "gone", human); !errors.Is(err, auth.ErrAgentRevoked) {
+		t.Fatalf("restore of revoked principal: %v", err)
+	}
+}
+
+func seedHuman(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		`INSERT INTO actors VALUES('human','Human','[]','now','{}')`,
+		`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('human','human','human','now','now','{"principal_kind":"human"}')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

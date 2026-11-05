@@ -1,4 +1,5 @@
-import { KNOWN_ADAPTERS, formatAge } from "$lib/agentPresence.js";
+import { KNOWN_ADAPTERS } from "$lib/agentPresence.js";
+import { formatAgo } from "$lib/time/format.js";
 
 /**
  * Persona roster model for the Access page.
@@ -117,29 +118,29 @@ export function accessSummaryLine(summary) {
 /** Row subline: when this persona was last used, in its own terms. */
 export function personaUseLabel(agent, now = Date.now()) {
   if (agent?.archived_at) {
-    const age = formatAge(agent.archived_at, now);
+    const age = formatAgo(agent.archived_at, now);
     const how =
       text(agent.archived_reason) === "inactive" ? "auto-archived" : "archived";
-    return age ? `${how} ${age} ago` : how;
+    return age ? `${how} ${age}` : how;
   }
   const used = personaLastUsed(agent);
   if (!Number.isFinite(used)) return "never used";
-  const age = formatAge(new Date(used).toISOString(), now);
-  return age ? `used ${age} ago` : "used just now";
+  return `used ${formatAgo(used, now) || "just now"}`;
 }
 
 /** What the folded idle rows have in common, for the "N hidden" line. */
 export function idlePersonaRangeLabel(idle = [], now = Date.now()) {
   const used = idle.map(personaLastUsed).filter(Number.isFinite);
   if (!used.length) return "Never used or unused for 7+ days.";
-  const newest = formatAge(new Date(Math.max(...used)).toISOString(), now);
-  const oldest = formatAge(new Date(Math.min(...used)).toISOString(), now);
+  // formatAgo phrases end in "ago"; a range keeps only the oldest one's.
+  const newest = formatAgo(Math.max(...used), now);
+  const oldest = formatAgo(Math.min(...used), now);
   if (used.length < idle.length) {
-    return `Never used, or last used ${newest} ago or earlier.`;
+    return `Never used, or last used ${newest} or earlier.`;
   }
   return newest === oldest
-    ? `Last used ${newest} ago.`
-    : `Last used ${newest} to ${oldest} ago.`;
+    ? `Last used ${newest}.`
+    : `Last used ${newest.replace(/ ago$/, "")} to ${oldest}.`;
 }
 
 /** Case-insensitive name/handle/host match for the toolbar filter. */

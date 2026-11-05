@@ -45,7 +45,7 @@
   "web-ui/src/lib/visualReports.js": 887,
   "web-ui/src/lib/workSummary.js": 884,
   "web-ui/src/routes/+layout.svelte": 1818,
-  "web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte": 1462,
+  "web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte": 1457,
   "web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte": 933,
   "web-ui/src/routes/o/[organization]/w/[workspace]/docs/+page.svelte": 1039,
   "web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte": 2078,

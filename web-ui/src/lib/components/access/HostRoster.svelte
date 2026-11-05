@@ -1,4 +1,5 @@
 <script>
+  import { accessErrorMessage } from "$lib/accessErrors.js";
   import {
     accessPersonaSummary,
     accessSummaryLine,
@@ -44,10 +45,10 @@
     try {
       await onrestore(host, agent);
     } catch (cause) {
-      restoreError =
-        cause?.details ||
-        (cause instanceof Error ? cause.message : "") ||
-        `${agent.name} was not restored.`;
+      restoreError = accessErrorMessage(
+        cause,
+        `${agent.name} was not restored.`,
+      );
     } finally {
       restoring = "";
     }
@@ -125,8 +126,8 @@
     <p
       class="border-t border-line-subtle px-4 py-1.5 text-micro text-fg-subtle"
     >
-      Archived names stay reserved and cannot act. Revoke is separate and
-      permanent.
+      Auto-archived personas are hidden until they are used again. Names a human
+      archived stay reserved and cannot act. Revoke is separate and permanent.
     </p>
     {#if restoreError}
       <p class="px-4 pb-2 text-micro text-danger-text" role="alert">

@@ -180,7 +180,10 @@ test("folds idle personas, archives and restores one", async ({ page }) => {
   const archived = main.locator("[data-archived-personas]");
   await expect(archived).toContainText("grok-build");
   await expect(archived).toContainText("auto-archived");
-  await expect(archived).toContainText("Archived names stay reserved");
+  await expect(archived).toContainText(
+    "Auto-archived personas are hidden until they are used again",
+  );
+  await expect(archived).toContainText("Names a human archived stay reserved");
   await archived
     .getByRole("button", { name: "Restore grok-build on studio" })
     .click();

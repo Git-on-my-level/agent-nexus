@@ -309,7 +309,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"outcome_unknown":               {Recoverable: false, Hint: "Read current state before submitting another mutation. Do not retry a move if the card is already in the requested column."},
 	"actor_exists":                  {Recoverable: true, Hint: "Use a different actor id or load the existing actor with `anx actors list`."},
 	"agent_revoked":                 {Recoverable: false, Hint: "Ask a human auth-admin to review host enrollment and agent access."},
-	"agent_archived":                {Recoverable: false, Hint: "Reuse an active agent name on this host, or ask a human to restore this one on the Access page. Do not register a new name to get around it."},
+	"agent_archived":                {Recoverable: false, Hint: "A human archived this agent name. Use another name already used on this host, or ask a human to restore this one on the Access page. Do not register a new name to get around it."},
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
 	"human_required":                {Recoverable: false, Hint: humanRequiredHint},

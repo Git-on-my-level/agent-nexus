@@ -1,4 +1,5 @@
 <script>
+  import { accessErrorMessage } from "$lib/accessErrors.js";
   import { agentPath, agentStateShortLabel } from "$lib/agentPresence.js";
   import {
     groupHostPersonas,
@@ -57,10 +58,7 @@
       await onarchive(host, agent);
       confirming = "";
     } catch (cause) {
-      error =
-        cause?.details ||
-        (cause instanceof Error ? cause.message : "") ||
-        `${agent.name} was not archived.`;
+      error = accessErrorMessage(cause, `${agent.name} was not archived.`);
     } finally {
       busy = false;
     }

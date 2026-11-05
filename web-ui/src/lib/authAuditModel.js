@@ -78,6 +78,8 @@ export function describeAuthAuditEvent(event, options = {}) {
         : `${actor} archived ${agentName || "a persona"} on ${host}`;
     case "host_agent_restored":
       return `${actor} restored ${agentName || "a persona"} on ${host}`;
+    case "host_agent_unarchived":
+      return `${agentName || "A persona"} on ${host} was used again and left the archive`;
     case "host_exclusions_changed": {
       const names = Array.isArray(meta.excluded_names)
         ? meta.excluded_names.filter(Boolean)

@@ -154,6 +154,18 @@ delegates; dropping delegates can only deny), then one root-owner range seek
 below, above and between the sorted allowed owners. Allowed values carry no
 column affinity, so legacy numeric owners never match a text actor ID.
 
+Migration 133 adds persona archive (`host_agents.archived_at`,
+`archived_reason`, `restored_at`, all identity metadata). Archive revokes the
+principal's tokens and sessions and refuses it at bearer authentication,
+bridge admission and wake routing; archived personas stay Trends delegates like
+revoked ones. Only human auth-admins archive or restore, and a revoked
+principal cannot be either. A manual archive reserves the name; an inactive
+(sweep) archive is cleared by the next valid host-signed assertion for the
+name. Roster summaries (`GET /hosts`, `/hosts/{id}`, `/agents`, `/agents/{id}`,
+Overview) carry `last_used_at`, the principal's newest token time, only for
+human or auth-admin readers; it is omitted for everyone else, and for a request
+with no cached principal.
+
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as
 public. Never cache visibility decisions for an SSE connection. The event stream creates

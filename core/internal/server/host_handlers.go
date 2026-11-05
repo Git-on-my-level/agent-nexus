@@ -48,7 +48,7 @@ func hostRoster(ctx context.Context, opts handlerOptions) (map[string]commandcen
 		return nil, err
 	}
 	byID := make(map[string]commandcenter.Summary, len(items))
-	for _, item := range items {
+	for _, item := range rosterForReader(ctx, items) {
 		byID[item.ID] = item
 	}
 	return byID, nil

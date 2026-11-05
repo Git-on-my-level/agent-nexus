@@ -1,14 +1,31 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/commandcenter"
 )
+
+// rosterForReader omits last_used_at (a principal's last authentication
+// time) unless the reader is a human or auth-admin principal. Other readers
+// may see the roster but not when each agent last authenticated. A request
+// with no cached principal sees none (fail closed).
+func rosterForReader(ctx context.Context, items []commandcenter.Summary) []commandcenter.Summary {
+	principal, _ := ctx.Value(principalContextKey{}).(*auth.Principal)
+	if isAuthAdminPrincipal(principal) {
+		return items
+	}
+	for i := range items {
+		items[i].LastUsedAt = nil
+	}
+	return items
+}
 
 // agentArchivedMessage is what an agent sees when it uses an archived persona
 // name. Archived names stay reserved; only a human can bring one back.
-const agentArchivedMessage = "this agent name is archived on this host; reuse an active name on this host, or ask a human to restore it on the Access page"
+const agentArchivedMessage = "a human archived this agent name on this host; reuse an active name on this host, or ask a human to restore it on the Access page"
 
 // hostAssertionResponse is the host_assertion token envelope. registered and
 // similar_names appear only when this call created the persona.

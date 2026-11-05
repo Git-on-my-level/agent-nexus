@@ -222,7 +222,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1568  | web-ui/src/lib/anxCoreClient.js                                                    |
 | 1553  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
-| 1462  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
+| 1457  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
 | 1447  | core/internal/primitives/brief.go                                                  |
 | 1443  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
 | 1364  | web-ui/src/lib/components/CommandPalette.svelte                                    |

@@ -1126,9 +1126,9 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		return HostAgent{}, TokenBundle{}, err
 	}
 	var agentID, actorID, kind string
-	var agentRevoked, archived sql.NullString
+	var agentRevoked, archived, archiveReason sql.NullString
 	var similar []string // non-nil (maybe empty) only when this call registers the name
-	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind,a.revoked_at,ha.archived_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind, &agentRevoked, &archived)
+	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind,a.revoked_at,ha.archived_at,ha.archived_reason FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind, &agentRevoked, &archived, &archiveReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		handle := name + "." + slug
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE username=?`, handle).Scan(&count); err != nil {
@@ -1176,8 +1176,8 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		return HostAgent{}, TokenBundle{}, err
 	} else if agentRevoked.Valid {
 		return HostAgent{}, TokenBundle{}, ErrAgentRevoked
-	} else if archived.Valid { // archived names stay reserved: never re-mint
-		return HostAgent{}, TokenBundle{}, ErrAgentArchived
+	} else if err = s.reuseArchivedNameTx(ctx, tx, id, name, agentID, actorID, archived, archiveReason); err != nil {
+		return HostAgent{}, TokenBundle{}, err // manual archives stay reserved
 	}
 	if linkedActorID != "" && actorID != linkedActorID {
 		return HostAgent{}, TokenBundle{}, ErrAdoptionConflict

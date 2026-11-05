@@ -182,6 +182,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	rosterAgent := seedNotificationTestAgent(t, env, "roster.matrixhost")
+	// Persona archive/restore rows use a throwaway persona on its own host, so
+	// they never depend on row order (DELETE /hosts revokes the shared host).
+	throwaway := seedNotificationTestAgent(t, env, "throwaway.matrixarchive")
+	personaPaths := strings.NewReplacer("{host_id}", throwaway.Host.ID, "{agent_name}", "throwaway")
 	now := time.Now().UTC()
 	for kind, value := range map[string]any{
 		"decision": pm.Decision{ID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Instruction: "Confidential decision sentinel", Status: pm.AwaitingAnswer, Revision: 1, CreatedAt: now},
@@ -209,7 +213,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO access_requests(id,principal_id,actor_id,username,grant_name,reason,created_at,request_event_id,inbox_item_id) VALUES('matrix-private-access',?,?,?,'auth-admin','Confidential access reason','now',?,'matrix-access-inbox')`, agent.AgentID, agent.ActorID, "matrix.agent", event["id"]); err != nil {
 		t.Fatal(err)
 	}
-	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{agent_name}", strings.SplitN(rosterAgent.Username, ".", 2)[0], "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
 	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, conversation.ID, "matrix-private-decision", "matrix-private-action", "matrix-private-turn", "matrix-private-run", "Confidential"}
 	snapshot := func() string {
 		var v string
@@ -228,6 +232,10 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 				}
 				t.Run(p.Method+" "+p.Path, func(t *testing.T) {
 					path := replacements.Replace(p.Path)
+					personaRoute := strings.HasPrefix(p.Path, "/hosts/{host_id}/agents/{agent_name}/")
+					if personaRoute {
+						path = personaPaths.Replace(p.Path)
+					}
 					if p.Policy == "independent" {
 						path = regexp.MustCompile(`\{[^/{}]+\}`).ReplaceAllString(path, "privacy-fixture")
 					}
@@ -349,8 +357,17 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 						if json.Unmarshal(out, &result) != nil || resp.StatusCode != 200 || !reflect.DeepEqual(result, want) {
 							t.Errorf("private reference read: %d %s", resp.StatusCode, out)
 						}
+					} else if personaRoute {
+						// Human auth-admin only: the human stranger succeeds, the agent is refused.
+						want := http.StatusOK
+						if principal.ActorID == agent.ActorID {
+							want = http.StatusForbidden
+						}
+						if resp.StatusCode != want {
+							t.Errorf("persona archive/restore status %d, want %d: %s", resp.StatusCode, want, out)
+						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/hosts/{host_id}/agents/") || strings.HasPrefix(p.Path, "/auth/access"))) {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {

@@ -28,12 +28,14 @@ const personaNameSimilarCode = "persona_name_similar"
 
 const unresolvedIdentityRepair = "pass --as <agent-name> or set ANX_AS=<agent-name>: reuse a name already used on this host when one fits, otherwise use the lowercase name of the agent tool you are running in. A new name becomes a new persona on its first call, so never invent one per task. Stop only if you cannot tell which agent tool you are running in"
 
-// unresolvedIdentityRepairFor names the host's known personas when there are any.
+// unresolvedIdentityRepairFor adds the names known on this machine when there
+// are any. They come from local token caches, so they are names this machine
+// has used, not a statement that the persona is active.
 func unresolvedIdentityRepairFor(names []string) string {
 	if len(names) == 0 {
 		return unresolvedIdentityRepair
 	}
-	return strings.Replace(unresolvedIdentityRepair, "already used on this host", "already used on this host ("+strings.Join(names, ", ")+")", 1)
+	return strings.Replace(unresolvedIdentityRepair, "already used on this host", "already used on this host (names known on this machine: "+strings.Join(names, ", ")+")", 1)
 }
 
 func unresolvedIdentityError(reason string) error {
@@ -70,7 +72,7 @@ func (a *App) knownHostPersonaNames(cfg config.Resolved) []string {
 }
 
 // withKnownHostNames rewrites an identity_unresolved error so its repair
-// lists the names already used on this host.
+// lists the names known on this machine.
 func (a *App) withKnownHostNames(cfg config.Resolved, err error) error {
 	var typed *errnorm.Error
 	if !errors.As(err, &typed) || typed.Code != "identity_unresolved" || !strings.Contains(typed.Message, unresolvedIdentityRepair) {
@@ -85,8 +87,9 @@ func (a *App) withKnownHostNames(cfg config.Resolved, err error) error {
 	return &copy
 }
 
-// archivedNameError explains an agent_archived refusal with the name and the
-// other names this host already uses.
+// archivedNameError explains an agent_archived refusal (a human archived the
+// name; sweep archives are cleared by use and never reach here) with the
+// other names known on this machine.
 func (a *App) archivedNameError(cfg config.Resolved, name string, err *errnorm.Error) error {
 	others := []string{}
 	for _, known := range a.knownHostPersonaNames(cfg) {
@@ -94,9 +97,9 @@ func (a *App) archivedNameError(cfg config.Resolved, name string, err *errnorm.E
 			others = append(others, known)
 		}
 	}
-	message := fmt.Sprintf("agent name %q is archived on this host and stays reserved; reuse an active name on this host", name)
+	message := fmt.Sprintf("agent name %q was archived by a human on this host and stays reserved; use another name already used on this host", name)
 	if len(others) > 0 {
-		message += " (" + strings.Join(others, ", ") + ")"
+		message += " (names known on this machine: " + strings.Join(others, ", ") + ")"
 	}
 	err.Message = message + ", or ask a human to restore it on the Access page"
 	return err
