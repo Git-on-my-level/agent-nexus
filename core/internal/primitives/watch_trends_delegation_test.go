@@ -31,9 +31,9 @@ func TestWatchTrendsDelegatedAdmissionPlanIsBounded(t *testing.T) {
 	}
 	walked := map[string]bool{"_anx_trends_allowed": true, "_anx_trends_gaps": true, "_anx_trends_reader": true, "_anx_trends_sole": true, "g": true, "CONSTANT": true, "main.sqlite_schema": true}
 	for _, step := range plan {
-		// The sole-human count walks human rows only: the partial index of
-		// active humans and the passkey table (one row per human credential).
-		if strings.Contains(step, "idx_agents_active_humans") || strings.HasPrefix(step, "SCAN pc") {
+		// The sole-human count reads at most two rows of the active-humans
+		// partial index (LIMIT 2, no deduplication).
+		if strings.Contains(step, "idx_agents_active_humans") {
 			continue
 		}
 		if fields := strings.Fields(step); len(fields) > 1 && fields[0] == "SCAN" && !walked[fields[1]] && !strings.HasPrefix(fields[1], "(") {
@@ -93,13 +93,11 @@ func TestWatchTrendsSoleHumanAlwaysAdmitted(t *testing.T) {
 	if err := f.trendsErr("pm-agent"); err != ErrForbidden {
 		t.Fatalf("agent must not inherit sole-human admission: %v", err)
 	}
-	// A legacy passkey holder without a principal kind is a second human.
-	f.exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('legacy-human','legacy-human','legacy-human',?,?,'{}')`, loopTS(f.now), loopTS(f.now))
-	f.exec(`INSERT INTO passkey_credentials(credential_id,agent_id,user_handle,public_key,attestation_type,created_at) VALUES('cred','legacy-human',X'01',X'01','none',?)`, loopTS(f.now))
+	f.seedPrincipal("second-human", "second-human", "human")
 	if err := f.trendsErr("owner"); err != ErrForbidden {
-		t.Fatalf("legacy passkey human must end sole-human admission: %v", err)
+		t.Fatalf("a second active human must end sole-human admission: %v", err)
 	}
-	f.exec(`UPDATE agents SET revoked_at=? WHERE id='legacy-human'`, loopTS(f.now))
+	f.exec(`UPDATE agents SET revoked_at=? WHERE id='second-human'`, loopTS(f.now))
 	if err := f.trendsErr("owner"); err != nil {
 		t.Fatalf("revoked second human must not block: %v", err)
 	}

@@ -1000,7 +1000,7 @@ func seedHumanPrincipalForLockoutTest(t *testing.T, ctx context.Context, db *sql
 	if _, err := db.ExecContext(
 		ctx,
 		`INSERT INTO agents(id, username, actor_id, created_at, updated_at, revoked_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, NULL, '{}')`,
+		 VALUES (?, ?, ?, ?, ?, NULL, '{"principal_kind":"human","auth_method":"passkey"}')`,
 		agentID,
 		username,
 		actorID,
