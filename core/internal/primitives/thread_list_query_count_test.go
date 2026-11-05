@@ -2,6 +2,7 @@ package primitives_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -83,6 +84,19 @@ func TestListThreadsQueryCountIsBounded(t *testing.T) {
 		// distinct refs: each row has a handle self ref and an id subject ref.
 		if got, max := counter.Count(), int64(1+(2*size+199)/200); got > max {
 			t.Fatalf("unbounded list of %d threads: %d queries, want <= %d", size, got, max)
+		}
+		// The page batch must render exactly what the per-row GetThread path
+		// renders for the same thread.
+		for _, thread := range all {
+			single, err := s.GetThread(ctx, thread["id"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := json.Marshal(thread)
+			want, _ := json.Marshal(single)
+			if string(got) != string(want) {
+				t.Fatalf("list row differs from GetThread:\n got %s\nwant %s", got, want)
+			}
 		}
 	}
 	if pageCounts[12] != pageCounts[450] {
