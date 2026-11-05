@@ -37,6 +37,7 @@
   import CopyButton from "$lib/components/CopyButton.svelte";
   import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
   import HostCard from "$lib/components/access/HostCard.svelte";
+  import AccessPageSkeleton from "$lib/components/access/AccessPageSkeleton.svelte";
   import AccessRequestRow from "$lib/components/access/AccessRequestRow.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
@@ -715,6 +716,7 @@
       client: coreClient,
       debounceMs: 600,
       onChange: () => loadHosts(),
+      skipInitial: true,
     });
     const poll = setInterval(() => {
       now = Date.now();
@@ -771,11 +773,9 @@
       </div>
     {/if}
 
-    {#if !loaded}
-      <p class="text-meta text-fg-muted">Loading access…</p>
-    {/if}
-
-    {#if accessRefused}
+    <!-- Sections wait for every read, then appear together: rendering each as
+         its read landed pushed everything below it around (CLS 0.2–0.8). -->
+    {#if !loaded}<AccessPageSkeleton />{:else if accessRefused}
       <div
         class="rounded-md border border-line bg-bg-soft px-4 py-10 text-center text-meta text-fg-muted"
         data-access-refused
@@ -786,9 +786,7 @@
           grant you administration.
         </p>
       </div>
-    {/if}
-
-    {#if !accessRefused}
+    {:else}
       {#if showTourBanner}
         <aside class="tour-arrival-banner" role="status" aria-live="polite">
           <div class="tour-arrival-banner__body">

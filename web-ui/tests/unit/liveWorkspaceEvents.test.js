@@ -461,6 +461,51 @@ describe("liveWorkspaceEvents", () => {
     stopPage();
   });
 
+  it("lets a caller that just read skip only the first connect notice", async () => {
+    let emit = null;
+    let fail = null;
+    const client = {
+      streamAgentChanges: vi.fn(
+        ({ onEvent, signal }) =>
+          new Promise((resolve, reject) => {
+            emit = onEvent;
+            fail = reject;
+            signal?.addEventListener("abort", () => {
+              const error = new Error("aborted");
+              error.name = "AbortError";
+              reject(error);
+            });
+          }),
+      ),
+    };
+    const loaded = vi.fn();
+    const plain = vi.fn();
+    const stopLoaded = liveAgentChanges({
+      client,
+      onChange: loaded,
+      skipInitial: true,
+      reconnectMs: 10,
+    });
+    const stopPlain = liveAgentChanges({ client, onChange: plain });
+    await flush();
+    emit({ event: "agents_changed", data: { revision: 1 } });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(loaded).not.toHaveBeenCalled();
+    expect(plain).toHaveBeenCalledTimes(1);
+    // A real change on the same connection still lands.
+    emit({ event: "agents_changed", data: { revision: 2 } });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(loaded).toHaveBeenCalledTimes(1);
+    // So does the first notice after a reconnect: changes may have landed.
+    fail(new Error("dropped"));
+    await vi.advanceTimersByTimeAsync(50);
+    emit({ event: "agents_changed", data: { revision: 3 } });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(loaded).toHaveBeenCalledTimes(2);
+    stopLoaded();
+    stopPlain();
+  });
+
   it("is a no-op for a client without the roster stream", () => {
     const stop = liveAgentChanges({ client: {}, onChange: vi.fn() });
     expect(stop).toBeTypeOf("function");

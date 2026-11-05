@@ -122,9 +122,12 @@ export function startAgentRoster(workspace) {
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibility);
     }
+    // run() below reads the roster as the controller starts; the stream's
+    // on-connect notice would only repeat it.
     const stopRosterStream = liveAgentChanges({
       client: coreClient,
       onChange: () => run(),
+      skipInitial: true,
     });
     const stopAskEvents = liveWorkspaceEvents({
       client: coreClient,

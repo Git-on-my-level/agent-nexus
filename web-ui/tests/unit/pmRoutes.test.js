@@ -90,6 +90,8 @@ vi.mock("$lib/authSession", () => ({
   isHumanWorkspacePrincipal: () => true,
   // The task page reads these to skip re-hydrating a session it already has.
   isAuthenticated: () => true,
+  // Cold path: the list waits for its own session read, as these tests expect.
+  isAuthSessionWarm: () => false,
   authSessionReady: {
     subscribe: (fn) => {
       fn(true);

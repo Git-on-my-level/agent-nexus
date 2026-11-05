@@ -90,7 +90,14 @@ export function observeHostBridge(workspace, id) {
     const ids = new Map();
     const state = { workspace, ids, run, stop };
     controller = state;
-    hostBridgeStatus.set({ workspace, hosts: {}, checked: [], error: false });
+    // A badge that remounts (its host row re-read) restarts the controller;
+    // keep what this workspace already knows so badges never fall back to
+    // "Checking bridge…" once a status has been read.
+    hostBridgeStatus.update((v) =>
+      v.workspace === workspace
+        ? v
+        : { workspace, hosts: {}, checked: [], error: false },
+    );
     async function run() {
       if (stopped || document.hidden || !ids.size) return;
       if (inflight) {
@@ -129,9 +136,12 @@ export function observeHostBridge(workspace, id) {
       clearTimeout(timer);
       timer = setTimeout(run, 100);
     }
+    // The first badge already schedules a read; skip the stream's
+    // on-connect notice so a page visit asks once.
     const release = liveAgentChanges({
       client: coreClient,
       onChange: schedule,
+      skipInitial: true,
     });
     const poll = setInterval(run, 60_000);
     const visible = () => {

@@ -262,16 +262,14 @@ describe("access page", () => {
     render(AccessPage, {
       props: { data: { outOfWorkspaceMode: "hosted", cliBaseUrl: "" } },
     });
-    await waitFor(() => {
-      expect(coreClientMock.listInvites).toHaveBeenCalled();
+    const organizationsLink = await screen.findByRole("link", {
+      name: /your account/i,
     });
+    expect(coreClientMock.listInvites).toHaveBeenCalled();
     expect(screen.queryByLabelText("Kind")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Invite a person" }),
     ).toBeNull();
-    const organizationsLink = screen.getByRole("link", {
-      name: /your account/i,
-    });
     expect(organizationsLink.getAttribute("href")).toBe("/");
   });
 
@@ -897,7 +895,10 @@ describe("access page", () => {
       }),
     );
     render(AccessPage, { props: { data: { outOfWorkspaceMode: "local" } } });
-    await screen.findByRole("region", { name: /^Administrators/ });
+    // Sections wait for every read, so the held one keeps them back.
+    await waitFor(() =>
+      expect(coreClientMock.listAuthAdmins).toHaveBeenCalled(),
+    );
 
     const refused = new Error("forbidden");
     refused.status = 403;
