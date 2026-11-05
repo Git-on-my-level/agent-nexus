@@ -114,27 +114,6 @@ type Host struct {
 	CreatedAt          string      `json:"created_at"`
 	RevokedAt          *string     `json:"revoked_at"`
 }
-type HostAgent struct {
-	ID               string  `json:"id"`
-	Ref              string  `json:"ref"`
-	ActorID          string  `json:"actor_id"`
-	HostID           *string `json:"host_id"`
-	HostSlug         *string `json:"host_slug"`
-	Name             string  `json:"name"`
-	Handle           string  `json:"handle"`
-	DisplayName      string  `json:"display_name"`
-	IdentityKind     string  `json:"identity_kind"`
-	State            string  `json:"state"`
-	BridgeOnline     bool    `json:"bridge_online"`
-	CurrentCardRef   *string `json:"current_card_ref"`
-	CurrentCardTitle *string `json:"current_card_title"`
-	LastProgressNote *string `json:"last_progress_note"`
-	LastProgressAt   *string `json:"last_progress_at"`
-	ActiveRun        any     `json:"active_run"`
-	OpenAsksCount    int     `json:"open_asks_count"`
-	LastSignalAt     *string `json:"last_signal_at"`
-	RevokedAt        *string `json:"revoked_at"`
-}
 
 // HostInventoryEntry is a bounded host roster row. AgentCount is the total
 // number of associated agents; Host.Agents contains only the requested page.
@@ -464,7 +443,7 @@ func (s *Store) DecideHostEnrollment(ctx context.Context, id string, approve boo
 	} else {
 		e.Status = "denied"
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=? WHERE id=? AND status IN ('pending','approved')`, e.Status, id)
+	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status=?,approved_by_actor_id=`+approverActor()+` WHERE id=? AND status IN ('pending','approved')`, e.Status, approve, admin.AgentID, admin.ActorID, id)
 	if err != nil {
 		return e, err
 	}
@@ -610,7 +589,7 @@ func (s *Store) CompleteHostEnrollment(ctx context.Context, id, poll, signature 
 	if err != nil {
 		return Host{}, err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollments SET status='completed',completed_host_id=? WHERE id=?`, h.ID, id)
+	err = completeEnrollmentTx(ctx, tx, id, h.ID)
 	if err != nil {
 		return Host{}, err
 	}
@@ -645,7 +624,7 @@ func (s *Store) CompleteHeadlessHostEnrollment(ctx context.Context, in HostEnrol
 	if err != nil {
 		return Host{}, err
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE host_enrollment_tokens SET consumed_at=? WHERE id=? AND consumed_at IS NULL`, hostNow(), id)
+	err = consumeEnrollmentTokenTx(ctx, tx, id, h.ID)
 	if err != nil {
 		return Host{}, err
 	}
@@ -726,15 +705,6 @@ func (s *Store) createHostTx(ctx context.Context, tx Transaction, in HostEnrollm
 	}
 	return Host{ID: id, KeyID: keyID}, nil
 }
-func revokeChildSessions(ctx context.Context, tx Transaction, id, now string) error {
-	for _, table := range []string{"auth_access_tokens", "auth_refresh_sessions"} {
-		_, err := tx.ExecContext(ctx, `UPDATE `+table+` SET revoked_at=? WHERE agent_id=? AND revoked_at IS NULL`, now, id)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
 func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 	var h Host
 	var adapters string
@@ -770,17 +740,18 @@ func (s *Store) GetHost(ctx context.Context, id string) (Host, error) {
 		h.ExcludedNames = append(h.ExcludedNames, n)
 	}
 	rows.Close()
-	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,`+wakePresenceSQL("ha.host_id", "a.actor_id")+` FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
+	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,ha.archived_at,`+wakePresenceSQL("ha.host_id", "a.actor_id")+` FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? ORDER BY ha.name`, h.ID)
 	if err != nil {
 		return h, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var a HostAgent
-		var rev, expiry sql.NullString
-		if err := rows.Scan(&a.Name, &a.IdentityKind, &a.ID, &a.ActorID, &a.Handle, &rev, &expiry); err != nil {
+		var rev, archived, expiry sql.NullString
+		if err := rows.Scan(&a.Name, &a.IdentityKind, &a.ID, &a.ActorID, &a.Handle, &rev, &archived, &expiry); err != nil {
 			return h, err
 		}
+		a.ArchivedAt = nullStringPtr(archived)
 		a.Ref = "actor:" + a.ActorID
 		a.HostID = &h.ID
 		a.HostSlug = &h.Slug
@@ -906,7 +877,7 @@ func (s *Store) ListHostInventory(ctx context.Context, hostLimit, agentLimit int
 	// Rank only selected hosts, then hydrate at most agentLimit per host. These
 	// are the same scoped relations used by the former per-host point reads.
 	rows, err = resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.host_id,ha.name,ha.identity_kind,ha.id,ha.actor_id,ha.username,ha.revoked_at,`+wakePresenceSQL("ha.host_id", "ha.actor_id")+` AS bridge_expiry FROM (
- SELECT ha.host_id,ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,
+ SELECT ha.host_id,ha.name,ha.identity_kind,a.id,a.actor_id,a.username,a.revoked_at,ha.archived_at,
  row_number() OVER (PARTITION BY ha.host_id ORDER BY ha.name) AS position
  FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id IN (SELECT value FROM json_each(?))) ha WHERE ha.position<=? ORDER BY ha.host_id,ha.name`, string(raw), agentLimit)
 	if err != nil {
@@ -1155,8 +1126,9 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		return HostAgent{}, TokenBundle{}, err
 	}
 	var agentID, actorID, kind string
-	var agentRevoked sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind,a.revoked_at FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind, &agentRevoked)
+	var agentRevoked, archived, archiveReason sql.NullString
+	var similar []string // non-nil (maybe empty) only when this call registers the name
+	err = tx.QueryRowContext(ctx, `SELECT a.id,a.actor_id,ha.identity_kind,a.revoked_at,ha.archived_at,ha.archived_reason FROM host_agents ha JOIN agents a ON a.id=ha.agent_id WHERE ha.host_id=? AND ha.name=?`, id, name).Scan(&agentID, &actorID, &kind, &agentRevoked, &archived, &archiveReason)
 	if errors.Is(err, sql.ErrNoRows) {
 		handle := name + "." + slug
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE username=?`, handle).Scan(&count); err != nil {
@@ -1197,10 +1169,15 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		if err = s.recordAuthAuditEventTx(ctx, tx, AuthAuditEventInput{EventType: "derived_agent_created", SubjectAgentID: agentID, SubjectActorID: actorID, Metadata: map[string]any{"host_id": id, "name": name}}); err != nil {
 			return HostAgent{}, TokenBundle{}, err
 		}
+		if similar, err = similarHostNames(ctx, tx, id, name); err != nil {
+			return HostAgent{}, TokenBundle{}, err
+		}
 	} else if err != nil {
 		return HostAgent{}, TokenBundle{}, err
 	} else if agentRevoked.Valid {
 		return HostAgent{}, TokenBundle{}, ErrAgentRevoked
+	} else if err = s.reuseArchivedNameTx(ctx, tx, id, name, agentID, actorID, archived, archiveReason); err != nil {
+		return HostAgent{}, TokenBundle{}, err // manual archives stay reserved
 	}
 	if linkedActorID != "" && actorID != linkedActorID {
 		return HostAgent{}, TokenBundle{}, ErrAdoptionConflict
@@ -1222,7 +1199,7 @@ func (s *Store) IssueHostAgentToken(ctx context.Context, hostID, keyID, name, si
 		return HostAgent{}, TokenBundle{}, err
 	}
 	hostIDCopy, slugCopy := id, slug
-	a := HostAgent{ID: agentID, Ref: "actor:" + actorID, ActorID: actorID, HostID: &hostIDCopy, HostSlug: &slugCopy, Name: name, Handle: name + "." + slug, DisplayName: name + " on " + slug, IdentityKind: kind, State: "stale"}
+	a := HostAgent{ID: agentID, Ref: "actor:" + actorID, ActorID: actorID, HostID: &hostIDCopy, HostSlug: &slugCopy, Name: name, Handle: name + "." + slug, DisplayName: name + " on " + slug, IdentityKind: kind, State: "stale", Registered: similar != nil, SimilarNames: similar}
 	return a, TokenBundle{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(ttl.Seconds())}, nil
 }
 func (s *Store) IsDerivedAgent(ctx context.Context, id string) (bool, error) {

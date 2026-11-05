@@ -871,6 +871,7 @@ func main() {
 			fmt.Printf("purged %d consumed workspace grant JTIs\n", deleted)
 		}
 	})
+	startPersonaArchiveSweep(maintenanceCtx, authStore) // persona_sweep.go
 	go runEvery(maintenanceCtx, auth.AuthRowPurgeInterval, authRowPurgeTimeout, func(jobCtx context.Context) {
 		purged, err := authStore.PurgeExpiredAuthRows(jobCtx, auth.AuthRowPurgeOptions{})
 		if err != nil {
@@ -909,7 +910,6 @@ func main() {
 		}
 		close(serverErr)
 	}()
-
 	select {
 	case err := <-serverErr:
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)

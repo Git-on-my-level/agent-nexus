@@ -118,6 +118,54 @@ per line (`.gitattributes` plus `make install-hooks`), so two branches that
 classify different columns rebase without a conflict; a rebase that lands new
 schema still needs `make access-inventory` to refresh writer fingerprints.
 
+Watch Trends admission (`trendsAdmissionSQL`) is the one place delegated
+ownership applies. Migration 132 adds `host_sponsors`, the human a host acts
+for, fixed when the host is created. A headless host's sponsor is the human who
+issued its enrollment token. A device-flow host's sponsor is its approver only
+when the approver is the workspace's sole active human at approval time: any
+human may approve any pending enrollment by ID and the pending list shows every
+user code, so approval proves nothing about who runs the host once a second
+human exists (approval still admits the host; it records no sponsor). The
+condition is checked at approval and again at completion, with a count bounded
+at two rows. An auth-admin agent sponsors nothing. Residual: a sole human who
+approves a machine that belongs to someone not yet in the workspace (an
+invitee who joins later) becomes that host's sponsor; the host was approved
+while nobody else could have operated it as a workspace member. The backfill
+reads the audit log (completed enrollment rows expire after an hour): token
+issuers always, and device approvals paired with their completion only when
+exactly one human was active at both the approval and the completion, judged
+from principal `created_at`/`revoked_at`.
+
+For that admission bit only, an active human reader also counts as owner of
+private roots (threads, tombstones) owned by a non-human principal bound
+through `host_agents` to a host they sponsored, whose actor was created for that
+principal (`agents.actor_id = agents.id`), so a dev-mode linked pre-existing
+actor never counts. Revoked agents and agents on revoked hosts remain
+delegates: their history was produced for the sponsor, and dropping them would
+re-lock owners who revoke stale personas. The direction is fixed: human to their
+hosts' agents, never agent to human, agent to sibling, or to any other human or
+their agents, whose private roots still deny the reader. Unknown artifacts
+still deny everyone. `admissionLedgerCTE`, ordinary reads, candidate admission,
+streams and mutations keep the exact-owner rule, so delegation grants no
+item-level read and widens no agent's access. Trends serves only aggregates
+and principal rankings. The probe stays primary-key bounded: one unique seek
+for the reader, an indexed sponsor seek with primary-key joins (at most 256
+delegates; dropping delegates can only deny), then one root-owner range seek
+below, above and between the sorted allowed owners. Allowed values carry no
+column affinity, so legacy numeric owners never match a text actor ID.
+
+Migration 133 adds persona archive (`host_agents.archived_at`,
+`archived_reason`, `restored_at`, all identity metadata). Archive revokes the
+principal's tokens and sessions and refuses it at bearer authentication,
+bridge admission and wake routing; archived personas stay Trends delegates like
+revoked ones. Only human auth-admins archive or restore, and a revoked
+principal cannot be either. A manual archive reserves the name; an inactive
+(sweep) archive is cleared by the next valid host-signed assertion for the
+name. Roster summaries (`GET /hosts`, `/hosts/{id}`, `/agents`, `/agents/{id}`,
+Overview) carry `last_used_at`, the principal's newest token time, only for
+human or auth-admin readers; it is omitted for everyone else, and for a request
+with no cached principal.
+
 Keep authorization separate from lifecycle filtering. Missing records may retain
 legacy semantics, but a known inaccessible record must never be treated as
 public. Never cache visibility decisions for an SSE connection. The event stream creates

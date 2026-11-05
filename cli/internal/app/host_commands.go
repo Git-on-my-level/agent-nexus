@@ -552,7 +552,7 @@ func (a *App) runHostDoctor(ctx context.Context, cfg config.Resolved) (*commandR
 		add("host_key_permissions", false, "enroll host first")
 	}
 	name, source, identityErr := a.identityName(cfg)
-	checks = append(checks, identityResolutionDoctorCheck(name, source, identityErr))
+	checks = append(checks, identityResolutionDoctorCheck(name, source, identityErr, a.knownHostPersonaNames(cfg)...))
 	_, agentctlErr := exec.LookPath("agentctl")
 	checks = append(checks, agentctlPresenceDoctorCheck(agentctlErr))
 	if home, homeErr := a.skillHome(""); homeErr == nil {
@@ -656,11 +656,11 @@ func coreHealthDoctorChecks(ctx context.Context, client *httpclient.Client) []do
 	return checks
 }
 
-func identityResolutionDoctorCheck(name, source string, identityErr error) doctorCheck {
+func identityResolutionDoctorCheck(name, source string, identityErr error, knownNames ...string) doctorCheck {
 	if identityErr == nil {
 		return doctorCheck{Name: "identity_resolution", OK: true, Status: "pass", Message: name + " via " + source}
 	}
-	return doctorCheck{Name: "identity_resolution", OK: false, Status: "fail", Message: "Identity could not be resolved. Please " + unresolvedIdentityRepair + "."}
+	return doctorCheck{Name: "identity_resolution", OK: false, Status: "fail", Message: "Identity could not be resolved. Please " + unresolvedIdentityRepairFor(knownNames) + "."}
 }
 
 func agentctlPresenceDoctorCheck(lookErr error) doctorCheck {

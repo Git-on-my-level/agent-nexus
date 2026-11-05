@@ -23,7 +23,7 @@ func TestHostBridgeStatusRespectsHostAndAgentProfileVisibility(t *testing.T) {
 	if _, e = store.PatchThread(ctx, "owner", card["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); e != nil {
 		t.Fatal(e)
 	}
-	for _, q := range []string{`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host','machine','Host','user','machine','[]','now')`, `INSERT INTO actors VALUES('agent-actor','Agent','[]','now','{}')`, `INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent','agent','agent-actor','now','now','{}')`, `INSERT INTO host_agents VALUES('host','agent','agent','derived')`, `INSERT INTO host_bridge_presence VALUES('host','instance',1,1,'test','now','now','2999-01-01T00:00:00Z')`, `INSERT INTO host_bridge_jobs VALUES('host','agent-actor','answers',1,1)`} {
+	for _, q := range []string{`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('host','machine','Host','user','machine','[]','now')`, `INSERT INTO actors VALUES('agent-actor','Agent','[]','now','{}')`, `INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent','agent','agent-actor','now','now','{}')`, `INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host','agent','agent','derived')`, `INSERT INTO host_bridge_presence VALUES('host','instance',1,1,'test','now','now','2999-01-01T00:00:00Z')`, `INSERT INTO host_bridge_jobs VALUES('host','agent-actor','answers',1,1)`} {
 		if _, e = ws.DB().Exec(q); e != nil {
 			t.Fatal(e)
 		}

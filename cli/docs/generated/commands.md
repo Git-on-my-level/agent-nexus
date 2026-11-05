@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `289`
+- Commands: `291`
 
 ## `actors.create`
 
@@ -858,7 +858,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Assertion or refresh-token exchange for bearer access.
 - Concepts: `auth`
-- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_handle_taken`, `agent_revoked`, `rate_limited`, `auth_unavailable`, `busy`
+- Error codes: `invalid_request`, `invalid_token`, `key_mismatch`, `host_revoked`, `agent_excluded`, `agent_archived`, `agent_handle_taken`, `agent_revoked`, `rate_limited`, `auth_unavailable`, `busy`
 - Output: Host assertion returns `{ agent, tokens: { access_token, token_type, expires_in } }`; other grants retain their existing `{ tokens }` envelope.
 
 ## `boards.archive`
@@ -1920,6 +1920,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Agent notes: Off by default; fail-open exit 0, native harness stdout or generic HookBrief v1 rather than an envelope. No implicit presence writes.
 - Examples:
   - Run an explicitly enabled bounded harness hook.: `anx hook session.start`
+
+## `hosts.agents.archive`
+
+- CLI path: `host agents archive`
+- HTTP: `POST /hosts/{host_id}/agents/{agent_name}/archive`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Hide and disable an unused persona while keeping its history and reserving its name.
+- Concepts: `hosts`, `agents`, `auth`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `forbidden`, `host_revoked`, `not_found`
+- Output: Returns `{ host }`.
+- Agent notes: Human-only. An agent that receives agent_archived should ask a human to restore the name on the Access page, or reuse another active name on the host.
+
+## `hosts.agents.restore`
+
+- CLI path: `host agents restore`
+- HTTP: `POST /hosts/{host_id}/agents/{agent_name}/restore`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Re-enable an archived persona name on its host.
+- Concepts: `hosts`, `agents`, `auth`
+- Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `forbidden`, `host_revoked`, `not_found`
+- Output: Returns `{ host }`.
+- Agent notes: Human-only.
 
 ## `hosts.bridge.check_in`
 

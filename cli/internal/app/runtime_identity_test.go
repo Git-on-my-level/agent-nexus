@@ -88,7 +88,7 @@ func TestUnresolvedIdentityDoesNotGuessTheOnlyInstalledAdapter(t *testing.T) {
 		t.Fatal("expected active identity to remain unresolved")
 	}
 	message := err.Error()
-	if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "first authenticated call registers that name on this host if it is new") || strings.Contains(message, "hermes") {
+	if !strings.Contains(message, "--as <agent-name>") || !strings.Contains(message, "ANX_AS=<agent-name>") || !strings.Contains(message, "new name becomes a new persona on its first call") || strings.Contains(message, "hermes") {
 		t.Fatalf("identity repair guessed an installed adapter: %s", message)
 	}
 	normalized := errnorm.Normalize(err)

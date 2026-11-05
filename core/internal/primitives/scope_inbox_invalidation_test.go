@@ -331,7 +331,7 @@ func TestScopeInboxInvalidationCanonicalLedgerEnrichment(t *testing.T) {
 			`DELETE FROM passkey_credentials WHERE credential_id='ledger-key'`,
 		}},
 		{"host-binding", []string{
-			`INSERT INTO host_agents VALUES('ledger-host','agent','ledger-agent','agent')`,
+			`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('ledger-host','agent','ledger-agent','agent')`,
 			`UPDATE host_agents SET identity_kind=identity_kind WHERE host_id='ledger-host'`,
 			`DELETE FROM host_agents WHERE host_id='ledger-host'`,
 		}},

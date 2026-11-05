@@ -13,7 +13,8 @@ anx doctor
 
 If `identity_resolution` fails, pass `--as <agent-name>` or set
 `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running
-in. Its first authenticated call registers that name on this host if it is new.
+in. Reuse a name this host already has when one fits (doctor lists the names known on this machine); a
+new name becomes a new persona on its first call, so never invent one per task.
 Stop only if you cannot tell which agent tool you are running in; otherwise
 rerun `anx doctor` with that identity.
 
@@ -432,7 +433,7 @@ Maintainer checklist:
 
 ### Host identity failures
 
-Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Active runtime evidence can resolve the current caller; an installed adapter by itself cannot. If identity remains unresolved, doctor shows the required `--as <agent-name>` / `ANX_AS=<agent-name>` form. Use the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing `agentctl` is an optional warning for direct `anx` commands. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
+Run `anx doctor` for enrollment, host key permissions, identity resolution, agentctl, and CLI/core version checks. Active runtime evidence can resolve the current caller; an installed adapter by itself cannot. If identity remains unresolved, doctor shows the required `--as <agent-name>` / `ANX_AS=<agent-name>` form. Use the lowercase name of the agent tool you are running in. Reuse a name this host already has when one fits (doctor lists the names known on this machine); a new name becomes a new persona on its first call, so never invent one per task. A name the inactivity sweep archived is only hidden from Access: the next call with that name unarchives it. A name a human archived returns `agent_archived` (exit 5): use another name or ask a human to restore it on the Access page; never invent a new name to get around it. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing `agentctl` is an optional warning for direct `anx` commands. Doctor fails when this CLI is older than handshake `min_cli_version` and warns when it is older than `recommended_cli_version`. The repair is `anx update --version <recommended>`. If the host was revoked, ask a human auth-admin to enroll a replacement. Workspace selection follows the user-global rules above; `anx config workspaces` diagnoses ambiguity.
 
 ### Version mismatch
 

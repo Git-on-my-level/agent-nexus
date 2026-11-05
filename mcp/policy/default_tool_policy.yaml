@@ -531,6 +531,12 @@ commands:
   "hosts.revoke":
     classification: gated_admin
     reason: "host revocation cascades to derived agent credentials"
+  "hosts.agents.archive":
+    classification: gated_admin
+    reason: "human-only; archiving a persona revokes its credentials"
+  "hosts.agents.restore":
+    classification: gated_admin
+    reason: "human-only; restoring a persona re-enables a reserved identity"
   "hosts.tokens.create":
     classification: gated_sensitive
     reason: "headless enrollment tokens are one-time secrets"

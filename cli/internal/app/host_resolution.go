@@ -106,13 +106,6 @@ func (a *App) identityName(cfg config.Resolved) (string, string, error) {
 	return "", "", unresolvedIdentityError("cannot resolve agent identity")
 }
 
-const unresolvedIdentityRepair = "pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in"
-
-func unresolvedIdentityError(reason string) error {
-	message := reason + "; " + unresolvedIdentityRepair
-	return errnorm.Usage("identity_unresolved", message)
-}
-
 func (a *App) ambiguousNativeHarness() bool {
 	count := 0
 	if a.Getenv("CLAUDECODE") == "1" {
@@ -204,7 +197,7 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 	} // Human test and explicit bearer context.
 	name, source, err := a.identityName(cfg)
 	if err != nil {
-		return cfg, err
+		return cfg, a.withKnownHostNames(cfg, err)
 	}
 	host, err := a.resolvedHost(cfg)
 	if err != nil {
@@ -259,7 +252,11 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 			return cfg, errnorm.Wrap(errnorm.KindNetwork, "request_failed", "host assertion failed", err)
 		}
 		if resp.StatusCode >= 400 {
-			return cfg, errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+			failure := errnorm.FromHTTPFailure(resp.StatusCode, resp.Body)
+			if failure.Code == "agent_archived" {
+				return cfg, a.archivedNameError(cfg, name, failure)
+			}
+			return cfg, failure
 		}
 		var grant struct {
 			Agent  map[string]any `json:"agent"`
@@ -267,9 +264,14 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 				AccessToken string `json:"access_token"`
 				ExpiresIn   int    `json:"expires_in"`
 			} `json:"tokens"`
+			Registered   bool     `json:"registered"`
+			SimilarNames []string `json:"similar_names"`
 		}
 		if err := json.Unmarshal(resp.Body, &grant); err != nil {
 			return cfg, err
+		}
+		if grant.Registered {
+			a.notePersonaReuse(name, grant.SimilarNames)
 		}
 		if grant.Tokens.AccessToken == "" || grant.Tokens.ExpiresIn < 1 {
 			return cfg, fmt.Errorf("invalid host token response")

@@ -16,7 +16,6 @@ function toAbsoluteUrl(baseUrl, pathWithQuery) {
   if (!baseUrl) {
     return pathWithQuery;
   }
-
   return new URL(pathWithQuery, `${baseUrl}/`).toString();
 }
 
@@ -25,24 +24,20 @@ function extractErrorMessage(detailsText) {
   if (!raw) {
     return "";
   }
-
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed?.error === "string") {
       return parsed.error;
     }
-
     if (typeof parsed?.error?.message === "string") {
       return parsed.error.message;
     }
-
     if (typeof parsed?.message === "string") {
       return parsed.message;
     }
   } catch {
     // Keep raw response text when payload is non-JSON.
   }
-
   return raw;
 }
 
@@ -51,7 +46,6 @@ function parseJsonBody(body, commandId) {
   if (!raw) {
     return {};
   }
-
   try {
     return JSON.parse(raw);
   } catch {
@@ -326,6 +320,8 @@ const pb = (pathParams, body) => ({
   options: b(body),
 });
 const p = (pathParams) => ({ pathParams });
+const hostAgentPath = (hostId, name) =>
+  pb(pathParams({ host_id: hostId, agent_name: name }), {});
 
 const adapterCommandTable = [
   [
@@ -547,6 +543,8 @@ const adapterCommandTable = [
     "hosts.revoke",
     (hostId) => p(pathParams({ host_id: hostId })),
   ],
+  ["archiveHostAgent", "hosts.agents.archive", (h, n) => hostAgentPath(h, n)],
+  ["restoreHostAgent", "hosts.agents.restore", (h, n) => hostAgentPath(h, n)],
   ["listPendingHostEnrollments", "hosts.enroll.pending"],
   [
     "approveHostEnrollment",

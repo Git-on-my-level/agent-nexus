@@ -21,8 +21,11 @@ func admissionLedgerCTE(scope AccessScope) string {
 		actor := `'` + strings.ReplaceAll(scope.ActorID, `'`, `''`) + `'`
 		active += ` OR EXISTS(SELECT 1 FROM main.resource_access_admission_root_owners WHERE unconditional=0 AND owner<` + actor + ` LIMIT 1) OR EXISTS(SELECT 1 FROM main.resource_access_admission_root_owners WHERE unconditional=0 AND owner>` + actor + ` LIMIT 1)`
 	}
-	return `_anx_admission_ledger(ledger,active) AS MATERIALIZED (SELECT CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN CASE WHEN EXISTS(SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='resource_access_compact_edges') THEN 2 ELSE -2 END WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END,(` + active + `))`
+	return `_anx_admission_ledger(ledger,active) AS MATERIALIZED (SELECT ` + admissionLedgerSQL + `,(` + active + `))`
 }
+
+// admissionLedgerSQL selects the usable admission ledger; below 1 fails closed.
+const admissionLedgerSQL = `CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN CASE WHEN EXISTS(SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='resource_access_compact_edges') THEN 2 ELSE -2 END WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END`
 
 // Candidate admission seeks the persisted root set, then current root owners.
 // A guarded request-local proof retains the unchanged warm membership budget.

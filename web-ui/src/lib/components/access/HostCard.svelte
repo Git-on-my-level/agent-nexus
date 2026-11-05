@@ -8,13 +8,8 @@
     localWorkEpoch,
     saveLocalWork,
   } from "$lib/localWorkStore.js";
-  import {
-    KNOWN_ADAPTERS,
-    agentPath,
-    agentStateShortLabel,
-  } from "$lib/agentPresence.js";
   import HostBridgeBadge from "$lib/components/agents/HostBridgeBadge.svelte";
-  import AgentStateDot from "$lib/components/agents/AgentStateDot.svelte";
+  import HostPersonaList from "$lib/components/access/HostPersonaList.svelte";
   import Button from "$lib/components/Button.svelte";
   import CopyableId from "$lib/components/CopyableId.svelte";
   import Time from "$lib/time/Time.svelte";
@@ -28,16 +23,22 @@
     host,
     agents = [],
     canManage = false,
+    canArchive = false,
+    showIdle = false,
+    query = "",
     workspaceHref = (path) => path,
     now = Date.now(),
     onexclusions = async () => {},
     onrevoke = async () => {},
+    onarchive = async () => {},
   } = $props();
 
   const NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
   let revoked = $derived(Boolean(host?.revoked_at));
-  let activeAgents = $derived(agents.filter((agent) => !agent.revoked_at));
+  let activeAgents = $derived(
+    agents.filter((agent) => !agent.revoked_at && !agent.archived_at),
+  );
   let excluded = $derived(host?.excluded_names ?? []);
   let unusedAdapters = $derived(
     (host?.discovered_adapters ?? []).filter(
@@ -144,11 +145,6 @@
       revokeBusy = false;
     }
   }
-
-  function agentKind(agent) {
-    if (agent.identity_kind === "adopted") return "adopted";
-    return KNOWN_ADAPTERS.has(agent.name) ? "adapter" : "persona";
-  }
 </script>
 
 <article
@@ -216,44 +212,17 @@
   {/if}
 
   <div class="border-t border-line-subtle">
-    {#if agents.length}
-      <ul>
-        {#each agents as agent (agent.id)}
-          <li
-            class="flex items-center gap-3 border-t border-line-subtle px-4 py-1.5 first:border-t-0 max-sm:min-h-11 {agent.revoked_at
-              ? 'opacity-60'
-              : ''}"
-            data-host-agent={agent.handle}
-          >
-            <AgentStateDot state={agent.state} />
-            <a
-              class="min-w-0 truncate text-meta text-fg hover:underline"
-              href={workspaceHref(agentPath(agent))}>{agent.name}</a
-            >
-            <span
-              class="min-w-0 truncate text-micro text-fg-subtle max-sm:hidden"
-              >@{agent.handle}</span
-            >
-            <span class="ml-auto shrink-0 text-micro text-fg-subtle"
-              >{agentKind(agent)}</span
-            >
-            <span class="w-16 shrink-0 text-right text-micro text-fg-muted"
-              >{agent.revoked_at
-                ? "revoked"
-                : excluded.includes(agent.name)
-                  ? "excluded"
-                  : agentStateShortLabel(agent.state)}</span
-            >
-          </li>
-        {/each}
-      </ul>
-    {:else}
-      <p class="px-4 py-2 text-micro text-fg-muted">
-        No agents yet. An agent appears here the first time it runs <code
-          class="rounded bg-line px-1 py-px text-fg">anx</code
-        > on this machine.
-      </p>
-    {/if}
+    <HostPersonaList
+      {host}
+      agents={agents.filter((agent) => !agent.archived_at)}
+      {excluded}
+      canArchive={canArchive && !revoked}
+      {showIdle}
+      {query}
+      {workspaceHref}
+      {now}
+      {onarchive}
+    />
     {#if unusedAdapters.length && !revoked}
       <p
         class="border-t border-line-subtle px-4 py-1.5 text-micro text-fg-subtle"

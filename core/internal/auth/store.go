@@ -497,12 +497,10 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 	if s == nil || s.db == nil {
 		return Principal{}, fmt.Errorf("auth store database is not initialized")
 	}
-
 	accessToken = strings.TrimSpace(accessToken)
 	if accessToken == "" {
 		return Principal{}, ErrInvalidToken
 	}
-
 	var (
 		agentID       string
 		username      string
@@ -511,6 +509,7 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		authMethod    string
 		authAdmin     bool
 		agentRevoked  sql.NullString
+		agentArchived sql.NullString
 		expiresAtRaw  string
 		tokenRevoked  sql.NullString
 		seriesAdapter string
@@ -520,23 +519,22 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 		ctx,
 		fmt.Sprintf(`SELECT a.id, a.username, a.actor_id, %s, %s,
 		        COALESCE(json_extract(a.metadata_json, '$.auth_admin'), 0),
-		        a.revoked_at, t.expires_at, t.revoked_at, COALESCE(t.series_adapter,''), t.id
+		        a.revoked_at, t.expires_at, t.revoked_at, COALESCE(t.series_adapter,''), t.id,
+		        (SELECT ha.archived_at FROM host_agents ha WHERE ha.agent_id = a.id)
 		 FROM auth_access_tokens t
 		 JOIN agents a ON a.id = t.agent_id
 		 WHERE t.token_hash = ?`, principalKindExpr("a"), authMethodExpr("a")),
 		hashToken(accessToken),
-	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &authAdmin, &agentRevoked, &expiresAtRaw, &tokenRevoked, &seriesAdapter, &accessTokenID)
+	).Scan(&agentID, &username, &actorID, &principalKind, &authMethod, &authAdmin, &agentRevoked, &expiresAtRaw, &tokenRevoked, &seriesAdapter, &accessTokenID, &agentArchived)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Principal{}, ErrInvalidToken
 		}
 		return Principal{}, fmt.Errorf("query access token: %w", err)
 	}
-
 	if tokenRevoked.Valid {
 		return Principal{}, ErrInvalidToken
 	}
-
 	expiresAt, err := time.Parse(time.RFC3339Nano, expiresAtRaw)
 	if err != nil {
 		return Principal{}, fmt.Errorf("parse access token expiry: %w", err)
@@ -547,6 +545,8 @@ func (s *Store) AuthenticateAccessToken(ctx context.Context, accessToken string)
 
 	if agentRevoked.Valid {
 		return Principal{}, ErrAgentRevoked
+	} else if agentArchived.Valid { // archived host persona; see host_personas.go
+		return Principal{}, ErrAgentArchived
 	}
 
 	return Principal{

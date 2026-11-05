@@ -883,7 +883,7 @@ func TestDoctorHelpExplainsFirstUseIdentityRepair(t *testing.T) {
 		"--as <agent-name>",
 		"ANX_AS=<agent-name>",
 		"lowercase name of the agent tool you are running in",
-		"first authenticated call registers that name on this host if it is new",
+		"new name becomes a new persona on its first call",
 		"Stop only if you cannot tell which agent tool you are running in",
 	} {
 		if !strings.Contains(output, phrase) {

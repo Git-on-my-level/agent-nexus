@@ -36,8 +36,10 @@
   import CopyableId from "$lib/components/CopyableId.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
-  import HostCard from "$lib/components/access/HostCard.svelte";
+  import { accessErrorMessage as message } from "$lib/accessErrors.js";
   import AccessPageSkeleton from "$lib/components/access/AccessPageSkeleton.svelte";
+  import HostRoster from "$lib/components/access/HostRoster.svelte";
+  import RevokedHosts from "$lib/components/access/RevokedHosts.svelte";
   import AccessRequestRow from "$lib/components/access/AccessRequestRow.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
@@ -98,7 +100,6 @@
   let showAllAudit = $state(false);
 
   let enrollOpen = $state(false);
-  let showRevokedHosts = $state(false);
   /**
    * The first host to arrive while this page was watching an empty workspace.
    *
@@ -215,17 +216,6 @@
       !sections.hosts.forbidden &&
       activeHosts.length === 0,
   );
-
-  function message(error, fallback) {
-    if (!error) return fallback;
-    if (typeof error === "string") return error || fallback;
-    // Core's reason reads better than the transport-level message around it.
-    if (typeof error.details === "string" && error.details.trim()) {
-      return error.details;
-    }
-    if (error instanceof Error) return error.message || fallback;
-    return fallback;
-  }
 
   function nameFor(id) {
     const raw = String(id ?? "").trim();
@@ -536,6 +526,12 @@
     void refreshAgentRoster();
   }
 
+  // Human-only; core refuses agents. The reply carries the updated host.
+  async function applyPersonaChange(request) {
+    const updated = (await request)?.host;
+    if (updated) hosts = hosts.map((h) => (h.id === updated.id ? updated : h));
+    void refreshAgentRoster();
+  }
   async function revokeHost(host) {
     await coreClient.revokeHost(host.id);
     await Promise.all([loadHosts(), loadPeople(), refreshAgentRoster()]);
@@ -1032,42 +1028,25 @@
             {sections.hosts.error}
           </p>
         {:else if activeHosts.length}
-          <div class="space-y-3">
-            {#each activeHosts as host (host.id)}
-              <HostCard
-                {host}
-                agents={host.agents ?? []}
-                canManage={canManageAccess}
-                {workspaceHref}
-                {now}
-                onexclusions={saveExclusions}
-                onrevoke={revokeHost}
-              />
-            {/each}
-          </div>
+          <HostRoster
+            hosts={activeHosts}
+            canManage={canManageAccess}
+            canArchive={canManageAccess && isHumanPrincipal}
+            {workspaceHref}
+            {now}
+            onexclusions={saveExclusions}
+            onrevoke={revokeHost}
+            onarchive={(host, agent) =>
+              applyPersonaChange(
+                coreClient.archiveHostAgent(host.id, agent.name),
+              )}
+            onrestore={(host, agent) =>
+              applyPersonaChange(
+                coreClient.restoreHostAgent(host.id, agent.name),
+              )}
+          />
         {/if}
-        {#if revokedHosts.length}
-          <button
-            class="mt-2 text-micro text-fg-muted hover:text-fg"
-            type="button"
-            onclick={() => (showRevokedHosts = !showRevokedHosts)}
-            >{showRevokedHosts
-              ? "Hide revoked hosts"
-              : `Show ${revokedHosts.length} revoked ${revokedHosts.length === 1 ? "host" : "hosts"}`}</button
-          >
-          {#if showRevokedHosts}
-            <div class="mt-2 space-y-3">
-              {#each revokedHosts as host (host.id)}
-                <HostCard
-                  {host}
-                  agents={host.agents ?? []}
-                  {workspaceHref}
-                  {now}
-                />
-              {/each}
-            </div>
-          {/if}
-        {/if}
+        <RevokedHosts hosts={revokedHosts} {workspaceHref} {now} />
       </section>
 
       <section

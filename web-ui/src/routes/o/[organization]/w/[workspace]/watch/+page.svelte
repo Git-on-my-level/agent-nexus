@@ -21,22 +21,19 @@
   import { patchSearchParams } from "$lib/urlState.js";
   import { TREND_RANGES, trendRange } from "$lib/watchTrends.js";
   import { briefStore, mountBrief, refreshBrief } from "$lib/briefStore.js";
-  import {
-    countWaitingDecisions,
-    freshnessLabel,
-    briefLoops,
-  } from "$lib/brief.js";
+  import { freshnessLabel, briefLoops } from "$lib/brief.js";
   import {
     attentionCount,
     collectionFromLoops,
     collectionFromDailyDigest,
   } from "$lib/collection.js";
+  import { overTargetAsk } from "$lib/watchRollup.js";
   import {
-    bucketCounts,
-    overTargetAsk,
-    rollupRows,
-    rollupSummary,
-  } from "$lib/watchRollup.js";
+    recentChanges,
+    sectionCounts,
+    watchRows,
+    watchSummary,
+  } from "$lib/watchList.js";
   import { formatAgo } from "$lib/time/format.js";
   import { mergeDashboardReports } from "$lib/overview.js";
   import {
@@ -111,13 +108,11 @@
   let staleAge = $derived(formatAgo($store.updatedAt, now) || "earlier");
 
   let initiatives = $derived(brief?.initiatives ?? []);
-  // Top-level initiatives with their children rolled in; loops and
-  // children are not rows of their own.
-  let rollup = $derived(rollupRows(initiatives));
-  let rollupLine = $derived(
-    rollupSummary(rollup, {
-      truncated: Boolean(brief?.truncated?.initiatives),
-    }),
+  // Top-level initiatives with their children rolled in, each in its
+  // section; loops and children are not rows of their own.
+  let rollup = $derived(watchRows(initiatives, now));
+  let summary = $derived(
+    watchSummary(rollup, { truncated: Boolean(brief?.truncated?.initiatives) }),
   );
   let digestCollection = $derived(
     collectionFromDailyDigest(brief?.dailyDigest, { href: initiativeHref }),
@@ -132,10 +127,9 @@
   let loopRows = $derived(
     loopCollection.groups.reduce((n, g) => n + g.rows.length, 0),
   );
-  let initiativeAttention = $derived(bucketCounts(rollup).needs_you);
+  let initiativeAttention = $derived(sectionCounts(rollup).needs_you);
   let countAsk = $derived(overTargetAsk(brief?.overTarget, brief?.decisions));
   let loopAttention = $derived(attentionCount(loopCollection));
-  let waitingDecisions = $derived(countWaitingDecisions(brief?.decisions));
 
   // Dashboards: each of the reader's pins is a tab; any other opens as a tab
   // from the "More dashboards" menu. Pins are per person; with none, core
@@ -389,9 +383,10 @@
         >
           <!-- The board prints its own inventory line beside the budget. -->
           {#if brief && tab === "initiatives" && layout === "list"}
-            <span data-source="computed:initiatives.rollup.total"
-              >{rollupLine}</span
-            ><span aria-hidden="true">·</span>
+            {#each summary as part (part.key)}<span
+                data-source="computed:{part.field}"
+                data-watch-count={part.key}>{part.text}</span
+              ><span aria-hidden="true">{" · "}</span>{/each}
           {/if}
           {#if brief}
             <span data-source="computed:generated_at"
@@ -410,15 +405,6 @@
       <div class="flex flex-wrap items-center gap-2">
         {#if tab === "initiatives"}{@render initiativeActions()}{/if}
         {#if tab === "trends"}{@render rangeToggle()}{/if}
-        {#if waitingDecisions > 0}
-          <a
-            class="decide-link"
-            href={workspaceHref("/decide")}
-            data-watch-decide-link
-            >{waitingDecisions} waiting for you in Decide
-            <span aria-hidden="true">→</span></a
-          >
-        {/if}
       </div>
     </div>
     <div class="tab-row flex items-end gap-2">
@@ -609,29 +595,29 @@
       />
     {/if}
   {:else if !rollup.length}
-    {#if !digestCollection.counts.digest}
-      <div
-        class="rounded-md border border-dashed border-line px-4 py-8 text-center"
-        data-watch-empty
-      >
-        <p class="text-meta text-fg">No initiatives yet.</p>
-        <p class="mt-1 text-micro text-fg-muted">
-          Initiatives appear here once an agent or a person files one.
-          <a
-            class="text-accent-text hover:underline"
-            href={workspaceHref("/initiatives/new")}>Create one</a
-          >
-        </p>
-      </div>
-    {/if}
+    <div
+      class="rounded-md border border-dashed border-line px-4 py-8 text-center"
+      data-watch-empty
+    >
+      <p class="text-meta text-fg">No initiatives yet.</p>
+      <p class="mt-1 text-meta text-fg-muted">
+        Initiatives appear here once an agent or a person files one.
+        <a
+          class="text-accent-text hover:underline"
+          href={workspaceHref("/initiatives/new")}>Create one</a
+        >
+      </p>
+    </div>
     <!-- The set can be empty because its last initiative was just retired,
-         or trimmed to digest-only work; the recent changes still read in
-         every empty-set case, exactly as they do beside the list. -->
-    <InitiativeChanges
-      changes={brief.initiativeChanges}
-      {now}
-      hrefFor={childInitiativeHref}
-    />
+         or trimmed to digest-only work; the week's changes still read. -->
+    {#if recentChanges(brief.initiativeChanges, now).length}
+      <InitiativeChanges
+        changes={brief.initiativeChanges}
+        {now}
+        hrefFor={childInitiativeHref}
+      />
+    {/if}
+    {@render digestHidden()}
   {:else}
     <InitiativeRollupList
       rows={rollup}
@@ -644,9 +630,10 @@
         ? workspaceHref(`/decide/${encodeURIComponent(countAsk.inboxItemId)}`)
         : ""}
       changes={brief.initiativeChanges}
+      hidden={digestHidden}
     />
   {/if}
-  {#if tab === "initiatives" && brief && digestCollection.counts.digest}
+  {#if tab === "initiatives" && brief && digestCollection.counts.digest && layout !== "list"}
     <section data-source="computed:daily_digest" aria-label="Daily digest">
       <h2 class="mb-2 text-meta font-semibold text-fg-muted">
         Needs an owner's look ({digestCollection.counts.digest})
@@ -659,6 +646,25 @@
     </section>
   {/if}
 </WorkspacePageShell>
+
+<!-- The list shows initiatives only; cards waiting for an owner read in
+     Lanes, beside the Ungrouped tray. -->
+{#snippet digestHidden()}
+  {#if digestCollection.counts.digest}
+    <a
+      class="flex min-h-11 items-center justify-between gap-3 border-b border-line-subtle px-1 py-2 text-meta text-fg-muted hover:text-fg"
+      href={workspaceHref("/watch?view=lanes")}
+      data-watch-digest-hidden
+      ><span
+        ><span class="font-medium text-fg"
+          >Cards awaiting an owner · <span data-source="computed:daily_digest"
+            >{digestCollection.counts.digest}</span
+          ></span
+        > Not listed here</span
+      ><span class="shrink-0 text-accent-text">Open in Lanes →</span></a
+    >
+  {/if}
+{/snippet}
 
 {#snippet initiativeActions()}
   {@render layoutToggle([
@@ -775,20 +781,5 @@
     font-size: 11px;
     font-weight: 700;
     line-height: 16px;
-  }
-  .decide-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    min-height: 2.25rem;
-    padding: 0.35rem 0.75rem;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    border-radius: 8px;
-    background: rgba(245, 158, 11, 0.08);
-    color: var(--warn-text);
-    font-size: 13px;
-  }
-  .decide-link:hover {
-    background: rgba(245, 158, 11, 0.14);
   }
 </style>

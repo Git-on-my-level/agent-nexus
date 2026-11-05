@@ -27,7 +27,7 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 	db := env.workspace.DB()
 	store := env.primitiveStore.(*primitives.Store)
 	reader := seedHumanPrincipalForLockoutTest(t, ctx, db, "prepare-reader", "prepare-reader-actor", "prepare-reader", "prepare-reader-token")
-	if _, err := db.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('prepare-host','prepare-host','Public host','user','machine','[]','now'); INSERT INTO host_keys VALUES('prepare-key','prepare-host','public','now',NULL); INSERT INTO host_agents VALUES('prepare-host','reader',?,'adopted')`, reader.AgentID); err != nil {
+	if _, err := db.Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('prepare-host','prepare-host','Public host','user','machine','[]','now'); INSERT INTO host_keys VALUES('prepare-key','prepare-host','public','now',NULL); INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('prepare-host','reader',?,'adopted')`, reader.AgentID); err != nil {
 		t.Fatal(err)
 	}
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "prepare-pm", "prepare-pm-actor", "prepare-pm", "prepare-pm-token")

@@ -28,7 +28,7 @@ type migration struct {
 	Verify     func(ctx context.Context, tx *sql.Tx) error
 }
 
-var migrations = []migration{
+var migrations = append([]migration{
 	{
 		Version: 1,
 		Statements: []string{
@@ -1176,35 +1176,7 @@ var migrations = []migration{
 	// Stop delivering legacy curation prompts. Canonical withdrawal events and
 	// resolution claims commit together, retaining a reason for each request.
 	{Version: 119, AfterApply: quietCurationSuggestions},
-
-	// Indexed derived positions keep background polls independent of history.
-	{Version: 120, AfterApply: installIdleMaintenancePositions},
-	{Version: 121, AfterApply: installWorkTracking},
-	{Version: 122, Statements: []string{
-		`CREATE INDEX IF NOT EXISTS idx_events_card_done ON events(json_extract(payload_json,'$.payload.card_id'),anx_timestamp_key(ts) DESC,id DESC) WHERE type='card_moved' AND json_extract(payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(payload_json,'$.payload.from_column_key'),'')<>'done' AND COALESCE(trashed_at,'')=''`,
-		`CREATE VIEW IF NOT EXISTS work_done_event_positions AS SELECT id,ts,json_extract(payload_json,'$.payload.card_id') AS card_id FROM events INDEXED BY idx_events_card_done WHERE type='card_moved' AND json_extract(payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(payload_json,'$.payload.from_column_key'),'')<>'done' AND COALESCE(trashed_at,'')=''`,
-	}},
-	{Version: 123, AfterApply: installAskPresentationHeads},
-	{Version: 124, AfterApply: installAskRetirementDeliveryPolicy},
-	// Watch trends bound each record family's read through identity/time
-	// positions; canonical hydrated rows keep their own authorization.
-	{Version: 125, AfterApply: installWatchTrendPositions},
-	{Version: 126, AfterApply: installInitiativeBoardAuthority},
-	// The work tree stores parentage and the Unsorted tray (see work_tree.go).
-	{Version: 127, AfterApply: installWorkTree},
-	// Watch's latest-note excerpt read a field notes never set.
-	{Version: 128, AfterApply: repairBriefNoteExcerpts},
-	// Core's own reminders have only a summary, and showed as blank notes.
-	{Version: 129, AfterApply: repairBriefNoteExcerpts},
-	{Version: 130, ApplyChunk: cardRevisionContentMigrationChunk, Verify: verifyCardRevisionContentMigration},
-	// The document list counts each page document's comments and reads its
-	// latest one by the trimmed thread key. Index that exact expression so the
-	// aggregate seeks the page's threads instead of scanning every message.
-	// Index only: stored thread_id values (NULL, padded) are left as written.
-	{Version: 131, Statements: []string{
-		`CREATE INDEX IF NOT EXISTS idx_events_message_thread_key ON events(trim(COALESCE(thread_id,'')),ts DESC,id DESC) WHERE type='message_posted';`,
-	}},
-}
+}, recentMigrations...)
 
 func applyMigrations(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, createMigrationsTableSQL); err != nil {

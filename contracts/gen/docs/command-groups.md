@@ -271,8 +271,10 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `host`
 
-- Commands: `16`
+- Commands: `18`
 - Command IDs:
+  - `hosts.agents.archive` (`host agents archive`)
+  - `hosts.agents.restore` (`host agents restore`)
   - `hosts.bridge.check_in` (`host bridge check-in`)
   - `hosts.bridge_status` (`host bridge-status`)
   - `hosts.enroll.approve` (`host enrollments approve`)

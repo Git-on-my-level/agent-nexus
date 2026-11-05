@@ -817,6 +817,16 @@
   },
   {
     "method": "POST",
+    "path": "/hosts/{host_id}/agents/{agent_name}/archive",
+    "policy": "maintenance"
+  },
+  {
+    "method": "POST",
+    "path": "/hosts/{host_id}/agents/{agent_name}/restore",
+    "policy": "maintenance"
+  },
+  {
+    "method": "POST",
     "path": "/hosts/{host_id}/bridge/check-in",
     "policy": "independent",
     "reason": "Deployment, identity, credentials or telemetry service; no canonical board/card record ownership."

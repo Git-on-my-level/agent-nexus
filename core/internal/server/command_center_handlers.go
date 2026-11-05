@@ -229,6 +229,7 @@ func handleAgents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			writeError(w, 500, "internal_error", "failed to load roster")
 			return
 		}
+		v = rosterForReader(r.Context(), v)
 		writeJSON(w, 200, map[string]any{"agents": v})
 		return
 	}
@@ -299,6 +300,7 @@ func handleAgents(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			writeError(w, 500, "internal_error", "failed to get agent")
 			return
 		}
+		d.Agent = rosterForReader(r.Context(), []commandcenter.Summary{d.Agent})[0]
 		truncated := false
 		if r.URL.Query().Get("summary") == "1" {
 			store, ok := opts.primitiveStore.(interface {

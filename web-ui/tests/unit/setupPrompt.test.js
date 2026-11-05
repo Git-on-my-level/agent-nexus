@@ -171,7 +171,9 @@ describe("machine prompt", () => {
     expect(prompt).toMatch(
       /lowercase\s+name of the agent tool you are running in/,
     );
-    expect(prompt).toMatch(/first authenticated\s+call registers that name/);
+    expect(prompt).toMatch(
+      /a new name becomes a\s+new persona on its first\s+call/,
+    );
     expect(prompt).toMatch(
       /Stop only if you cannot tell which agent tool you are running in/,
     );
@@ -345,7 +347,9 @@ describe("PM prompt", () => {
     expect(machine).toMatch(
       /lowercase\s+name of the agent tool you are running in/,
     );
-    expect(machine).toMatch(/first authenticated\s+call registers that name/);
+    expect(machine).toMatch(
+      /a new name becomes a\s+new persona on its first\s+call/,
+    );
     expect(
       machine.indexOf("lowercase name of the agent tool you are running in"),
     ).toBeLessThan(machine.indexOf("auth whoami"));

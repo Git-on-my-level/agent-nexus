@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `289`
+- Command operations: `291`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `238`
+- Missing recommended examples: `240`
 
 ## Baseline gap counts
 
@@ -254,6 +254,8 @@ Generated from `contracts/anx-openapi.yaml`.
 - `events.unarchive` `POST /events/{event_id}/unarchive`
 - `home.read` `POST /home/read`
 - `home.unread` `GET /home/unread`
+- `hosts.agents.archive` `POST /hosts/{host_id}/agents/{agent_name}/archive`
+- `hosts.agents.restore` `POST /hosts/{host_id}/agents/{agent_name}/restore`
 - `hosts.bridge.check_in` `POST /hosts/{host_id}/bridge/check-in`
 - `hosts.bridge_status` `POST /hosts/bridge-status`
 - `hosts.enroll.approve` `POST /auth/hosts/enrollments/{enrollment_id}/approve`

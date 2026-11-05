@@ -153,7 +153,10 @@ export const QA_AGENTS = [
       requester_actor_id: "actor-soren-release",
     },
   }),
-  qaAgent("reviewer", "idle", { last_signal_at: hoursAgo(3) }),
+  qaAgent("reviewer", "idle", {
+    last_signal_at: hoursAgo(3),
+    last_used_at: hoursAgo(3),
+  }),
   qaAgent("release-bot", "stale", { last_signal_at: null }),
 ];
 
