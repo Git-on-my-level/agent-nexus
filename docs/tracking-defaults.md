@@ -49,8 +49,9 @@ Pages and retries share the owner/day delivery identity. Agent recipients use
 the existing bridge queue; humans use their enabled push/digest channels.
 With no channel configured, the automatic note and the reader's
 `brief.daily_digest` remain available. `anx orient` lists these cards under
-`daily digest`; Watch's Initiatives tab shows “Needs an owner's look” with
-the preview count and links to the same initiative pages in every layout. Reading the brief
+`daily digest`; Watch's Lanes view shows “Needs an owner's look” with
+the preview count and links to the same initiative pages, and the List view
+(initiatives only) says how many there are and links to Lanes. Reading the brief
 sends no notification.
 Ownership is checked again in the enqueue transaction; reassignment, a new
 explicit promise, completion or lost visibility can cancel a stale snapshot.

@@ -105,7 +105,7 @@ export const QA_SCENES = [
     path: "/o/local/w/local/watch",
     workspaceMode: "workspace-default",
     waitFor: async (page) => {
-      // Observability starts closed; rows that need the reader start open.
+      // Every row starts closed; open Observability.
       const row = "[data-collection-row='card:observability']";
       await page.click(`${row} [data-collection-toggle]`);
       await page.waitForSelector(`${row} [data-details-steps] ol li`);
@@ -117,9 +117,9 @@ export const QA_SCENES = [
     workspaceMode: "workspace-default",
     briefState: "mockup",
     waitFor: async (page) => {
-      await page.waitForSelector(
-        "[data-collection-row='card:capture'] [data-rollup-kid='card:speaker-id']",
-      );
+      const row = "[data-collection-row='card:capture']";
+      await page.click(`${row} [data-collection-toggle]`);
+      await page.waitForSelector(`${row} [data-rollup-kid='card:speaker-id']`);
     },
   },
   {
@@ -129,9 +129,8 @@ export const QA_SCENES = [
     briefState: "initiative-set",
     waitFor: async (page) => {
       await page.waitForSelector("[data-over-target-ask]");
-      await page.waitForSelector(
-        "[data-initiative-change='initiative_retired']",
-      );
+      // Recent changes start closed, with this week's count.
+      await page.waitForSelector("[data-initiative-changes-count]");
     },
   },
   {

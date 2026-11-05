@@ -137,25 +137,36 @@ ref (`j`/`k` move focus). Reply drafts use the durable key
 `inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
 
 **Watch** (`/watch`) is outcomes per workspace, built from the brief. The
-Initiatives list (`InitiativeRollupList`) has one row per top-level
-initiative, with children and loops folded away. Rows sort by what needs the
-reader (need you, slipping, moving, no promise; done is folded), and the
-header counts initiatives and the cards rolled up into them. Each row shows
-its outcome (core's `outcome`, when it says more than the title), a
-"proposed" tag while it is still in Backlog, its stated next step, its
-children by state (one segment per child), its
-promises ("N of M past", "on track") and who is next (You, else the owner).
-A click, tap, or Enter/Space on the title opens a row. Open, it lists its
-workstreams (or its children) as kid rows. A workstream row reads from its
+Initiatives list (`InitiativeRollupList`, rules in `watchList.js`) has one
+row per top-level initiative, with children and loops folded away and cards
+with no initiative left out (cards awaiting an owner read in Lanes; a line
+under the list says so). Rows read in sections, first match wins: Needs you
+(an open decision or a child waiting on the reader), Lagging (its own promise
+is past, or at least two children are past theirs and they are at least a
+third of its children), Blocked (`blocked_count` or a child in the blocked
+phase), Stale (dated evidence, none in 7 days), Moving, Proposed (still in
+Backlog). Done folds behind "Done · N". The header is one line on one basis,
+open initiatives: "5 open · 2 need you · 3 lagging · 1 stale". There are no
+counter tiles or filter chips, and no Decide button on Watch. Each row shows
+its title, one status line (what is late or stuck, how long it has been
+quiet, then the stated next step, worded as the initiative page words it), a
+bar from core's `progress` (else its children done), its owner and child
+count, and on the right why it is in its section. Secondary text is 13px or
+larger. An over-target notice ("Over target: 6 open against a target of 5.")
+shows only when the open initiatives exceed the board's target. Recent
+changes to the set are the last 7 days of `initiative_changes`, collapsed
+behind a count pill ("3 in 7 days"): a card beside the list on a wide screen,
+a fold under it on a phone, where each initiative is a card.
+A click, tap, or Enter/Space on the title opens a row; every row starts
+closed. Open, it shows the outcome, then its workstreams (or its children)
+as kid rows. A workstream row reads from its
 own rollup: its children's short codes and card count, its children by state
 ("1 needs you · 3 blocked"), its nearest promise ("due Oct 25", "10h past",
 "3 past") and its owner, or You when something in it waits on the reader. A
 workstream core did not expand, or a single child, shows its own phase and
 promise. Below that is one strip: latest
 evidence and note, owner, the plan's next steps, and a link to the
-initiative. Rows that need the reader start open. Their plan steps wait for
-a tap, so opening the page reads nothing per row. A row the reader opens
-reads its card once, through `workCache`.
+initiative. A row the reader opens reads its card once, through `workCache`.
 
 Trends (`?tab=trends`, `&range=7d|90d`; 30 days by default) answers "is the
 workspace getting better or worse?" with what no other view shows: change

@@ -144,7 +144,7 @@
 
 {#if compact}
   <div
-    class="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-micro text-fg-muted"
+    class="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 text-meta text-fg-muted"
     data-initiative-details
   >
     <span class="min-w-0 [overflow-wrap:anywhere]" data-details-evidence>

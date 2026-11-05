@@ -30,7 +30,7 @@ vi.mock("$lib/actions/durableDraft.js", () => ({
 
 import DecisionCard from "../../src/lib/components/decide/DecisionCard.svelte";
 import InitiativeRollupList from "../../src/lib/components/watch/InitiativeRollupList.svelte";
-import { rollupRows } from "../../src/lib/watchRollup.js";
+import { watchRows } from "../../src/lib/watchList.js";
 import {
   BRIEF_COMPUTED_FIELDS,
   normalizeBrief,
@@ -42,7 +42,7 @@ import fixture from "../../../contracts/fixtures/brief/brief.v1.json";
 const brief = normalizeBrief(fixture);
 const NOW = Date.parse("2026-10-15T09:00:00Z");
 const watchProps = {
-  rows: rollupRows(brief.initiatives),
+  rows: watchRows(brief.initiatives, Date.parse("2026-10-15T09:00:00Z")),
   now: NOW,
   hrefFor: (ref) => `/i/${ref}`,
   decideHref: (row) => `/decide?initiative=${row.ref}`,
