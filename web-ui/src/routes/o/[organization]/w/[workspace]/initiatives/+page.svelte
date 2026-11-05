@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
   import { coreClient } from "$lib/coreClient";
   import { formatTimestamp } from "$lib/formatDate";
-  import { initializeAuthSession } from "$lib/authSession";
+  import { initializeAuthSession, isAuthSessionWarm } from "$lib/authSession";
   import { restartSession } from "$lib/workspaceBootstrap";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
@@ -76,6 +76,7 @@
     onWorkspaceViewsDenied,
   } from "$lib/workspaceViewCache.js";
   import { reliableRead } from "$lib/reliableRead.js";
+  import { listAllPages } from "$lib/inboxSources.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let listController;
   let pendingLiveRead = null;
@@ -92,7 +93,7 @@
   // Board titles are fetched once for layout labels.
   let boardsRequested = false;
   let decisions = $state([]);
-  let decisionsLoaded = $state(false);
+  let decisionsLoaded = false;
   let shortcutsOpen = $state(false);
   let moveError = $state("");
   let sessionExpired = $state(false);
@@ -368,6 +369,9 @@
     const id = ++requestId;
     loading = true;
     if (!live) error = "";
+    // Board labels and Requested badges do not need the rows: read at once.
+    if (!decisionsLoaded) void loadDecisions();
+    if (!boardsRequested) void loadBoards();
     try {
       if (scanAll && !append) {
         const rows = [];
@@ -397,8 +401,6 @@
         error = "";
         reconnecting = false;
         writeWorkspaceView(key, { records, nextCursor });
-        if (!decisionsLoaded) void loadDecisions();
-        if (!boardsRequested) void loadBoards();
         return;
       }
       const result = await read({
@@ -423,10 +425,10 @@
       error = "";
       reconnecting = false;
       writeWorkspaceView(key, { records, nextCursor });
-      if (!decisionsLoaded) void loadDecisions();
-      if (!boardsRequested) void loadBoards();
     } catch (err) {
       if (id === requestId && scope === readerScopeKey() && !signal.aborted) {
+        // Re-arm the side reads so a retry reads them again too.
+        decisionsLoaded = boardsRequested = false;
         reconnecting = false;
         error = errorMessage(err);
         sessionExpired = isSessionExpired(err);
@@ -467,39 +469,32 @@
    */
   async function loadDecisions() {
     decisionsLoaded = true;
-    try {
-      // Follow the cursor so the Requested badge does not miss a request
-      // that landed past the first page. Pages are newest first, so if the
-      // ceiling is reached only the oldest requests go unbadged; the Inbox
-      // still lists them.
-      const items = [];
-      let cursor;
-      for (let page = 0; page < DECISION_PREFETCH_PAGES; page += 1) {
-        const result = await coreClient.listPmDecisions({ limit: 200, cursor });
-        items.push(...(Array.isArray(result?.items) ? result.items : []));
-        cursor = result?.next_cursor || "";
-        if (!cursor) break;
-      }
-      decisions = items;
-      if (cursor)
-        console.warn(
-          `Requested badges cover the newest ${items.length} decisions; older ones are not badged.`,
-        );
-      const receipts = [];
-      let actionCursor;
-      for (let page = 0; page < DECISION_PREFETCH_PAGES; page += 1) {
-        const result = await coreClient.listPmActions({
-          limit: 200,
-          cursor: actionCursor,
-        });
-        receipts.push(...(Array.isArray(result?.items) ? result.items : []));
-        actionCursor = result?.next_cursor || "";
-        if (!actionCursor) break;
-      }
-      actions = receipts;
-    } catch {
-      // Fail soft: the Requested badge link degrades, the page stays usable.
-    }
+    // Follow the cursor so the Requested badge does not miss a request past
+    // the first page. Pages are newest first, so at the ceiling only the
+    // oldest go unbadged; the Inbox still lists them. Both feeds read at
+    // once, and each fails soft on its own (the badge link degrades).
+    const all = (list) =>
+      listAllPages(
+        (cursor) => list({ limit: 200, cursor }),
+        "items",
+        DECISION_PREFETCH_PAGES,
+      );
+    await Promise.all([
+      all((o) => coreClient.listPmDecisions(o))
+        .then((result) => {
+          decisions = result.items;
+          if (result.has_more)
+            console.warn(
+              `Requested badges cover the newest ${result.items.length} decisions; older ones are not badged.`,
+            );
+        })
+        .catch(() => {}),
+      all((o) => coreClient.listPmActions(o))
+        .then((result) => {
+          actions = result.items;
+        })
+        .catch(() => {}),
+    ]);
   }
   function setMoveNotice(notice, { pointer = false } = {}) {
     moveNotice = notice;
@@ -802,6 +797,10 @@
       sessionExpired = isSessionExpired(denial);
     });
     let disposed = false;
+    // A session the shell already hydrated reads now; the refresh lands
+    // behind it (as on the initiative page). Only a cold page waits.
+    const sessionWarm = isAuthSessionWarm();
+    if (sessionWarm) loaded = true;
     initializeAuthSession({
       fetchFn: globalThis.fetch.bind(globalThis),
       workspaceSlug: $page.params.workspace,
@@ -811,6 +810,7 @@
         if (!disposed) loaded = true;
       })
       .catch((err) => {
+        if (sessionWarm) return;
         error = errorMessage(err);
         sessionExpired = isSessionExpired(err);
         loading = false;

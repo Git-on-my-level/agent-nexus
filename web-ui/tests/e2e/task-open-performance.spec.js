@@ -222,6 +222,8 @@ async function installSlowCore(page) {
       if (path === "/boards")
         return { boards: [{ id: "board-1", title: "Delivery" }] };
       if (path === "/inbox") return { items: [], total: 0 };
+      if (path === "/pm/decisions" || path === "/pm/actions")
+        return { items: [], next_cursor: "" };
       if (path === "/home/unread")
         return {
           groups: [],
@@ -477,4 +479,47 @@ test("pointing at a row reads the card before the click", async ({ page }) => {
   page.off("request", onRequest);
   expect(cardReads).toBe(0);
   expect(prefetched).toBeGreaterThan(before);
+});
+
+test("returning to Initiatives reads its lists in one wave", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await installSlowCore(page);
+  // Compile both routes first; that cost is not what this measures.
+  await page.goto(TASKS);
+  await expect(
+    page.locator('[data-work-ref="card:tune-combat"] a').first(),
+  ).toBeVisible({ timeout: 60_000 });
+  await page.goto(`${ROOT}/initiatives/${encodeURIComponent(OTHER.ref)}`);
+  await expect(page.getByRole("heading", { name: CARD.title })).toBeVisible({
+    timeout: 60_000,
+  });
+  const fetchBefore = await page.evaluate(() => {
+    window.__taskOpenGate.hold();
+    return window.__taskOpenGate.sent.length;
+  });
+  await page.getByRole("link", { name: "← Initiatives" }).click();
+  /*
+   * The list used to wait on a fresh /auth/session, and the board and PM
+   * reads on the list. With every response held, each must still be sent.
+   */
+  await expect
+    .poll(
+      async () => {
+        const sent = await page.evaluate(
+          (start) => window.__taskOpenGate.sent.slice(start),
+          fetchBefore,
+        );
+        return ["/work", "/boards", "/pm/decisions", "/pm/actions"].filter(
+          (path) => !sent.includes(path),
+        );
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual([]);
+  await page.evaluate(() => window.__taskOpenGate.release());
+  await expect(
+    page.locator('[data-work-ref="card:tune-combat"] a').first(),
+  ).toBeVisible();
 });

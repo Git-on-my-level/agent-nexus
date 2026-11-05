@@ -8,6 +8,7 @@ import {
   completeAuthSession,
   initializeAuthSession,
   isAuthenticated,
+  isAuthSessionWarm,
   isHumanWorkspacePrincipal,
   logoutAuthSession,
   sessionEndedByAccountStatus,
@@ -108,6 +109,31 @@ describe("authSession", () => {
       agent_id: "agent-2",
       actor_id: "actor-2",
     });
+  });
+
+  it("reports a session warm only once hydrated with a signed-in agent", async () => {
+    setCurrentWorkspaceSlug("alpha");
+    expect(isAuthSessionWarm("alpha")).toBe(false);
+    const reply = (body) => async () =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: reply({ authenticated: false }),
+    });
+    expect(isAuthSessionWarm("alpha")).toBe(false);
+    await initializeAuthSession({
+      workspaceSlug: "alpha",
+      fetchFn: reply({
+        authenticated: true,
+        agent: { agent_id: "agent-2", actor_id: "actor-2" },
+      }),
+    });
+    expect(isAuthSessionWarm("alpha")).toBe(true);
+    clearAuthSession("alpha");
+    expect(isAuthSessionWarm("alpha")).toBe(false);
   });
 
   it("preserves the current agent when session rehydration fails transiently", async () => {

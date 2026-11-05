@@ -261,6 +261,20 @@ export function isAuthenticated(workspaceSlug = getCurrentWorkspaceSlug()) {
   return Boolean(getAuthenticatedAgent(workspaceSlug)?.agent_id);
 }
 
+/**
+ * True when `/auth/session` already hydrated this workspace with a signed-in
+ * agent, so a page can read now and let its own session refresh land behind.
+ */
+export function isAuthSessionWarm(
+  workspaceSlug = getCurrentWorkspaceSlug(),
+  organizationSlug = getCurrentOrganizationSlug(),
+) {
+  return (
+    ensureAuthState(workspaceSlug, organizationSlug).ready &&
+    isAuthenticated(workspaceSlug)
+  );
+}
+
 /** Human principals for workspace auth (passkey, hosted account directory, external grant). Matches core `human_only` routes. */
 export function isHumanWorkspacePrincipal(agent) {
   if (!agent || typeof agent !== "object") {
