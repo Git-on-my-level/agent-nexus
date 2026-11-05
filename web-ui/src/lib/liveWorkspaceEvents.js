@@ -79,10 +79,14 @@ export function liveWorkspaceEvents({
 /**
  * Roster invalidations from `GET /stream/agents`. `onChange` runs on connect
  * (core's first notification), on every change and after a reconnect.
+ * `skipInitial` drops the notice core sends when the shared stream first
+ * connects, for a caller that has just read what it shows; changes and
+ * reconnects still arrive.
  *
  * @param {{
  *   client: { streamAgentChanges?: (options: object) => Promise<void> },
  *   onChange: (changes: object[]) => void | Promise<void>,
+ *   skipInitial?: boolean,
  *   debounceMs?: number,
  *   maxWaitMs?: number,
  *   reconnectMs?: number,
@@ -92,6 +96,7 @@ export function liveWorkspaceEvents({
 export function liveAgentChanges({
   client,
   onChange,
+  skipInitial = false,
   debounceMs = 250,
   maxWaitMs = DEFAULT_MAX_WAIT_MS,
   reconnectMs = 3000,
@@ -106,7 +111,7 @@ export function liveAgentChanges({
   return subscribe({
     client,
     key: "agents",
-    accept: () => true,
+    accept: (event) => !(skipInitial && event?.initial),
     filter: () => true,
     onChange,
     debounceMs,
@@ -286,6 +291,7 @@ function createHub(client, key, { reconnectMs = 3000 } = {}) {
   let reconnectTimer = null;
   let lastEventId = "";
   let connectedOnce = false;
+  let announced = false;
   let failures = 0;
   const startedAt = Date.now();
 
@@ -346,9 +352,13 @@ function createHub(client, key, { reconnectMs = 3000 } = {}) {
           onEvent: (message) => {
             delivered = true;
             if (message?.event !== "agents_changed") return;
+            // Core's on-connect notice for the hub's first connection.
+            const initial = !connectedOnce && !announced;
+            announced = true;
             notify({
               type: "agents_changed",
               revision: message?.data?.revision ?? null,
+              ...(initial ? { initial: true } : {}),
             });
           },
         });

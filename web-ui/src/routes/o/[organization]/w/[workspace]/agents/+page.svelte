@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/stores";
+  import { get } from "svelte/store";
 
   import {
     agentPath,
@@ -148,8 +149,13 @@
   }
 
   onMount(() => {
+    // A roster another surface already loaded may be old: re-read it. A
+    // controller that is starting now is already reading it.
+    const loaded =
+      get(agentRoster).workspace === workspaceSlug &&
+      get(agentRoster).status !== "idle";
     const release = startAgentRoster(workspaceSlug);
-    void refreshAgentRoster();
+    if (loaded) void refreshAgentRoster();
     const clock = setInterval(() => {
       now = Date.now();
     }, 15_000);

@@ -63,6 +63,8 @@
     const release = liveAgentChanges({
       client: coreClient,
       onChange: () => void load(),
+      // load() above already read the hosts for this visit.
+      skipInitial: true,
     });
     const visible = () => {
       if (!document.hidden) void load();

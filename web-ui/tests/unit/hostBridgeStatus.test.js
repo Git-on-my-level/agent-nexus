@@ -136,3 +136,38 @@ describe("host bridge initial and failed reads", () => {
     expect(state.hosts.host).toEqual(snapshot);
   });
 });
+
+describe("host bridge re-checks", () => {
+  it("keeps the last known status when a badge re-subscribes", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("document", {
+      hidden: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    const known = { host_id: "host", bridge: null };
+    coreClient.getHostBridgeStatus.mockResolvedValue({ hosts: [known] });
+    let release = observeHostBridge("ws", "host");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(get(hostBridgeStatus).hosts.host).toEqual(known);
+    // A re-read row remounts its badge: release, then observe again.
+    release();
+    let finish;
+    coreClient.getHostBridgeStatus.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    release = observeHostBridge("ws", "host");
+    releases.push(release);
+    await vi.advanceTimersByTimeAsync(100);
+    const state = get(hostBridgeStatus);
+    const badge = bridgeBadge(
+      { id: "host" },
+      state.hosts.host,
+      Date.now(),
+      !state.checked.includes("host"),
+    );
+    // Still "No bridge" while the re-check is in flight, never "Checking".
+    expect(badge.state).toBe("none");
+    finish({ hosts: [known] });
+  });
+});

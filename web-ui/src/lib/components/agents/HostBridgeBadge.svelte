@@ -59,7 +59,10 @@
     }[badge.state] ?? "bg-fg-subtle",
   );
   let needsSetup = $derived(badge.state === "none" || badge.state === "stale");
-  $effect(() => (visible ? observeHostBridge(workspace, host.id) : undefined));
+  // Observe by id: a re-read hands in a new `host` object for the same
+  // machine, and re-subscribing on that would restart the shared poll.
+  let hostId = $derived(host.id);
+  $effect(() => (visible ? observeHostBridge(workspace, hostId) : undefined));
   onMount(() => {
     let observer;
     if (typeof IntersectionObserver !== "undefined") {
