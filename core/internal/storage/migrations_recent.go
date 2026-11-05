@@ -33,4 +33,5 @@ var recentMigrations = []migration{
 	// Host sponsorship: the human who approved or issued a host's enrollment.
 	// Trends admission treats that host's agents as acting for the sponsor.
 	{Version: 132, AfterApply: installHostSponsors},
+	{Version: 133, AfterApply: installHostPersonaArchive}, // host_personas.go
 }

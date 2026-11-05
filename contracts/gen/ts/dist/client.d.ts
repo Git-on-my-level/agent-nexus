@@ -189,6 +189,8 @@ export declare class AnxClient {
     eventsUnarchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     homeRead(options?: RequestOptions): Promise<InvokeResult>;
     homeUnread(options?: RequestOptions): Promise<InvokeResult>;
+    hostsAgentsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    hostsAgentsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsBridgeCheckIn(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     hostsBridgeStatus(options?: RequestOptions): Promise<InvokeResult>;
     hostsEnrollApprove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

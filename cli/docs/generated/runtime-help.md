@@ -494,7 +494,7 @@ Setup and identity
 - For fleet hosts, an explicitly granted auth-admin agent creates a one-time token with `anx host tokens create --label <destination-label>`. Deliver it over an authenticated channel, then pipe it to `anx host enroll --name <destination-slug> --token-stdin` on the destination machine. Replace both placeholders with the real destination values; set the workspace base URL on both machines, disable shell tracing, and never log the secret. Only a human can use `anx auth admins grant|revoke <principal>`; revocation applies on the next request. Agents cannot revoke their own host.
 - Run `anx config workspaces` when unsure which workspace applies. Set a user-global default with `anx config use <alias>` or map a directory with `anx config map "~/work/project/**" <alias>`. Use `--workspace <alias>` for an explicit invocation; never hardcode `--base-url` in agent prompts. Preferences live outside git repositories.
 - Set `ANX_AS=<name>` or pass `--as <name>` to select an explicit stable principal. Active `agentctl identity` evidence can resolve the current caller; installed harness availability alone is not caller identity. Check the resolved handle and host in `anx orient`.
-- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
+- Run `anx doctor` before authenticated work. If `identity_resolution` fails, pass `--as <agent-name>` or set `ANX_AS=<agent-name>` to the lowercase name of the agent tool you are running in. Reuse a name this host already has when one fits (doctor lists them); a new name becomes a new persona on its first call, so never invent one per task. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity.
 - `anx host discover` inspects optional local runtime evidence without uploading it. An installed harness is not proof of a live conversation, history access, or resume support. Generic registration does not require agentctl.
 
 
@@ -859,7 +859,7 @@ Global flags:
 Report workspace resolution and local/network preconditions.
 
 ```text
-Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in; its first authenticated call registers that name on this host if it is new. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
+Doctor: report the resolved workspace and source, enrollment, host key permissions, identity, agentctl and CLI/core version checks. An unresolved identity is a failed check. Pass --as <agent-name> or set ANX_AS=<agent-name> to the lowercase name of the agent tool you are running in. Reuse a name this host already has when one fits (doctor lists them); a new name becomes a new persona on its first call, so never invent one per task. Stop only if you cannot tell which agent tool you are running in; otherwise rerun doctor with that identity. Missing agentctl is an optional warning for direct anx commands. Ambiguous workspace selection fails before networking.
 
 Usage:
   anx doctor
@@ -2004,7 +2004,7 @@ Generated Help: host list
 - Error codes: `auth_required`, `invalid_token`
 - Concepts: `hosts`, `agents`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 
 Global flags:
@@ -2031,7 +2031,7 @@ Generated Help: host bridge-status
 - Error codes: `auth_required`, `invalid_request`
 - Concepts: `hosts`, `agents`
 - Agent notes: Read-only POST. Partial job coverage never proves absence.
-- Adjacent commands: `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -10095,7 +10095,7 @@ Generated Help: host enrollments list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Local Help: host enrollments list
 
@@ -10131,7 +10131,7 @@ Generated Help: host enrollments approve
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`, `host_slug_taken`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -10171,7 +10171,7 @@ Generated Help: host enrollments deny
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`, `enrollment_expired`, `enrollment_consumed`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -10211,7 +10211,7 @@ Generated Help: host tokens create
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `invalid_request`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:
@@ -10258,7 +10258,7 @@ Generated Help: host tokens list
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens revoke`
 
 Local Help: host tokens list
 
@@ -10294,7 +10294,7 @@ Generated Help: host tokens revoke
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `not_found`
 - Concepts: `auth`, `hosts`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host revoke`, `host tokens create`, `host tokens list`
 
 Inputs:
   Required:
@@ -10334,7 +10334,7 @@ Generated Help: host revoke
 - Error codes: `auth_required`, `invalid_token`, `auth_admin_required`, `host_self_revoke`, `not_found`
 - Concepts: `hosts`, `auth`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host tokens create`, `host tokens list`, `host tokens revoke`
+- Adjacent commands: `host agents archive`, `host agents restore`, `host bridge check-in`, `host bridge-status`, `host enroll complete`, `host enroll headless`, `host enroll poll`, `host enroll start`, `host enrollments approve`, `host enrollments deny`, `host enrollments list`, `host get`, `host list`, `host patch`, `host tokens create`, `host tokens list`, `host tokens revoke`
 
 Inputs:
   Required:

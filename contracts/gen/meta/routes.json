@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 271,
+  "route_count": 273,
   "routes": [
     {
       "method": "GET",
@@ -781,6 +781,16 @@
       "method": "PATCH",
       "path": "/hosts/{host_id}",
       "access_class": "public_auth_ceremony"
+    },
+    {
+      "method": "POST",
+      "path": "/hosts/{host_id}/agents/{agent_name}/archive",
+      "access_class": "authenticated_principal_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/hosts/{host_id}/agents/{agent_name}/restore",
+      "access_class": "authenticated_principal_surface"
     },
     {
       "method": "POST",

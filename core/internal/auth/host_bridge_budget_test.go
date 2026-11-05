@@ -40,7 +40,7 @@ func TestHostBridgeStatusBudgetAndPlans(t *testing.T) {
 		if _, e := seedDB.Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,'now','now','{}')`, actor, actor, actor); e != nil {
 			t.Fatal(e)
 		}
-		if _, e := seedDB.Exec(`INSERT INTO host_agents VALUES('host',?,?,'derived')`, actor, actor); e != nil {
+		if _, e := seedDB.Exec(`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host',?,?,'derived')`, actor, actor); e != nil {
 			t.Fatal(e)
 		}
 		for _, kind := range []string{"answers", "wake", "git", "spool", "files"} {

@@ -72,6 +72,12 @@ export function describeAuthAuditEvent(event, options = {}) {
       return agentName
         ? `${agentName} on ${host} used anx for the first time`
         : `A new agent on ${host} used anx for the first time`;
+    case "host_agent_archived":
+      return meta.reason === "inactive"
+        ? `${agentName || "A persona"} on ${host} was archived after going unused`
+        : `${actor} archived ${agentName || "a persona"} on ${host}`;
+    case "host_agent_restored":
+      return `${actor} restored ${agentName || "a persona"} on ${host}`;
     case "host_exclusions_changed": {
       const names = Array.isArray(meta.excluded_names)
         ? meta.excluded_names.filter(Boolean)

@@ -80,7 +80,7 @@ func handleIssueAuthToken(w http.ResponseWriter, r *http.Request, opts handlerOp
 			return
 		}
 		opts.agentChanges.publish()
-		writeJSON(w, http.StatusOK, map[string]any{"agent": agent, "tokens": issued})
+		writeJSON(w, http.StatusOK, hostAssertionResponse(agent, issued))
 		return
 	case "refresh_token":
 		tokens, err = opts.authStore.IssueTokenFromRefresh(r.Context(), req.RefreshToken)
@@ -432,6 +432,8 @@ func authenticatePrincipalFromHeader(w http.ResponseWriter, r *http.Request, opt
 			writeError(w, http.StatusUnauthorized, "invalid_token", "token is invalid, expired, or revoked")
 		case errors.Is(err, auth.ErrAgentRevoked):
 			writeError(w, http.StatusForbidden, "agent_revoked", "agent has been revoked")
+		case errors.Is(err, auth.ErrAgentArchived):
+			writeError(w, http.StatusForbidden, "agent_archived", agentArchivedMessage)
 		default:
 			writeInternalError(w, r, err, "failed to authenticate token")
 		}

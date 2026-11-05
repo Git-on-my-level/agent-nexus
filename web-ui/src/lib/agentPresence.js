@@ -311,7 +311,7 @@ export function agentRowModel(
 /** Roster grouped by presentation state, in state order; empty groups omitted. */
 export function groupAgentsByState(agents = []) {
   const active = (Array.isArray(agents) ? agents : []).filter(
-    (agent) => agent && !agent.revoked_at,
+    (agent) => agent && !agent.revoked_at && !agent.archived_at,
   );
   return AGENT_STATES.map((state) => ({
     ...state,
@@ -345,7 +345,7 @@ function compareWithinState(a, b, state) {
 /** Counts for the roster summary line. */
 export function rosterSummary(agents = []) {
   const active = (Array.isArray(agents) ? agents : []).filter(
-    (agent) => agent && !agent.revoked_at,
+    (agent) => agent && !agent.revoked_at && !agent.archived_at,
   );
   const counts = Object.fromEntries(AGENT_STATES.map((s) => [s.key, 0]));
   for (const agent of active) {

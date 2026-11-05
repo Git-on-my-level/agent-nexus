@@ -36,8 +36,9 @@
   import CopyableId from "$lib/components/CopyableId.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import AuthAdminGrants from "$lib/components/access/AuthAdminGrants.svelte";
-  import HostCard from "$lib/components/access/HostCard.svelte";
   import AccessPageSkeleton from "$lib/components/access/AccessPageSkeleton.svelte";
+  import HostRoster from "$lib/components/access/HostRoster.svelte";
+  import RevokedHosts from "$lib/components/access/RevokedHosts.svelte";
   import AccessRequestRow from "$lib/components/access/AccessRequestRow.svelte";
   import HostEnrollmentRequest from "$lib/components/access/HostEnrollmentRequest.svelte";
   import HostEnrollmentTokens from "$lib/components/access/HostEnrollmentTokens.svelte";
@@ -98,7 +99,6 @@
   let showAllAudit = $state(false);
 
   let enrollOpen = $state(false);
-  let showRevokedHosts = $state(false);
   /**
    * The first host to arrive while this page was watching an empty workspace.
    *
@@ -536,6 +536,13 @@
     void refreshAgentRoster();
   }
 
+  // Human-only; core refuses agents. The reply carries the updated host.
+  async function setPersonaArchive(host, agent, archive) {
+    const call = archive ? "archiveHostAgent" : "restoreHostAgent";
+    const updated = (await coreClient[call](host.id, agent.name))?.host;
+    if (updated) hosts = hosts.map((h) => (h.id === updated.id ? updated : h));
+    void refreshAgentRoster();
+  }
   async function revokeHost(host) {
     await coreClient.revokeHost(host.id);
     await Promise.all([loadHosts(), loadPeople(), refreshAgentRoster()]);
@@ -1032,42 +1039,19 @@
             {sections.hosts.error}
           </p>
         {:else if activeHosts.length}
-          <div class="space-y-3">
-            {#each activeHosts as host (host.id)}
-              <HostCard
-                {host}
-                agents={host.agents ?? []}
-                canManage={canManageAccess}
-                {workspaceHref}
-                {now}
-                onexclusions={saveExclusions}
-                onrevoke={revokeHost}
-              />
-            {/each}
-          </div>
+          <HostRoster
+            hosts={activeHosts}
+            canManage={canManageAccess}
+            canArchive={canManageAccess && isHumanPrincipal}
+            {workspaceHref}
+            {now}
+            onexclusions={saveExclusions}
+            onrevoke={revokeHost}
+            onarchive={(host, agent) => setPersonaArchive(host, agent, true)}
+            onrestore={(host, agent) => setPersonaArchive(host, agent, false)}
+          />
         {/if}
-        {#if revokedHosts.length}
-          <button
-            class="mt-2 text-micro text-fg-muted hover:text-fg"
-            type="button"
-            onclick={() => (showRevokedHosts = !showRevokedHosts)}
-            >{showRevokedHosts
-              ? "Hide revoked hosts"
-              : `Show ${revokedHosts.length} revoked ${revokedHosts.length === 1 ? "host" : "hosts"}`}</button
-          >
-          {#if showRevokedHosts}
-            <div class="mt-2 space-y-3">
-              {#each revokedHosts as host (host.id)}
-                <HostCard
-                  {host}
-                  agents={host.agents ?? []}
-                  {workspaceHref}
-                  {now}
-                />
-              {/each}
-            </div>
-          {/if}
-        {/if}
+        <RevokedHosts hosts={revokedHosts} {workspaceHref} {now} />
       </section>
 
       <section

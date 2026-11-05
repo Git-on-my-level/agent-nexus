@@ -31,8 +31,10 @@ func (s SQLIdentities) listAgents(ctx context.Context, limit int) ([]Identity, e
 		COALESCE(x.display_name,a.username),COALESCE(a.revoked_at,''),
 		COALESCE(ha.name,''),COALESCE(ha.identity_kind,''),
 		COALESCE(h.id,''),COALESCE(h.slug,''),
-		COALESCE(bp.last_seen_at,''),CASE WHEN bj.enabled=1 AND bj.ready=1 THEN COALESCE(bp.expires_at,'') ELSE '' END,
-		COALESCE(h.revoked_at,''),CASE WHEN hx.name IS NULL THEN 0 ELSE 1 END
+		CASE WHEN bj.actor_id IS NOT NULL THEN COALESCE(bp.last_seen_at,'') ELSE '' END,CASE WHEN bj.enabled=1 AND bj.ready=1 THEN COALESCE(bp.expires_at,'') ELSE '' END,
+		COALESCE(h.revoked_at,''),CASE WHEN hx.name IS NULL THEN 0 ELSE 1 END,
+		COALESCE(ha.archived_at,''),COALESCE(ha.archived_reason,''),
+		COALESCE((SELECT MAX(t.created_at) FROM auth_access_tokens t WHERE t.agent_id=a.id),'')
 		FROM agents a
 		LEFT JOIN actors x ON x.id=a.actor_id
 		LEFT JOIN host_agents ha ON ha.agent_id=a.id
@@ -53,13 +55,13 @@ func (s SQLIdentities) listAgents(ctx context.Context, limit int) ([]Identity, e
 		var excluded int
 		if e = rows.Scan(&v.AgentID, &v.Handle, &v.ActorID, &meta, &v.DisplayName, &v.RevokedAt,
 			&v.Name, &v.Kind, &v.HostID, &v.HostSlug, &v.BridgeCheckedInAt, &v.BridgeExpiresAt,
-			&hostRevoked, &excluded); e != nil {
+			&hostRevoked, &excluded, &v.ArchivedAt, &v.ArchivedReason, &v.LastUsedAt); e != nil {
 			return nil, e
 		}
 		if v.HostID != "" {
 			v.DisplayName = v.Name + " on " + v.HostSlug
 			v.Adapter = defaultAdapter(v.Name)
-			if hostRevoked != "" || v.RevokedAt != "" || excluded != 0 {
+			if hostRevoked != "" || v.RevokedAt != "" || excluded != 0 || v.ArchivedAt != "" {
 				v.BridgeCheckedInAt, v.BridgeExpiresAt = "", ""
 			}
 		} else {
@@ -141,6 +143,11 @@ type Summary struct {
 	WaitingAsk       *OpenAsk   `json:"waiting_ask"`
 	LastSignalAt     *string    `json:"last_signal_at"`
 	RevokedAt        *string    `json:"revoked_at"`
+	// LastUsedAt is the principal's own last authenticated use (newest access
+	// token), never host bridge presence. ArchivedAt marks an archived persona.
+	LastUsedAt     *string `json:"last_used_at"`
+	ArchivedAt     *string `json:"archived_at"`
+	ArchivedReason *string `json:"archived_reason"`
 }
 type Detail struct {
 	Agent       Summary          `json:"agent"`
@@ -213,6 +220,7 @@ func (s *Store) rosterMode(ctx context.Context, now time.Time, limit int, collec
 	for i, v := range identities {
 		out[i] = Summary{ID: v.AgentID, Ref: "actor:" + v.ActorID, ActorID: v.ActorID, HostID: stringPtr(v.HostID), HostSlug: stringPtr(v.HostSlug), Name: v.Name, Handle: v.Handle, DisplayName: v.DisplayName, IdentityKind: v.Kind, State: "stale", RevokedAt: stringPtr(v.RevokedAt), BridgeOnline: bridgeOnline(v.BridgeExpiresAt, now)}
 		out[i].LastSignalAt = stringPtr(v.BridgeCheckedInAt)
+		out[i].LastUsedAt, out[i].ArchivedAt, out[i].ArchivedReason = stringPtr(v.LastUsedAt), stringPtr(v.ArchivedAt), stringPtr(v.ArchivedReason)
 		index[v.AgentID] = i
 	}
 	// Each source is scanned once. No per-agent event query is performed.

@@ -44,6 +44,7 @@ type App struct {
 	outputStarted                  bool
 	writes                         writeTracker
 	webURL                         *webURLLookup
+	identityWarnings               []output.Warning // from host identity resolution; see persona_names.go
 }
 
 func (a *App) clockNow() time.Time {
@@ -318,6 +319,10 @@ func (a *App) Run(args []string) int {
 	}
 	if result != nil && len(result.Warnings) > 0 {
 		warnings = append(result.Warnings, warnings...)
+	}
+	if resolved.JSON && len(a.identityWarnings) > 0 {
+		// Text mode already printed these to stderr.
+		warnings = append(append([]output.Warning{}, a.identityWarnings...), warnings...)
 	}
 	actions := append(deriveNextActions(identity.Command, normalizedArgs, value), repairs...)
 	if result != nil {

@@ -421,6 +421,16 @@
   },
   {
     "method": "POST",
+    "path": "/hosts/{host_id}/agents/{agent_name}/archive",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/hosts/{host_id}/agents/{agent_name}/restore",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
     "path": "/hosts/{host_id}/bridge/check-in",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },

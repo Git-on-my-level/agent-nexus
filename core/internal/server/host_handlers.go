@@ -128,6 +128,9 @@ func hostRouteAccess(r *http.Request) routeAccessRequirement {
 		if parts[0] != "" && len(parts) == 3 && parts[1] == "bridge" && parts[2] == "check-in" && method == http.MethodPost {
 			return public // signed host proof is checked by the real handler
 		}
+		if parts[0] != "" && len(parts) == 4 && parts[1] == "agents" && parts[2] != "" && (parts[3] == "archive" || parts[3] == "restore") && method == http.MethodPost {
+			return write
+		}
 	}
 	return unsupported
 }
@@ -153,6 +156,11 @@ func hostError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code = http.StatusForbidden, "agent_excluded"
 	case errors.Is(err, auth.ErrAgentRevoked):
 		status, code = http.StatusForbidden, "agent_revoked"
+	case errors.Is(err, auth.ErrAgentArchived):
+		writeError(w, http.StatusForbidden, "agent_archived", agentArchivedMessage)
+		return
+	case errors.Is(err, auth.ErrHumanRequired):
+		status, code = http.StatusForbidden, "forbidden"
 	case errors.Is(err, auth.ErrHostSlugTaken):
 		status, code = http.StatusConflict, "host_slug_taken"
 	case errors.Is(err, auth.ErrAgentHandleTaken):
@@ -489,6 +497,10 @@ func handleHostRoutes(w http.ResponseWriter, r *http.Request, opts handlerOption
 		}
 		opts.agentChanges.publish()
 		writeJSON(w, 200, map[string]any{"bridge": b})
+		return
+	}
+	if len(parts) == 4 && parts[1] == "agents" && (parts[3] == "archive" || parts[3] == "restore") && r.Method == http.MethodPost {
+		handleHostAgentArchive(w, r, opts, id, parts[2], parts[3] == "archive")
 		return
 	}
 	if len(parts) != 1 {

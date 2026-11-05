@@ -18,7 +18,7 @@ func (s *Store) enrichPrincipalHosts(ctx context.Context, principals []AuthPrinc
 		positions[p.AgentID] = i
 	}
 	raw, _ := json.Marshal(ids)
-	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.agent_id,ha.host_id,h.id,h.slug,h.revoked_at,`+wakePresenceSQL("h.id", "(SELECT actor_id FROM agents WHERE id=ha.agent_id)")+`,
+	rows, err := resourceaccess.NewDB(s.db).QueryContext(ctx, `SELECT ha.agent_id,ha.host_id,h.id,h.slug,h.revoked_at,ha.archived_at IS NOT NULL,`+wakePresenceSQL("h.id", "(SELECT actor_id FROM agents WHERE id=ha.agent_id)")+`,
  COALESCE((SELECT json_group_array(name) FROM host_exclusions WHERE host_id=ha.host_id),'[]')
  FROM json_each(?) selected JOIN host_agents ha ON ha.agent_id=selected.value
  LEFT JOIN hosts h ON h.id=ha.host_id`, string(raw))
@@ -28,8 +28,9 @@ func (s *Store) enrichPrincipalHosts(ctx context.Context, principals []AuthPrinc
 	defer rows.Close()
 	for rows.Next() {
 		var agentID, hostID, names string
+		var archived bool
 		var visibleID, slug, revoked, expiry sql.NullString
-		if err := rows.Scan(&agentID, &hostID, &visibleID, &slug, &revoked, &expiry, &names); err != nil {
+		if err := rows.Scan(&agentID, &hostID, &visibleID, &slug, &revoked, &archived, &expiry, &names); err != nil {
 			return err
 		}
 		if !visibleID.Valid {
@@ -38,6 +39,8 @@ func (s *Store) enrichPrincipalHosts(ctx context.Context, principals []AuthPrinc
 		p := &principals[positions[agentID]]
 		p.HostID = hostID
 		p.HostBridgeOnline = expiry.Valid && !expired(expiry.String) && !revoked.Valid
+		// An archived persona is routed like an excluded one: no wakes.
+		p.HostExcluded = archived
 		var excluded []string
 		if err := json.Unmarshal([]byte(names), &excluded); err != nil {
 			return err

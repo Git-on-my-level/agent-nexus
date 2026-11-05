@@ -3390,7 +3390,7 @@ export const commandRegistry = [
         "path": "/auth/token",
         "operation_id": "issueAuthToken",
         "summary": "Exchange host assertion or refresh auth tokens",
-        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, revoked agents, and revoked hosts receive no token. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After. SQLite writer contention returns a recoverable 503 busy error with Retry-After; retry signed requests with a fresh proof.",
+        "description": "grant_type=host_assertion requires host_id, key_id, agent_name, signed_at, signature. Sign UTF-8 bytes of `anx-host-agent-token|\u003chost_id\u003e|\u003ckey_id\u003e|\u003cagent_name\u003e|\u003csigned_at\u003e` with the host Ed25519 key and send base64 signature. signed_at is RFC3339 UTC, within 5 minutes of server time. Core atomically records a hash of message and signature; replay fails. The name is lowercase `[a-z][a-z0-9-]*` (1–32 characters). Discovered adapters use claude, codex, cursor, omp, or generic; other names are explicit personas. The returned agent handle is `\u003cagent_name\u003e.\u003chost_slug\u003e`. Missing agents are created lazily with stable actor ID. Excluded names, archived names (agent_archived; a human restores them on the Access page), revoked agents, and revoked hosts receive no token; an archived name is never silently re-created. When a call creates a new persona, the response sets `registered: true` and lists up to five active names on the same host that share its stem (trailing `-rN`, `-vN` or `-N` removed) in `similar_names`. Host grants return only a short-lived agent access token, no refresh token. Existing grants apply only to their existing eligible principals; agent-key assertion cannot mint derived agents. grant_type=workspace_human_grant and workspace_managed_agent_grant exchange a signed grant from the configured trusted issuer; send issue_refresh_token=false to receive an access token without a refresh token. Grant exchanges are rate limited per caller address (each attempt reserves a request before signature work; grants that verify and are unused return it) and per principal and grant type for grants that verify (issuer and subject for humans; issuer, workspace, organization and slot for managed agents); replays never spend the principal budget. Both return 429 with Retry-After. SQLite writer contention returns a recoverable 503 busy error with Retry-After; retry signed requests with a fresh proof.",
         "why": "Assertion or refresh-token exchange for bearer access.",
         "input_mode": "json-body",
         "streaming": {
@@ -3403,6 +3403,7 @@ export const commandRegistry = [
             "key_mismatch",
             "host_revoked",
             "agent_excluded",
+            "agent_archived",
             "agent_handle_taken",
             "agent_revoked",
             "rate_limited",
@@ -8605,6 +8606,120 @@ export const commandRegistry = [
         "ts_method": ""
     },
     {
+        "command_id": "hosts.agents.archive",
+        "cli_path": "host agents archive",
+        "group": "host",
+        "method": "POST",
+        "path": "/hosts/{host_id}/agents/{agent_name}/archive",
+        "operation_id": "archiveHostAgent",
+        "summary": "Archive a persona on a host",
+        "description": "Human auth-admin bearer only; agents (including granted auth-admin agents) receive forbidden. Archive is not revoke and not delete: the actor, its history and attribution stay, and the name stays reserved on the host. In one transaction core stamps archived_at, revokes every outstanding access token and refresh session for that principal, and records one `host_agent_archived` audit event. While archived, the bearer authenticator rejects the principal (agent_archived), host_assertion for the name returns agent_archived instead of minting or re-creating it, bridge check-ins naming the actor are refused like exclusions, and wake routing skips it. Idempotent: archiving an archived persona returns the host unchanged.",
+        "why": "Hide and disable an unused persona while keeping its history and reserving its name.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "auth_admin_required",
+            "forbidden",
+            "host_revoked",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "agents",
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Human-only. An agent that receives agent_archived should ask a human to restore the name on the Access page, or reuse another active name on the host.",
+        "path_params": [
+            "host_id",
+            "agent_name"
+        ],
+        "adjacent_commands": [
+            "hosts.agents.restore",
+            "hosts.bridge.check_in",
+            "hosts.bridge_status",
+            "hosts.enroll.complete",
+            "hosts.enroll.headless",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsAgentsArchive",
+        "ts_method": "hostsAgentsArchive"
+    },
+    {
+        "command_id": "hosts.agents.restore",
+        "cli_path": "host agents restore",
+        "group": "host",
+        "method": "POST",
+        "path": "/hosts/{host_id}/agents/{agent_name}/restore",
+        "operation_id": "restoreHostAgent",
+        "summary": "Restore an archived persona",
+        "description": "Human auth-admin bearer only. Clears archived_at and records one `host_agent_restored` audit event. Tokens revoked by the archive stay revoked; the next host_assertion for the name mints a fresh token for the same actor. Idempotent for a persona that is not archived.",
+        "why": "Re-enable an archived persona name on its host.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ host }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "auth_admin_required",
+            "forbidden",
+            "host_revoked",
+            "not_found"
+        ],
+        "concepts": [
+            "hosts",
+            "agents",
+            "auth"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Human-only.",
+        "path_params": [
+            "host_id",
+            "agent_name"
+        ],
+        "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.bridge.check_in",
+            "hosts.bridge_status",
+            "hosts.enroll.complete",
+            "hosts.enroll.headless",
+            "hosts.enroll.poll",
+            "hosts.enroll.start",
+            "hosts.enroll.approve",
+            "hosts.enroll.deny",
+            "hosts.enroll.pending",
+            "hosts.get",
+            "hosts.list",
+            "hosts.patch",
+            "hosts.revoke",
+            "hosts.tokens.create",
+            "hosts.tokens.list",
+            "hosts.tokens.revoke"
+        ],
+        "go_method": "HostsAgentsRestore",
+        "ts_method": "hostsAgentsRestore"
+    },
+    {
         "command_id": "hosts.bridge.check_in",
         "cli_path": "host bridge check-in",
         "group": "host",
@@ -8612,7 +8727,7 @@ export const commandRegistry = [
         "path": "/hosts/{host_id}/bridge/check-in",
         "operation_id": "checkInHostBridge",
         "summary": "Check in host bridge",
-        "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded. Server expiry is 300 seconds. A different non-retired incarnation may replace the current one only with a signed timestamp strictly newer than its accepted timestamp high-water mark. Within one incarnation, sequence must increase; a backward clock step is accepted without lowering that mark. Proof skew/replay checks still apply. After a restart during a backward clock step, replacement waits until signed time exceeds the stored mark. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.",
+        "description": "Host self-authentication through the three host proof headers. Sign UTF-8 `anx-host-bridge-check-in|\u003chost_id\u003e|\u003csigned_at\u003e|\u003cbase64url(SHA256(raw request body))\u003e` with the active host key. Timestamp skew is at most five minutes and message/signature replay is rejected. One bridge instance sends a complete workspace-local agent/job snapshot, at most 256 KiB. Each actor must belong to this active enrollment and not be excluded or archived. Server expiry is 300 seconds. A different non-retired incarnation may replace the current one only with a signed timestamp strictly newer than its accepted timestamp high-water mark. Within one incarnation, sequence must increase; a backward clock step is accepted without lowering that mark. Proof skew/replay checks still apply. After a restart during a backward clock step, replacement waits until signed time exceeds the stored mark. Only enabled, ready wake jobs imply agent wake-online; answers alone do not.",
         "why": "Record a host bridge heartbeat for wake routing.",
         "input_mode": "json-body",
         "streaming": {
@@ -8662,6 +8777,8 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge_status",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
@@ -8716,6 +8833,8 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.enroll.complete",
             "hosts.enroll.headless",
@@ -8770,6 +8889,8 @@ export const commandRegistry = [
             "enrollment_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -8838,6 +8959,8 @@ export const commandRegistry = [
             "enrollment_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.headless",
@@ -8891,6 +9014,8 @@ export const commandRegistry = [
             "enrollment_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -8980,6 +9105,8 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9027,6 +9154,8 @@ export const commandRegistry = [
         "surface": "utility",
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9078,6 +9207,8 @@ export const commandRegistry = [
             "enrollment_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9160,6 +9291,8 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9210,6 +9343,8 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9256,6 +9391,8 @@ export const commandRegistry = [
         "surface": "canonical",
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9323,6 +9460,8 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9375,6 +9514,8 @@ export const commandRegistry = [
             "host_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9441,6 +9582,8 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9488,6 +9631,8 @@ export const commandRegistry = [
         "surface": "utility",
         "agent_notes": "Validate workspace identity and route-specific proof before mutation; error codes are stable.",
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -9539,6 +9684,8 @@ export const commandRegistry = [
             "token_id"
         ],
         "adjacent_commands": [
+            "hosts.agents.archive",
+            "hosts.agents.restore",
             "hosts.bridge.check_in",
             "hosts.bridge_status",
             "hosts.enroll.complete",
@@ -17449,6 +17596,12 @@ export class AnxClient {
     }
     homeUnread(options = {}) {
         return this.invoke("home.unread", {}, options);
+    }
+    hostsAgentsArchive(pathParams, options = {}) {
+        return this.invoke("hosts.agents.archive", pathParams, options);
+    }
+    hostsAgentsRestore(pathParams, options = {}) {
+        return this.invoke("hosts.agents.restore", pathParams, options);
     }
     hostsBridgeCheckIn(pathParams, options = {}) {
         return this.invoke("hosts.bridge.check_in", pathParams, options);

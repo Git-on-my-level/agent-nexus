@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 289
+- Command count: 291
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -30,7 +30,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | git | 5 |
 | home | 2 |
 | hook | 1 |
-| host | 16 |
+| host | 18 |
 | inbox | 5 |
 | initiative | 2 |
 | integrations | 7 |
@@ -64,7 +64,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | exposed_read | 96 |
 | exposed_write | 82 |
-| gated_admin | 29 |
+| gated_admin | 31 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 11 |
 | unsupported_interactive | 13 |
@@ -78,7 +78,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- | --- |
 | standalone default | 178 | exposed_read + exposed_write + adapted |
 | hosted default | 70 | explicit read-only private-app allowlist |
-| gated | 42 | requires explicit admin/sensitive policy scope |
+| gated | 44 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
 | unsupported | 69 | not represented as direct MCP tools in v1 |
 
@@ -234,6 +234,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | home.read | home | POST | /home/read | exposed_write | ordinary home read-marker write |
 | home.unread | home | GET | /home/unread | exposed_read | home unread projection |
 | hook | hook | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
+| hosts.agents.archive | host | POST | /hosts/{host_id}/agents/{agent_name}/archive | gated_admin | human-only; archiving a persona revokes its credentials |
+| hosts.agents.restore | host | POST | /hosts/{host_id}/agents/{agent_name}/restore | gated_admin | human-only; restoring a persona re-enables a reserved identity |
 | hosts.bridge_status | host | POST | /hosts/bridge-status | exposed_read | bounded workspace-local host liveness and job coverage read |
 | hosts.bridge.check_in | host | POST | /hosts/{host_id}/bridge/check-in | unsupported_other | bridge check-in is host-signed infrastructure traffic |
 | hosts.enroll.approve | host | POST | /auth/hosts/enrollments/{enrollment_id}/approve | gated_admin | approving a host grants machine-level credentials |

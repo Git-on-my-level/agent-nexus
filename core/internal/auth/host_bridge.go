@@ -98,7 +98,7 @@ func (s *Store) CheckInHostBridge(ctx context.Context, id, signed string, in Bri
 		}
 	}
 	admitted, _ := json.Marshal(actorIDs)
-	rows, err := tx.QueryContext(ctx, `SELECT a.actor_id FROM json_each(?) selected CROSS JOIN agents a ON a.actor_id=selected.value JOIN host_agents ha ON ha.agent_id=a.id AND ha.host_id=? WHERE a.revoked_at IS NULL AND NOT EXISTS(SELECT 1 FROM host_exclusions hx WHERE hx.host_id=ha.host_id AND hx.name=ha.name)`, string(admitted), id)
+	rows, err := tx.QueryContext(ctx, `SELECT a.actor_id FROM json_each(?) selected CROSS JOIN agents a ON a.actor_id=selected.value JOIN host_agents ha ON ha.agent_id=a.id AND ha.host_id=? WHERE a.revoked_at IS NULL AND ha.archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM host_exclusions hx WHERE hx.host_id=ha.host_id AND hx.name=ha.name)`, string(admitted), id)
 	if err != nil {
 		return out, err
 	}
@@ -219,7 +219,7 @@ func (s *Store) HostBridgeStatus(ctx context.Context, ids []string) ([]BridgeSta
 		return nil, err
 	}
 	// This query starts at the explicit host IDs and the (host,actor,kind) PK.
-	rows, err = db.QueryContext(ctx, `SELECT h.id,j.actor_id,j.kind,j.enabled,j.ready,CASE WHEN ha.agent_id IS NOT NULL AND hx.name IS NULL THEN a.actor_id END FROM json_each(?) selected CROSS JOIN hosts h ON h.id=selected.value CROSS JOIN host_bridge_jobs j ON j.host_id=h.id AND j.actor_id IN (SELECT actor_id FROM host_bridge_jobs admitted WHERE admitted.host_id=h.id GROUP BY actor_id ORDER BY actor_id LIMIT 33) LEFT JOIN agents a ON a.actor_id=j.actor_id AND a.revoked_at IS NULL LEFT JOIN host_agents ha ON ha.agent_id=a.id AND ha.host_id=h.id LEFT JOIN host_exclusions hx ON hx.host_id=ha.host_id AND hx.name=ha.name ORDER BY h.id,j.actor_id,j.kind`, string(raw))
+	rows, err = db.QueryContext(ctx, `SELECT h.id,j.actor_id,j.kind,j.enabled,j.ready,CASE WHEN ha.agent_id IS NOT NULL AND ha.archived_at IS NULL AND hx.name IS NULL THEN a.actor_id END FROM json_each(?) selected CROSS JOIN hosts h ON h.id=selected.value CROSS JOIN host_bridge_jobs j ON j.host_id=h.id AND j.actor_id IN (SELECT actor_id FROM host_bridge_jobs admitted WHERE admitted.host_id=h.id GROUP BY actor_id ORDER BY actor_id LIMIT 33) LEFT JOIN agents a ON a.actor_id=j.actor_id AND a.revoked_at IS NULL LEFT JOIN host_agents ha ON ha.agent_id=a.id AND ha.host_id=h.id LEFT JOIN host_exclusions hx ON hx.host_id=ha.host_id AND hx.name=ha.name ORDER BY h.id,j.actor_id,j.kind`, string(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,7 @@ func (s *Store) HostBridgeStatus(ctx context.Context, ids []string) ([]BridgeSta
 // SQL fragment for a known host and actor; never derive wake coverage from the
 // mere existence of a host answer consumer.
 func wakePresenceSQL(host, actor string) string {
-	return `(SELECT p.expires_at FROM host_bridge_presence p JOIN host_bridge_jobs j ON j.host_id=p.host_id AND j.actor_id=` + actor + ` AND j.kind='wake' AND j.enabled=1 AND j.ready=1 WHERE p.host_id=` + host + ` AND NOT EXISTS(SELECT 1 FROM host_exclusions hx WHERE hx.host_id=p.host_id AND hx.name=ha.name))`
+	return `(SELECT p.expires_at FROM host_bridge_presence p JOIN host_bridge_jobs j ON j.host_id=p.host_id AND j.actor_id=` + actor + ` AND j.kind='wake' AND j.enabled=1 AND j.ready=1 WHERE p.host_id=` + host + ` AND ha.archived_at IS NULL AND NOT EXISTS(SELECT 1 FROM host_exclusions hx WHERE hx.host_id=p.host_id AND hx.name=ha.name))`
 }
 
 // ListHostSummaries is a bounded machine selector with no roster enrichment.

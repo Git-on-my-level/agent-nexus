@@ -67,7 +67,7 @@ type PresencePatch struct {
 	Note    *string
 	SetNote bool
 }
-type Identity struct{ AgentID, ActorID, HostID, HostSlug, Name, Handle, DisplayName, Kind, Adapter, RevokedAt, BridgeCheckedInAt, BridgeExpiresAt string }
+type Identity struct{ AgentID, ActorID, HostID, HostSlug, Name, Handle, DisplayName, Kind, Adapter, RevokedAt, BridgeCheckedInAt, BridgeExpiresAt, ArchivedAt, ArchivedReason, LastUsedAt string }
 type IdentitySource interface {
 	ResolveAgent(context.Context, string) (Identity, error)
 	ListAgents(context.Context) ([]Identity, error)

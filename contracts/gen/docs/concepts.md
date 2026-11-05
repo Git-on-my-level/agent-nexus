@@ -15,7 +15,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `22`
+- Commands: `24`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -28,6 +28,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `agents.me.get`
   - `agents.me.presence`
   - `agents.stream`
+  - `hosts.agents.archive`
+  - `hosts.agents.restore`
   - `hosts.bridge.check_in`
   - `hosts.bridge_status`
   - `hosts.get`
@@ -76,7 +78,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `auth`
 
-- Commands: `36`
+- Commands: `38`
 - Command IDs:
   - `actors.create`
   - `actors.list`
@@ -103,6 +105,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `auth.principals.list`
   - `auth.principals.revoke`
   - `auth.token`
+  - `hosts.agents.archive`
+  - `hosts.agents.restore`
   - `hosts.enroll.approve`
   - `hosts.enroll.complete`
   - `hosts.enroll.deny`
@@ -386,7 +390,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `hosts`
 
-- Commands: `24`
+- Commands: `26`
 - Command IDs:
   - `bridge.add`
   - `bridge.doctor`
@@ -396,6 +400,8 @@ Generated from `contracts/anx-openapi.yaml`.
   - `bridge.start`
   - `bridge.status`
   - `bridge.stop`
+  - `hosts.agents.archive`
+  - `hosts.agents.restore`
   - `hosts.bridge.check_in`
   - `hosts.bridge_status`
   - `hosts.enroll.approve`
