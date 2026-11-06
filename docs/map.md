@@ -241,8 +241,8 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1016  | web-ui/scripts/game-dev-studio-seed-data.mjs                                       |
 | 982   | web-ui/src/lib/brief.js                                                            |
 | 981   | cli/internal/app/loop_tier.go                                                      |
-| 973   | core/internal/primitives/watch_trends.go                                           |
 | 973   | web-ui/src/lib/components/decide/DecisionCard.svelte                               |
+| 966   | core/internal/primitives/watch_trends.go                                           |
 | 959   | core/internal/server/stream_handlers.go                                            |
 | 946   | core/cmd/anx-core/main.go                                                          |
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |

@@ -35,7 +35,7 @@ func approverActor() string {
 // condition is checked again here, so a second human who joins between
 // approval and completion cancels the sponsorship. Recording a sponsor grants
 // nothing by itself: every Trends request re-checks, live, that the reader is
-// still an active human (trendsAdmissionSQL).
+// still an active human (Watch Trends admission).
 func completeEnrollmentTx(ctx context.Context, tx Transaction, enrollmentID, hostID string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE host_enrollments SET status='completed',completed_host_id=? WHERE id=?`, hostID, enrollmentID); err != nil {
 		return err
