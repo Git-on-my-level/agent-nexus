@@ -441,6 +441,71 @@ test("number keys arm, then send; answering moves to the next", async ({
   expect(bodies[0]).toMatchObject({ response_text: "Hold a week" });
 });
 
+test("answering keeps the place once the answer lands and the brief drops it", async ({
+  page,
+  context,
+}) => {
+  const answered = new Set();
+  const bodies = await setup(context, {
+    briefRoute: (route) =>
+      json(route, {
+        ...brief,
+        decisions: brief.decisions.filter(
+          (d) => !answered.has(d.inbox_item_id),
+        ),
+        generated_at: new Date().toISOString(),
+      }),
+    respond: (route) => {
+      answered.add(
+        decodeURIComponent(
+          new URL(route.request().url()).pathname.split("/").at(-2),
+        ),
+      );
+      return json(route, { event: { id: "response-one" } }, 201);
+    },
+  });
+  // A clicked row puts `?item=` in the URL; a link can bring `?ref=`.
+  await page.goto(`${LIST}?ref=${encodeURIComponent(MERGE.ref)}`);
+  const pane = page.locator(
+    `[data-variant="pane"][data-decision-ref="${MERGE.ref}"]`,
+  );
+  await pane.locator('[data-decision-proposal="1"]').click();
+  // The row below the answered one, not the top of the list.
+  const next = page.locator('[data-decide-row="ask-95"][aria-current="true"]');
+  await expect(next).toBeVisible();
+  await expect(page).toHaveURL(/\?item=ask-95$/);
+  await flush(page);
+  await expect.poll(() => bodies.length).toBe(1);
+  // The committed answer re-reads the brief, which no longer has the row.
+  await expect.poll(() => answered.has(MERGE.inbox_item_id)).toBe(true);
+  await page.evaluate(async () => {
+    const { refreshBrief } = await import("/src/lib/briefStore.js");
+    await refreshBrief();
+  });
+  await expect(page.getByText("Decision not found.")).toHaveCount(0);
+  await expect(next).toBeVisible();
+  await expect(
+    page.locator(`[data-decide-row="${MERGE.inbox_item_id}"]`),
+  ).toHaveCount(0);
+});
+
+test("Undo from a linked row selects the restored decision", async ({
+  page,
+  context,
+}) => {
+  const bodies = await setup(context);
+  await page.goto(`${LIST}?item=${MERGE.inbox_item_id}`);
+  const pane = page.locator(
+    `[data-variant="pane"][data-decision-ref="${MERGE.ref}"]`,
+  );
+  await pane.locator('[data-decision-proposal="1"]').click();
+  await expect(page).toHaveURL(/\?item=ask-95$/);
+  await page.getByRole("button", { name: /undo/i }).click();
+  await expect(pane.locator('[data-decision-proposal="1"]')).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`\\?item=${MERGE.inbox_item_id}$`));
+  expect(bodies).toHaveLength(0);
+});
+
 test("a failed read shows a banner with Retry, never the raw body (I5)", async ({
   page,
   context,

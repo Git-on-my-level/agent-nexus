@@ -244,20 +244,37 @@
   }
 
   /**
+   * The row below `id` in the full order, else the one above, skipping rows
+   * already answered. Queuing an answer hides its row at once, so by the time
+   * the card reports it, `decisions` no longer holds it: walk `all` instead.
+   */
+  function nextAfter(id) {
+    const index = all.findIndex((row) => row.inboxItemId === id);
+    if (index < 0) return decisions[0] ?? null;
+    const waiting = (row) => decisions.includes(row);
+    return (
+      all.slice(index + 1).find(waiting) ??
+      all.slice(0, index).findLast(waiting) ??
+      null
+    );
+  }
+
+  /**
    * The row was answered: clear it and move to the one below. A PM answer
    * goes through the durable outbox rather than the undo toast, so its row
    * stays (showing its send status) until core confirms it.
    */
   function onAnswered(decision) {
-    if (decision.pmDecision) return;
+    if (!decision || decision.pmDecision) return;
     if (!wide) folded = new Set([...folded, decision.inboxItemId]);
-    const index = decisions.findIndex(
-      (row) => row.inboxItemId === decision.inboxItemId,
-    );
-    const next = decisions[index + 1] ?? decisions[index - 1] ?? null;
-    selectedId = next?.inboxItemId ?? "";
-    if (selectedParam)
-      void goto(itemHref(next ? selectedId : ""), {
+    selectedId = nextAfter(decision.inboxItemId)?.inboxItemId ?? "";
+    const next = selectedId;
+    // The URL still names the answered row (a clicked row's `?item=`, or a
+    // link's `?ref=`). Once its answer lands and the brief drops it, that
+    // target matches nothing and the page would fall to "Decision not
+    // found", so the URL follows the selection now.
+    if (requestedParam)
+      void goto(itemHref(next), {
         replaceState: true,
         keepFocus: true,
         noScroll: true,
@@ -273,6 +290,12 @@
       folded = unfolded;
     }
     selectedId = restored.itemId;
+    if (requestedParam)
+      void goto(itemHref(restored.itemId), {
+        replaceState: true,
+        keepFocus: true,
+        noScroll: true,
+      });
   }
 
   function openSubject() {
