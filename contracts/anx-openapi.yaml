@@ -6208,13 +6208,14 @@ paths:
         backlog and who raises the most asks. initiatives: promises kept, initiatives past their promise
         and work started vs finished. loops: loop runs, loops reporting on time and the most active agents.
         Each panel compares the current period with the one before it.
-        Readers whose current access scope denies no workspace resource receive unscoped aggregates.
-        For this check only, a human also counts as owner of private resources owned by agents on hosts
-        that human sponsored; this grants no item-level read and never runs from an agent to a human.
-        Every other reader receives a fixed 403 restricted_trends response. Eligibility is checked
-        fresh in the aggregate's read snapshot; there is no response or permission cache and no
-        special role. Transfers, grants and revocations apply on the next request. The 200-versus-403
-        outcome reveals whether any inaccessible resource exists, without identifying it.
+        Every active human principal receives unscoped aggregates, including counts and principal
+        rankings that cover other principals' private resources; this grants no item-level read.
+        A non-human reader receives unscoped aggregates only when its current access scope denies no
+        workspace resource; every other reader receives a fixed 403 restricted_trends response.
+        Eligibility is checked fresh in the aggregate's read snapshot; there is no response or
+        permission cache. Transfers, grants and revocations apply on the next request. For a
+        non-human reader, the 200-versus-403 outcome reveals whether any inaccessible resource
+        exists, without identifying it.
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: watch.trends

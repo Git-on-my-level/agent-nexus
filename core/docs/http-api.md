@@ -420,14 +420,15 @@ buckets,panels}`. It reads the previous and current period (daily buckets for
 run receipts; core runs no models and fetches nothing. Each record family is
 a capped indexed position page followed by bounded hydration. Eligibility joins
 cannot walk beyond the page to fill it; a full page remains truncated even when
-some records are no longer answerable. A fresh indexed access check in
-the same read snapshot admits the calculation only when the viewer's effective
-scope denies zero workspace resources; for this check alone a human also owns
-the private resources of agents on hosts they sponsored (issued the enrollment
-token for, or approved as the sole human), which grants no item read. No role grants eligibility and nothing is
-cached; transfers/grants/revocations apply on the next request. Otherwise the
-route returns fixed `403 restricted_trends`. The 200/403 status reveals whether
-any inaccessible resource exists (without identifying it). This residual is
+some records are no longer answerable. Every active human principal is
+admitted, so a person is never locked out of their own workspace's trends; the
+aggregates (including principal rankings) then cover other principals' private
+resources, which grants no item read. A non-human reader is admitted only when
+a fresh indexed access check in the same read snapshot finds that its effective
+scope denies zero workspace resources. Nothing is cached;
+transfers/grants/revocations apply on the next request. Otherwise the route
+returns fixed `403 restricted_trends`. For an agent, the 200/403 status reveals
+whether any inaccessible resource exists (without identifying it). This residual is
 explicit: board lookup error wording and legacy uncertain-series suppression
 already expose existence in narrower circumstances; Trends needs no guessed ref.
 Linked children are conservatively omitted from promise panels even after their
