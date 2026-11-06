@@ -93,6 +93,8 @@ func installWatchTrendPositions(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TRIGGER watch_trend_card_insert AFTER INSERT ON cards BEGIN ` + trendCardPositions(`FROM cards c WHERE c.id=NEW.id`) + ` END`,
 		`CREATE TRIGGER watch_trend_card_update AFTER UPDATE OF column_key,archived_at,trashed_at,created_at,updated_at ON cards BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('card','card_done') AND id=NEW.id; ` + trendCardPositions(`FROM cards c WHERE c.id=NEW.id`) + ` END`,
 		`CREATE TRIGGER watch_trend_card_delete AFTER DELETE ON cards BEGIN DELETE FROM watch_trend_positions WHERE kind IN ` + trendCardKinds + ` AND id=OLD.id; END`,
+		// A recreated backing thread keeps its id; its earlier asks count again.
+		`CREATE TRIGGER watch_trend_thread_insert AFTER INSERT ON threads BEGIN ` + trendEventPositions(`FROM events e WHERE e.thread_id=NEW.id AND e.type IN `+trendAskEventTypes) + ` END`,
 		`CREATE TRIGGER watch_trend_thread_delete AFTER DELETE ON threads BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('ask','answer','open_ask') AND id IN (SELECT e.id FROM events e WHERE e.thread_id=OLD.id AND e.type IN ` + trendAskEventTypes + `); END`,
 		`CREATE TRIGGER watch_trend_initiative_insert AFTER INSERT ON brief_initiatives BEGIN ` + trendInitiativePositions(`FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE bi.card_id=NEW.card_id`) + ` END`,
 		`CREATE TRIGGER watch_trend_initiative_update AFTER UPDATE ON brief_initiatives BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('promise_open','promise_closed','loop') AND id=NEW.card_id; ` + trendInitiativePositions(`FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE bi.card_id=NEW.card_id`) + ` END`,

@@ -3967,7 +3967,7 @@
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
     "../storage/usage_tracking.go:*Workspace:InitializeUsageTracking": "fa5492c7faf7d3945e23ebedfcf8b479d41446b07f75514dab0838f15c66ca8e",
     "../storage/watch_trend_days.go:installWatchTrendDays": "81e896ca8afa68e6c7633efb0a3ef3f39b2ce3a00dd5f326703f3bf30d13cd1a",
-    "../storage/watch_trend_positions.go:installWatchTrendPositions": "5873a6a9dbda644cb6142c1f54880978a523ef5fe37fb8d64661873994dbe2ae",
+    "../storage/watch_trend_positions.go:installWatchTrendPositions": "af6002326eceb9c46a502ae2bf9e2465cc27dc0da8724f6aa2b0837522b0b93d",
     "../storage/watch_trend_positions.go:trendCardPositions": "531df216c8a0b7ba8d962fd984dddd813d1b9dcbea45621b00545d2fc0580bdc",
     "../storage/watch_trend_positions.go:trendEventPositions": "a7f503281974a60f2efe9c7e5b94d4f200b354c89e5c2093a641a44d51d39649",
     "../storage/watch_trend_positions.go:trendInitiativePositions": "bde070cf0d4812b9528e2c9e5cd4864494d53c92b071b38d781bc3d829f99f1b",

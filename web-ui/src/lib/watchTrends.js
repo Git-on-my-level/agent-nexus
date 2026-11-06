@@ -462,11 +462,13 @@ export function trendsVerdict(groups, days = 30) {
     rest.push(`${plural(l.loop_runs.failed, "loop run")} failed to run`);
     actions.push({ key: "loops", label: "Check loops" });
   }
+  // Only the asks lead is a change over the range; the others are now-shares.
+  const over = lead
+    ? ` over the last ${days === 7 ? "week" : `${days} days`}`
+    : "";
   if (!lead && rest.length) lead = rest.shift();
   return {
-    lead: lead
-      ? `${sentence(lead).slice(0, -1)} over the last ${days === 7 ? "week" : `${days} days`}.`
-      : "",
+    lead: lead ? `${sentence(lead).slice(0, -1)}${over}.` : "",
     rest: sentence(joinClauses(rest)),
     actions,
   };

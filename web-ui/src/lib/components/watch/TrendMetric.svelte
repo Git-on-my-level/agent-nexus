@@ -42,7 +42,7 @@
 <div
   class="metric"
   data-trend={panel.id}
-  data-source="computed:watch_trends.{panel.id}"
+  data-source="computed:watch_trends.{panel.source ?? panel.id}"
 >
   <div class="min-w-0">
     <div class="label">{label}</div>

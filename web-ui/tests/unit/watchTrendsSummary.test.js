@@ -174,3 +174,12 @@ describe("trendsVerdict", () => {
     );
   });
 });
+
+it("does not call a current share a change over the range", () => {
+  expect(
+    trendsVerdict(
+      { loops: [{ id: "loop_health", unit: "percent", value: 80 }] },
+      30,
+    ).lead,
+  ).toBe("80% of loops are reporting on time.");
+});

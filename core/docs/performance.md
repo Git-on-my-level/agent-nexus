@@ -2543,8 +2543,10 @@ days through today. When a count family's capped page is full, one grouped
 primary-key range read over at most 2n days (60 at 30d, 182 at 90d) returns at
 most 2n bucket sums and fills only the buckets the page did not reach. Per
 request that is O(range days) per truncated family, independent of workspace
-size; untruncated families read nothing more. Write cost is one primary-key
-upsert per position change.
+size; untruncated families read nothing more. Write cost is one or two
+primary-key writes on `watch_trend_days` per position change (a re-key, such as
+a card edit moving `updated_at`, is a -1/+1 pair). Recreating a thread re-adds
+its ask positions; purging one removes them.
 
 The internal calculation retains bounded-history regression coverage. Backlog
 admits a capped history of asks before resolving their visible responses; a capped

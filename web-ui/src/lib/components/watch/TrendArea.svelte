@@ -61,6 +61,7 @@
     if (runs)
       out.loop_failed = {
         id: "loop_failed",
+        source: "loop_runs.failed",
         title: "Failed to run",
         unit: "count",
         direction: "down_good",
