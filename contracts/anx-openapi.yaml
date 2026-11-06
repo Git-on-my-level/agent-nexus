@@ -6223,7 +6223,7 @@ paths:
         Three indexed root-owner existence seeks establish full visibility before aggregate reads.
         Restricted responses are byte-invariant across hidden writes while any denial remains.
         The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped
-        indexed seeks over a single unpartitioned positions table. Scoped aggregates remain unsupported
+        indexed seeks over a single unpartitioned positions table, plus per-day counts for count series. Scoped aggregates remain unsupported
         because hidden contributors can change canonical derived state.
       x-anx-cli-path: watch trends
       x-anx-why: See trends over time that the current-state views cannot show.
@@ -16442,7 +16442,7 @@ components:
         direction: {type: string, enum: [up_good, down_good, neutral], description: Which way of moving is an improvement.}
         value: {type: number, nullable: true}
         previous: {type: number, nullable: true}
-        truncated: {type: boolean, description: A record cap was reached; null points mark history that was not read.}
+        truncated: {type: boolean, description: A record cap was reached and some history is still unknown; null points mark history that was not read. Count series fill capped history from per-day counts and are not truncated.}
         series:
           type: array
           items:

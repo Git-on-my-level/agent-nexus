@@ -549,7 +549,14 @@
       <SkeletonList rows={4} />
     {/if}
   {:else if tab === "trends"}
-    <TrendsView days={trendDays} />
+    <TrendsView
+      days={trendDays}
+      links={{
+        decide: workspaceHref("/decide"),
+        initiatives: workspaceHref("/watch"),
+        loops: workspaceHref("/watch?tab=loops"),
+      }}
+    />
   {:else if layout === "lanes"}
     <!-- The board reads the same brief and draws its own loading, error
          and empty states: Ungrouped cards can wait with no initiative yet. -->

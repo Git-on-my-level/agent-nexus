@@ -43,4 +43,8 @@ var recentMigrations = []migration{
 		`UPDATE agents SET metadata_json=json_set(COALESCE(NULLIF(metadata_json,''),'{}'),'$.principal_kind','human') WHERE NULLIF(json_extract(metadata_json,'$.principal_kind'),'') IS NULL AND EXISTS(SELECT 1 FROM passkey_credentials pc WHERE pc.agent_id=agents.id)`,
 		`CREATE INDEX IF NOT EXISTS idx_agents_active_humans ON agents(actor_id) WHERE revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human'`,
 	}},
+	// Watch trends count series read per-day totals (watch_trend_days.go)
+	// instead of going unknown once a family's capped page fills. Rebuilding
+	// positions adds run_failed and installs the day counts.
+	{Version: 135, AfterApply: installWatchTrendPositions},
 }

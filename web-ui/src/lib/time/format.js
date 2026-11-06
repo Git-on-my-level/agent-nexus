@@ -273,3 +273,21 @@ export function datetimeLocalToIso(local) {
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString();
 }
+
+/**
+ * A UTC calendar day as "Oct 8": for buckets core cuts on UTC midnight, which
+ * the reader's own time zone would shift to the day before west of UTC.
+ * Empty for unparseable input.
+ *
+ * @param {string|number|Date|null|undefined} value
+ * @param {{locale?: string}} [options]
+ */
+export function formatUtcDay(value, { locale = "en-US" } = {}) {
+  const at = instantMs(value);
+  if (at == null) return "";
+  return new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(at));
+}

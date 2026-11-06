@@ -44,8 +44,10 @@ type trendWindow struct {
 	periodN int
 }
 
+// newTrendWindow covers whole UTC days through the end of today (so today so
+// far is the last bucket); bucket edges match watch_trend_days.
 func newTrendWindow(days int, now time.Time) trendWindow {
-	w := trendWindow{end: now.UTC(), step: 24 * time.Hour, n: days}
+	w := trendWindow{end: now.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour), step: 24 * time.Hour, n: days}
 	if days > 30 {
 		w.step, w.n = 7*24*time.Hour, (days+6)/7
 	}
@@ -114,7 +116,8 @@ type trendLoop struct {
 
 type trendsBuild struct {
 	*briefBuild
-	w trendWindow
+	w    trendWindow
+	days map[string][]float64 // per-bucket day counts by series key (watch_trends_days.go)
 }
 
 // WatchTrends returns one group of watch_trends.v1 over days (7, 30 or 90).
@@ -205,6 +208,9 @@ func (b *trendsBuild) decisionPanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	open, openTruncated, err := b.trendOpenAsks()
+	if err == nil {
+		err = b.loadDays(map[string]time.Time{"opened": horizon, "answered": answersHorizon})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -230,6 +236,9 @@ func (b *trendsBuild) initiativePanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	done, doneHorizon, err := b.trendDone()
+	if err == nil {
+		err = b.loadDays(map[string]time.Time{"started": createdHorizon, "finished": doneHorizon})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +255,9 @@ func (b *trendsBuild) loopPanels() ([]map[string]any, error) {
 		return nil, err
 	}
 	loops, loopsTruncated, err := b.trendLoops()
+	if err == nil {
+		err = b.loadDays(map[string]time.Time{"runs": horizon, "failed": horizon})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +590,7 @@ func (b *trendsBuild) counts(key, label string, times []time.Time, horizon time.
 			*s.points[i]++
 		}
 	}
-	return s
+	return b.fillDays(s)
 }
 
 // periodSum totals a series over one period (0 previous, 1 current); nil when
@@ -595,6 +607,7 @@ func (b *trendsBuild) periodSum(s trendSeries, period int) *float64 {
 }
 
 func (b *trendsBuild) panel(id, title, unit, direction string, value, previous *float64, truncated bool, series ...trendSeries) map[string]any {
+	truncated = truncated && (len(series) == 0 || b.seriesUnknown(series))
 	out := []map[string]any{}
 	for _, s := range series {
 		seriesUnit := unit
@@ -892,75 +905,4 @@ func (b *trendsBuild) agentRunsPanel(runs []trendRun, horizon time.Time) (map[st
 		events = append(events, trendActorEvent{r.actor, r.at})
 	}
 	return b.rankedPanel("agent_runs", "Most active agents", "neutral", events, horizon)
-}
-
-type trendActorEvent struct {
-	actor string
-	at    time.Time
-}
-
-// rankedPanel counts events per principal in each period and keeps the top
-// trendsSourceRows by the current period. previous is null when the read did
-// not reach back through the whole previous period.
-func (b *trendsBuild) rankedPanel(id, title, direction string, events []trendActorEvent, horizon time.Time) (map[string]any, error) {
-	type tally struct{ current, previous float64 }
-	byActor := map[string]*tally{}
-	for _, e := range events {
-		if e.actor == "" {
-			continue
-		}
-		i := b.w.bucket(e.at)
-		if i < 0 {
-			continue
-		}
-		if byActor[e.actor] == nil {
-			byActor[e.actor] = &tally{}
-		}
-		if i >= b.w.n {
-			byActor[e.actor].current++
-		} else {
-			byActor[e.actor].previous++
-		}
-	}
-	ids := []string{}
-	for id, t := range byActor {
-		if t.current > 0 {
-			ids = append(ids, id)
-		}
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		if byActor[ids[i]].current != byActor[ids[j]].current {
-			return byActor[ids[i]].current > byActor[ids[j]].current
-		}
-		return ids[i] < ids[j]
-	})
-	if len(ids) > trendsSourceRows {
-		ids = ids[:trendsSourceRows]
-	}
-	// A ranking from a period the read did not cover in full would present an
-	// undercount as exact; the panel says truncated instead.
-	if !b.w.complete(b.w.n, horizon) {
-		ids = nil
-	}
-	for _, id := range ids {
-		b.actors[id] = true
-	}
-	if err := b.resolveActors(); err != nil {
-		return nil, err
-	}
-	rows := []map[string]any{}
-	for _, id := range ids {
-		principal := map[string]any{"id": id, "display": id}
-		if p, ok := b.display[id]; ok {
-			principal = p
-		}
-		row := map[string]any{"principal": principal, "value": byActor[id].current, "previous": byActor[id].previous}
-		if !b.w.complete(0, horizon) {
-			row["previous"] = nil
-		}
-		rows = append(rows, row)
-	}
-	p := b.panel(id, title, "count", direction, nil, nil, !horizon.IsZero())
-	p["rows"] = rows
-	return p, nil
 }

@@ -3,8 +3,9 @@ import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type:
 import { visualReportExample } from "../../src/lib/fixtures/visualReportExample.js";
 
 /**
- * Watch → Trends renders three `watch_trends.v1` groups: a card per panel
- * with its value, change, takeaway and sparkline, a 7/30/90-day toggle, and
+ * Watch → Trends renders three `watch_trends.v1` groups as a health summary:
+ * one sentence on the workspace, an area per group with its status, main
+ * chart and metric rows, the ranked people panels, a 7/30/90-day toggle, and
  * a retry (never a spinner for ever) when one group fails.
  */
 const ACTOR = "actor-watch-trends-e2e";
@@ -36,7 +37,11 @@ function trends(group, days) {
     generated_at: new Date().toISOString(),
     range_days: days,
     bucket: days === 90 ? "week" : "day",
-    buckets: [],
+    buckets: Array.from({ length: n }, (_, i) => {
+      const step = (days === 90 ? 7 : 1) * 86400000;
+      const today = Math.floor(Date.now() / 86400000) * 86400000;
+      return new Date(today - (n - 1 - i) * step).toISOString();
+    }),
   };
   const panel = (extra) => ({ truncated: false, rows: [], ...extra });
   const panels = {
@@ -267,30 +272,36 @@ for (const [name, viewport] of [
     await page.goto(WATCH);
     await page.locator('[data-watch-tab="trends"]').click();
     await expect(page).toHaveURL(/tab=trends/);
-    const card = page.locator('[data-trend="answer_time"]');
-    await expect(card).toBeVisible();
-    await expect(card.locator("[data-trend-value]")).toHaveText("2.3 h");
-    await expect(card.locator("[data-trend-takeaway]")).toHaveText(
-      "Answer time up 2.3× vs the previous 30 days, now 2.3 h.",
+    const summary = page.locator("[data-trend-summary]");
+    await expect(summary).toContainText(
+      "Open asks rose from 9 to 23 over the last 30 days.",
     );
+    await expect(summary).toContainText("Answers got slower (2.3 h typical)");
     await expect(
-      page.locator('[data-trend="past_promise"] [data-trend-takeaway]'),
-    ).toHaveText("24 of 32 initiatives are past their promise, up 25 pts.");
+      summary.locator('[data-trend-action="decide"]'),
+    ).toHaveAttribute("href", /\/decide$/);
+    const wait = page.locator('[data-trend="answer_time"]');
+    await expect(wait.locator("[data-trend-value]")).toHaveText("2.3 h");
+    await expect(wait.locator("[data-trend-delta]")).toHaveText("▲ 2.3×");
     await expect(
-      page.locator('[data-trend="loop_runs"] [data-trend-partial]'),
-    ).toBeVisible();
+      page.locator('[data-trend-group="decisions"] [data-trend-verdict]'),
+    ).toHaveText("Backlog growing");
+    // Runs were capped: the area totals the days that were read, once.
+    const loops = page.locator('[data-trend-group="loops"]');
+    await expect(loops.locator("[data-trend-takeaway]")).toContainText(
+      "in the last 20 days",
+    );
+    await expect(loops.locator("[data-trend-unread]")).toBeVisible();
+    await expect(page.locator('[data-trend="ask_sources"] li')).toHaveCount(3);
     expect(seen.sort()).toEqual(["decisions:30", "initiatives:30", "loops:30"]);
-    // Charts stack one per row at full width.
-    const cards = page.locator('[data-trend-group="decisions"] [data-trend]');
+    // Areas sit side by side on a wide screen and stack on a phone.
+    const areas = page.locator("[data-trend-group]");
     const [first, second] = [
-      await cards.nth(0).boundingBox(),
-      await cards.nth(1).boundingBox(),
+      await areas.nth(0).boundingBox(),
+      await areas.nth(1).boundingBox(),
     ];
-    const group = await page
-      .locator('[data-trend-group="decisions"]')
-      .boundingBox();
-    expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
-    expect(Math.abs(first.width - group.width)).toBeLessThanOrEqual(1);
+    if (name === "desktop") expect(second.y).toBeLessThan(first.y + 1);
+    else expect(second.y).toBeGreaterThanOrEqual(first.y + first.height);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth + 1,
@@ -322,9 +333,9 @@ test("the period toggle reads again for the chosen range", async ({
     "true",
   );
   await expect.poll(() => seen.filter((s) => s.endsWith(":7")).length).toBe(3);
-  await expect(
-    page.locator('[data-trend="answer_time"] [data-trend-takeaway]'),
-  ).toContainText("previous week");
+  await expect(page.locator("[data-trend-summary]")).toContainText(
+    "over the last week",
+  );
 });
 
 test("a failed group offers a retry and leaves the others", async ({

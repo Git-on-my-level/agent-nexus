@@ -6,6 +6,8 @@
  * "not enough history" rather than guessing when either is unknown.
  */
 
+import { formatUtcDay } from "$lib/time/format.js";
+
 export const TREND_RANGES = Object.freeze([7, 30, 90]);
 export const TREND_GROUPS = Object.freeze([
   { key: "decisions", label: "Decisions" },
@@ -266,4 +268,206 @@ export function trendChartLabel(panel) {
     )
     .join("; ");
   return `${panel?.title ?? ""}: ${series}`;
+}
+
+// --- Health summary (Watch → Trends layout) ---
+
+/** The series a count panel's value totals. */
+const VALUE_SERIES = Object.freeze({
+  asks_flow: "answered",
+  work_flow: "finished",
+  loop_runs: "runs",
+  loop_failed: "failed",
+});
+
+const seriesPoints = (panel, key) =>
+  (panel?.series ?? []).find((s) => s.key === key)?.points ?? [];
+
+/** How many of the most recent buckets have a known value. */
+export function knownTail(points = []) {
+  let n = 0;
+  for (let i = points.length - 1; i >= 0 && isNumber(points[i]); i--) n++;
+  return n;
+}
+
+const span = (n, bucket) =>
+  `${n} ${bucket === "week" ? (n === 1 ? "week" : "weeks") : n === 1 ? "day" : "days"}`;
+
+/**
+ * What a panel's headline shows. A count panel whose older history could not
+ * be read shows the total over the buckets that were, and says over how long,
+ * rather than a dash.
+ *
+ * @returns {{ text: string, delta: ReturnType<typeof trendDelta>, partial: string }}
+ */
+export function panelReading(panel, bucket = "day") {
+  if (!panel) return { text: "—", delta: null, partial: "" };
+  if (isNumber(panel.value))
+    return {
+      text: formatTrendValue(panel.unit, panel.value),
+      delta: trendDelta(panel),
+      partial: "",
+    };
+  const key = VALUE_SERIES[panel.id];
+  const points = key ? seriesPoints(panel, key) : [];
+  const known = knownTail(points);
+  if (known > 0 && known < points.length) {
+    const total = points.slice(-known).reduce((sum, v) => sum + v, 0);
+    return {
+      text: formatTrendValue("count", total),
+      delta: null,
+      partial: `last ${span(known, bucket)}`,
+    };
+  }
+  return { text: "—", delta: null, partial: "" };
+}
+
+/** "Oct 8"; weekly buckets read "Week of Oct 8". */
+export function bucketLabel(iso, bucket = "day") {
+  const day = formatUtcDay(iso);
+  return day && bucket === "week" ? `Week of ${day}` : day;
+}
+
+const byId = (panels) =>
+  Object.fromEntries((panels ?? []).map((p) => [p.id, p]));
+
+/**
+ * One area's status pill: "warn" when it is getting worse, "ok" when it is
+ * holding, "none" when there is not enough history to say.
+ *
+ * @returns {{ tone: "warn" | "ok" | "none", label: string }}
+ */
+export function areaStatus(group, panels) {
+  const p = byId(panels);
+  const none = { tone: "none", label: "Not enough history" };
+  if (group === "decisions") {
+    const backlog = p.ask_backlog;
+    if (isNumber(backlog?.value) && isNumber(backlog?.previous)) {
+      if (backlog.value > backlog.previous)
+        return { tone: "warn", label: "Backlog growing" };
+      return {
+        tone: "ok",
+        label:
+          backlog.value < backlog.previous ? "Backlog shrinking" : "Steady",
+      };
+    }
+    const flow = p.asks_flow;
+    if (isNumber(flow?.raised) && isNumber(flow?.value))
+      return flow.raised > flow.value
+        ? { tone: "warn", label: "More asks than answers" }
+        : { tone: "ok", label: "Keeping up" };
+    return none;
+  }
+  if (group === "initiatives") {
+    const past = p.past_promise;
+    const kept = trendDelta(p.promises ?? {});
+    if (isNumber(past?.value) && isNumber(past?.previous))
+      return past.value > past.previous || kept?.tone === "bad"
+        ? { tone: "warn", label: "Slipping" }
+        : { tone: "ok", label: "Holding" };
+    if (kept)
+      return kept.tone === "bad"
+        ? { tone: "warn", label: "Slipping" }
+        : { tone: "ok", label: "Holding" };
+    const work = p.work_flow;
+    if (isNumber(work?.started) && isNumber(work?.value))
+      return work.started > work.value
+        ? { tone: "warn", label: "Starting more than finishing" }
+        : { tone: "ok", label: "Holding" };
+    return none;
+  }
+  if (group === "loops") {
+    const health = p.loop_health;
+    const runs = p.loop_runs;
+    if (isNumber(health?.value) && health.value < 100)
+      return { tone: "warn", label: `${Math.round(health.value)}% on time` };
+    if (isNumber(runs?.failed) && runs.failed > 0)
+      return { tone: "warn", label: `${plural(runs.failed, "failed run")}` };
+    if (isNumber(health?.value) || isNumber(runs?.value))
+      return { tone: "ok", label: "Healthy" };
+    return none;
+  }
+  return none;
+}
+
+function joinClauses(clauses) {
+  if (clauses.length <= 1) return clauses[0] ?? "";
+  return `${clauses.slice(0, -1).join(", ")} and ${clauses.at(-1)}`;
+}
+
+const sentence = (text) =>
+  text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}.` : "";
+
+/**
+ * The workspace in a sentence or two, from the numbers core returned, plus
+ * the follow-ups worth a click. Groups still loading or unavailable are left
+ * out; nothing is said without a number behind it.
+ *
+ * @param {Record<string, any[] | undefined>} groups panels by group key
+ * @returns {{ lead: string, rest: string, actions: { key: string, label: string }[] }}
+ */
+export function trendsVerdict(groups, days = 30) {
+  const d = byId(groups?.decisions);
+  const i = byId(groups?.initiatives);
+  const l = byId(groups?.loops);
+  let lead = "";
+  const rest = [];
+  const actions = [];
+
+  const backlog = d.ask_backlog;
+  const flow = d.asks_flow;
+  if (
+    isNumber(backlog?.value) &&
+    isNumber(backlog?.previous) &&
+    backlog.value !== backlog.previous
+  )
+    lead = `open asks ${backlog.value > backlog.previous ? "rose" : "fell"} from ${formatTrendValue("count", backlog.previous)} to ${formatTrendValue("count", backlog.value)}`;
+  else if (isNumber(flow?.raised) && isNumber(flow?.value))
+    lead =
+      flow.raised > flow.value
+        ? `asks are outpacing answers: ${formatTrendValue("count", flow.raised)} raised, ${formatTrendValue("count", flow.value)} answered`
+        : `answers are keeping up: ${formatTrendValue("count", flow.value)} answered, ${formatTrendValue("count", flow.raised)} raised`;
+  if (isNumber(backlog?.value) && backlog.value > 0)
+    actions.push({
+      key: "decide",
+      label: `Answer ${plural(backlog.value, "open ask")}`,
+    });
+
+  const wait = trendDelta(d.answer_time ?? {});
+  if (wait && wait.tone !== "flat")
+    rest.push(
+      `answers got ${wait.tone === "good" ? "faster" : "slower"} (${formatDuration(d.answer_time.value)} typical)`,
+    );
+  if (isNumber(i.promises?.value))
+    rest.push(
+      `${formatTrendValue("percent", i.promises.value)} of promises were kept`,
+    );
+  if (isNumber(i.past_promise?.past) && i.past_promise.past > 0) {
+    rest.push(
+      `${formatTrendValue("count", i.past_promise.past)} of ${formatTrendValue("count", i.past_promise.total)} initiatives are past their promise`,
+    );
+    actions.push({
+      key: "initiatives",
+      label: "See initiatives past their promise",
+    });
+  }
+  const health = l.loop_health;
+  if (isNumber(health?.value)) {
+    rest.push(
+      `${formatTrendValue("percent", health.value)} of loops are reporting on time`,
+    );
+    if (health.value < 100)
+      actions.push({ key: "loops", label: "Check late loops" });
+  } else if (isNumber(l.loop_runs?.failed) && l.loop_runs.failed > 0) {
+    rest.push(`${plural(l.loop_runs.failed, "loop run")} failed to run`);
+    actions.push({ key: "loops", label: "Check loops" });
+  }
+  if (!lead && rest.length) lead = rest.shift();
+  return {
+    lead: lead
+      ? `${sentence(lead).slice(0, -1)} over the last ${days === 7 ? "week" : `${days} days`}.`
+      : "",
+    rest: sentence(joinClauses(rest)),
+    actions,
+  };
 }
