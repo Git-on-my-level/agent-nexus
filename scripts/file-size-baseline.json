@@ -16,7 +16,7 @@
   "core/internal/primitives/curation_store.go": 813,
   "core/internal/primitives/derived_store.go": 1197,
   "core/internal/primitives/topics_store.go": 1315,
-  "core/internal/primitives/watch_trends.go": 973,
+  "core/internal/primitives/watch_trends.go": 966,
   "core/internal/server/handler.go": 2314,
   "core/internal/server/report_handlers.go": 837,
   "core/internal/server/stream_handlers.go": 959,

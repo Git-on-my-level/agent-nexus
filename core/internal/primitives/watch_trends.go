@@ -118,34 +118,27 @@ type trendsBuild struct {
 }
 
 // WatchTrends returns one group of watch_trends.v1 over days (7, 30 or 90).
-// Scoped callers must first pass trendsAdmissionSQL in the calculation's read
-// snapshot (no root denied, delegated roots excepted) or the read is rejected.
+// Scoped callers must be an active human or pass trendsAdmissionSQL in the
+// calculation's read snapshot, or the read is rejected.
 func (s *Store) WatchTrends(ctx context.Context, reader BriefReader, group string, days int, now time.Time) (map[string]any, error) {
 	// A separate callback could hide contributors beyond the canonical scope.
 	if reader.Visible != nil {
 		return nil, ErrForbidden
 	}
 	if scope, scoped := accessScopeFrom(ctx); scoped {
-		// Probe canonical roots, not descendants: without a denied root there
-		// cannot be a denied descendant. Root-owner primary-key range seeks
-		// (trendsAdmissionSQL; a human also owns their delegated agents' roots)
-		// stay independent of the number of hidden resources. Pin proof and
+		// Every active human is admitted; an agent must have no denied root
+		// (trendsAdmit; canonical roots only, independent of the number of
+		// hidden resources). Pin proof and
 		// calculation to one read snapshot so a concurrent transfer cannot
 		// invalidate admission midway. Skip ordinary page policy preparation.
-		q, args := trendsAdmissionSQL(scope)
 		read, finish, err := s.db.PinReads(resourceaccess.WithoutPolicy(ctx), func(c context.Context, db resourceaccess.QueryRower) (context.Context, error) {
-			var active bool
-			var ledger int
-			if err := db.QueryRowContext(c, q, args...).Scan(&active, &ledger); err != nil {
+			if err := trendsAdmit(c, db, scope); err != nil {
 				return c, err
-			}
-			if active || ledger < 1 {
-				return c, ErrForbidden
 			}
 			if hook, ok := c.Value(watchTrendsProofHookKey{}).(func(context.Context)); ok {
 				hook(c)
 			}
-			// Admitted: no denied root except the reader's delegated agents'. Only
+			// Admitted: an active human, or no denied root. Only
 			// this calculation may use unscoped relations; no capability escapes.
 			return resourceaccess.WithoutPolicy(context.WithValue(c, accessScopeKey{}, struct{}{})), nil
 		})

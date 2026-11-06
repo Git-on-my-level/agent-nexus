@@ -4,6 +4,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"context"
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,7 @@ func TestWatchTrendsRouteRequiresFullVisibility(t *testing.T) {
 	db := env.workspace.DB()
 	store := env.primitiveStore.(*primitives.Store)
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "trends-owner", "trends-owner-actor", "trends-owner", "trends-owner-token")
-	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "trends-stranger", "trends-stranger-actor", "trends-stranger", "trends-stranger-token")
+	stranger := seedAgentReaderForTrendsTest(t, ctx, db, "trends-stranger", "trends-stranger-token")
 	privateBoard, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Private"})
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +107,7 @@ func testWatchTrendsMechanismBudget(t *testing.T, mechanism string) {
 	store := env.primitiveStore.(*primitives.Store)
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "perf-owner", "owner", "perf-owner", "perf-owner-token")
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "perf-stranger", "stranger", "perf-stranger", "perf-stranger-token")
+	demoteToAgentForTrendsTest(t, ctx, db, stranger.AgentID) // humans are always admitted
 	board, err := store.CreateBoard(ctx, "owner", map[string]any{"title": "Public", "role": "initiatives"})
 	if err != nil {
 		t.Fatal(err)
@@ -257,7 +259,7 @@ func TestWatchTrendsRestrictionIgnoresHiddenWrites(t *testing.T) {
 	db := env.workspace.DB()
 	store := env.primitiveStore.(*primitives.Store)
 	owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "cache-owner", "cache-owner-actor", "cache-owner", "cache-owner-token")
-	stranger := seedHumanPrincipalForLockoutTest(t, ctx, db, "cache-stranger", "cache-stranger-actor", "cache-stranger", "cache-stranger-token")
+	stranger := seedAgentReaderForTrendsTest(t, ctx, db, "cache-stranger", "cache-stranger-token")
 	public, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Public"})
 	if err != nil {
 		t.Fatal(err)
@@ -313,8 +315,8 @@ func TestWatchTrendsHTTPTransfersTakeEffectWithinWindow(t *testing.T) {
 			ctx := context.Background()
 			db := env.workspace.DB()
 			store := env.primitiveStore.(*primitives.Store)
-			owner := seedHumanPrincipalForLockoutTest(t, ctx, db, "transfer-owner", "transfer-owner-actor", "transfer-owner", "transfer-owner-token")
-			successor := seedHumanPrincipalForLockoutTest(t, ctx, db, "transfer-new", "transfer-new-actor", "transfer-new", "transfer-new-token")
+			owner := seedAgentReaderForTrendsTest(t, ctx, db, "transfer-owner", "transfer-owner-token")
+			successor := seedAgentReaderForTrendsTest(t, ctx, db, "transfer-new", "transfer-new-token")
 			board, err := store.CreateBoard(ctx, owner.ActorID, map[string]any{"title": "Private", "role": "initiatives"})
 			if err != nil {
 				t.Fatal(err)
@@ -361,5 +363,25 @@ func TestWatchTrendsHTTPTransfersTakeEffectWithinWindow(t *testing.T) {
 				trendsResponseBody(t, url, successor.AccessToken, http.StatusOK)
 			}
 		})
+	}
+}
+
+// seedAgentReaderForTrendsTest seeds an authenticated non-human principal.
+// Every active human is admitted to Trends, so readers that must be refused
+// for hidden roots are agents.
+func seedAgentReaderForTrendsTest(t *testing.T, ctx context.Context, db *sql.DB, name, token string) lockoutPrincipalSeed {
+	t.Helper()
+	seed := seedHumanPrincipalForLockoutTest(t, ctx, db, name, name, name, token)
+	demoteToAgentForTrendsTest(t, ctx, db, seed.AgentID)
+	return seed
+}
+
+func demoteToAgentForTrendsTest(t *testing.T, ctx context.Context, db *sql.DB, agentID string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx, `DELETE FROM passkey_credentials WHERE agent_id=?`, agentID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE agents SET metadata_json='{"principal_kind":"agent","auth_method":"public_key"}' WHERE id=?`, agentID); err != nil {
+		t.Fatal(err)
 	}
 }
