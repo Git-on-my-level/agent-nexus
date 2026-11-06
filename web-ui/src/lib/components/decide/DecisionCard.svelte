@@ -195,6 +195,9 @@
   function send(text, outcome = "answered") {
     const body = String(text ?? "").trim();
     if (!body || answered) return;
+    // Queuing hides the row, so a parent passing `decision={selected}` hands
+    // this card null before the call returns. Tell it which one was answered.
+    const answeredDecision = decision;
     // Core wakes only an agent requester; a human or unknown-kind requester
     // reads the answer from their asks, so "original" would be a 409 dead end.
     const notifyMode =
@@ -212,12 +215,13 @@
     });
     replying = false;
     pinned = false;
-    onAnswered?.(decision);
+    onAnswered?.(answeredDecision);
   }
 
   async function choose(proposal, index) {
     if (pmAnswer) {
       saveError = "";
+      const answeredDecision = decision;
       try {
         // Persisted before it is sent; a storage failure stops the send.
         await enqueuePmDecisionAnswer({
@@ -231,7 +235,7 @@
           preview: proposal,
         });
         pmSent = true;
-        onAnswered?.(decision);
+        onAnswered?.(answeredDecision);
       } catch {
         saveError =
           "Couldn’t save your answer on this device, so it was not sent.";
