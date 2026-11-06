@@ -14,7 +14,12 @@ import (
 // authorization.
 const trendUpsert = ` ON CONFLICT(kind,id) DO UPDATE SET at_key=excluded.at_key,card_id=excluded.card_id;`
 const trendEventTypes = `('human_attention_requested','human_attention_responded','run_recorded','card_moved')`
-const trendEventKinds = `('ask','answer','run','open_ask','done_event')`
+const trendEventKinds = `('ask','answer','run','run_failed','open_ask','done_event')`
+
+// Asks and answers count only while their thread exists (purging a thread
+// keeps its events), matching the answerable-ask join hydration applies.
+const trendAskEventTypes = `('human_attention_requested','human_attention_responded')`
+const trendAskThreadExists = `EXISTS(SELECT 1 FROM threads t WHERE t.id=e.thread_id)`
 const trendCardKinds = `('card','card_done','promise_open','promise_closed','loop')`
 
 func trendEventPositions(from string) string {
@@ -22,10 +27,13 @@ func trendEventPositions(from string) string {
  CASE e.type WHEN 'human_attention_requested' THEN 'ask' WHEN 'human_attention_responded' THEN 'answer' WHEN 'card_moved' THEN 'done_event' ELSE 'run' END,
  e.id,anx_timestamp_key(e.ts),CASE WHEN e.type='card_moved' THEN COALESCE(json_extract(e.payload_json,'$.payload.card_id'),'') ELSE '' END ` + from + `
  AND e.type IN ` + trendEventTypes + ` AND COALESCE(e.trashed_at,'')=''
- AND (e.type<>'card_moved' OR (json_extract(e.payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(e.payload_json,'$.payload.from_column_key'),'')<>'done'))` + trendUpsert +
+ AND (e.type<>'card_moved' OR (json_extract(e.payload_json,'$.payload.column_key')='done' AND COALESCE(json_extract(e.payload_json,'$.payload.from_column_key'),'')<>'done'))
+ AND (e.type NOT IN ` + trendAskEventTypes + ` OR ` + trendAskThreadExists + `)` + trendUpsert +
 		// Backlog candidates include resolved asks; open state is derived at
 		// read time from the resolutions visible in the calculation snapshot.
-		`INSERT INTO watch_trend_positions(kind,id,at_key) SELECT 'open_ask',e.id,anx_timestamp_key(e.ts) ` + from + ` AND e.type='human_attention_requested' AND COALESCE(e.trashed_at,'')=''` + trendUpsert
+		`INSERT INTO watch_trend_positions(kind,id,at_key) SELECT 'open_ask',e.id,anx_timestamp_key(e.ts) ` + from + ` AND e.type='human_attention_requested' AND COALESCE(e.trashed_at,'')='' AND ` + trendAskThreadExists + trendUpsert +
+		// Runs that failed to run (infra_error), counted per day alongside runs.
+		`INSERT INTO watch_trend_positions(kind,id,at_key) SELECT 'run_failed',e.id,anx_timestamp_key(e.ts) ` + from + ` AND e.type='run_recorded' AND COALESCE(e.trashed_at,'')='' AND json_extract(e.payload_json,'$.payload.outcome')='infra_error'` + trendUpsert
 }
 
 func trendCardPositions(from string) string {
@@ -39,7 +47,7 @@ func trendInitiativePositions(from string) string {
 }
 
 func installWatchTrendPositions(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range []string{"events", "cards", "brief_initiatives"} {
+	for _, table := range []string{"events", "cards", "brief_initiatives", "threads"} {
 		exists, err := sqliteTableExists(ctx, tx, table)
 		if err != nil || !exists {
 			return err
@@ -85,6 +93,9 @@ func installWatchTrendPositions(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TRIGGER watch_trend_card_insert AFTER INSERT ON cards BEGIN ` + trendCardPositions(`FROM cards c WHERE c.id=NEW.id`) + ` END`,
 		`CREATE TRIGGER watch_trend_card_update AFTER UPDATE OF column_key,archived_at,trashed_at,created_at,updated_at ON cards BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('card','card_done') AND id=NEW.id; ` + trendCardPositions(`FROM cards c WHERE c.id=NEW.id`) + ` END`,
 		`CREATE TRIGGER watch_trend_card_delete AFTER DELETE ON cards BEGIN DELETE FROM watch_trend_positions WHERE kind IN ` + trendCardKinds + ` AND id=OLD.id; END`,
+		// A recreated backing thread keeps its id; its earlier asks count again.
+		`CREATE TRIGGER watch_trend_thread_insert AFTER INSERT ON threads BEGIN ` + trendEventPositions(`FROM events e WHERE e.thread_id=NEW.id AND e.type IN `+trendAskEventTypes) + ` END`,
+		`CREATE TRIGGER watch_trend_thread_delete AFTER DELETE ON threads BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('ask','answer','open_ask') AND id IN (SELECT e.id FROM events e WHERE e.thread_id=OLD.id AND e.type IN ` + trendAskEventTypes + `); END`,
 		`CREATE TRIGGER watch_trend_initiative_insert AFTER INSERT ON brief_initiatives BEGIN ` + trendInitiativePositions(`FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE bi.card_id=NEW.card_id`) + ` END`,
 		`CREATE TRIGGER watch_trend_initiative_update AFTER UPDATE ON brief_initiatives BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('promise_open','promise_closed','loop') AND id=NEW.card_id; ` + trendInitiativePositions(`FROM brief_initiatives bi JOIN cards c ON c.id=bi.card_id WHERE bi.card_id=NEW.card_id`) + ` END`,
 		`CREATE TRIGGER watch_trend_initiative_delete AFTER DELETE ON brief_initiatives BEGIN DELETE FROM watch_trend_positions WHERE kind IN ('promise_open','promise_closed','loop') AND id=OLD.card_id; END`,
@@ -100,5 +111,5 @@ func installWatchTrendPositions(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	return nil
+	return installWatchTrendDays(ctx, tx)
 }

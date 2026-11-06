@@ -218,9 +218,9 @@ func TestWatchTrendsComputesFlowsAndDeltas(t *testing.T) {
 	}
 }
 
-// A capped family reports truncation and leaves buckets past its horizon null
-// instead of claiming zero.
-func TestWatchTrendsMarksCappedHistoryUnknown(t *testing.T) {
+// A capped family fills the buckets its page did not reach from day counts,
+// so a busy workspace still gets complete totals.
+func TestWatchTrendsFillsCappedHistoryFromDayCounts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scale-corpus budget guard; the non-short CI tier keeps the full fixture")
 	}
@@ -231,13 +231,21 @@ func TestWatchTrendsMarksCappedHistoryUnknown(t *testing.T) {
 		f.run(work, time.Duration(i)*time.Minute, "acted")
 	}
 	f.run(work, 20*24*time.Hour, "acted")
+	f.run(work, 21*24*time.Hour, "infra_error")
+	f.run(work, 40*24*time.Hour, "acted")
 	runs := f.trends(30)["loop_runs"]
-	if runs["truncated"] != true || runs["value"].(*float64) != nil {
+	if runs["truncated"] != false || trendValue(t, runs, "value") != trendsRunCap+3 || trendValue(t, runs, "previous") != 1 || trendValue(t, runs, "failed") != 1 {
 		t.Fatalf("runs = %#v", runs)
 	}
 	points := runs["series"].([]map[string]any)[0]["points"].([]*float64)
-	if points[0] != nil {
-		t.Fatalf("bucket before the horizon = %v, want unknown", *points[0])
+	for i, p := range points {
+		if p == nil {
+			t.Fatalf("bucket %d before the horizon is unknown", i)
+		}
+	}
+	// Rows-only panels keep saying the page was capped.
+	if active := f.trends(30)["agent_runs"]; active["truncated"] != true {
+		t.Fatalf("ranking from a capped page = %#v", active)
 	}
 }
 

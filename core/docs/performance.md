@@ -2534,6 +2534,20 @@ trends), and run-event inserts dropped from ~25.1k to ~24.0k VM steps each.
 Canonical row authorization remains necessary. Completion positions keep the
 card-specific partial index for the latest-completion seek.
 
+Migration 135 adds `watch_trend_days(kind,day,n)`, one row per position kind
+and UTC day, kept by triggers on `watch_trend_positions` (insert +1, delete -1,
+re-key moves the count) and rebuilt whenever positions are. Positions gain
+`run_failed` (infra_error runs), and ask/answer positions are dropped when their
+thread is purged, matching the answerable-ask join. Trend windows are whole UTC
+days through today. When a count family's capped page is full, one grouped
+primary-key range read over at most 2n days (60 at 30d, 182 at 90d) returns at
+most 2n bucket sums and fills only the buckets the page did not reach. Per
+request that is O(range days) per truncated family, independent of workspace
+size; untruncated families read nothing more. Write cost is one or two
+primary-key writes on `watch_trend_days` per position change (a re-key, such as
+a card edit moving `updated_at`, is a -1/+1 pair). Recreating a thread re-adds
+its ask positions; purging one removes them.
+
 The internal calculation retains bounded-history regression coverage. Backlog
 admits a capped history of asks before resolving their visible responses; a capped
 history reports unknown backlog. Empty lifecycle values have the same meaning

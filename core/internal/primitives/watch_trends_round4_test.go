@@ -132,15 +132,17 @@ func TestWatchTrendsBoundsHydrationBeforeEligibility(t *testing.T) {
 	f.exec(`DELETE FROM threads WHERE id=?`, orphan["thread_id"])
 	b := &trendsBuild{briefBuild: &briefBuild{s: f.store, ctx: f.ctx, now: f.now}, w: newTrendWindow(30, f.now)}
 	asks, horizon, err := b.trendAsks()
-	if err != nil || len(asks) != 0 || !horizon.Equal(f.now) {
-		t.Fatalf("hydration walked past the capped unanswerable page: asks=%d horizon=%v err=%v", len(asks), horizon, err)
+	// Purging the thread drops its asks' positions, so they neither fill the
+	// capped page nor the day counts.
+	if err != nil || len(asks) != 1 || !horizon.IsZero() {
+		t.Fatalf("purged thread's asks still positioned: asks=%d horizon=%v err=%v", len(asks), horizon, err)
 	}
 	out, err := f.store.WatchTrends(WithRequestAccessScope(f.ctx, AccessScope{ActorID: "owner"}), BriefReader{}, "decisions", 30, f.now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if panel := out["panels"].([]map[string]any)[0]; panel["truncated"] != true || panel["raised"] != (*float64)(nil) {
-		t.Fatalf("incomplete history presented as complete: %v", panel)
+	if panel := out["panels"].([]map[string]any)[0]; panel["truncated"] != false || trendValue(t, panel, "raised") != 1 {
+		t.Fatalf("purged thread's asks counted: %v", panel)
 	}
 }
 

@@ -3,15 +3,18 @@
    * Watch → Trends: is the workspace getting better or worse? Three
    * independent reads (decisions, initiatives, loops), each bounded and
    * each with its own loading, failure and retry, so one slow group never
-   * holds the others on a spinner. Charts stack one per row.
+   * holds the others on a spinner. Laid out as a health summary: one
+   * sentence on how the workspace is doing, an area card per group with its
+   * status and main chart, then who needs help and who is most active.
    */
   import { createWorkspaceReadClient } from "$lib/coreClient";
   import { readWithDeadline } from "$lib/liveReports.js";
-  import { TREND_GROUPS } from "$lib/watchTrends.js";
-  import Button from "$lib/components/Button.svelte";
-  import TrendCard from "./TrendCard.svelte";
+  import { TREND_GROUPS, trendsVerdict } from "$lib/watchTrends.js";
+  import TrendArea from "./TrendArea.svelte";
+  import TrendPeople from "./TrendPeople.svelte";
 
-  let { days = 30 } = $props();
+  /** @type {{ days?: number, links?: Record<string, string> }} */
+  let { days = 30, links = {} } = $props();
 
   /** @type {Record<string, { status: string, data?: any }>} */
   let groups = $state({});
@@ -58,78 +61,123 @@
   let restricted = $derived(
     TREND_GROUPS.some((group) => groups[group.key]?.status === "restricted"),
   );
+  let loaded = $derived(
+    Object.fromEntries(
+      TREND_GROUPS.map((g) => [
+        g.key,
+        groups[g.key]?.status === "ok" ? groups[g.key].data.panels : undefined,
+      ]),
+    ),
+  );
+  let verdict = $derived(trendsVerdict(loaded, days));
+  let people = $derived(
+    [loaded.decisions, loaded.loops]
+      .flatMap((panels) => panels ?? [])
+      .filter((p) => p.id === "ask_sources" || p.id === "agent_runs"),
+  );
 </script>
 
-<div class="space-y-6" data-watch-trends>
+<div class="space-y-5" data-watch-trends>
   {#if restricted}
     <p class="text-meta text-fg-muted" data-trend-restricted>
       Trends are worked out from every item in this workspace, so they need
       access to all of it. Some items here aren't visible to you.
     </p>
-  {/if}
-  {#each TREND_GROUPS as group (group.key)}
-    {@const state = groups[group.key] ?? { status: "loading" }}
-    {#if state.status !== "restricted"}
-      <section
-        aria-labelledby="trends-{group.key}"
-        data-trend-group={group.key}
-      >
-        <h2
-          id="trends-{group.key}"
-          class="mb-2 text-micro font-semibold uppercase tracking-wide text-fg-subtle"
-        >
-          {group.label}
-        </h2>
-        {#if state.status === "ok"}
-          {#if state.data.panels.length}
-            <div class="trend-grid">
-              {#each state.data.panels as panel (panel.id)}
-                <TrendCard {panel} days={state.data.range_days ?? days} />
-              {/each}
-            </div>
-          {:else}
-            <p class="text-meta text-fg-muted">Nothing to chart here yet.</p>
-          {/if}
-        {:else if state.status === "loading"}
-          <div class="trend-grid" aria-busy="true">
-            {#each [0, 1, 2] as i (i)}
-              <div class="trend-skeleton"></div>
+  {:else}
+    {#if verdict.lead}
+      <section class="verdict" aria-label="Summary" data-trend-summary>
+        <p class="lead">
+          {verdict.lead}{#if verdict.rest}{" "}<span class="rest"
+              >{verdict.rest}</span
+            >{/if}
+        </p>
+        {#if verdict.actions.some((a) => links[a.key])}
+          <ul class="actions">
+            {#each verdict.actions.filter((a) => links[a.key]) as action (action.key)}
+              <li>
+                <a
+                  class="chip"
+                  href={links[action.key]}
+                  data-trend-action={action.key}>{action.label}</a
+                >
+              </li>
             {/each}
-          </div>
-          <p class="sr-only" role="status">Loading {group.label} trends…</p>
-        {:else}
-          <div
-            class="flex flex-wrap items-center gap-3 rounded-md border border-dashed border-line px-4 py-3"
-            data-trend-error
-          >
-            <p class="text-meta text-fg-muted">
-              {state.status === "slow"
-                ? "This is taking too long to work out."
-                : "Couldn't load these trends."}
-            </p>
-            <Button
-              variant="secondary"
-              size="compact"
-              onclick={() => retry(group.key)}>Retry</Button
-            >
-          </div>
+          </ul>
         {/if}
       </section>
     {/if}
-  {/each}
+    <div class="areas">
+      {#each TREND_GROUPS as group (group.key)}
+        <TrendArea
+          {group}
+          state={groups[group.key] ?? { status: "loading" }}
+          days={groups[group.key]?.data?.range_days ?? days}
+          onretry={() => retry(group.key)}
+        />
+      {/each}
+    </div>
+    {#if people.length}
+      <div class="people">
+        {#each people as panel (panel.id)}
+          <TrendPeople {panel} />
+        {/each}
+      </div>
+    {/if}
+  {/if}
 </div>
 
 <style>
-  /* One chart per row, full width, so each series has room to read. */
-  .trend-grid {
+  .verdict {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.125rem 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--panel);
+  }
+  .lead {
+    margin: 0;
+    max-width: 60rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--fg);
+  }
+  .rest {
+    font-weight: 400;
+    color: var(--fg-muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    color: var(--fg);
+    text-decoration: none;
+  }
+  .chip:hover {
+    background: var(--panel-hover);
+  }
+  .areas {
     display: grid;
     gap: 0.875rem;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   }
-  .trend-skeleton {
-    height: 11rem;
-    border: 1px solid var(--line-subtle);
-    border-radius: var(--radius-md);
-    background: var(--bg-soft);
+  .people {
+    display: grid;
+    gap: 0.875rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   }
 </style>
