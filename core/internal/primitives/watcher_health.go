@@ -28,6 +28,17 @@ type watcherAlarm struct {
 	Episode, Raises                               int
 }
 
+// Keep the quota -> SQLite lock order used by ordinary mutations. Nested
+// event/attention helpers inherit ownership rather than reacquiring the mutex.
+func (s *Store) watcherWriteTransaction(ctx context.Context, run func(context.Context, *accessTx) error) error {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+		ctx = context.WithValue(ctx, replayQuotaKey{}, s)
+	}
+	return s.db.WriteTransaction(ctx, run)
+}
+
 func watcherID(key string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("watcher-health:"+key)).String()
 }
@@ -96,7 +107,7 @@ func saveWatcherAlarm(ctx context.Context, tx *accessTx, a watcherAlarm) error {
 // store. It deliberately never copies private turn text, IDs or owner refs.
 func (s *Store) ReconcilePMHealth(ctx context.Context, unhealthy bool, now time.Time, cfg WatcherHealthConfig) error {
 	thread := watcherID("pm-thread")
-	return s.db.WriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
+	return s.watcherWriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
 		a, err := loadWatcherAlarm(ctx, tx, "pm", "")
 		if err != nil {
 			return err

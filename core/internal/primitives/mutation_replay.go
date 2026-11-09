@@ -16,7 +16,7 @@ import (
 // Nested primitive transactions remain scoped savepoints, including default-board
 // creation, revision content and projection maintenance. No legacy ID adoption.
 func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash string, status int, run func(context.Context) (map[string]any, error)) (IdempotencyReplay, error) {
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		ctx = context.WithValue(ctx, replayQuotaKey{}, s)

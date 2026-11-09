@@ -2686,3 +2686,9 @@ the UTC Z suffix before indexed comparison preserves fractional-second order.
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pm \
   -run '^TestPerformanceWatcherPMHealthReads$' -count=1 -v -timeout=5m
 ```
+
+Alarm mutations acquire optional quota serialization before the SQLite writer,
+matching ordinary mutations. Nested event and attention replay calls retain that
+ownership; they still enforce quota limits and roll back the entire alarm on a
+rejection. Quota-enabled tests cover agent placements, PM asks/recovery and
+concurrent ordinary idempotent writes without lock inversion.

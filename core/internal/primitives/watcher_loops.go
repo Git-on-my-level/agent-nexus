@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Time, cfg WatcherHealthConfig) error {
-	return s.db.WriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
+	return s.watcherWriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
 		a, err := loadWatcherAlarm(ctx, tx, "loop:"+id, id)
 		if err != nil {
 			return err
