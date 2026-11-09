@@ -2655,9 +2655,9 @@ existing card visibility. It adds responsibility only. State inherits both the
 card and current ask; the cursor/receipt position views contain identities only.
 
 PM health reads its registered presence by primary key, then seeks the latest
-expired and successful turn deadlines using `pm_records_health_expired` and
+expired and successful turn creation times using `pm_records_health_expired` and
 `pm_records_health_success` (workspace, selected actor, status, failure kind,
-deadline). It returns a boolean, never historical turn content. New PM indexes
+creation time). It returns a boolean, never historical turn content. New PM indexes
 are installed with the existing PM store schema initialization. Migration 136
 creates empty clock state/cursor and annotated-loop/live-receipt indexes; index
 construction visits existing metadata/events once, without a content backfill.
@@ -2674,4 +2674,15 @@ ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pr
   -run '^TestPerformanceWatcherHealthReads$' -count=1 -v -timeout=5m
 ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
   -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
+
+The PM signal is separately gated by `pm/testdata/health_read_budget.json` with
+4,096 old turns: at most two queries, two rows, 1,500 VM steps and zero full
+scans. Creation order, rather than deadline order, prevents a previously
+successful long-timeout turn from hiding a newer short-timeout expiry. Removing
+the UTC Z suffix before indexed comparison preserves fractional-second order.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pm \
+  -run '^TestPerformanceWatcherPMHealthReads$' -count=1 -v -timeout=5m
 ```
