@@ -50,7 +50,8 @@ func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Tim
 		}
 		loop := computeLoop(loopCard{id: id, phase: card.ColumnKey, created: card.CreatedAt, metadata: m}, facts.loopFacts, now)
 		state := workString(loop["health"])
-		unhealthy := state == "failing" || state == "overdue" || state == "stalled"
+		known := watcherHealthKnown(facts, state, len(workMap(m["goal"])) > 0)
+		unhealthy := known && (state == "failing" || state == "overdue" || state == "stalled")
 		every, _ := workInt(cadence["every_seconds"])
 		if every == 0 {
 			every, _ = workInt(cadence["progress_budget_seconds"])
@@ -90,12 +91,15 @@ func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Tim
 				return err
 			}
 			hloop := computeLoop(loopCard{id: id, phase: card.ColumnKey, created: card.CreatedAt, metadata: m}, hf.loopFacts, now)
-			hu := hloop["health"] == "failing" || hloop["health"] == "overdue" || hloop["health"] == "stalled"
+			hu := watcherHealthKnown(hf, workString(hloop["health"]), len(workMap(m["goal"])) > 0) && (hloop["health"] == "failing" || hloop["health"] == "overdue" || hloop["health"] == "stalled")
 			if !hs && !(stopAfter > 0 && hu && now.Sub(parseWatcherTime(a.Since)) >= time.Duration(stopAfter)*time.Second) {
 				return saveWatcherAlarm(ctx, tx, a)
 			}
 			reason := "The loop stop rule has tripped. Decide whether to retire it or fix and resume it."
 			return s.reconcileWatcherAlarm(humanCtx, tx, a, "decide", human, "stop", thread, subject, reason, hf.refs, now, cfg)
+		}
+		if !known {
+			return saveWatcherAlarm(ctx, tx, a)
 		}
 		if !unhealthy {
 			return s.reconcileWatcherAlarm(ctx, tx, a, "", "", "", thread, subject, "", nil, now, cfg)
@@ -119,7 +123,8 @@ var errWatcherEvidenceUnavailable = errors.New("watcher receipt candidates unava
 // decoding of receipt bodies, effect text, metrics or historical summaries.
 type watcherLoopRead struct {
 	loopFacts
-	refs []string
+	refs              []string
+	effectUnavailable bool
 }
 
 func watcherLoopFacts(ctx context.Context, tx *accessTx, id string, now time.Time) (watcherLoopRead, bool, error) {
@@ -164,7 +169,10 @@ func watcherLoopFacts(ctx context.Context, tx *accessTx, id string, now time.Tim
 		var effect string
 		err = tx.QueryRowContext(ctx, `SELECT ts FROM events WHERE id=?`, effects[0]).Scan(&effect)
 		if errors.Is(err, sql.ErrNoRows) {
-			return f, false, errWatcherEvidenceUnavailable
+			// An old private effect cannot suppress newer, public failure or
+			// missed-run evidence. Only a goal/stall judgment needs it.
+			f.effectUnavailable = true
+			return f, stop, nil
 		}
 		if err != nil {
 			return f, false, err
@@ -212,4 +220,9 @@ func watcherRecipient(ctx context.Context, tx *accessTx, owner, card string, now
 		}
 	}
 	return "", nil
+}
+
+// Receipt failures and cadence misses have precedence over goal effects.
+func watcherHealthKnown(f watcherLoopRead, state string, hasGoal bool) bool {
+	return !f.effectUnavailable || !hasGoal || state == "failing" || state == "overdue"
 }

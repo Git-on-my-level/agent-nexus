@@ -136,3 +136,30 @@ func TestWatcherPlacementRetainsReceiptPrivacyAfterRevocation(t *testing.T) {
 		t.Fatal("revoked receipt leaked via placement", got)
 	}
 }
+
+func TestWatcherPrivateOldEffectDoesNotHidePublicMissedRuns(t *testing.T) {
+	s, ctx := attentionFixture(t)
+	now := time.Now().UTC()
+	id := watcherLoopFixture(t, s, ctx, now)
+	board, err := s.CreateBoard(ctx, "placer", map[string]any{"title": "Private old effect"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "placer", workString(board["thread_id"]), map[string]any{"pm_actor_id": "placer"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	event, err := s.AppendEvent(ctx, "placer", map[string]any{"type": "run_recorded", "summary": "Old private effect", "refs": []string{"card:" + id, "thread:" + workString(board["thread_id"])}, "payload": map[string]any{"run_id": "private-effect", "outcome": "acted"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE events SET ts=? WHERE id=?`, loopTS(now.Add(-time.Hour)), event["id"]); err != nil {
+		t.Fatal(err)
+	}
+	watcherReceipt(t, s, ctx, id, now.Add(-time.Minute), "measured", false)
+	watcherReceipt(t, s, ctx, id, now, "measured", false)
+	// No recent activity from the assignee; only the old effect is private.
+	watcherStep(t, s, ctx, now.Add(2*time.Hour))
+	if got := attentionAll(t, s, ctx, "human", "human", "decide"); len(got) != 1 {
+		t.Fatal("public missed runs suppressed by an irrelevant private effect", got)
+	}
+}

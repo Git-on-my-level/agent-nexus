@@ -2641,8 +2641,9 @@ request-key placement, ask creation/withdrawal and repeat bookkeeping.
 
 Receipt health uses `idx_watcher_loop_runs` to admit at most two live receipt
 identities, and `idx_watcher_loop_effects` to admit at most one effect identity.
-Scoped events hydrate only those primary keys. An inaccessible admitted receipt
-withholds a new judgment; it never scans further into private history or invents
+Scoped events hydrate only those primary keys. An inaccessible recent receipt
+withholds a new judgment; an inaccessible older effect withholds goal/stall
+judgments but cannot hide public cadence misses or receipt failures. The reader never scans further into private history or invents
 an overdue/stalled result from a filtered prefix. Only time, outcome and the
 stop-rule boolean are decoded. Archived/trashed runs are excluded by partial
 indexes, not a read-time walk. No run-count or metric aggregate is needed.
