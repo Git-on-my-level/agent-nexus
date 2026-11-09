@@ -18,8 +18,7 @@ func TestWatcherHealthMigrationPreservesHistoryAndReopenState(t *testing.T) {
 	for _, q := range []string{
 		`INSERT INTO events(id,handle,type,ts,actor_id,refs_json,payload_json) VALUES('watcher-legacy','watcher-legacy','message_posted','2026-01-01T00:00:00Z','system','[]','{"payload":{"text":"Original history"}}')`,
 		`DROP VIEW watcher_run_positions`, `DROP VIEW watcher_effect_positions`,
-		`DROP INDEX idx_watcher_loop_runs`, `DROP INDEX idx_watcher_loop_effects`,
-		`DROP INDEX idx_work_metadata_health`, `DROP TABLE watcher_health`, `DROP TABLE watcher_health_cursor`,
+		`DROP TABLE watcher_receipt_positions`, `DROP TABLE watcher_loop_candidates`, `DROP TABLE watcher_health`, `DROP TABLE watcher_health_cursor`,
 		`DELETE FROM schema_migrations WHERE version=136`,
 	} {
 		if _, err = ws.DB().ExecContext(ctx, q); err != nil {

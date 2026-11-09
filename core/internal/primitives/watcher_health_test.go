@@ -5,7 +5,13 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+func watcherID(key string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("watcher-health:"+key)).String()
+}
 
 func watcherLoopFixture(t *testing.T, s *Store, ctx context.Context, now time.Time) string {
 	t.Helper()

@@ -1468,11 +1468,21 @@
       "next_raise_at": "scope:progress",
       "raise_count": "scope:progress",
       "recipient": "scope:progress",
+      "thread_id": "scope:progress",
       "unhealthy_since": "scope:progress"
     },
     "watcher_health_cursor": {
       "after_card_id": "internal:reader-cursor",
       "singleton": "internal:reader-cursor"
+    },
+    "watcher_loop_candidates": {
+      "card_id": "internal:reader-cursor"
+    },
+    "watcher_receipt_positions": {
+      "id": "internal:reader-cursor",
+      "is_effect": "internal:reader-cursor",
+      "subject_ref": "internal:reader-cursor",
+      "ts": "internal:reader-cursor"
     },
     "watcher_run_positions": {
       "id": "internal:reader-cursor",
@@ -2865,16 +2875,17 @@
     "../primitives/watch_trends_admission.go:trendsAdmit": "e8a7565c6fb63bff547bcb68db7dffd2265215e7158e9c0e56a075bc18b68d2c",
     "../primitives/watch_trends_days.go:*trendsBuild:loadDays": "272b33b440b6ec5baac476ad85d588bdcba3ae6f1f3cc9aedfedf07c95091083",
     "../primitives/watch_trends_ranked.go:*trendsBuild:rankedPanel": "f2dc3e26f76ef7799284f829c85bcc84aa9f6951c14adce20287eac79a8dcd70",
-    "../primitives/watcher_health.go:*Store:MaintainLoopHealth": "096f6ba675c996ed1ceea540b704da666ae1d13c850ac15af5d5ec3815d043a2",
-    "../primitives/watcher_health.go:*Store:ReconcilePMHealth": "9049203581944a31c925c33973dea008b129098dd6abfea170be62146afcd352",
-    "../primitives/watcher_health.go:*Store:reconcileWatcherAlarm": "726245d315b935217b43c5d2fb907b40805bb3f134a6be433a27641d4300d6fe",
+    "../primitives/watcher_health.go:*Store:MaintainLoopHealth": "5779549190109ebc2e6f95e01c4c70f36feee657866d20080cf9995a0e1042ec",
+    "../primitives/watcher_health.go:*Store:ReconcilePMHealth": "9a56ee77aadc8e9b199b9a3ba197bd69e5849228318baf6ee907d0752975964b",
+    "../primitives/watcher_health.go:*Store:reconcileWatcherAlarm": "b28f2d4cc5fb8784e01f20b215f4a319e1bbf9570b46e30cf14cf0dd3dec6923",
     "../primitives/watcher_health.go:*Store:watcherWriteTransaction": "392e47ade21baa9955eccc47861cd6bd8215fa75ba37ea7ebf124cd6073e8347",
     "../primitives/watcher_health.go:clearWatcherPlacement": "be9d661409f22659636834ce34c9cf1ca27364866e0ecdad08063a9891c2d206",
-    "../primitives/watcher_health.go:loadWatcherAlarm": "ebcde144b2bad4cfcc1987953f84679a703af768f52b83ed6a5a1e5b8db33798",
-    "../primitives/watcher_health.go:saveWatcherAlarm": "c10000ff7dbad57a03ae399bc2d667a298c1d268fd343c0b4203834dcdb02d65",
-    "../primitives/watcher_loops.go:*Store:maintainWatcherLoop": "703c985ff1747ac3ce89963df458de05b8253078adc9feba45eb848101180d2a",
+    "../primitives/watcher_health.go:loadWatcherAlarm": "9f3396a352028efd1a4e62766637450dddbf25983ba35409e0bf9ee90361e29f",
+    "../primitives/watcher_health.go:saveWatcherAlarm": "6361fb73589fb66fbe0db8055a05748bfcab646b9fd607becfaaa8c9a94ec78d",
+    "../primitives/watcher_loops.go:*Store:maintainWatcherLoop": "559bc4eecc012227f25d2fd35bf3b2314dae7d5bbd68c89673d47fc871fac5e2",
+    "../primitives/watcher_loops.go:watcherHumanRecipient": "93faa8e13117fafa738f900e7447cd6b9c306d13e96e98c08762b72861d8cc5d",
     "../primitives/watcher_loops.go:watcherLoopFacts": "17ef7ba95f140af26c8519cbe8b08664cdf88f00e20d5dbfa722b4c697e9d9f6",
-    "../primitives/watcher_loops.go:watcherRecipient": "f8ec7b5ae7b524d75020486bbfdafd78ef82ee77aba3525573259d72b2e583c0",
+    "../primitives/watcher_loops.go:watcherRecipient": "c8876a7491b34afc468f0319d08f32a8c2d7a1b5dcd668a737a61df49d7e7e4d",
     "../primitives/work_budget.go:*briefBuild:groupingBudget": "2013e9165e7b39900201431b74421d1b2f8ca82bacbbb17f6a339e9d3c8cfa3b",
     "../primitives/work_cursor.go:*Store:workCursorCodec": "3a075d05352e498dfaad1cf9d00860d91bff44c7cdf364f23c8460de220bd703",
     "../primitives/work_events.go:insertWorkEvent": "192e377aafec41b3e8b0e9f6329499cd5b2c5601e97c7b777c2696c84d023c21",
@@ -4011,7 +4022,7 @@
     "../storage/watch_trend_positions.go:trendEventPositions": "a7f503281974a60f2efe9c7e5b94d4f200b354c89e5c2093a641a44d51d39649",
     "../storage/watch_trend_positions.go:trendInitiativePositions": "bde070cf0d4812b9528e2c9e5cd4864494d53c92b071b38d781bc3d829f99f1b",
     "../storage/watch_trend_positions.go:trendUpsert": "b3d734a0484522bba2272442f7c846fd5521060034264e08e33474fa817ae7d0",
-    "../storage/watcher_health.go:installWatcherHealth": "7e4d50f95f9ae31abccd3ca649d10b601b85be44c0bc2c82aeab01914bfde027",
+    "../storage/watcher_health.go:installWatcherHealth": "787b2283f1d60d987ee071cfc403b08b5a2b92ec336a93a4b20c1fc06042bc55",
     "../storage/work_lifecycle.go:installWorkLifecycle": "064f1daab232dfde68014702daeab7145414189332fe24e9ddaf9aee74d9ac9e",
     "../storage/work_summary_indexes.go:installWorkSummaryAskIndex": "d455a142c2881d85a6e2cf34edd55edc0575ec30b7aedb2aad5e9d6894be3fa9",
     "../storage/work_summary_indexes.go:installWorkSummaryAttention": "9de4b78fb29bf8c9063300a0f4461e58840158ea9a49bd8caac4ea4fb7af0ba7",

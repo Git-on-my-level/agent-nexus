@@ -13,7 +13,11 @@ even while idle claims remain healthy. Presence recovery clears the offline
 condition; a later successful turn clears a missed deadline. An explicit PM
 disconnect clears the monitoring expectation. Reconnecting starts a new
 expectation and does not resurrect deadline failures from before that connection.
-Private turn text, references and owner identities never enter the alarm.
+Core selects the first active human from the same bounded workspace cohort used
+for loop fallback. The ask targets that human's Decide view, on a health thread
+owned by that human (`pm_actor_id`); unrelated principals cannot read it. If the
+recipient is revoked, a new human-owned thread and ask replace the old ask.
+Private turn text, references and turn-owner identities never enter the alarm.
 
 For a loop, Core retains `failing`, `overdue` and `stalled` precedence. After two
 continuous unhealthy cadences it places the card in its responsible actor's
@@ -46,7 +50,9 @@ is needed. A historical prose rule requires its producer to report a trip or an
 operator to configure the timer; installing this change does not invent a trip.
 
 Each episode commits its state, request keys, placement and ask in one SQLite
-transaction. Retries do not duplicate them. Repeats refresh the same placement
+transaction. Ask, reminder, recovery and PM thread identities are random; public
+event IDs cannot preclaim them. Durable episode state provides idempotency, so
+retries do not duplicate them. Repeats refresh the same placement
 and append an automatic `message_posted` event with `payload.source=watcher_health`
 and the ask reference. The repeat interval doubles, capped at 24 hours. An open
 ask stays coalesced; after a human resolves it, continued failure opens another
@@ -77,7 +83,9 @@ without altering `plan_health`, presence expiry or authored promises:
 Durations accept Go duration syntax, one second through 365 days. Cadence
 multipliers accept 1 through 1000. Invalid values log the variable name and use
 the default. Decide is clamped to at least digest, and the repeat cap to at least
-the initial interval. Migration 136 creates empty clock bookkeeping and an
-annotated-loop identity index; it does not rewrite historical cards or receipts.
+the initial interval. Migration 136 creates clock bookkeeping and compact loop/receipt position tables.
+Existing partial indexes seed only annotated loop identities and live receipt
+positions; triggers maintain them with canonical changes. It adds no expression
+index on events or work metadata and rewrites no canonical history.
 The durable loop cursor admits at most 25 identities each 30-second tick, so
 large inventories have a bounded sweep delay rather than an unbounded tick.

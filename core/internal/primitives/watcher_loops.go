@@ -214,16 +214,22 @@ func watcherRecipient(ctx context.Context, tx *accessTx, owner, card string, now
 			}
 		}
 	}
+	human, err := watcherHumanRecipient(ctx, tx, card)
+	return human, human != "", err
+}
+
+// Empty card selects an audience for a new human-owned PM health thread.
+func watcherHumanRecipient(ctx context.Context, tx *accessTx, card string) (string, error) {
 	humans, err := queryStrings(ctx, tx, `SELECT actor_id FROM agents INDEXED BY idx_agents_active_humans WHERE revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human' ORDER BY actor_id LIMIT 200`)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 	for _, actor := range humans {
-		if trackingActorCanRead(ctx, tx, actor, card) {
-			return actor, true, nil
+		if card == "" || trackingActorCanRead(ctx, tx, actor, card) {
+			return actor, nil
 		}
 	}
-	return "", false, nil
+	return "", nil
 }
 
 // Receipt failures and cadence misses have precedence over goal effects.

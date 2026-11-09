@@ -24,8 +24,8 @@ func DefaultWatcherHealthConfig() WatcherHealthConfig {
 }
 
 type watcherAlarm struct {
-	Key, Card, Since, Level, Recipient, Ask, Next string
-	Episode, Raises                               int
+	Key, Card, Since, Level, Recipient, Ask, Next, Thread string
+	Episode, Raises                                       int
 }
 
 // Keep the quota -> SQLite lock order used by ordinary mutations. Nested
@@ -39,10 +39,6 @@ func (s *Store) watcherWriteTransaction(ctx context.Context, run func(context.Co
 	return s.db.WriteTransaction(ctx, run)
 }
 
-func watcherID(key string) string {
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("watcher-health:"+key)).String()
-}
-
 // MaintainLoopHealth walks indexed loop identities and existing alarm rows in
 // pages of 25. The durable cursor rotates, so an unhealthy prefix cannot starve
 // later loops. Each card is evaluated and changed in one writer snapshot.
@@ -51,7 +47,7 @@ func (s *Store) MaintainLoopHealth(ctx context.Context, now time.Time, cfg Watch
 	if err := s.db.QueryRowContext(ctx, `SELECT after_card_id FROM watcher_health_cursor WHERE singleton=1`).Scan(&after); err != nil {
 		return err
 	}
-	ids, err := queryStrings(ctx, s.db, `SELECT card_id FROM work_metadata INDEXED BY idx_work_metadata_health WHERE card_id>? AND (json_type(metadata_json,'$.cadence')='object' OR json_type(metadata_json,'$.goal')='object') ORDER BY card_id LIMIT 25`, after)
+	ids, err := queryStrings(ctx, s.db, `SELECT card_id FROM watcher_loop_candidates WHERE card_id>? ORDER BY card_id LIMIT 25`, after)
 	if err != nil {
 		return err
 	}
@@ -92,33 +88,42 @@ func loadWatcherAlarm(ctx context.Context, tx *accessTx, key, card string) (watc
 	if _, err := tx.ExecContext(ctx, `INSERT INTO watcher_health(alarm_key,card_id) VALUES(?,?) ON CONFLICT DO NOTHING`, key, card); err != nil {
 		return a, err
 	}
-	err := tx.QueryRowContext(ctx, `SELECT unhealthy_since,episode,level,recipient,ask_id,raise_count,next_raise_at FROM watcher_health WHERE alarm_key=?`, key).Scan(&a.Since, &a.Episode, &a.Level, &a.Recipient, &a.Ask, &a.Raises, &a.Next)
+	err := tx.QueryRowContext(ctx, `SELECT unhealthy_since,episode,level,recipient,ask_id,raise_count,next_raise_at,thread_id FROM watcher_health WHERE alarm_key=?`, key).Scan(&a.Since, &a.Episode, &a.Level, &a.Recipient, &a.Ask, &a.Raises, &a.Next, &a.Thread)
 	return a, err
 }
 func saveWatcherAlarm(ctx context.Context, tx *accessTx, a watcherAlarm) error {
 	// Internal clock state never leaves maintenance; recipient-scoped content
 	// writes are checked separately before the state advances.
 	ctx = CanonicalMaintenanceContext(ctx)
-	_, err := tx.ExecContext(ctx, `UPDATE watcher_health SET unhealthy_since=?,episode=?,level=?,recipient=?,ask_id=?,raise_count=?,next_raise_at=? WHERE alarm_key=?`, a.Since, a.Episode, a.Level, a.Recipient, a.Ask, a.Raises, a.Next, a.Key)
+	_, err := tx.ExecContext(ctx, `UPDATE watcher_health SET unhealthy_since=?,episode=?,level=?,recipient=?,ask_id=?,raise_count=?,next_raise_at=?,thread_id=? WHERE alarm_key=?`, a.Since, a.Episode, a.Level, a.Recipient, a.Ask, a.Raises, a.Next, a.Thread, a.Key)
 	return err
 }
 
 // ReconcilePMHealth is passed a content-free signal from PM's own indexed
 // store. It deliberately never copies private turn text, IDs or owner refs.
 func (s *Store) ReconcilePMHealth(ctx context.Context, unhealthy bool, now time.Time, cfg WatcherHealthConfig) error {
-	thread := watcherID("pm-thread")
 	return s.watcherWriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
 		a, err := loadWatcherAlarm(ctx, tx, "pm", "")
 		if err != nil {
 			return err
 		}
 		if !unhealthy {
-			return s.reconcileWatcherAlarm(ctx, tx, a, "", "", "", thread, "thread:"+thread, "", nil, now, cfg)
+			return s.reconcileWatcherAlarm(ctx, tx, a, "", "", "", a.Thread, "thread:"+a.Thread, "", nil, now, cfg)
 		}
-		if _, err = s.CreateThread(ctx, actors.SystemActorID, map[string]any{"id": thread, "title": "PM health"}); err != nil && !errors.Is(err, ErrConflict) {
+		recipient, err := watcherHumanRecipient(ctx, tx, "")
+		if err != nil || recipient == "" {
 			return err
 		}
-		return s.reconcileWatcherAlarm(ctx, tx, a, "decide", "", "pm", thread, "thread:"+thread, "The workspace PM is offline or has missed a turn deadline. Restore the PM runner and verify a successful reply.", nil, now, cfg)
+		if a.Thread == "" || a.Recipient != recipient {
+			// Persist the random identity with the alarm. A public client cannot
+			// preclaim either the thread or its asks by predicting a counter.
+			a.Thread = uuid.NewString()
+			if _, err = s.CreateThread(ctx, actors.SystemActorID, map[string]any{"id": a.Thread, "title": "PM health", "pm_actor_id": recipient}); err != nil {
+				return err
+			}
+		}
+		scoped := WithAccessScope(ctx, AccessScope{ActorID: recipient})
+		return s.reconcileWatcherAlarm(scoped, tx, a, "decide", recipient, "pm", a.Thread, "thread:"+a.Thread, "The workspace PM is offline or has missed a turn deadline. Restore the PM runner and verify a successful reply.", nil, now, cfg)
 	})
 }
 
@@ -126,7 +131,7 @@ func (s *Store) reconcileWatcherAlarm(ctx context.Context, tx *accessTx, a watch
 	ask := askKind != ""
 	if level == "" {
 		if a.Ask != "" {
-			_, err := s.AppendHumanAttentionWithdrawal(CanonicalMaintenanceContext(ctx), actors.SystemActorID, a.Ask, map[string]any{"id": watcherID(a.Ask + ":recovered"), "payload": map[string]any{"reason": "Watcher health recovered or monitoring ended."}})
+			_, err := s.AppendHumanAttentionWithdrawal(CanonicalMaintenanceContext(ctx), actors.SystemActorID, a.Ask, map[string]any{"payload": map[string]any{"reason": "Watcher health recovered or monitoring ended."}})
 			if err != nil && !errors.Is(err, ErrHumanAttentionAlreadyResponded) && !errors.Is(err, ErrNotFound) {
 				return err
 			}
@@ -181,7 +186,7 @@ func (s *Store) reconcileWatcherAlarm(ctx context.Context, tx *accessTx, a watch
 		}
 	}
 	if ask && a.Ask == "" {
-		a.Ask = watcherID(key + ":ask")
+		a.Ask = uuid.NewString()
 		title := "Restore the workspace PM?"
 		proposals := []string{"Restore the PM runner", "Disconnect the PM intentionally"}
 		if a.Card != "" {
@@ -207,7 +212,7 @@ func (s *Store) reconcileWatcherAlarm(ctx context.Context, tx *accessTx, a watch
 	if a.Ask != "" {
 		refs = append(refs, "event:"+a.Ask)
 	}
-	if _, err := s.AppendEvent(ctx, actors.SystemActorID, map[string]any{"id": watcherID(key + ":reminder"), "type": "message_posted", "thread_id": thread, "refs": refs, "summary": reason, "payload": map[string]any{"text": reason, "automatic": true, "source": "watcher_health", "request_key": key, "surface": level}}); err != nil {
+	if _, err := s.AppendEvent(ctx, actors.SystemActorID, map[string]any{"type": "message_posted", "thread_id": thread, "refs": refs, "summary": reason, "payload": map[string]any{"text": reason, "automatic": true, "source": "watcher_health", "request_key": key, "surface": level}}); err != nil {
 		return err
 	}
 	interval := cfg.RepeatInitial
