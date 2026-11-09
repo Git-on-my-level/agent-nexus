@@ -64,18 +64,60 @@ func TestWatcherLoopEscalatesFallsBackAndRecovers(t *testing.T) {
 	if got := attentionAll(t, s, ctx, "placer", "agent", "decide"); len(got) != 1 {
 		t.Fatal("missing decide escalation", got)
 	}
-	// The owner stops using the workspace. A human receives the same alarm.
+	if n := watcherCount(t, s, "human_attention_requested"); n != 0 {
+		t.Fatal("active agent decide opened an ask", n)
+	}
+	// The owner stops using the workspace. The human gets one recovery ask.
 	watcherStep(t, s, ctx, now.Add(2*time.Hour))
-	if got := attentionAll(t, s, ctx, "human", "human", "decide"); len(got) != 1 {
-		t.Fatal("no human fallback", got)
+	got := attentionAll(t, s, ctx, "human", "human", "decide")
+	if len(got) != 1 || got[0].Title != "Restore reliable loop runs?" {
+		t.Fatal("human decide skipped recovery ask", got)
 	}
 	if got := attentionAll(t, s, ctx, "placer", "agent", "decide"); len(got) != 0 {
 		t.Fatal("old placement survived", got)
+	}
+	agent := "agent:preferred-id"
+	if err := s.SetAttentionAgent(ctx, "human", &agent); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PlaceAttention(ctx, "preferred", AttentionPlacement{SubjectRef: "card:" + id, For: "actor:human", To: "routine", Reason: "Nothing to decide"}); err != nil {
+		t.Fatal(err)
+	}
+	got = attentionAll(t, s, ctx, "human", "human", "decide")
+	if len(got) != 1 || got[0].Title != "Restore reliable loop runs?" {
+		t.Fatal("attention agent demoted the recovery ask", got)
+	}
+	watcherStep(t, s, ctx, now.Add(2*time.Hour))
+	if n := watcherCount(t, s, "human_attention_requested"); n != 1 {
+		t.Fatal("duplicate recovery ask", n)
 	}
 	watcherReceipt(t, s, ctx, id, now.Add(2*time.Hour+time.Minute), "measured", false)
 	watcherStep(t, s, ctx, now.Add(2*time.Hour+time.Minute))
 	if got := attentionAll(t, s, ctx, "human", "human", "decide"); len(got) != 0 {
 		t.Fatal("recovery left alarm", got)
+	}
+}
+func TestWatcherHumanOwnedLoopDecideOpensRecoveryAsk(t *testing.T) {
+	s, ctx := attentionFixture(t)
+	now := time.Now().UTC()
+	id := watcherLoopFixture(t, s, ctx, now)
+	if _, err := s.db.ExecContext(ctx, `UPDATE cards SET assignee=? WHERE id=?`, "actor:human", id); err != nil {
+		t.Fatal(err)
+	}
+	watcherStep(t, s, ctx, now.Add(4*time.Minute))
+	if n := watcherCount(t, s, "human_attention_requested"); n != 0 {
+		t.Fatal("digest opened an ask", n)
+	}
+	if got := attentionAll(t, s, ctx, "human", "human", "digest"); len(got) != 1 {
+		t.Fatal("missing human digest", got)
+	}
+	watcherStep(t, s, ctx, now.Add(6*time.Minute))
+	got := attentionAll(t, s, ctx, "human", "human", "decide")
+	if len(got) != 1 || got[0].Title != "Restore reliable loop runs?" {
+		t.Fatal("human decide skipped recovery ask", got)
+	}
+	if got := attentionAll(t, s, ctx, "human", "human", "digest"); len(got) != 0 {
+		t.Fatal("decide ask left a card placement", got)
 	}
 }
 func TestWatcherPMCoalescesRetriesRepeatsAndRecovery(t *testing.T) {

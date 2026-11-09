@@ -33,7 +33,7 @@ func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Tim
 		if card.ColumnKey == "done" || card.ColumnKey == "cancelled" || card.ArchivedAt.Valid || card.TrashedAt.Valid || len(cadence) == 0 && len(workMap(m["goal"])) == 0 {
 			return s.reconcileWatcherAlarm(ctx, tx, a, "", "", "", thread, subject, "", nil, now, cfg)
 		}
-		recipient, err := watcherRecipient(ctx, tx, firstCardLeaseAssignee(card.Assignee.String), id, now, cfg.AgentActivityWithin, false)
+		recipient, humanOwner, err := watcherRecipient(ctx, tx, firstCardLeaseAssignee(card.Assignee.String), id, now, cfg.AgentActivityWithin, false)
 		if err != nil {
 			return err
 		}
@@ -74,7 +74,7 @@ func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Tim
 		}
 		if stop {
 			// Asks are for humans, even while the loop has an active agent owner.
-			human, err := watcherRecipient(ctx, tx, firstCardLeaseAssignee(card.Assignee.String), id, now, cfg.AgentActivityWithin, true)
+			human, _, err := watcherRecipient(ctx, tx, firstCardLeaseAssignee(card.Assignee.String), id, now, cfg.AgentActivityWithin, true)
 			if err != nil {
 				return err
 			}
@@ -108,12 +108,16 @@ func (s *Store) maintainWatcherLoop(ctx context.Context, id string, now time.Tim
 		if age.Seconds()/interval.Seconds() < float64(cfg.LoopDigestCadences) {
 			return saveWatcherAlarm(ctx, tx, a)
 		}
-		level := "digest"
+		level, kind := "digest", ""
 		if age.Seconds()/interval.Seconds() >= float64(cfg.LoopDecideCadences) {
 			level = "decide"
+			// One recovery ask, not a card placement an attention agent can demote.
+			if humanOwner {
+				kind = "recover"
+			}
 		}
 		reason := "Loop is " + state + ": " + workString(loop["health_reason"]) + ". Record recovery or hand off."
-		return s.reconcileWatcherAlarm(scoped, tx, a, level, recipient, "", thread, subject, reason, facts.refs, now, cfg)
+		return s.reconcileWatcherAlarm(scoped, tx, a, level, recipient, kind, thread, subject, reason, facts.refs, now, cfg)
 	})
 }
 
@@ -185,41 +189,41 @@ func watcherLoopFacts(ctx context.Context, tx *accessTx, id string, now time.Tim
 
 // Choose responsibility, not authority: candidates must already read the card.
 // A human owner remains responsible; agents need recent actual workspace use.
-func watcherRecipient(ctx context.Context, tx *accessTx, owner, card string, now time.Time, fresh time.Duration, humanOnly bool) (string, error) {
+func watcherRecipient(ctx context.Context, tx *accessTx, owner, card string, now time.Time, fresh time.Duration, humanOnly bool) (string, bool, error) {
 	if owner != "" {
 		actor, err := trackingActor(ctx, tx, owner)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		var id, kind string
 		err = tx.QueryRowContext(ctx, `SELECT id,COALESCE(json_extract(metadata_json,'$.principal_kind'),'agent') FROM agents WHERE actor_id=? AND revoked_at IS NULL`, actor).Scan(&id, &kind)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return "", err
+			return "", false, err
 		}
 		if err == nil && trackingActorCanRead(ctx, tx, actor, card) {
 			if kind == "human" {
-				return actor, nil
+				return actor, true, nil
 			}
 			var active bool
 			err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_access_tokens WHERE agent_id=? AND created_at>=? AND revoked_at IS NULL) OR EXISTS(SELECT 1 FROM events WHERE actor_id=? AND ts>=? LIMIT 1) OR EXISTS(SELECT 1 FROM agent_presence WHERE agent_id=? AND observed_at>=?)`, id, loopTS(now.Add(-fresh)), actor, loopTS(now.Add(-fresh)), id, loopTS(now.Add(-fresh))).Scan(&active)
 			if err != nil {
-				return "", err
+				return "", false, err
 			}
 			if active && !humanOnly {
-				return actor, nil
+				return actor, false, nil
 			}
 		}
 	}
 	humans, err := queryStrings(ctx, tx, `SELECT actor_id FROM agents INDEXED BY idx_agents_active_humans WHERE revoked_at IS NULL AND json_extract(metadata_json,'$.principal_kind')='human' ORDER BY actor_id LIMIT 200`)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	for _, actor := range humans {
 		if trackingActorCanRead(ctx, tx, actor, card) {
-			return actor, nil
+			return actor, true, nil
 		}
 	}
-	return "", nil
+	return "", false, nil
 }
 
 // Receipt failures and cadence misses have precedence over goal effects.
