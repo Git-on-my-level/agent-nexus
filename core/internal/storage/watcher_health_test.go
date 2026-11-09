@@ -56,4 +56,19 @@ func TestWatcherHealthMigrationPreservesHistoryAndReopenState(t *testing.T) {
 	if err = ws.DB().QueryRowContext(ctx, `SELECT episode,raise_count,next_raise_at FROM watcher_health WHERE alarm_key='pm'`).Scan(&episode, &raises, &next); err != nil || episode != 9 || raises != 3 || next != "2027-01-01T00:00:00Z" {
 		t.Fatal(episode, raises, next, err)
 	}
+	// Reconciliation can reapply a newer migration over its existing schema.
+	if _, err = ws.DB().ExecContext(ctx, `DELETE FROM schema_migrations WHERE version=136`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	if err = ws.DB().QueryRowContext(ctx, `SELECT episode,raise_count,next_raise_at FROM watcher_health WHERE alarm_key='pm'`).Scan(&episode, &raises, &next); err != nil || episode != 9 || raises != 3 || next != "2027-01-01T00:00:00Z" {
+		t.Fatal("replay reset existing alarm", episode, raises, next, err)
+	}
 }

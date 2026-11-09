@@ -4010,7 +4010,7 @@
     "../storage/watch_trend_positions.go:trendEventPositions": "a7f503281974a60f2efe9c7e5b94d4f200b354c89e5c2093a641a44d51d39649",
     "../storage/watch_trend_positions.go:trendInitiativePositions": "bde070cf0d4812b9528e2c9e5cd4864494d53c92b071b38d781bc3d829f99f1b",
     "../storage/watch_trend_positions.go:trendUpsert": "b3d734a0484522bba2272442f7c846fd5521060034264e08e33474fa817ae7d0",
-    "../storage/watcher_health.go:installWatcherHealth": "fd1c5b09c5d290a62bc9248a7786cce155e4d9e939f7e7f97584f5ccc6da4cc3",
+    "../storage/watcher_health.go:installWatcherHealth": "7e4d50f95f9ae31abccd3ca649d10b601b85be44c0bc2c82aeab01914bfde027",
     "../storage/work_lifecycle.go:installWorkLifecycle": "064f1daab232dfde68014702daeab7145414189332fe24e9ddaf9aee74d9ac9e",
     "../storage/work_summary_indexes.go:installWorkSummaryAskIndex": "d455a142c2881d85a6e2cf34edd55edc0575ec30b7aedb2aad5e9d6894be3fa9",
     "../storage/work_summary_indexes.go:installWorkSummaryAttention": "9de4b78fb29bf8c9063300a0f4461e58840158ea9a49bd8caac4ea4fb7af0ba7",
