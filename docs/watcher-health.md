@@ -17,6 +17,8 @@ Core selects the first active human from the same bounded workspace cohort used
 for loop fallback. The ask targets that human's Decide view, on a health thread
 owned by that human (`pm_actor_id`); unrelated principals cannot read it. If the
 recipient is revoked, a new human-owned thread and ask replace the old ask.
+If no active human exists, publication waits until one is available; the next
+maintenance tick can then raise the still-unhealthy PM alarm.
 Private turn text, references and turn-owner identities never enter the alarm.
 
 For a loop, Core retains `failing`, `overdue` and `stalled` precedence. After two
