@@ -17,7 +17,7 @@ func TestPerformanceWatcherHealthReleasedUpgrade(t *testing.T) {
 		t.Skip("performance CI tier")
 	}
 	root := t.TempDir()
-	db := mainHistoryDatabase(t, root, 135)
+	db := mainHistoryDatabase(t, root, 58)
 	layout := NewLayout(root)
 	if err := ensureLayout(layout); err != nil {
 		t.Fatal(err)
@@ -25,6 +25,17 @@ func TestPerformanceWatcherHealthReleasedUpgrade(t *testing.T) {
 	ctx := context.Background()
 	if err := perfguard.Seed(ctx, db, layout.ArtifactContentDir, "scale-owner", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
+	}
+	// Follow the standard startup fixture's genuine history. Seeding directly
+	// into 135 would introduce pre-130-shaped revisions after their content
+	// migration and fail its recorded invariant, independently of this change.
+	for _, m := range migrations {
+		if m.Version > 58 && m.Version <= 135 {
+			if err := applyMigration(ctx, db, m); err != nil {
+				db.Close()
+				t.Fatal(err)
+			}
+		}
 	}
 	// Supplement the standard corpus with an annotation and live + archived
 	// receipt for every card; the standard fixture contains no run_recorded.

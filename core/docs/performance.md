@@ -2700,3 +2700,19 @@ matching ordinary mutations. Nested event and attention replay calls retain that
 ownership; they still enforce quota limits and roll back the entire alarm on a
 rejection. Quota-enabled tests cover agent placements, PM asks/recovery and
 concurrent ordinary idempotent writes without lock inversion.
+
+On 2026-11-10, `TestPerformanceWatcherHealthReleasedUpgrade` measured genuine
+schema-135 → 136 readiness at **119.8 ms** (unchanged 90-second budget) and
+warm-open at **67.7 ms** (unchanged five-second budget), on the standard
+4,096-row scale corpus supplemented with 4,096 annotated cards, 4,096 live run
+receipts and 4,096 archived run receipts. Fixture construction follows real
+schema-58 history through 135 before timing this incremental upgrade; this does
+not certify the separate legacy schema-58 full-upgrade gate. No new expression
+index is installed on canonical events or work metadata. The bounded reader
+still uses four queries / six rows at both history sizes, now **134 VM steps**
+and zero full scans.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=4 GOFLAGS='-p=2' go test -C core ./internal/storage \
+  -run '^TestPerformanceWatcherHealthReleasedUpgrade$' -count=1 -v -timeout=10m
+```
