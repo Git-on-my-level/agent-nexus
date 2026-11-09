@@ -192,6 +192,8 @@ Live dashboard data and declared push adapters: [guide](docs/live-series.md).
 
 Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.md).
 
+Watcher failures: [PM and loop health alarms](docs/watcher-health.md).
+
 Work tree: [stored parents, path aliases, Unsorted and explicit moves](docs/grouping-work.md).
 
 Work leases, deadlines and approval apply-by: [spec](docs/work-leases.md).

@@ -56,6 +56,8 @@ func NewStore(db *sql.DB) (*Store, error) {
  CREATE INDEX IF NOT EXISTS pm_records_changes ON pm_records(kind,workspace_id,julianday(json_extract(body,'$.created_at')));
  CREATE INDEX IF NOT EXISTS pm_records_overview_owner ON pm_records(kind,workspace_id,actor_id,json_extract(body,'$.status'));
  CREATE INDEX IF NOT EXISTS pm_records_parent_status ON pm_records(kind,workspace_id,parent_id,json_extract(body,'$.status'));
+ CREATE INDEX IF NOT EXISTS pm_records_health_expired ON pm_records(kind,workspace_id,json_extract(body,'$.agent_actor_id'),json_extract(body,'$.status'),json_extract(body,'$.failure_kind'),julianday(json_extract(body,'$.deadline')) DESC,id DESC);
+ CREATE INDEX IF NOT EXISTS pm_records_health_success ON pm_records(kind,workspace_id,json_extract(body,'$.agent_actor_id'),json_extract(body,'$.status'),julianday(json_extract(body,'$.deadline')) DESC,id DESC);
  CREATE INDEX IF NOT EXISTS pm_records_turn_outbox ON pm_records(kind,workspace_id,json_extract(body,'$.status'),COALESCE(json_extract(body,'$.delivery_queued'),0)) WHERE kind='turn' AND json_extract(body,'$.status')='delivered' AND COALESCE(json_extract(body,'$.delivery_queued'),0)=0;`)
 	if err != nil {
 		return nil, err

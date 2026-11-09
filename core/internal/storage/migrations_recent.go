@@ -47,4 +47,5 @@ var recentMigrations = []migration{
 	// instead of going unknown once a family's capped page fills. Rebuilding
 	// positions adds run_failed and installs the day counts.
 	{Version: 135, AfterApply: installWatchTrendPositions},
+	{Version: 136, AfterApply: installWatcherHealth},
 }

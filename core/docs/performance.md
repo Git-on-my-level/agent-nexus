@@ -2629,3 +2629,48 @@ route budget; these component measurements do not claim complete HTTP admission.
 ./scripts/slot run tests -- go test -C core ./internal/primitives \
   -run 'Test(InitiativeReadsBudget|GroupingReadsBoundedWithTenThousandUnrelatedCards|GroupingUngroupedBoundedBehindTenThousandDeniedCards|WatchWorkstreamRollupBudget)$' -count=1 -v -timeout=5m
 ```
+
+## Watcher health maintenance
+
+The watcher clock adds no HTTP read or stream tick. Every 30 seconds it admits
+25 annotated-loop/alarm identities from two indexed keyset pages (at most 50
+physical rows merged before the 25-card limit). Its durable cursor rotates;
+no denied or unhealthy prefix is refilled. Each card uses one writer snapshot
+for current lifecycle/metadata/ownership, recipient selection, receipt health,
+request-key placement, ask creation/withdrawal and repeat bookkeeping.
+
+Receipt health uses `idx_watcher_loop_runs` to admit at most two live receipt
+identities, and `idx_watcher_loop_effects` to admit at most one effect identity.
+Scoped events hydrate only those primary keys. An inaccessible admitted receipt
+withholds a new judgment; it never scans further into private history or invents
+an overdue/stalled result from a filtered prefix. Only time, outcome and the
+stop-rule boolean are decoded. Archived/trashed runs are excluded by partial
+indexes, not a read-time walk. No run-count or metric aggregate is needed.
+
+A candidate owner uses the actor unique index, card point authorization and
+indexed existence probes for recent token, event or presence activity. Fallback
+admits at most 200 human identities through `idx_agents_active_humans` and checks
+existing card visibility. It adds responsibility only. State inherits both the
+card and current ask; the cursor/receipt position views contain identities only.
+
+PM health reads its registered presence by primary key, then seeks the latest
+expired and successful turn deadlines using `pm_records_health_expired` and
+`pm_records_health_success` (workspace, selected actor, status, failure kind,
+deadline). It returns a boolean, never historical turn content. New PM indexes
+are installed with the existing PM store schema initialization. Migration 136
+creates empty clock state/cursor and annotated-loop/live-receipt indexes; index
+construction visits existing metadata/events once, without a content backfill.
+Reopen retains episodes and repeat deadlines. No request, startup budget or plan
+allowance is weakened.
+
+`testdata/watcher_health_budget.json` gates the new receipt reads with and
+without 4,096 unrelated/newer archived events: at most four queries, six rows,
+2,000 VM steps, zero full scans. Functional regressions cover the 25-card cursor,
+private-card fallback, coalescing, growing repeat intervals and atomic rollback.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformanceWatcherHealthReads$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
