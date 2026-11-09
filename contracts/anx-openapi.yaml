@@ -12522,6 +12522,7 @@ components:
         every_seconds: {type: integer, minimum: 60, maximum: 3155760000}
         progress_budget_seconds: {type: integer, minimum: 60, maximum: 3155760000, description: Must be at least every_seconds.}
         stop_rule: {type: string, maxLength: 500}
+        stop_after_unhealthy_seconds: {type: integer, minimum: 60, maximum: 3155760000, description: "Open a retire-or-resume ask after this continuous unhealthy interval. Does not stop execution."}
     WorkGoal:
       type: object
       additionalProperties: false

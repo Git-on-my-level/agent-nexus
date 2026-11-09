@@ -11,7 +11,6 @@
         }
       : decision,
   );
-
   import { page } from "$app/stores";
   import { durableDraft } from "$lib/actions/durableDraft.js";
   import { copyText } from "$lib/clipboard.js";
@@ -44,7 +43,6 @@
   import RefLink from "$lib/components/RefLink.svelte";
   import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
-
   /**
    * The one rendering of a decision: Decide's list, its permalink and the
    * initiative page all use this component (end-state S7).
@@ -73,7 +71,6 @@
     workspaceSlug = "",
     binding = null,
   } = $props();
-
   let href = $derived(
     bindWorkspaceHref(
       organizationSlug || $page.params.organization,
@@ -101,7 +98,6 @@
   let reply = $state("");
   let copied = $state(false);
   let copyTimer;
-
   let deadline = $derived(decisionDeadline(decision, now));
   let age = $derived(ageSeconds(decision.createdAt, now));
   let unsent = $derived(

@@ -53,7 +53,9 @@ has passed the next signal its own author promised. Only evidence (a note with
 an evidence ref, a plan-step state change, a changed source observation) resets
 the clock; moving a promise without evidence is counted and shown. There are
 no workspace-tuned health thresholds and no met or broken enum. A promise beyond
-the horizon (default 2 days) warns at write time.
+the horizon (default 2 days) warns at write time. Operational liveness alarms may
+debounce and schedule delivery through deployment configuration; those settings
+never change promises or computed initiative health.
 
 ### One core per workspace, aggregation in a hosted shell
 
@@ -138,6 +140,7 @@ replacement for every source workflow or a separate distributed tracker DB.
 The **workspace** is the primary isolation boundary in Agent Nexus. A workspace contains its own set of topics, cards, boards, documents, events, artifacts, and actors, plus backing **threads** used for timelines and packet subject resolution (threads are infrastructure, not the primary operator noun). Workspaces are isolated from one another; there is no cross-workspace visibility or shared state at the storage layer.
 
 This decision supports:
+
 - **Clean multi-tenant isolation**: each workspace is an independent organizational context.
 - **Simple reasoning about scope**: actors, data, and provenance are all scoped to a single workspace.
 - **Clear hosting model**: workspaces can be provisioned, backed up, and migrated independently.
@@ -147,12 +150,14 @@ This decision supports:
 The canonical source of truth at runtime is **SQLite for structured data** and **filesystem blobs for content**. This hybrid model replaces earlier designs that treated the filesystem itself as the primary runtime substrate.
 
 Implications:
+
 - **SQLite** stores events, topics, cards, boards, artifact metadata, documents, actor registry, backing thread rows, and derived views.
 - **Filesystem** stores artifact content, referenced by path from SQLite metadata.
 - **File-first** approaches (if mentioned at all) describe import/export/backup shapes, not the live runtime source of truth.
 - All query, mutation, and projection logic operates against the SQLite + blob substrate.
 
 This decision ensures:
+
 - Reliable transactional semantics for state mutations.
 - Efficient querying and indexing for derived views.
 - Clear separation between structured metadata and opaque content.
@@ -163,6 +168,7 @@ This decision ensures:
 **Boards** and **documents** are canonical organizing layers in Agent Nexus. They are not disposable UI sugar or optional projections.
 
 Implications:
+
 - **Boards** provide structured views over topics, cards, and related backing threads. They are first-class entities with their own storage, lifecycle, and identity. Boards can be persisted, shared, and referenced independently of any particular UI session.
 - **Documents** provide a first-class lifecycle with revision history, trash/archive semantics (per contract field names), and Merkle-chain integrity. They are distinct from generic artifacts and have their own API surface.
 - Both boards and documents exist in the core data model and can be manipulated through the canonical API, not just through the UI.
@@ -178,6 +184,7 @@ Agent Nexus distinguishes between human and agent authentication:
 - **Legacy actor-mode** (where the system treats all actors uniformly without authentication type distinction) exists only as a development convenience. It is not a product identity story and should not be treated as the default in production or hosted environments.
 
 This separation supports:
+
 - Clear audit trails distinguishing human vs. agent actions.
 - Different security postures for different actor types.
 - Future evolution (e.g., hardware-bound agent keys, scoped agent permissions).
@@ -193,6 +200,7 @@ Agent Nexus exposes two distinct API surfaces:
 2. **Projection APIs**: Derived views that aggregate or transform canonical data for specific use cases. Examples include inbox items, staleness indicators, and board views. These APIs are convenience layers that may evolve independently of canonical storage.
 
 Implications:
+
 - Projection APIs are regenerable from canonical data.
 - Projection API changes do not require storage migrations.
 - Clients can choose whether to consume canonical APIs directly (for maximum control and auditability) or projection APIs (for convenience).

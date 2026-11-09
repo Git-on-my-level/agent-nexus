@@ -2629,3 +2629,90 @@ route budget; these component measurements do not claim complete HTTP admission.
 ./scripts/slot run tests -- go test -C core ./internal/primitives \
   -run 'Test(InitiativeReadsBudget|GroupingReadsBoundedWithTenThousandUnrelatedCards|GroupingUngroupedBoundedBehindTenThousandDeniedCards|WatchWorkstreamRollupBudget)$' -count=1 -v -timeout=5m
 ```
+
+## Watcher health maintenance
+
+The watcher clock adds no HTTP read or stream tick. Every 30 seconds it admits
+25 annotated-loop/alarm identities from two indexed keyset pages (at most 50
+physical rows merged before the 25-card limit). Its durable cursor rotates;
+no denied or unhealthy prefix is refilled. Each card uses one writer snapshot
+for current lifecycle/metadata/ownership, recipient selection, receipt health,
+request-key placement, ask creation/withdrawal and repeat bookkeeping.
+
+Receipt health uses `idx_watcher_receipt_subject` to admit at most two live receipt
+identities, and `idx_watcher_receipt_effect` to admit at most one effect identity.
+These are ordinary indexes on the compact `watcher_receipt_positions` table;
+canonical triggers keep lifecycle/subject/time/effect positions current.
+Scoped events hydrate only those primary keys. An inaccessible recent receipt
+withholds a new judgment; an inaccessible older effect withholds goal/stall
+judgments but cannot hide public cadence misses or receipt failures. The reader never scans further into private history or invents
+an overdue/stalled result from a filtered prefix. Only time, outcome and the
+stop-rule boolean are decoded. Archived/trashed runs are excluded from position
+tables on the canonical write, not by a read-time walk. No run-count or metric aggregate is needed.
+
+A candidate owner uses the actor unique index, card point authorization and
+indexed existence probes for recent token, event or presence activity. Fallback
+admits at most 200 human identities through `idx_agents_active_humans` and checks
+existing card visibility. It adds responsibility only. State inherits the
+card, current ask and human-owned PM thread; position views contain only traversal
+keys. PM asks target a selected active human, whose owned thread constrains their
+audience; random event/thread IDs and atomic episode state prevent preclaim attacks.
+
+PM health reads its registered presence by primary key, then seeks the latest
+expired and successful turn creation times using `pm_records_health_expired` and
+`pm_records_health_success` (workspace, selected actor, status, failure kind,
+creation time). It returns a boolean, never historical turn content. New PM indexes
+are installed with the existing PM store schema initialization. Migration 136
+creates empty clock state/cursor and compact loop/receipt position tables. No new
+expression index traverses canonical events or metadata. Backfill walks the
+existing partial `idx_brief_loop_annotated_recent` and `idx_events_run_subject_ts`
+indexes: O(annotated loops + run receipts), excluding unrelated canonical rows.
+Only live positions are retained. Canonical changes update these tables in the
+same transaction, including archive/trash/restore/import writes.
+Reopen retains episodes and repeat deadlines. No request, startup budget or plan
+allowance is weakened.
+
+`testdata/watcher_health_budget.json` gates the new receipt reads with and
+without 4,096 unrelated/newer archived events: at most four queries, six rows,
+2,000 VM steps, zero full scans. Functional regressions cover the 25-card cursor,
+private-card fallback, coalescing, growing repeat intervals and atomic rollback.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/primitives \
+  -run '^TestPerformanceWatcherHealthReads$' -count=1 -v -timeout=5m
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/storage \
+  -run '^TestPerformanceStartupAndMigrations$' -count=1 -v -timeout=10m
+```
+
+The PM signal is separately gated by `pm/testdata/health_read_budget.json` with
+4,096 old turns: at most two queries, two rows, 1,500 VM steps and zero full
+scans. Creation order, rather than deadline order, prevents a previously
+successful long-timeout turn from hiding a newer short-timeout expiry. Removing
+the UTC Z suffix before indexed comparison preserves fractional-second order.
+
+```sh
+ANX_PERFORMANCE_TEST=1 ./scripts/slot run tests -- go test -C core ./internal/pm \
+  -run '^TestPerformanceWatcherPMHealthReads$' -count=1 -v -timeout=5m
+```
+
+Alarm mutations acquire optional quota serialization before the SQLite writer,
+matching ordinary mutations. Nested event and attention replay calls retain that
+ownership; they still enforce quota limits and roll back the entire alarm on a
+rejection. Quota-enabled tests cover agent placements, PM asks/recovery and
+concurrent ordinary idempotent writes without lock inversion.
+
+On 2026-11-10, `TestPerformanceWatcherHealthReleasedUpgrade` measured genuine
+schema-135 → 136 readiness at **119.8 ms** (unchanged 90-second budget) and
+warm-open at **67.7 ms** (unchanged five-second budget), on the standard
+4,096-row scale corpus supplemented with 4,096 annotated cards, 4,096 live run
+receipts and 4,096 archived run receipts. Fixture construction follows real
+schema-58 history through 135 before timing this incremental upgrade; this does
+not certify the separate legacy schema-58 full-upgrade gate. No new expression
+index is installed on canonical events or work metadata. The bounded reader
+still uses four queries / six rows at both history sizes, now **134 VM steps**
+and zero full scans.
+
+```sh
+ANX_PERFORMANCE_TEST=1 GOMAXPROCS=4 GOFLAGS='-p=2' go test -C core ./internal/storage \
+  -run '^TestPerformanceWatcherHealthReleasedUpgrade$' -count=1 -v -timeout=10m
+```

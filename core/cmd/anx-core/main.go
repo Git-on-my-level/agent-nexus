@@ -679,7 +679,7 @@ func main() {
 		p, err := authStore.PrincipalForActor(ctx, actor)
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
 	})
-	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router")
+	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router", "watcher_health")
 	go loopstats.Run(maintenanceCtx, os.Stderr)
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
@@ -760,7 +760,7 @@ func main() {
 	}
 	go cardLeaseClock.Run(maintenanceCtx)
 	workTrackingClock := &server.WorkTrackingClock{Store: primitiveStore, AuthStore: authStore, Deliveries: delivery.Store{DB: workspace.DB()}, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
-	go workTrackingClock.Run(maintenanceCtx)
+	go server.RunWorkTrackingClocks(maintenanceCtx, workTrackingClock, pmRuntime)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)

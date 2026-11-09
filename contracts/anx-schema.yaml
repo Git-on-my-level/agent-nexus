@@ -849,6 +849,8 @@ reference_conventions:
         experiment requires candidate (1..200) and decision (kept, reverted, rejected),
         with optional finite score_before/score_after. effect_refs has at most 10
         typed refs or HTTP/HTTPS URLs (including url: refs; schemes are case-insensitive).
+        Optional stop_rule_triggered is a boolean producer assertion that the authored
+        stop rule has tripped. The newest receipt supersedes that assertion.
 
     exception_raised:
       payload_must_include: ["subtype"]
@@ -1670,3 +1672,13 @@ watch_rollup_data:
     - top_level is deprecated and ignored. Explicit stored-parent moves determine initiative status; creation without a parent or initiative true lands in Unsorted.
     - Unsorted contains needs_home cards. where suggestions are advisory; next_actions name explicit work move commands.
     - Curation counts are omitted. Existing events do not classify kept-as-evidence or archive-candidate transitions, and cross-workspace move journals are client state; a recent event window cannot deterministically count all three categories.
+
+watcher_health:
+  semantics:
+    - Core runs a bounded durable maintenance clock independently of the PM runner. No model or external execution is started.
+    - A registered PM offline for 1 hour beyond the 90-second presence window, or an expired unanswered turn, opens one coalesced workspace-human Decide ask. Explicit disconnect disables the expectation; renewed presence clears offline, and a later successful turn clears deadline failure.
+    - Loop failing, overdue and stalled states retain their existing receipt-based computation. After 2 continuous unhealthy cadences an owned digest placement is raised; after 4 it becomes Decide. Goals without cadence use their progress budget (default 7 days) as the interval.
+    - An inactive or unreadable agent owner falls back to a readable active workspace human. Responsibility grants no resource access. Private receipts are evaluated under the recipient scope.
+    - A newest receipt asserting stop_rule_triggered, or cadence.stop_after_unhealthy_seconds elapsing, opens one retire-or-resume ask. Free-text stop_rule is never interpreted by Core; external producers assert non-time conditions. No loop is automatically retired or resumed.
+    - Alarm episodes, request keys and repeat schedules commit atomically with placements and asks. Repeats refresh the same placement and append an automatic reminder, doubling the interval up to 24 hours. Recovery withdraws an open system ask and removes only the system placement. Human answers are preserved.
+    - Deployment configuration may tune debounce, cadence multipliers, activity freshness and repeat intervals. These settings do not change plan_health or the authored promise clock.

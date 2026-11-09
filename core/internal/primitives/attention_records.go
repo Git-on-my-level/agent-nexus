@@ -16,12 +16,15 @@ import (
 const attentionPageSize = 100
 
 type AttentionPlacement struct {
-	SubjectRef string `json:"subject_ref"`
-	For        string `json:"for"`
-	To         string `json:"to"`
-	Reason     string `json:"reason"`
-	Rank       int    `json:"rank"`
-	RequestKey string `json:"request_key,omitempty"`
+	// Maintenance can retain evidence provenance without changing the public
+	// authoring request. The existing ownership source indexes this payload.
+	evidenceRefs []string
+	SubjectRef   string `json:"subject_ref"`
+	For          string `json:"for"`
+	To           string `json:"to"`
+	Reason       string `json:"reason"`
+	Rank         int    `json:"rank"`
+	RequestKey   string `json:"request_key,omitempty"`
 }
 type AttentionFeedback struct {
 	SubjectRef     string   `json:"subject_ref"`
@@ -168,6 +171,9 @@ func (s *Store) PlaceAttention(ctx context.Context, actor string, p AttentionPla
 	p.SubjectRef = subject.Type + ":" + subject.ID
 	p.For = "actor:" + recipient
 	payload := map[string]any{"subject_ref": p.SubjectRef, "for": p.For, "surface": p.To, "reason": p.Reason, "rank": p.Rank, "placed_by": "actor:" + actor}
+	if len(p.evidenceRefs) > 0 {
+		payload["related_refs"] = p.evidenceRefs
+	}
 	if err = s.CheckResourceValues(ctx, payload); err != nil {
 		return nil, err
 	}

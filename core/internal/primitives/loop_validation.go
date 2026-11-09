@@ -64,7 +64,7 @@ func validateLoopMetadata(m map[string]any) error {
 			return workInvalid("%s must be an object or null", key)
 		}
 		if key == "cadence" {
-			if err := loopKeys(obj, "every_seconds", "progress_budget_seconds", "stop_rule"); err != nil {
+			if err := loopKeys(obj, "every_seconds", "progress_budget_seconds", "stop_rule", "stop_after_unhealthy_seconds"); err != nil {
 				return err
 			}
 			every, ok := workInt(obj["every_seconds"])
@@ -75,6 +75,12 @@ func validateLoopMetadata(m map[string]any) error {
 				n, ok := workInt(v)
 				if !ok || n < every || n > 3155760000 {
 					return workInvalid("cadence.progress_budget_seconds must be an integer >= every_seconds and <=3155760000")
+				}
+			}
+			if v, has := obj["stop_after_unhealthy_seconds"]; has {
+				n, ok := workInt(v)
+				if !ok || n < 60 || n > 3155760000 {
+					return workInvalid("invalid cadence.stop_after_unhealthy_seconds")
 				}
 			}
 			if v, has := obj["stop_rule"]; has && !loopText(v, 500, false) {
@@ -127,11 +133,16 @@ func ValidateRunRecorded(event map[string]any) error {
 	if !ok {
 		return workInvalid("run payload required")
 	}
-	if err := loopKeys(p, "run_id", "outcome", "started_at", "finished_at", "metrics", "experiment", "effect_refs"); err != nil {
+	if err := loopKeys(p, "run_id", "outcome", "started_at", "finished_at", "metrics", "experiment", "effect_refs", "stop_rule_triggered"); err != nil {
 		return err
 	}
 	if !loopText(p["run_id"], 200, true) {
 		return workInvalid("run_id must have 1..200 characters")
+	}
+	if v, exists := p["stop_rule_triggered"]; exists {
+		if _, ok := v.(bool); !ok {
+			return workInvalid("stop_rule_triggered must be boolean")
+		}
 	}
 	switch p["outcome"] {
 	case "acted", "measured", "no_op", "infra_error":

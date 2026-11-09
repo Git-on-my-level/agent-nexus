@@ -14,7 +14,7 @@ import (
 )
 
 // TestStalenessKnobs pins the end-state rule "one clock: promise versus
-// evidence": no workspace-tuned staleness thresholds feed human-visible state.
+// evidence": no workspace-tuned staleness thresholds feed initiative promise state.
 // It scans the Go sources of core/ and cli/ (tests and generated files
 // excluded) and fails when an env knob or a duration constant for staleness,
 // stalling or darkness appears. The only duration fallback is
@@ -25,7 +25,12 @@ func TestStalenessKnobs(t *testing.T) {
 	durationName := regexp.MustCompile(`(?i)(stale|stall|dark|fallback)`)
 	durationValue := regexp.MustCompile(`\btime\.(Hour|Minute|Second|Duration)\b`)
 	// SignalStaleness measures agent process liveness, not initiative health.
-	exempt := map[string]bool{"commandcenter.SignalStaleness": true}
+	exempt := map[string]bool{
+		"commandcenter.SignalStaleness": true,
+		// Registered PM connection liveness controls alarm delivery only. This
+		// exact source location cannot exempt a new promise/initiative knob.
+		"env ANX_PM_OFFLINE_ALARM_AFTER (core/internal/server/watcher_health_clock.go)": true,
+	}
 	root := filepath.Join("..", "..", "..")
 	found := map[string]bool{}
 	flags := []string{}
