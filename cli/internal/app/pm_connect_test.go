@@ -23,7 +23,7 @@ func stubPMInstallConnect(t *testing.T) {
 	pmServicePreflightConnect = func(*App, context.Context, config.Resolved, []string) error { return nil }
 }
 
-const mismatchBody = `{"error":{"code":"pm_actor_mismatch","message":"configured old; acting new","hint":"Rebind ANX_PM_AGENT_ACTOR_ID to new and restart anx-core.","recoverable":false}}`
+const mismatchBody = `{"error":{"code":"pm_actor_mismatch","message":"configured old; acting new","hint":"Rebind ANX_PM_AGENT_ACTOR_ID to new and restart anx-core.","details":{"configured_actor_id":"old","acting_actor_id":"new"},"recoverable":false}}`
 
 func TestPMInstallPreflightsBeforeServiceMutation(t *testing.T) {
 	for _, platform := range []string{"darwin", "linux"} {
@@ -213,10 +213,7 @@ func TestPMConnectCancellationAndOldCore(t *testing.T) {
 			if status == 404 && err != nil {
 				t.Fatal(err)
 			}
-			if status == 500 && httpStatusFromErr(err) != 500 {
-				t.Fatal(err)
-			}
-			if (status == 401 || status == 403) && !errors.Is(err, context.Canceled) {
+			if status != 404 && !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}
 			if calls != 1 {
@@ -328,7 +325,7 @@ func TestPMConnectDiagnosticIsPrivateBoundedAndExcludesBody(t *testing.T) {
 	if e = os.WriteFile(path, []byte(strings.Repeat("x", 16*1024+1)), 0600); e != nil {
 		t.Fatal(e)
 	}
-	if _, e = readPMConnectFailure(dir); e == nil {
-		t.Fatal("oversized diagnostic accepted")
+	if failure, e := readPMConnectFailure(dir); e != nil || failure != nil {
+		t.Fatalf("oversized diagnostic is not unknown: %+v %v", failure, e)
 	}
 }

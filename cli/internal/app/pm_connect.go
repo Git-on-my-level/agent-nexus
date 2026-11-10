@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,17 +10,22 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/filelock"
 )
 
 const pmConnectAuthBackoffStart = time.Minute
 const pmConnectAuthBackoffCap = 15 * time.Minute
+const pmConnectRetryBackoffStart = time.Second
+const pmConnectRetryBackoffCap = 2 * time.Minute
 
 type pmConnectFailure struct {
-	Code      string `json:"code"`
-	At        string `json:"at"`
-	Status    int    `json:"status,omitempty"`
-	Retryable bool   `json:"retryable"`
-	Hint      string `json:"hint,omitempty"`
+	Code              string `json:"code"`
+	At                string `json:"at"`
+	Status            int    `json:"status,omitempty"`
+	Retryable         bool   `json:"retryable"`
+	Hint              string `json:"hint,omitempty"`
+	ConfiguredActorID string `json:"configured_actor_id,omitempty"`
+	ActingActorID     string `json:"acting_actor_id,omitempty"`
 }
 
 // Store only bounded diagnostics, never response bodies, tokens or runner argv.
@@ -29,34 +33,56 @@ func recordPMConnect(state string, err error) error {
 	var failure *pmConnectFailure
 	if err != nil {
 		normalized := errnorm.Normalize(err)
-		failure = &pmConnectFailure{Code: truncateToMaxBytes(normalized.Code, 128), At: nowFn().UTC().Format(time.RFC3339Nano), Status: httpStatusFromErr(err), Retryable: claimErrorRetryable(err), Hint: truncateToMaxBytes(normalized.Hint, 2048)}
+		failure = &pmConnectFailure{Code: normalized.Code, At: nowFn().UTC().Format(time.RFC3339Nano), Status: httpStatusFromErr(err), Retryable: claimErrorRetryable(err)}
+		if failure.Code == "pm_actor_mismatch" {
+			details := pmErrorDetails(err)
+			failure.ConfiguredActorID, _ = details["configured_actor_id"].(string)
+			failure.ActingActorID, _ = details["acting_actor_id"].(string)
+		}
+		failure.localize()
 	}
 	raw, err := json.Marshal(failure)
 	if err != nil {
 		return err
 	}
-	return writePMPrivateFile(filepath.Join(state, "last-connect.json"), raw)
+	return writePMConnectFile(state, raw)
 }
 
 func readPMConnectFailure(state string) (*pmConnectFailure, error) {
-	file, err := os.Open(filepath.Join(state, "last-connect.json"))
-	if os.IsNotExist(err) {
+	path := filepath.Join(state, "last-connect.json")
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
 		return nil, nil
 	}
+	file, err := filelock.OpenNoFollow(path, os.O_RDONLY, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return nil, nil
+	}
 	raw, err := io.ReadAll(io.LimitReader(file, 16*1024+1))
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 	if len(raw) > 16*1024 {
-		return nil, fmt.Errorf("PM connect diagnostic exceeds 16 KiB")
+		return nil, nil
 	}
 	var failure *pmConnectFailure
 	if err = json.Unmarshal(raw, &failure); err != nil {
-		return nil, err
+		return nil, nil
+	}
+	if failure != nil {
+		if failure.Code == "" {
+			return nil, nil
+		}
+		if _, err := time.Parse(time.RFC3339Nano, failure.At); err != nil {
+			return nil, nil
+		}
+		// Also discard remote hints left by older CLI versions.
+		failure.localize()
 	}
 	return failure, nil
 }
@@ -79,10 +105,10 @@ var pmServicePreflightConnect = func(a *App, ctx context.Context, cfg config.Res
 	return a.connectPM(ctx, resolved, argv)
 }
 
-// Keep the service alive on authorization denial: service-manager KeepAlive
-// must not turn a permanent configuration fault into a ten-second crash loop.
+// Retry connect failures in-process so service-manager KeepAlive cannot turn
+// configuration faults or outages into a short crash loop.
 func (a *App) waitPMConnect(ctx context.Context, cfg config.Resolved, argv []string, state string) error {
-	backoff := pmConnectAuthBackoffStart
+	authBackoff, retryBackoff := pmConnectAuthBackoffStart, pmConnectRetryBackoffStart
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -92,23 +118,30 @@ func (a *App) waitPMConnect(ctx context.Context, cfg config.Resolved, argv []str
 			return ctx.Err()
 		}
 		if recordErr := recordPMConnect(state, err); recordErr != nil {
-			return fmt.Errorf("persist PM connect status: %w", recordErr)
+			a.pmLog("pm serve: cannot persist advisory connect status: %v\n", recordErr)
 		}
 		if err == nil {
 			return nil
 		}
 		authFailure := errnorm.ExitCode(err) == 5
-		if !authFailure || claimErrorRetryable(err) {
+		retryable := claimErrorRetryable(err)
+		if !authFailure && !retryable {
 			return err
 		}
-		normalized := errnorm.Normalize(err)
-		a.pmLog("pm serve: connect failed code=%s: %s; %s; retrying in %s\n", normalized.Code, normalized.Message, normalized.Hint, backoff)
+		backoff := authBackoff
+		if retryable {
+			backoff = retryBackoff
+			retryBackoff = min(2*retryBackoff, pmConnectRetryBackoffCap)
+			authBackoff = pmConnectAuthBackoffStart
+		} else {
+			authBackoff = min(2*authBackoff, pmConnectAuthBackoffCap)
+			retryBackoff = pmConnectRetryBackoffStart
+		}
+		diagnostic := &pmConnectFailure{Code: errnorm.Normalize(err).Code}
+		diagnostic.localize()
+		a.pmLog("pm serve: connect failed code=%s; %s; retrying in %s\n", diagnostic.Code, diagnostic.Hint, backoff)
 		if err = sleepFn(ctx, backoff); err != nil {
 			return err
-		}
-		backoff *= 2
-		if backoff > pmConnectAuthBackoffCap {
-			backoff = pmConnectAuthBackoffCap
 		}
 	}
 }
