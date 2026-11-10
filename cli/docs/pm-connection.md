@@ -20,9 +20,10 @@ this is the same deployment configuration for self-hosted workspaces.
 
 `pm serve` records connect failures in mode-0600 `last-connect.json` under its
 work directory. `pm status` exposes `last_connect_failure` (code, timestamp,
-HTTP status, retryability and repair hint) in JSON and text. A successful runner
-connect clears the failure. Missing history on an older installation means
-unknown, not healthy. No response body, token or runner command is stored there.
+HTTP status, retryability and repair hint) in JSON and text. A successful
+install preflight or runner connect clears the failure. Missing history on an
+older installation means unknown, not healthy. No response body, token or runner
+command is stored there.
 
 On a non-retryable connect authorization failure, serve remains alive and retries
 after 1, 2, 4, 8, then at most 15 minutes, until the binding is repaired or the

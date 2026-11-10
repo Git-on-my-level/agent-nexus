@@ -74,6 +74,66 @@ func TestPMInstallPreflightsBeforeServiceMutation(t *testing.T) {
 	}
 }
 
+func TestPMInstallSuccessClearsStaleConnectFailure(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	oldOS, oldExec, oldAuth := pmServiceOS, pmServiceExec, pmServiceResolveAuth
+	t.Cleanup(func() { pmServiceOS, pmServiceExec, pmServiceResolveAuth = oldOS, oldExec, oldAuth })
+	pmServiceOS = "linux"
+	pmServiceResolveAuth = func(_ *App, _ context.Context, cfg config.Resolved) (config.Resolved, error) {
+		cfg.AccessToken = "test"
+		return cfg, nil
+	}
+	repaired := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pm/connect" || r.Method != "POST" || r.Header.Get("Authorization") != "Bearer test" {
+			t.Errorf("unexpected preflight: %s %s", r.Method, r.URL.Path)
+		}
+		if !repaired {
+			w.WriteHeader(403)
+			w.Write([]byte(mismatchBody))
+			return
+		}
+		w.Write([]byte(`{"state":"connected"}`))
+	}))
+	defer srv.Close()
+	pmServiceExec = func(context.Context, string, ...string) ([]byte, error) {
+		if !repaired {
+			t.Fatal("service manager called after failed preflight")
+		}
+		return []byte("active"), nil
+	}
+	a := &App{UserHomeDir: func() (string, error) { return home, nil }}
+	cfg := config.Resolved{BaseURL: srv.URL, ConfigDir: filepath.Join(home, "credentials")}
+	result, err := a.runPMService(context.Background(), "install", []string{"--runner", "echo {prompt}"}, cfg)
+	if err == nil || result != nil || errnorm.Normalize(err).Code != "pm_actor_mismatch" {
+		t.Fatalf("expected mismatch: %+v %v", result, err)
+	}
+	repaired = true
+	result, err = a.runPMService(context.Background(), "install", []string{"--runner", "echo {prompt}"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := result.Data.(pmServiceStatus)
+	if !status.Installed || status.LastConnectFailure != nil {
+		t.Fatalf("successful install kept stale connect failure: %+v", status)
+	}
+	state := filepath.Join(home, "state", "anx", "pm", pmServiceID(cfg.BaseURL, cfg.ConfigDir, "pm"))
+	raw, err := os.ReadFile(filepath.Join(state, "last-connect.json"))
+	if err != nil || string(raw) != "null" {
+		t.Fatalf("connect diagnostic = %q, %v", raw, err)
+	}
+	result, err = a.runPMService(context.Background(), "status", nil, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status = result.Data.(pmServiceStatus)
+	if status.LastConnectFailure != nil || strings.Contains(result.Text, "pm_actor_mismatch") || strings.Contains(result.Text, "Last connect failure") {
+		t.Fatalf("status kept stale connect failure: %+v %s", status, result.Text)
+	}
+}
+
 func TestPMConnectAuthorizationBackoffRecoveryAndStatus(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))

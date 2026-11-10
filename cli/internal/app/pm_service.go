@@ -186,6 +186,15 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 			}
 			return nil, e
 		}
+		// Preflight is a real connect. Clear a failure left by an earlier
+		// rejected install; serve has not run yet, so status would otherwise
+		// keep reporting that stale mismatch.
+		if e = os.MkdirAll(state, 0700); e != nil {
+			return nil, fmt.Errorf("persist connect status: %w", e)
+		}
+		if e = recordPMConnect(state, nil); e != nil {
+			return nil, fmt.Errorf("persist connect status: %w", e)
+		}
 		binary, e := os.Executable()
 		if e != nil {
 			return nil, e
