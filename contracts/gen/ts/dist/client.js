@@ -11844,7 +11844,7 @@ export const commandRegistry = [
         "path": "/pm/connect",
         "operation_id": "pmConnect",
         "summary": "Connect a local workspace PM runner",
-        "description": "Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials.",
+        "description": "Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials. An authenticated agent whose actor differs from ANX_PM_AGENT_ACTOR_ID receives HTTP 403 pm_actor_mismatch with configured_actor_id, acting_actor_id and a hint to rebind that server setting. Unauthenticated callers and human principals receive no binding details.",
         "why": "Register the selected PM's local connection without queueing a turn.",
         "input_mode": "json-body",
         "streaming": {
@@ -11855,6 +11855,7 @@ export const commandRegistry = [
             "auth_required",
             "invalid_token",
             "forbidden",
+            "pm_actor_mismatch",
             "conflict",
             "invalid_request",
             "unavailable"
@@ -12721,6 +12722,7 @@ export const commandRegistry = [
             "auth_required",
             "invalid_token",
             "forbidden",
+            "pm_actor_mismatch",
             "unavailable"
         ],
         "concepts": [

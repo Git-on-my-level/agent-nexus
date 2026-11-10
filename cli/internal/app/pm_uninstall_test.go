@@ -13,6 +13,7 @@ import (
 )
 
 func TestPMUninstallResetKeepRegistrationAndServerFailure(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, mode := range []string{"reset", "keep", "server-failure", "auth-failure"} {
 		t.Run(mode, func(t *testing.T) {
 			home := t.TempDir()

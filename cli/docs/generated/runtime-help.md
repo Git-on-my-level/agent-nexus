@@ -4342,7 +4342,7 @@ Generated Help: pm connect
 - Input mode: `json-body`
 - Why: Register the selected PM's local connection without queueing a turn.
 - Output: Returns `PMPresence`.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `conflict`, `invalid_request`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `conflict`, `invalid_request`, `unavailable`
 - Concepts: `agents`
 - Agent notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
@@ -4397,7 +4397,7 @@ Generated Help: pm disconnect
 - Input mode: `none`
 - Why: Stop expecting the selected PM to return after explicit uninstall.
 - Output: Returns `PMPresence` with state not_onboarded.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `unavailable`
 - Concepts: `agents`
 - Agent notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
 - Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
@@ -11531,7 +11531,7 @@ Local Help: pm install
 - Side effect class: `local_operational_write`
 - Summary: Install or update the PM service on this computer.
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at
+- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
 - Examples:
   - `anx --as pm pm install`
 
@@ -11558,7 +11558,7 @@ Local Help: pm status
 - Side effect class: `read_only`
 - Summary: Read the local PM service and last accepted claim.
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at
+- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
 - Examples:
   - `anx --as pm pm status`
 
@@ -11580,7 +11580,7 @@ Local Help: pm uninstall
 - Side effect class: `local_operational_write`
 - Summary: Remove the local PM service and reset workspace onboarding.
 - Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at
+- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
 - Examples:
   - `anx --as pm pm uninstall`
 

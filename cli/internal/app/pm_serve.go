@@ -98,17 +98,15 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	for i := 0; i < maxConcurrent; i++ {
 		workerIDs[i] = pmServeWorkerRunnerID(runnerID, i+1)
 	}
-	hostLabel, _ := os.Hostname()
-	hostLabel = safePMConnectionLabel(hostLabel, "local computer")
-	_, connectErr := a.invokeRawJSON(ctx, cfg, "pm connect", "POST", "/pm/connect", map[string]any{"runner": pmRunnerLabel(argv), "host": hostLabel})
-	// Older cores lack this optional connection operation; their accepted claims
-	// retain the legacy presence signal. Authentication failures never fall back.
-	if connectErr != nil && ctx.Err() == nil && httpStatusFromErr(connectErr) != 404 {
-		return nil, connectErr
-	}
-	a.pmLog("pm serve: agent=%s runner_id=%s worker_ids=%s work_dir=%s max_concurrent=%d\n", cfg.Agent, runnerID, strings.Join(workerIDs, ","), absDir, maxConcurrent)
 	serveCtx, stopSignals := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	if err := a.waitPMConnect(serveCtx, cfg, argv, absDir); err != nil {
+		if serveCtx.Err() != nil {
+			return &commandResult{Text: "pm serve stopped; released 0 turn(s)", Data: map[string]any{"stopped": true, "released": []string{}}}, nil
+		}
+		return nil, err
+	}
+	a.pmLog("pm serve: agent=%s runner_id=%s worker_ids=%s work_dir=%s max_concurrent=%d\n", cfg.Agent, runnerID, strings.Join(workerIDs, ","), absDir, maxConcurrent)
 	harnessRoot, stopHarness := context.WithCancel(context.Background())
 	defer stopHarness()
 	type heldTurn struct {

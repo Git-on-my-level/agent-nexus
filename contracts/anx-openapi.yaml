@@ -1088,10 +1088,10 @@ paths:
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `PMPresence`.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, conflict, invalid_request, unavailable]
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, pm_actor_mismatch, conflict, invalid_request, unavailable]
       x-anx-concepts: [agents]
       x-anx-stability: beta
-      description: Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials.
+      description: Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials. An authenticated agent whose actor differs from ANX_PM_AGENT_ACTOR_ID receives HTTP 403 pm_actor_mismatch with configured_actor_id, acting_actor_id and a hint to rebind that server setting. Unauthenticated callers and human principals receive no binding details.
       requestBody:
         required: true
         content:
@@ -1099,6 +1099,12 @@ paths:
             schema:
               $ref: '#/components/schemas/PMConnectRequest'
       responses:
+        '403':
+          description: Authenticated principal denied; pm_actor_mismatch identifies a stale configured PM actor binding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PMErrorResponse'
         '200':
           description: Workspace PM connection state
           content:
@@ -1118,7 +1124,7 @@ paths:
       x-anx-input-mode: none
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns `PMPresence` with state not_onboarded.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
+      x-anx-error-codes: [auth_required, invalid_token, forbidden, pm_actor_mismatch, unavailable]
       x-anx-concepts: [agents]
       x-anx-stability: beta
       description: Authenticated selected PM principal only, including when already disconnected. Ordinary silence remains offline. Reset is durable across restarts and preserves historical conversations, decisions and approvals.
@@ -11755,6 +11761,12 @@ components:
             details:
               type: object
               properties:
+                configured_actor_id:
+                  type: string
+                  description: Configured PM actor, disclosed only after authenticating an agent on a PM connection operation.
+                acting_actor_id:
+                  type: string
+                  description: Authenticated acting agent for pm_actor_mismatch.
                 turn_id:
                   type: string
                   description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.

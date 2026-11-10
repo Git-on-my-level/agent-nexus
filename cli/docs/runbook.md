@@ -660,7 +660,7 @@ Logs, prompt files and last accepted claim live under
 Prompt files are mode 0600 and removed after execution. `{prompt_file}` substitutes
 only the path; legacy `{prompt}` also means a path. Without a placeholder, agentctl
 receives `--prompt-file`. Do not use command substitution to put prompt text in argv.
-`status --json` reports installed/running, workspace, profile, logs and last claim.
+`status --json` reports installed/running, workspace, profile, logs, last claim and last connect failure; see [PM connection diagnostics](pm-connection.md) for install preflight and actor-binding repair.
 Uninstall removes the selected local service/state and calls authenticated
 `POST /pm/disconnect` as the selected PM principal. The workspace returns to
 `not_onboarded`; unfinished queued/running turns fail with `pm_not_onboarded`,
@@ -669,11 +669,11 @@ Workspace credentials are retained. If reset fails, local removal still complete
 and a warning prints an exact `anx ... pm disconnect` retry command.
 Use `--keep-registration` when moving the PM to another computer: it skips the
 server reset, so ordinary silence becomes offline after 90 seconds. Only a new
-explicit `pm connect` (performed by `pm serve`) re-enables a disconnected PM;
+explicit `pm connect` (performed by `pm install` or `pm serve`) re-enables a disconnected PM;
 stale claims or heartbeats cannot revive it. Revoking host credentials prevents reconnecting; selecting a different
 workspace PM requires that actor to connect before its features become available.
 
-PM features require onboarding: a registered PM has connected through `anx pm serve`
+PM features require onboarding: a registered PM has connected through `anx pm install` or `anx pm serve`
 at least once. Before that, PM-only requests return HTTP 409 `pm_not_onboarded`
 and do not queue new questions or proposals. Existing history, proposals and
 human approval/decline remain accessible even before onboarding. Upgrades infer

@@ -50,6 +50,9 @@ func (s *Service) Connect(ctx context.Context, p Principal, in ConnectionInput) 
 	if err := s.authorize(ctx, p, "pm.connect", ""); err != nil {
 		return Presence{}, err
 	}
+	if s.cfg.AgentActorID != "" && s.cfg.AgentActorID != p.ActorID {
+		return Presence{}, &ActorMismatchError{ConfiguredActorID: s.cfg.AgentActorID, ActingActorID: p.ActorID}
+	}
 	if !connectionLabel(in.Runner) || !connectionLabel(in.Host) {
 		return Presence{}, ErrInvalid
 	}
