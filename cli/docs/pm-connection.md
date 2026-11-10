@@ -29,10 +29,13 @@ including older records. Actor IDs are restricted to bounded identifiers.
 Reads refuse symlinked files; writes refuse symlinked or foreign-owned diagnostic
 directories. A diagnostic write failure is logged and does not stop serve.
 
-On a non-retryable connect authorization failure, serve remains alive and retries
+On a non-retryable connect authorization failure or HTTP 409 registration conflict,
+serve remains alive and retries
 after 1, 2, 4, 8, then at most 15 minutes, until the binding is repaired or the
 process receives SIGTERM/interrupt. Retryable connect failures, including network
 outages and HTTP 503, retry after 1, 2, 4 seconds and so on, capped at 2 minutes.
 Both waits are interruptible. It does not claim work until connected. This
 prevents KeepAlive from repeatedly restarting a permanently denied service.
+For a registration conflict, rebind `ANX_PM_AGENT_ACTOR_ID` to the intended runner's
+actor and restart core. `pm disconnect` clears presence but retains registration.
 Other non-retryable startup errors retain the existing failure behavior.

@@ -33,7 +33,7 @@ func recordPMConnect(state string, err error) error {
 	var failure *pmConnectFailure
 	if err != nil {
 		normalized := errnorm.Normalize(err)
-		failure = &pmConnectFailure{Code: normalized.Code, At: nowFn().UTC().Format(time.RFC3339Nano), Status: httpStatusFromErr(err), Retryable: claimErrorRetryable(err)}
+		failure = &pmConnectFailure{Code: normalized.Code, At: nowFn().UTC().Format(time.RFC3339Nano), Status: httpStatusFromErr(err), Retryable: pmConnectErrorRetryable(err)}
 		if failure.Code == "pm_actor_mismatch" {
 			details := pmErrorDetails(err)
 			failure.ConfiguredActorID, _ = details["configured_actor_id"].(string)
@@ -105,6 +105,11 @@ var pmServicePreflightConnect = func(a *App, ctx context.Context, cfg config.Res
 	return a.connectPM(ctx, resolved, argv)
 }
 
+func pmConnectErrorRetryable(err error) bool {
+	// Connect conflicts require registration repair, unlike claim lease races.
+	return httpStatusFromErr(err) != 409 && claimErrorRetryable(err)
+}
+
 // Retry connect failures in-process so service-manager KeepAlive cannot turn
 // configuration faults or outages into a short crash loop.
 func (a *App) waitPMConnect(ctx context.Context, cfg config.Resolved, argv []string, state string) error {
@@ -123,9 +128,9 @@ func (a *App) waitPMConnect(ctx context.Context, cfg config.Resolved, argv []str
 		if err == nil {
 			return nil
 		}
-		authFailure := errnorm.ExitCode(err) == 5
-		retryable := claimErrorRetryable(err)
-		if !authFailure && !retryable {
+		configurationFailure := errnorm.ExitCode(err) == 5 || httpStatusFromErr(err) == 409
+		retryable := pmConnectErrorRetryable(err)
+		if !configurationFailure && !retryable {
 			return err
 		}
 		backoff := authBackoff
@@ -137,7 +142,7 @@ func (a *App) waitPMConnect(ctx context.Context, cfg config.Resolved, argv []str
 			authBackoff = min(2*authBackoff, pmConnectAuthBackoffCap)
 			retryBackoff = pmConnectRetryBackoffStart
 		}
-		diagnostic := &pmConnectFailure{Code: errnorm.Normalize(err).Code}
+		diagnostic := &pmConnectFailure{Code: errnorm.Normalize(err).Code, Status: httpStatusFromErr(err)}
 		diagnostic.localize()
 		a.pmLog("pm serve: connect failed code=%s; %s; retrying in %s\n", diagnostic.Code, diagnostic.Hint, backoff)
 		if err = sleepFn(ctx, backoff); err != nil {

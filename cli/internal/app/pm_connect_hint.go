@@ -14,6 +14,11 @@ func (f *pmConnectFailure) localize() {
 	if !pmConnectIdentifier(f.ActingActorID) {
 		f.ActingActorID = ""
 	}
+	if f.Status == 409 {
+		f.Retryable = false
+		f.Hint = "Another actor is already registered as PM. Ask a workspace operator to rebind ANX_PM_AGENT_ACTOR_ID to this runner's actor and restart anx-core before reconnecting."
+		return
+	}
 	switch f.Code {
 	case "pm_actor_mismatch":
 		f.Hint = "Ask a workspace operator to rebind ANX_PM_AGENT_ACTOR_ID to the acting actor and restart anx-core."

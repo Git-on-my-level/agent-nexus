@@ -13,7 +13,60 @@ import (
 	"time"
 
 	"agent-nexus-cli/internal/config"
+	"agent-nexus-cli/internal/errnorm"
 )
+
+func TestPMServeRegistrationConflictUsesConfigurationBackoff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	oldOS, oldSleep := pmServiceOS, sleepFn
+	t.Cleanup(func() { pmServiceOS, sleepFn = oldOS, oldSleep })
+	pmServiceOS = "linux"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/pm/connect" {
+			t.Errorf("claimed before resolving registration conflict: %s %s", r.Method, r.URL.Path)
+		}
+		calls++
+		w.WriteHeader(409)
+		w.Write([]byte(`{"error":{"code":"conflict","message":"another PM actor is registered","hint":"https://user:secret@example.test/","recoverable":true}}`))
+	}))
+	defer srv.Close()
+	cfg := config.Resolved{BaseURL: srv.URL, ConfigDir: filepath.Join(home, "credentials"), As: "pm", AccessToken: "test"}
+	state := filepath.Join(home, "state", "anx", "pm", pmServiceID(cfg.BaseURL, cfg.ConfigDir, "pm"))
+	a := &App{Stderr: &bytes.Buffer{}, UserHomeDir: func() (string, error) { return home, nil }}
+	want := []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute, 15 * time.Minute, 15 * time.Minute}
+	sleeps := 0
+	sleepFn = func(ctx context.Context, delay time.Duration) error {
+		if sleeps >= len(want) || delay != want[sleeps] {
+			t.Fatalf("conflict backoff %d: %s", sleeps, delay)
+		}
+		sleeps++
+		result, err := a.runPMService(ctx, "status", nil, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		failure := result.Data.(pmServiceStatus).LastConnectFailure
+		if failure == nil || failure.Code != "conflict" || failure.Status != 409 || failure.Retryable || !strings.Contains(result.Text, "ANX_PM_AGENT_ACTOR_ID") || !strings.Contains(result.Text, "restart anx-core") || strings.Contains(result.Text, "secret") {
+			t.Fatalf("missing safe conflict repair: %+v %s", failure, result.Text)
+		}
+		if sleeps == len(want) {
+			cancel()
+			return ctx.Err()
+		}
+		return nil
+	}
+	result, err := a.runPMServe(ctx, []string{"--runner", "echo {prompt_file}", "--work-dir", state}, cfg)
+	if err != nil || result == nil || !asBool(asMap(result.Data)["stopped"]) || calls != len(want) || sleeps != len(want) {
+		t.Fatalf("serve stopped before cancellation: %+v %v calls=%d sleeps=%d", result, err, calls, sleeps)
+	}
+	if !claimErrorRetryable(errnorm.FromHTTPFailure(409, nil)) {
+		t.Fatal("connect conflict handling changed claim lease retries")
+	}
+}
 
 func TestPMConnectTransientBackoffRecovers(t *testing.T) {
 	old := sleepFn
