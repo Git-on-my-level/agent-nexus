@@ -91,6 +91,10 @@ func (s *Service) authorizePermission(ctx context.Context, p Principal, permissi
 		if errors.Is(err, ErrUnavailable) {
 			return err
 		}
+		var mismatch *ActorMismatchError
+		if (permission == "pm.connect" || permission == "pm.disconnect") && errors.As(err, &mismatch) {
+			return mismatch
+		}
 		var nonHuman *ConversationOwnerNotHumanError
 		if permission == "pm.propose" && errors.As(err, &nonHuman) {
 			return nonHuman

@@ -158,7 +158,7 @@ func NewPMRuntime(db *sql.DB, store *primitives.Store, authStore *auth.Store, cf
 					if p.ActorID == cfg.PM.AgentActorID {
 						return nil
 					}
-					return pm.ErrForbidden
+					return &pm.ActorMismatchError{ConfiguredActorID: cfg.PM.AgentActorID, ActingActorID: p.ActorID}
 				}
 				candidate, err := authStore.IsLocalPMCandidate(ctx, actual.AgentID)
 				if err != nil {

@@ -2714,7 +2714,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Register the selected PM's local connection without queueing a turn.
 - Concepts: `agents`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `conflict`, `invalid_request`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `conflict`, `invalid_request`, `unavailable`
 - Output: Returns `PMPresence`.
 - Agent notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
 
@@ -2857,7 +2857,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `none`
 - Why: Stop expecting the selected PM to return after explicit uninstall.
 - Concepts: `agents`
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `unavailable`
 - Output: Returns `PMPresence` with state not_onboarded.
 - Agent notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
 

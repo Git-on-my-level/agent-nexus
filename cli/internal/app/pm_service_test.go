@@ -16,6 +16,7 @@ import (
 )
 
 func TestPMServiceLifecycleAndIsolation(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"linux", "darwin"} {
 		t.Run(platform, func(t *testing.T) {
 			home := t.TempDir()
@@ -114,6 +115,7 @@ func TestPMServiceLifecycleAndIsolation(t *testing.T) {
 }
 
 func TestPMServiceWaitReportsPostClaimState(t *testing.T) {
+	stubPMInstallConnect(t)
 	home := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
@@ -152,6 +154,7 @@ func TestPMServiceWaitReportsPostClaimState(t *testing.T) {
 }
 
 func TestPMServiceInstallWithoutWaitReportsStartingAndKeepsPriorProfile(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		t.Run(platform, func(t *testing.T) {
 			home := t.TempDir()
@@ -244,6 +247,7 @@ func TestPMServiceInstallWithoutWaitReportsStartingAndKeepsPriorProfile(t *testi
 }
 
 func TestPMServiceInstallPreparationFailureKeepsSelectedServiceRunning(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		t.Run(platform, func(t *testing.T) {
 			home := t.TempDir()
@@ -312,6 +316,7 @@ func TestPMServiceInstallPreparationFailureKeepsSelectedServiceRunning(t *testin
 }
 
 func TestPMServiceInstallCommitFailureRestoresSelectedService(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		t.Run(platform, func(t *testing.T) {
 			home := t.TempDir()
@@ -397,6 +402,7 @@ func TestPMServiceInstallCommitFailureRestoresSelectedService(t *testing.T) {
 }
 
 func TestPMServiceInstallActivationFailureRestoresSelectedService(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		for _, mode := range []string{"restart-old", "restore-fails"} {
 			t.Run(platform+"/"+mode, func(t *testing.T) {
@@ -503,6 +509,7 @@ func TestPMServiceInstallActivationFailureRestoresSelectedService(t *testing.T) 
 }
 
 func TestPMServiceInstallStopsPriorDefaultProfileService(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		t.Run(platform, func(t *testing.T) {
 			home := t.TempDir()
@@ -578,6 +585,7 @@ func TestPMServiceInstallStopsPriorDefaultProfileService(t *testing.T) {
 }
 
 func TestPMServiceInstallFailureKeepsPriorDefaultProfileService(t *testing.T) {
+	stubPMInstallConnect(t)
 	for _, platform := range []string{"darwin", "linux"} {
 		for _, failure := range []string{"start", "wait"} {
 			t.Run(platform+"/"+failure, func(t *testing.T) {
@@ -683,6 +691,7 @@ func TestPMServiceInstallFailureKeepsPriorDefaultProfileService(t *testing.T) {
 }
 
 func TestPMServiceStopFailureRetainsFiles(t *testing.T) {
+	stubPMInstallConnect(t)
 	home := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
@@ -734,6 +743,7 @@ func TestPMPrivatePromptFileReplacesSymlinkAndRestrictsMode(t *testing.T) {
 }
 
 func TestPMMacStopFailureRetainsFiles(t *testing.T) {
+	stubPMInstallConnect(t)
 	home := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
 	oldOS, oldExec := pmServiceOS, pmServiceExec

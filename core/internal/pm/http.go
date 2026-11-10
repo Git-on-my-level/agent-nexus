@@ -374,8 +374,17 @@ func writeError(w http.ResponseWriter, err error) {
 	if errors.As(err, &humanPending) {
 		status, code, message = http.StatusConflict, "human_proposal_pending", err.Error()
 	}
+	var mismatch *ActorMismatchError
+	if errors.As(err, &mismatch) {
+		status, code, message = http.StatusForbidden, "pm_actor_mismatch", mismatch.Error()
+	}
 	w.WriteHeader(status)
 	body := map[string]any{"code": code, "message": message}
+	if mismatch != nil {
+		body["details"] = mismatch
+		body["hint"] = mismatch.Hint()
+		body["recoverable"] = false
+	}
 	if humanPending != nil {
 		body["details"] = humanPending
 	}

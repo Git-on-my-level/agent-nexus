@@ -40,18 +40,19 @@ type pmServiceSettings struct {
 }
 
 type pmServiceStatus struct {
-	Installed   bool   `json:"installed"`
-	Running     bool   `json:"running"`
-	Workspace   string `json:"workspace"`
-	Agent       string `json:"agent"`
-	Service     string `json:"service"`
-	Logs        string `json:"logs"`
-	LastClaimAt string `json:"last_claim_at,omitempty"`
+	LastConnectFailure *pmConnectFailure `json:"last_connect_failure,omitempty"`
+	Installed          bool              `json:"installed"`
+	Running            bool              `json:"running"`
+	Workspace          string            `json:"workspace"`
+	Agent              string            `json:"agent"`
+	Service            string            `json:"service"`
+	Logs               string            `json:"logs"`
+	LastClaimAt        string            `json:"last_claim_at,omitempty"`
 }
 
 func init() {
 	for _, verb := range []string{"install", "status", "uninstall"} {
-		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Remove the local PM service and reset workspace onboarding."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx --as pm pm " + verb}}
+		topic := localHelperTopic{Path: "pm " + verb, Summary: map[string]string{"install": "Install or update the PM service on this computer.", "status": "Read the local PM service and last accepted claim.", "uninstall": "Remove the local PM service and reset workspace onboarding."}[verb], JSONShape: "installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure", Composition: "Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.", Examples: []string{"anx --as pm pm " + verb}}
 		if verb == "install" {
 			topic.Flags = []localHelperFlag{{Name: "--wait", Description: "Wait for an accepted connection after install."}, {Name: "--wait-timeout <duration>", Description: "Bound the connection wait (default 90s, maximum 5m)."}, {Name: "--runner <argv>", Description: "Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport."}}
 		}
@@ -171,6 +172,19 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		argv, e := splitRunnerArgv(settings.Runner)
 		if e != nil || len(argv) == 0 {
 			return nil, errnorm.Usage("runner_required", "set --runner once, or run anx --as pm pm install in an interactive terminal for the setup wizard; subsequent non-interactive installs reuse settings.json")
+		}
+		preflightCfg := cfg
+		preflightCfg.As = agent
+		if e = pmServicePreflightConnect(a, ctx, preflightCfg, argv); e != nil {
+			// A failed repair must remain visible in status even if the old
+			// service is still running. Never change its definition or manager.
+			if recordErr := os.MkdirAll(state, 0700); recordErr != nil {
+				return nil, fmt.Errorf("%w; persist connect status: %v", e, recordErr)
+			}
+			if recordErr := recordPMConnect(state, e); recordErr != nil {
+				return nil, fmt.Errorf("%w; persist connect status: %v", e, recordErr)
+			}
+			return nil, e
 		}
 		binary, e := os.Executable()
 		if e != nil {
@@ -412,11 +426,15 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 			}
 		}
 	}
-	refreshStatus := func() {
+	refreshStatus := func() error {
+		status.LastConnectFailure, err = readPMConnectFailure(state)
+		if err != nil {
+			return fmt.Errorf("read PM connect status: %w", err)
+		}
 		if !status.Installed {
 			status.Running = false
 			status.LastClaimAt = ""
-			return
+			return nil
 		}
 		if pmServiceOS == "linux" {
 			out, e := pmServiceExec(ctx, "systemctl", "--user", "is-active", id+".service")
@@ -428,8 +446,11 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		if b, e := os.ReadFile(filepath.Join(state, "last-claim")); e == nil {
 			status.LastClaimAt = strings.TrimSpace(string(b))
 		}
+		return nil
 	}
-	refreshStatus()
+	if err := refreshStatus(); err != nil {
+		return nil, err
+	}
 	if verb == "install" && wait {
 		if err := pmServiceWaitForConnection(a, ctx, cfg, waitTimeout, state, installStartedAt); err != nil {
 			return nil, err
@@ -442,7 +463,9 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		// --wait has confirmed the first accepted connection. Re-read both
 		// process state and the local claim timestamp so the returned status is
 		// about that post-claim state, not the instant just after launch.
-		refreshStatus()
+		if err := refreshStatus(); err != nil {
+			return nil, err
+		}
 		return &commandResult{Data: status, Warnings: warnings, Text: fmt.Sprintf("PM connected\nWorkspace: %s\nProfile: %s\nLast accepted claim: %s\nService manager reports running=%t\nLogs: %s", cfg.BaseURL, status.Agent, firstNonEmpty(status.LastClaimAt, "unknown"), status.Running, state)}, nil
 	}
 	if verb == "install" && agent != "pm" {
@@ -462,6 +485,9 @@ func (a *App) runPMService(ctx context.Context, verb string, args []string, cfg 
 		}
 	}
 	message := fmt.Sprintf("PM %s: installed=%t running=%t\nWorkspace: %s\nProfile: %s\nLast accepted claim: %s\nLogs: %s", verb, status.Installed, status.Running, status.Workspace, status.Agent, firstNonEmpty(status.LastClaimAt, "none"), state)
+	if status.LastConnectFailure != nil {
+		message += fmt.Sprintf("\nLast connect failure: %s at %s (HTTP %d)\n%s", status.LastConnectFailure.Code, status.LastConnectFailure.At, status.LastConnectFailure.Status, status.LastConnectFailure.Hint)
+	}
 	if verb == "install" && !wait {
 		connection := "starting, not yet claimed"
 		if claimConfirmedSince(status.LastClaimAt, installStartedAt) {
