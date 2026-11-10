@@ -102,7 +102,7 @@ func (a *App) runPMServe(ctx context.Context, args []string, cfg config.Resolved
 	defer stopSignals()
 	if err := a.waitPMConnect(serveCtx, cfg, argv, absDir); err != nil {
 		if serveCtx.Err() != nil {
-			return &commandResult{Text: "pm serve stopped", Data: map[string]any{"stopped": true}}, nil
+			return &commandResult{Text: "pm serve stopped; released 0 turn(s)", Data: map[string]any{"stopped": true, "released": []string{}}}, nil
 		}
 		return nil, err
 	}
