@@ -49,13 +49,22 @@ func TestRound6ResolutionEvidence(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES('turn',?,?,?,?,1,?)`, turn.ID, p.WorkspaceID, p.ActorID, conv.ID, body); err != nil {
 		t.Fatal(err)
 	}
-	claimed, err := rt.Service.ClaimTurn(ctx, pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}, pm.ClaimInput{RunnerID: "r6"})
-	if err != nil {
-		t.Fatal(err)
-	}
 	input := pm.DecisionInput{RequestKey: "r6-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1.1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{ref}}}
 	call := func(method, path, token string, in any) *httptest.ResponseRecorder {
+		t.Helper()
 		if input, ok := in.(pm.DecisionInput); ok && strings.Contains(path, "/turns/") {
+			// Each request owns its lease. Human evidence/projection checks between
+			// these requests must not consume a runner's un-heartbeated lease.
+			agent := pm.Principal{WorkspaceID: p.WorkspaceID, ActorID: machine.ActorID}
+			claimed, err := rt.Service.ClaimTurn(ctx, agent, pm.ClaimInput{RunnerID: "r6"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if _, err := rt.Service.ReleaseTurn(ctx, agent, claimed.ID, pm.ReleaseInput{RunnerID: "r6", LeaseToken: claimed.LeaseToken}); err != nil {
+					t.Fatal(err)
+				}
+			}()
 			in = pm.TurnProposeInput{DecisionInput: input, LeaseToken: claimed.LeaseToken}
 		}
 		var body []byte
