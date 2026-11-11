@@ -28,7 +28,10 @@ info:
     the caller's derived host and launcher `agentctl`, creating a provisional
     unknown-state run if necessary; it records run ID, host ID, agent ID and
     adapter on the resulting event, message, and audit record. A malformed
-    header or a run belonging to another agent fails with run_attribution_invalid.
+    header or a run belonging to another agent fails with run_attribution_invalid
+    before any mutation; error.details.reason is malformed, not_derived_agent or
+    run_owned_by_other_agent and error.details.write_applied is false. Clients may
+    resend the same request without the header to write unattributed; the CLI does.
     Absence means no run attribution. This header never grants authority.
 servers:
   - url: http://127.0.0.1:8000
@@ -12831,7 +12834,9 @@ components:
       properties:
         ref: {type: string}
         title: {type: string}
-        state: {type: string}
+        state: {type: string, description: "Effective phase: the stored phase, except that a backlog or ready card with a visible child or grandchild in_progress, review or blocked reads in_progress."}
+        stored_state: {type: string, description: Present only when it differs from state; the stored phase.}
+        is_loop: {type: boolean, description: "Present and true for a loop (cadence annotation or a recent loop run); Watch lists loops separately from initiatives."}
         path: {$ref: '#/components/schemas/WorkPath'}
         owner: {type: string, nullable: true, description: Canonical assignee; absence means awaiting an owner regardless of leases.}
         needs_home: {type: boolean}
@@ -12845,6 +12850,7 @@ components:
         initiatives: {type: array, items: {$ref: '#/components/schemas/WorkTreeNode'}}
         unsorted: {type: array, items: {$ref: '#/components/schemas/WorkTreeNode'}}
         node: {$ref: '#/components/schemas/WorkTreeNode'}
+        open_initiatives: {type: integer, description: "Listed open initiatives that are not loops: the count Watch shows as open."}
         truncated: {type: boolean}
       oneOf:
       - required: [initiatives, unsorted]
@@ -12866,6 +12872,9 @@ components:
         parent_ref: {type: string, nullable: true}
         is_initiative: {type: boolean}
         needs_home: {type: boolean}
+        state: {type: string, nullable: true, description: Effective phase of the named card (as in WorkTreeNode.state); null for a text query.}
+        stored_state: {type: string, description: Present only when it differs from state.}
+        owner: {type: string, nullable: true, description: Canonical assignee of the named card; null when awaiting an owner or for a text query.}
         suggestions:
           type: array
           items:
@@ -16019,7 +16028,8 @@ components:
       required: [ref, title, owner, state, placement, promise, past_promise_for_seconds, promise_moves, last_evidence_at, progress, blocked_count, waiting_on_you_count, note, possibly_moot, loop]
       properties:
         outcome: {type: string, maxLength: 280, readOnly: true, description: Goal annotation label (or metric), otherwise the first summary line; at most 280 Unicode code points.}
-        proposed: {type: boolean, readOnly: true, description: True exactly when canonical placement is backlog; orthogonal to promise health state.}
+        proposed: {type: boolean, readOnly: true, description: True exactly when the effective placement is backlog; orthogonal to promise health state.}
+        stored_placement: {type: string, readOnly: true, enum: [backlog, ready, in_progress, review, done], description: "Present only when it differs from placement: the stored phase of a not-started card (backlog or ready) that reads in_progress because a visible child or grandchild is in_progress, review or blocked."}
         parent_ref: {type: string, nullable: true, readOnly: true, description: Stored parent card ref (card handle or id); plan links never establish parentage.}
         is_initiative: {type: boolean, readOnly: true, description: Top-level active card outside the Unsorted tray; independent of board role and plans.}
         needs_home: {type: boolean, readOnly: true, description: Card awaits explicit placement in the Unsorted tray.}
@@ -16030,7 +16040,7 @@ components:
         title: { type: string }
         owner: { type: string, nullable: true, description: First canonical assignee ref, including an implicit creator or assigned fallback owner; never inferred from the promise author. Null only when unassigned. }
         state: { type: string, enum: [past_promise, moving, no_promise, digest, done] }
-        placement: { type: string, enum: [backlog, ready, in_progress, review, done] }
+        placement: { type: string, enum: [backlog, ready, in_progress, review, done], description: "Effective placement: the stored phase, except that a backlog or ready card with a visible child or grandchild in_progress, review or blocked reads in_progress. Reads never change the stored phase (see stored_placement)." }
         promise: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefPromise' }] }
         past_promise_for_seconds: { type: integer, nullable: true }
         promise_moves: { type: integer }

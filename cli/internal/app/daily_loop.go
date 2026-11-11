@@ -249,10 +249,11 @@ func (a *App) dailyMove(ctx context.Context, cfg config.Resolved, ref, phase str
 func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("await")
-	var until, timeout, settle trackedString
+	var until, timeout, settle, deadlineFlag trackedString
 	var answers, all trackedBool
 	fs.Var(&until, "until", "answered or state=<phase>")
 	fs.Var(&timeout, "timeout", "Maximum wait duration, default 30m")
+	fs.Var(&deadlineFlag, "deadline", "Wait until this absolute time (RFC3339, YYYY-MM-DD, or a duration from now like 8h); exits 14 deadline_reached with no answer")
 	fs.Var(&answers, "answers", "Wait for answers to this session's asks that it has not been handed yet")
 	fs.Var(&settle, "settle", "With --answers: how long to keep collecting after an answer while asks stay open, default 20s")
 	fs.Var(&all, "all", "With --answers: include asks filed by other sessions of this agent")
@@ -260,6 +261,14 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
 	refs := append(leading, fs.Args()...)
+	deadline, hasDeadline, err := parseAwaitDeadline(deadlineFlag, timeout.set, a.clockNow())
+	if err != nil {
+		return nil, err
+	}
+	if hasDeadline {
+		result, waitErr := a.runAwaitUntil(ctx, args, cfg, deadline)
+		return result, waitErr
+	}
 	if answers.value {
 		if len(refs) != 0 || until.set {
 			return nil, errnorm.Usage("invalid_args", "usage: anx await --answers [--timeout <dur>] [--settle <dur>] [--all]")

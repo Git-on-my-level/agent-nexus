@@ -19,8 +19,13 @@ func TestWatcherPositionsUpgradeAndCanonicalLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := applyMigration(ctx, db, migrations[len(migrations)-1]); err != nil {
-		t.Fatal(err)
+	// Migration 136 installs the watcher positions; later migrations follow it.
+	for _, m := range migrations {
+		if m.Version == 136 {
+			if err := applyMigration(ctx, db, m); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	check := func(candidates, runs, effects int) {
 		t.Helper()

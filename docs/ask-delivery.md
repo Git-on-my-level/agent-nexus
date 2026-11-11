@@ -105,6 +105,9 @@ without their jobs. Await/batch/direct commands continue to work. See the
 ```bash
 anx await <ask-id>                # one answer gates the next step
 anx await --answers --timeout 4h  # any answer this session has not been handed
+anx await --answers --deadline 2026-11-12T08:00:00Z
+                                  # overnight: one command, safe to re-arm;
+                                  # exit 14 deadline_reached means no answer by then
 anx inbox list --status answered  # everything already answered, including
                                   # answers filed while the session was closed
 anx inbox list --unread           # answers nobody has marked read
@@ -114,6 +117,13 @@ anx inbox read <ask-ref>          # mark one answer read; accepts event:<id> and
 
 `anx inbox list --status answered` always includes the caller's own answered
 asks and agrees with `anx orient` → `my_asks_and_answers`.
+
+A long wait is one command. `--deadline` takes an absolute time (or a
+duration from now) instead of `--timeout`; rerunning the same command after an
+interruption keeps the same end, so a supervisor can re-arm it freely. Network
+outages during the wait are retried. Reaching the deadline with no answer exits
+14 with `deadline_reached`, distinct from exit 8, which remains the `--timeout`
+and transport-timeout exit.
 
 ### What `anx await --answers` returns
 

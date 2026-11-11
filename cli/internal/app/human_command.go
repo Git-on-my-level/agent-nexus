@@ -240,9 +240,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		threadID = fm.ThreadID
 		relatedRefs = normalizeStringFilters(fm.Refs)
 		responseProposals = proposals
-		if previewFlag.value {
-			_, proposalLintErr = buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)
-		}
+		_, proposalLintErr = buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)
 		requestID = fm.RequestID
 		requesterActorID = firstNonEmpty(fm.RequesterActorID, strings.TrimSpace(cfg.ActorID))
 		requesterAgentID = firstNonEmpty(fm.RequesterAgentID, strings.TrimSpace(cfg.AgentID), strings.TrimSpace(cfg.Agent))
@@ -286,52 +284,49 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		}
 		var err error
 		responseProposals, err = buildCLIHumanAttentionResponseProposals(recommendedResponseFlag.value, proposalFlags.values)
-		if err != nil && !previewFlag.value {
-			return nil, err
-		}
-		if previewFlag.value {
-			proposalLintErr = err
-			if err != nil {
-				responseProposals = nil
-				for _, option := range append([]string{recommendedResponseFlag.value}, proposalFlags.values...) {
-					if strings.TrimSpace(option) != "" {
-						responseProposals = append(responseProposals, option)
-					}
+		// Collected with every other violation below, in preview and on submit.
+		proposalLintErr = err
+		if err != nil {
+			responseProposals = nil
+			for _, option := range append([]string{recommendedResponseFlag.value}, proposalFlags.values...) {
+				if strings.TrimSpace(option) != "" {
+					responseProposals = append(responseProposals, option)
 				}
 			}
 		}
 	}
 
-	if err := presentation.validateBounds(); err != nil {
-		return nil, errnorm.Usage("invalid_request", err.Error())
+	// Hard violations make the request invalid at the server; --force cannot
+	// override them. They are reported together with the lint below.
+	hardErrors := presentation.boundViolations()
+	if proposalLintErr != nil {
+		hardErrors = append(hardErrors, errnorm.Normalize(proposalLintErr).Message)
 	}
 	links := append([]askEvidenceLink{}, fmFromFile.Evidence...)
 	for _, raw := range evidenceFlags.values {
 		label, u, ok := strings.Cut(raw, "=")
 		if !ok {
-			return nil, errnorm.Usage("invalid_request", "--evidence requires Label=URL")
+			hardErrors = append(hardErrors, fmt.Sprintf("--evidence %q requires Label=URL", raw))
+			continue
 		}
 		links = append(links, askEvidenceLink{Label: label, URL: u})
 	}
+	hardCode := "invalid_request"
 	if strings.ContainsAny(title, "\r\n") {
-		return nil, errnorm.Usage("ask_title_invalid", "ask title must be one line; move detail into --body or --body-file ask.md")
+		hardErrors, hardCode = append(hardErrors, "title must be one line; move detail into --body or --body-file ask.md"), "ask_title_invalid"
 	}
-	if utf8.RuneCountInString(title) > 160 {
-		return nil, errnorm.Usage("ask_title_too_long", "ask title exceeds the hard maximum of 160 characters; move detail into --body or --body-file ask.md")
+	if n := utf8.RuneCountInString(title); n > 160 {
+		hardErrors, hardCode = append(hardErrors, fmt.Sprintf("ask title exceeds the hard maximum of 160 characters (%d); move detail into --body or --body-file ask.md", n)), "ask_title_too_long"
 	}
 	decision, err := parseAskDecisionFlags(byFlag, blocksFlags.values, priorityFlag, a.clockNow())
 	if err != nil {
 		return nil, err
 	}
-	warnings, lintErr := lintAskAuthoring(strings.TrimSpace(body+"\n"+presentation.Details), relatedRefs, links, a.workspaceForges(cfg))
+	warnings, authoringErrors := lintAskAuthoring(strings.TrimSpace(body+"\n"+presentation.Details), relatedRefs, links, a.workspaceForges(cfg))
 	plainWarnings, lintErrors := lintAskPresentation(title, presentation, responseProposals)
 	warnings = append(warnings, plainWarnings...)
-	if proposalLintErr != nil {
-		lintErrors = append(lintErrors, proposalLintErr.Error())
-	}
-	if lintErr != nil {
-		lintErrors = append(lintErrors, lintErr.Error())
-	}
+	lintErrors = append(append(append([]string{}, hardErrors...), lintErrors...), authoringErrors...)
+	var lintErr error
 	if len(lintErrors) > 0 {
 		lintErr = fmt.Errorf("%s", strings.Join(lintErrors, "; "))
 	}
@@ -357,8 +352,11 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if forceFlag.value && strings.TrimSpace(reasonFlag.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "--force requires --reason")
 	}
+	if len(hardErrors) > 0 {
+		return nil, errnorm.WithDetails(errnorm.Usage(hardCode, fmt.Sprintf("%d problems: %s", len(lintErrors), lintErr.Error())), map[string]any{"violations": lintErrors, "forceable": false})
+	}
 	if lintErr != nil && !forceFlag.value {
-		return nil, errnorm.Usage("ask_authoring", lintErr.Error()+"; or use --force --reason <explanation>")
+		return nil, errnorm.WithDetails(errnorm.Usage("ask_authoring", fmt.Sprintf("%d problems: %s; or use --force --reason <explanation>", len(lintErrors), lintErr.Error())), map[string]any{"violations": lintErrors, "forceable": true})
 	}
 	var loopWarnings []output.Warning
 	if kind == "ask" && decision.empty() {

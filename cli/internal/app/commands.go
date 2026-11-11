@@ -140,6 +140,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return a.runDeliveriesCommand(ctx, args[1:], cfg)
 	case "lease":
 		return a.runLeaseCommand(ctx, args[1:], cfg)
+	case "feedback":
+		result, err := a.runFeedback(ctx, args[1:], cfg)
+		return "feedback", result, err
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err

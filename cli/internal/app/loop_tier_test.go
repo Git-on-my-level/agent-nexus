@@ -262,6 +262,11 @@ type noteRecorder struct {
 	posted   map[string]any
 	previous string
 	health   string
+	column   string   // card column; default in_progress
+	assignee string   // card assignee_refs JSON; default none
+	busy     int      // POST /events answers 503 busy this many times first
+	keys     []string // request_key of every POST /events
+	writes   []string // method and path of every other write
 }
 
 func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
@@ -274,7 +279,21 @@ func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
 			if health == "" {
 				health = `{}`
 			}
-			fmt.Fprintf(w, `{"card":{"id":"card-1","ref":"card:x","thread_id":"thread-1","title":"X","column_key":"in_progress","plan_health":%s}}`, health)
+			column, assignee := rec.column, rec.assignee
+			if column == "" {
+				column = "in_progress"
+			}
+			if assignee == "" {
+				assignee = "[]"
+			}
+			if r.Method != http.MethodGet {
+				rec.mu.Lock()
+				rec.writes = append(rec.writes, r.Method+" "+r.URL.Path)
+				rec.mu.Unlock()
+			}
+			fmt.Fprintf(w, `{"card":{"id":"card-1","ref":"card:x","thread_id":"thread-1","title":"X","board_ref":"board:b1","column_key":%q,"assignee_refs":%s,"updated_at":"2026-10-14T09:00:00Z","plan_health":%s}}`, column, assignee, health)
+		case strings.HasPrefix(r.URL.Path, "/boards/"):
+			fmt.Fprint(w, `{"board":{"id":"b1","updated_at":"2026-10-14T09:00:00Z"}}`)
 		case r.URL.Path == "/events" && r.Method == http.MethodGet:
 			rec.mu.Lock()
 			prev := rec.previous
@@ -289,9 +308,18 @@ func noteServer(t *testing.T, rec *noteRecorder) *httptest.Server {
 			var doc map[string]any
 			_ = json.Unmarshal(body, &doc)
 			rec.mu.Lock()
+			rec.keys = append(rec.keys, anyString(doc["request_key"]))
+			if rec.busy > 0 {
+				rec.busy--
+				rec.mu.Unlock()
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				fmt.Fprint(w, `{"error":{"code":"busy","message":"workspace writer is busy; wait and retry the original event request"}}`)
+				return
+			}
 			rec.posted = doc
 			rec.mu.Unlock()
-			fmt.Fprint(w, `{"event":{"id":"evt-9","type":"message_posted"}}`)
+			fmt.Fprint(w, `{"event":{"id":"evt-9","type":"message_posted","actor_id":"actor-1"}}`)
 		case r.URL.Path == "/agents/me/presence":
 			fmt.Fprint(w, `{}`)
 		default:
@@ -334,8 +362,11 @@ func TestNotePostsNextAndEvidencePayload(t *testing.T) {
 	if anyString(asMap(doc["result"])["note_ref"]) != "event:evt-9" {
 		t.Fatalf("result=%#v", doc["result"])
 	}
-	if codes := warningCodes(doc); len(codes) != 1 || codes["note_promise_unowned"] == "" {
-		t.Fatalf("expected warning for unassigned fixture card: %#v", doc["warnings"])
+	if codes := warningCodes(doc); len(codes) != 0 {
+		t.Fatalf("an in-progress card's promise note needs no warning: %#v", doc["warnings"])
+	}
+	if !strings.HasPrefix(anyString(rec.posted["request_key"]), "note:") {
+		t.Fatalf("every note carries a request_key: %#v", rec.posted["request_key"])
 	}
 }
 

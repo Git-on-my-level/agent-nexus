@@ -178,6 +178,9 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	case "note":
 		_, err := parseNoteArgs(args[1:], time.Now())
 		return "note", err
+	case "feedback":
+		_, err := parseFeedbackArgs(args[1:])
+		return "feedback", err
 	case "done":
 		_, _, err := parseDoneArgs(args[1:])
 		return "done", err
@@ -354,7 +357,7 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], draftSubcommandSpec)
 	case "provenance":
 		return preflightSubcommand(args[1:], provenanceSubcommandSpec)
-	case "orient", "note", "done", "context", "ask", "review", "escalate", "await":
+	case "orient", "note", "done", "context", "ask", "review", "escalate", "await", "feedback":
 		return nil
 	case "secret":
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
@@ -520,7 +523,7 @@ func preflightInferredCommandName(args []string) string {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "feedback": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}

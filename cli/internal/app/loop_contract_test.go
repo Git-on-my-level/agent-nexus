@@ -166,7 +166,9 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 		}
 	}
 	messages := map[string]string{
-		"note_promise_unowned":        "promise set on an unowned card",
+		"note_card_not_started":       "note posted, but card:x is still backlog: it belongs to actor:other, who starts it; to take it over run anx work start",
+		"note_start_failed":           "note posted, but card:x could not move to in_progress and is still backlog; run anx work start",
+		"run_attribution_skipped":     "write saved without run attribution: core refused agentctl/x (run belongs to another agent).",
 		"note_no_next":                "no --next; a card renews by noting its next promise",
 		"note_promise_kept":           "promise kept: report progress by 2026-11-02T00:00:00Z; pass --next to change it or --met if this note fulfils it",
 		"ask_already_open":            "this question on this card is already open; nothing new was filed",

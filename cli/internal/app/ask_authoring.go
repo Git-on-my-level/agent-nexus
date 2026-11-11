@@ -7,11 +7,37 @@ import (
 	"strings"
 
 	"agent-nexus-cli/internal/workspaceconfig"
+	"gopkg.in/yaml.v3"
 )
 
 type askEvidenceLink struct {
 	Label string `json:"label" yaml:"label"`
 	URL   string `json:"url" yaml:"url"`
+	shape string // set when a YAML entry was not a {label, url} object
+}
+
+// UnmarshalYAML accepts the {label, url} object and records any other shape
+// (a bare "Label=URL" string, a list) for lint to report with its index,
+// instead of failing the whole frontmatter with a decoder type error.
+func (l *askEvidenceLink) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.MappingNode {
+		var plain struct {
+			Label string `yaml:"label"`
+			URL   string `yaml:"url"`
+		}
+		if err := node.Decode(&plain); err != nil {
+			l.shape = fmt.Sprintf("an object that did not decode (%v) at line %d", err, node.Line)
+			return nil
+		}
+		l.Label, l.URL = plain.Label, plain.URL
+		return nil
+	}
+	if node.Kind == yaml.ScalarNode {
+		l.shape = fmt.Sprintf("the string %q at line %d", node.Value, node.Line)
+	} else {
+		l.shape = fmt.Sprintf("a %s at line %d", map[yaml.Kind]string{yaml.SequenceNode: "list", yaml.AliasNode: "alias"}[node.Kind], node.Line)
+	}
+	return nil
 }
 
 const askDecisionTemplate = `---
@@ -71,15 +97,22 @@ var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
 var askPointerOnly = regexp.MustCompile(`(?i)^\s*(?:please\s+)?(?:see|read|refer to|check)\s+[^\n]+\s*$`)
 
-func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forges []workspaceconfig.Forge) ([]string, error) {
-	for _, link := range links {
+// lintAskAuthoring returns every evidence and grounding problem at once, not
+// the first: an ask used to be rejected once per problem, one per attempt.
+func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forges []workspaceconfig.Forge) ([]string, []string) {
+	var problems []string
+	for i, link := range links {
+		if link.shape != "" {
+			problems = append(problems, fmt.Sprintf("evidence[%d] must be an object {label: <text>, url: <https://...>}; got %s", i, link.shape))
+			continue
+		}
 		u, e := url.Parse(link.URL)
 		if e != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || strings.TrimSpace(link.Label) == "" {
-			return nil, fmt.Errorf("evidence requires a label and an http(s) URL without credentials")
+			problems = append(problems, fmt.Sprintf("evidence[%d] requires a non-empty label and an http(s) URL without credentials, as {label: <text>, url: <https://...>}", i))
 		}
 	}
 	if askPointerOnly.MatchString(body) {
-		return nil, fmt.Errorf("ask body is only a pointer; add the decision, context and effects of each option")
+		problems = append(problems, "ask body is only a pointer; add the decision, context and effects of each option")
 	}
 	evidence := strings.Join(refs, " ") + " " + body
 	for _, link := range links {
@@ -99,7 +132,7 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forge
 			}
 		}
 		if !satisfied {
-			return nil, fmt.Errorf("PR #%s has no matching evidence URL; add its labelled pull-request URL", match[1])
+			problems = append(problems, fmt.Sprintf("PR #%s has no matching evidence URL; add {label: \"PR #%s\", url: <its pull-request URL>} to evidence", match[1], match[1]))
 		}
 	}
 	for _, match := range askNamedRef.FindAllStringSubmatch(body, -1) {
@@ -122,12 +155,12 @@ func lintAskAuthoring(body string, refs []string, links []askEvidenceLink, forge
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("%s %q has no matching evidence ref or permalink; add one", kind, match[2])
+			problems = append(problems, fmt.Sprintf("%s %q has no matching evidence ref or permalink; add one", kind, match[2]))
 		}
 	}
 	warnings := []string{}
 	if strings.Contains(body, "```") {
 		warnings = append(warnings, "Summarise code instead of pasting it; link a PR or commit permalink")
 	}
-	return warnings, nil
+	return warnings, problems
 }

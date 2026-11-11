@@ -1,0 +1,43 @@
+package app
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// An ask was rejected for a recommendation over 240 characters, and only after
+// that was fixed for a PR named without its URL. Preview and submit now report
+// every violation in one response, each with its field path and limit.
+func TestAskReportsEveryViolationAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ask.md")
+	content := strings.Replace(askDecisionTemplate, "    Measure one daily report run before buying more capacity.", "    "+strings.Repeat("Measure it. ", 25), 1)
+	content = strings.Replace(content, "evidence: []", "evidence:\n  - \"PR=https://example.test/pr/1\"", 1)
+	content = strings.Replace(content, "if_no_answer: >-\n", "details: \"Shipped in PR #4242 last week.\"\nif_no_answer: >-\n", 1)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload := assertEnvelopeOK(t, runCLIForTest(t, dir, nil, nil, []string{"--json", "ask", "--from-file", path, "--preview"}))
+	lint := asMap(asMap(payload["result"])["lint"])
+	errs := strings.Join(stringList(lint["errors"]), "\n")
+	for _, want := range []string{
+		"recommendation.action is 300 characters; the limit is 240",
+		"evidence[0] must be an object {label: <text>, url: <https://...>}; got the string \"PR=https://example.test/pr/1\"",
+		"PR #4242 has no matching evidence URL",
+	} {
+		if !strings.Contains(errs, want) {
+			t.Fatalf("preview missing %q in:\n%s", want, errs)
+		}
+	}
+	if lint["valid"] != false {
+		t.Fatal("preview must be invalid")
+	}
+	raw := runCLIForTest(t, dir, nil, nil, []string{"--json", "ask", "--from-file", path})
+	for _, want := range []string{"recommendation.action is 300 characters", "evidence[0] must be an object", "PR #4242 has no matching evidence URL", `"forceable": false`} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("submit missing %q in:\n%s", want, raw)
+		}
+	}
+}

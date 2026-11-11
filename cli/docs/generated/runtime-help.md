@@ -32,6 +32,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `adapters` (group): Declare and administer scoped host-local live data sources
 - `deliveries` (group): List, claim and receipt durable notification and wake deliveries
 - `lease` (group): Claim a card with a TTL work lease before starting work on it
+- `feedback` (group): Report a problem with ANX itself to the people who run it
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Inspect the enrolled host and derived-agent identity
@@ -530,11 +531,12 @@ Daily loop
 
 1. Run `anx orient` to see your identity, answers for you, asks waiting on a human, your initiatives against their promises, and the next command.
 2. Use `anx where card:<slug>` to inspect its home before substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
-3. Post `anx note card:<slug> "What changed and why" --evidence <ref>` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. Always name the task explicitly: participation does not change legacy current-card selection.
+3. Post `anx note card:<slug> "What changed and why" --evidence <ref>` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. A note with `--next` or `--evidence` is progress: it starts a card that has not started (backlog or ready) when you own it or nobody does, assigning you if it has no owner (result.started); a card someone else owns stays put with warning note_card_not_started. A parent whose children have started reads in_progress in tree, where and Watch. Notes carry a request_key: rerun the same note after a timeout and it is sent once. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask --from-file ask.md`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
-5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --timeout <dur>` as a background process and re-arm it after each return: it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
+5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --deadline <RFC3339>` as a background process and re-arm it after each return (the deadline is absolute, so re-arming never extends it; exit 14 deadline_reached means no answer by then): it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer to your own ask with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery, and that read state is shared with other sessions of your agent, so it refuses an ask another session filed; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
+8. When ANX itself gets in your way (a confusing error, a missing command, a view that disagrees with the CLI), file it with `anx feedback "<what happened>" --evidence <ref>`: it lands on card:anx-feedback for the people who run the workspace and returns a prefilled upstream issue link.
 
 
 Runs and output
@@ -1181,6 +1183,16 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 
 Tip: `anx help <command path>` for full command-level generated details.
+```
+
+## `feedback`
+
+Report a problem with ANX itself to the people who run it
+
+```text
+anx feedback "<what went wrong or what you need>" [--evidence <url|ref>]... [--dry-run]: report a problem with ANX itself (remote_coordination_write).
+  Posts a note on card:anx-feedback ("ANX product feedback", created in Unsorted on first use) so the people who run this workspace see it in Watch and anx tree, and returns upstream_issue_url, a prefilled issue for the public agent-nexus repository.
+  Same idempotent write as anx note: rerunning after a timeout never files twice.
 ```
 
 ## `work`

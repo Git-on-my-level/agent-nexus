@@ -38,6 +38,24 @@ func workParentSQL(child string) string {
 	return `(SELECT parent.id FROM cards parent WHERE parent.id=` + child + `.parent_card_id AND parent.trashed_at IS NULL)`
 }
 
+// workActivePhases are the phases of work someone has started.
+const workActivePhases = `('in_progress','review','blocked')`
+
+// workEffectivePhaseSQL is the phase every work listing shows. It is the
+// stored column, except that a card not yet started (backlog or ready) whose
+// visible child or grandchild has started reads in_progress: an initiative
+// whose workstreams are moving is moving. Reads never change the stored
+// column. One indexed seek answers the child check (idx_cards_active_children);
+// the grandchild check visits the card's open children (depth is at most three).
+func workEffectivePhaseSQL(card string) string {
+	active := func(parent, alias string) string {
+		return `EXISTS(SELECT 1 FROM cards ` + alias + ` WHERE ` + alias + `.parent_card_id=` + parent + ` AND ` + alias + `.column_key IN ` + workActivePhases + ` AND ` + alias + `.trashed_at IS NULL AND ` + alias + `.archived_at IS NULL)`
+	}
+	return `(CASE WHEN ` + card + `.column_key IN ('backlog','ready') AND (` + active(card+".id", "work_active_child") +
+		` OR EXISTS(SELECT 1 FROM cards work_open_child WHERE work_open_child.parent_card_id=` + card + `.id AND work_open_child.trashed_at IS NULL AND work_open_child.archived_at IS NULL AND work_open_child.column_key IN ('backlog','ready') AND ` +
+		active("work_open_child.id", "work_active_grandchild") + `)) THEN 'in_progress' ELSE ` + card + `.column_key END)`
+}
+
 func workHasParentSQL(child string) string {
 	return `(` + child + `.parent_card_id IS NOT NULL)`
 }

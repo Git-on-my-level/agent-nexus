@@ -48,4 +48,13 @@ var recentMigrations = []migration{
 	// positions adds run_failed and installs the day counts.
 	{Version: 135, AfterApply: installWatchTrendPositions},
 	{Version: 136, AfterApply: installWatcherHealth},
+	// The brief admits open initiatives from open top-level cards, so busy
+	// children can no longer crowd them out of Watch (brief_admission.go).
+	// Index only: no stored row changes.
+	{Version: 137, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_cards_open_roots ON cards(id) WHERE parent_card_id IS NULL AND needs_home=0 AND trashed_at IS NULL AND archived_at IS NULL AND column_key NOT IN ('done','cancelled')`,
+		// A not-started card with active children reads as in progress
+		// (workEffectivePhaseSQL); this index answers "any active child" in one seek.
+		`CREATE INDEX IF NOT EXISTS idx_cards_active_children ON cards(parent_card_id) WHERE parent_card_id IS NOT NULL AND trashed_at IS NULL AND archived_at IS NULL AND column_key IN ('in_progress','review','blocked')`,
+	}},
 }

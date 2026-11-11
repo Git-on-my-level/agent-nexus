@@ -16,7 +16,9 @@ machine-readable source for that check.
 | ask_auto_created_card       | ask         | `No --subject-ref`               | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available. |
 | work_near_duplicate         | work create | `matches an open initiative`     | Inspect the matching initiative with `anx where <card>` and name it with `work create --under <card>`.                                                       |
 | work_over_target            | work create | `open initiatives (target 15)`   | Prefer existing work or create under a named initiative.                                                                                                     |
-| note_promise_unowned        | note        | `promise set on an unowned card` | Claim it with `anx work start <card>` so an assignee is prompted to renew it.                                                                                |
+| note_card_not_started       | note        | `note posted, but`               | The card has not started and someone else owns it: they start it, or take it over with `anx work start <card>`.                                              |
+| note_start_failed           | note        | `could not`                      | The note was saved but the card did not start; run `anx work start <card>`.                                                                                  |
+| run_attribution_skipped     | any write   | `without run attribution`        | The write was saved unattributed. Write with the `--as` of the agent that started the agentctl run, or unset `AGENTCTL_EXECUTION_ID` for another identity.   |
 | note_no_next                | note        | `no --next`                      | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                          |
 | note_promise_kept           | note        | `promise kept:`                  | Nothing to do when the promise still stands. Change it with `--next`; say it is fulfilled with `--met`.                                                      |
 | ask_already_open            | ask         | `is already open`                | Wait with `anx await <ask-id>`; revise the copy with `anx ask revise`.                                                                                       |
@@ -49,7 +51,13 @@ How each warning is computed, and what it costs:
 - `work_near_duplicate`, `work_over_target`: one `GET /work?limit=200` before
   the write; token Jaccard or normalized Levenshtein >= 0.8 against open
   initiative titles; more than 15 open initiatives.
-- `note_promise_unowned`: reuses the card read and checks assignees/owner. No extra request.
+- `note_card_not_started`, `note_start_failed`: a note with `--next` or
+  `--evidence` on a card in backlog or ready starts it when the writer owns it
+  or nobody does (an assignee patch when unowned, then a move to
+  `in_progress`, reported as `result.started`). The warnings reuse the card
+  read; starting adds the same requests as `anx work start`.
+- `run_attribution_skipped`: core refused the `X-ANX-Run-Id` header before
+  writing anything; the CLI resent the same request once without it.
 - `note_no_next`: `anx note` without `--next`. No request.
 - `note_moved_without_evidence`: `--next` without `--evidence`, and the
   caller's newest earlier `next` on the card resolves to a different time. One

@@ -146,7 +146,7 @@ for (const [name, viewport] of [
       const list = page.locator("[data-rollup-list]");
       // One basis: six open initiatives (done never counts), no "at least".
       await expect(page.locator("[data-watch-summary]")).toContainText(
-        "6 open · 3 need you · 1 lagging",
+        "6 open · 3 need you · 1 lagging · 1 not started",
       );
       const over = list.locator("[data-over-target]");
       await expect(over).toContainText(
@@ -204,7 +204,7 @@ for (const [name, viewport] of [
       await expect(list).toBeVisible();
       // Header: one line of counts, no tiles, no Decide button.
       await expect(page.locator("[data-watch-summary]")).toContainText(
-        "6 open · 3 need you · 1 lagging",
+        "6 open · 3 need you · 1 lagging · 1 not started",
       );
       await expect(page.locator("[data-watch-decide-link]")).toHaveCount(0);
       await expect(list.locator("[data-collection-filter]")).toHaveCount(0);
@@ -213,7 +213,7 @@ for (const [name, viewport] of [
         "Needs you · 3",
         "Lagging · 1",
         "Moving · 1",
-        "Proposed · 1",
+        "Not started · 1",
         /Done · 1/,
       ]);
       expect(

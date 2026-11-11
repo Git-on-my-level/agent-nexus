@@ -17,6 +17,12 @@ import (
 
 const connectTimeout = 10 * time.Second
 
+// minReadAttempt outlasts core's 20-second busy-writer wait. At 20 seconds the
+// client cancelled each token exchange just before core could answer 503 busy
+// (seen in production as client-cancelled /auth/token at ~19.9s), so every
+// attempt was spent and nothing was learned.
+const minReadAttempt = 30 * time.Second
+
 type requestFailure struct {
 	cause          error
 	attempts       int
@@ -47,7 +53,7 @@ func (c *Client) retry(ctx context.Context, safe bool, call func(context.Context
 	attemptTimeout := c.timeout
 	maxAttempts := 1
 	if safe {
-		attemptTimeout = min(c.timeout, max(20*time.Second, c.timeout/3))
+		attemptTimeout = min(c.timeout, max(minReadAttempt, c.timeout/3))
 		maxAttempts = 3
 	}
 	backoff := min(200*time.Millisecond, c.timeout/10)

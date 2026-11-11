@@ -213,26 +213,43 @@ func hasAskPreview(args []string) bool {
 }
 
 // Hard payload bounds match the additive API contract; an override cannot make
-// an oversized request valid at the server.
-func (p askPresentation) validateBounds() error {
-	for _, f := range []struct {
-		name, value string
-		max         int
-	}{{"situation", p.Situation, 4000}, {"impact", p.Impact, 4000}, {"if_no_answer", p.IfNoAnswer, 4000}, {"details", p.forPayload().Details, 32000}} {
-		if utf8.RuneCountInString(f.value) > f.max {
-			return fmt.Errorf("%s exceeds %d characters", f.name, f.max)
+// an oversized request valid at the server. Every violation is reported, each
+// with its field path, its length and the limit, so one preview shows them all.
+func (p askPresentation) boundViolations() []string {
+	var out []string
+	over := func(path, value string, limit int) {
+		if n := utf8.RuneCountInString(value); n > limit {
+			out = append(out, fmt.Sprintf("%s is %d characters; the limit is %d", path, n, limit))
 		}
 	}
-	if p.Recommendation != nil && (utf8.RuneCountInString(p.Recommendation.Action) > 240 || utf8.RuneCountInString(p.Recommendation.Why) > 4000) {
-		return fmt.Errorf("recommendation action/why exceeds 240/4000 characters")
+	over("situation", p.Situation, 4000)
+	over("impact", p.Impact, 4000)
+	over("if_no_answer", p.IfNoAnswer, 4000)
+	over("details", p.forPayload().Details, 32000)
+	if p.Recommendation != nil {
+		over("recommendation.action", p.Recommendation.Action, 240)
+		over("recommendation.why", p.Recommendation.Why, 4000)
 	}
 	if len(p.Alternatives) > 5 {
-		return fmt.Errorf("alternatives exceeds 5 entries")
+		out = append(out, fmt.Sprintf("alternatives has %d entries; the limit is 5", len(p.Alternatives)))
 	}
-	for _, alt := range p.Alternatives {
-		if strings.TrimSpace(alt.Action) == "" || strings.TrimSpace(alt.Consequence) == "" || utf8.RuneCountInString(alt.Action) > 240 || utf8.RuneCountInString(alt.Consequence) > 4000 {
-			return fmt.Errorf("alternative requires non-empty action (at most 240 characters) and consequence (at most 4000)")
+	for i, alt := range p.Alternatives {
+		path := fmt.Sprintf("alternatives[%d]", i)
+		if strings.TrimSpace(alt.Action) == "" {
+			out = append(out, path+".action is required")
 		}
+		if strings.TrimSpace(alt.Consequence) == "" {
+			out = append(out, path+".consequence is required")
+		}
+		over(path+".action", alt.Action, 240)
+		over(path+".consequence", alt.Consequence, 4000)
+	}
+	return out
+}
+
+func (p askPresentation) validateBounds() error {
+	if v := p.boundViolations(); len(v) > 0 {
+		return fmt.Errorf("%s", strings.Join(v, "; "))
 	}
 	return nil
 }

@@ -142,7 +142,7 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "orient" || parts[0] == "context" {
 		return "read_only"
 	}
-	if parts[0] == "note" || parts[0] == "done" {
+	if parts[0] == "note" || parts[0] == "done" || parts[0] == "feedback" {
 		return "remote_coordination_write"
 	}
 	if command == "auth access-requests request" || command == "auth access-requests approve" || command == "auth access-requests deny" {

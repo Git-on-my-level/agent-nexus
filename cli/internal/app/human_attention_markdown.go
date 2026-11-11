@@ -96,18 +96,13 @@ func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind strin
 	if fm.Title == "" {
 		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter title is required")
 	}
-	if fm.RecommendedResponse == "" && !preview {
-		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter recommendation.action (or legacy recommended_response) is required")
-	}
+	// A missing recommendation is reported with every other violation.
 	if fm.Kind != "" && !strings.EqualFold(fm.Kind, expectedKind) {
 		return empty, "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("frontmatter kind %q does not match anx %s", fm.Kind, expectedKind))
 	}
 
 	responseProposals, err := buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)
-	if err != nil && !preview {
-		return empty, "", nil, err
-	}
-	if preview && err != nil {
+	if err != nil {
 		responseProposals = nil
 		for _, option := range append([]string{fm.RecommendedResponse}, fm.Proposals...) {
 			if strings.TrimSpace(option) != "" {

@@ -67,7 +67,7 @@ func attachRunAttribution(w http.ResponseWriter, r *http.Request, opts handlerOp
 		return true
 	}
 	if !runHeaderPattern.MatchString(raw) {
-		writeError(w, http.StatusBadRequest, "run_attribution_invalid", "run header is malformed")
+		writeRunAttributionInvalid(w, "malformed", raw, "run header is malformed; expected agentctl/<execution-id>")
 		return false
 	}
 	principal, ok := authenticatePrincipalFromHeader(w, r, opts, true)
@@ -80,13 +80,13 @@ func attachRunAttribution(w http.ResponseWriter, r *http.Request, opts handlerOp
 	}
 	identity, err := opts.runStore.Identity(r.Context(), principal.AgentID)
 	if err != nil || identity.ActorID != principal.ActorID || identity.HostID == "" || (identity.Kind != "derived" && identity.Kind != "adopted") {
-		writeError(w, 400, "run_attribution_invalid", "run header requires a derived agent")
+		writeRunAttributionInvalid(w, "not_derived_agent", raw, "run header requires a host-derived agent; this credential is not one")
 		return false
 	}
 	run, e := opts.runStore.Provisional(r.Context(), identity, strings.TrimPrefix(raw, "agentctl/"))
 	if e != nil {
 		if errors.Is(e, commandcenter.ErrIdentityConflict) {
-			writeError(w, http.StatusBadRequest, "run_attribution_invalid", "run belongs to another agent")
+			writeRunAttributionInvalid(w, "run_owned_by_other_agent", raw, "run "+raw+" is already attributed to another agent on this host; this write was made as a different agent")
 		} else {
 			writeError(w, http.StatusInternalServerError, "internal_error", "failed to resolve run attribution")
 		}
@@ -97,6 +97,17 @@ func attachRunAttribution(w http.ResponseWriter, r *http.Request, opts handlerOp
 	opts.agentChanges.publish()
 	return true
 }
+
+// writeRunAttributionInvalid refuses the run header before any mutation and
+// says how to write anyway: the header never grants authority, so resending
+// without it is always safe (current CLIs do so automatically).
+func writeRunAttributionInvalid(w http.ResponseWriter, reason, run, message string) {
+	payload := errorPayload("run_attribution_invalid", message)
+	payload["hint"] = "Nothing was written. Resend the same request without X-ANX-Run-Id to write unattributed; anx v0.13.62 and later do this automatically. To attribute, write as the agent that started this agentctl run, or unset AGENTCTL_EXECUTION_ID when writing as a different identity."
+	payload["details"] = map[string]any{"reason": reason, "run": run, "write_applied": false}
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": payload})
+}
+
 func handleRuns(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.runStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "runs_unavailable", "runs store is not configured")
