@@ -62,7 +62,7 @@ func TestSQLiteMaintenanceConfigDefaults(t *testing.T) {
 
 func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 	clearSQLiteMaintenanceEnv(t)
-	t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+	t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "true")
 	t.Setenv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL", "2m")
 	t.Setenv("ANX_SQLITE_WAL_WARN_BYTES", "1234")
 	t.Setenv("ANX_SQLITE_WAL_PINNED_RUNS", "7")
@@ -72,13 +72,45 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.enabled {
-		t.Fatal("watchdog should be disabled")
+	if !config.enabled {
+		t.Fatal("watchdog should be enabled")
 	}
 	if config.interval != 2*time.Minute || config.warnBytes != 1234 || config.pinnedRuns != 7 ||
 		config.truncateBusyTimeout != 75*time.Millisecond || config.journalSizeLimit != 5678 {
 		t.Fatalf("unexpected config: %#v", config)
 	}
+}
+
+func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
+	t.Run("journal limit still applies", func(t *testing.T) {
+		clearSQLiteMaintenanceEnv(t)
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL", "not-a-duration")
+		t.Setenv("ANX_SQLITE_WAL_WARN_BYTES", "not-a-number")
+		t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "5678")
+		config, err := loadSQLiteMaintenanceConfig()
+		if err != nil {
+			t.Fatalf("disabled watchdog rejected tuning values: %v", err)
+		}
+		if config.enabled {
+			t.Fatal("watchdog should be disabled")
+		}
+		if config.interval != defaultWALWatchdogInterval || config.warnBytes != defaultWALWarnBytes {
+			t.Fatalf("disabled watchdog parsed tuning values: %#v", config)
+		}
+		if config.journalSizeLimit != 5678 {
+			t.Fatalf("journal size limit = %d, want 5678", config.journalSizeLimit)
+		}
+	})
+
+	t.Run("invalid journal limit still rejected", func(t *testing.T) {
+		clearSQLiteMaintenanceEnv(t)
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+		t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "0")
+		if _, err := loadSQLiteMaintenanceConfig(); err == nil {
+			t.Fatal("disabled watchdog accepted an invalid journal size limit")
+		}
+	})
 }
 
 func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {
@@ -253,7 +285,8 @@ func TestWALWatchdogStateMachine(t *testing.T) {
 		t.Fatalf("warning repeated: %v", logs)
 	}
 
-	// A complete PASSIVE run truncates and resets the episode.
+	// A complete PASSIVE run above the truncate floor truncates and resets the episode.
+	walBytes = defaultWALTruncateFloorBytes + 1
 	fake.passive = walCheckpointResult{busy: 0, logFrames: 10, checkpointedFrames: 10}
 	tick()
 	if fake.truncateCalls != 1 {
@@ -261,6 +294,7 @@ func TestWALWatchdogStateMachine(t *testing.T) {
 	}
 
 	// A later episode can warn once again.
+	walBytes = 200
 	fake.passive = walCheckpointResult{busy: 0, logFrames: 10, checkpointedFrames: 5}
 	tick()
 	tick()
@@ -286,6 +320,45 @@ func TestWALWatchdogStateMachine(t *testing.T) {
 	}
 	if strings.Contains(logs[2], "/secret") {
 		t.Fatalf("failure outcome leaked error text: %s", logs[2])
+	}
+}
+
+func TestWALWatchdogEvaluateTruncateFloor(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		walBytes int64
+		passive  walCheckpointResult
+		truncate bool
+	}{
+		{
+			name:     "empty WAL complete",
+			walBytes: 0,
+			passive:  walCheckpointResult{busy: 0, logFrames: 0, checkpointedFrames: 0},
+		},
+		{
+			name:     "tiny WAL complete",
+			walBytes: defaultWALTruncateFloorBytes,
+			passive:  walCheckpointResult{busy: 0, logFrames: 10, checkpointedFrames: 10},
+		},
+		{
+			name:     "big WAL complete",
+			walBytes: defaultWALTruncateFloorBytes + 1,
+			passive:  walCheckpointResult{busy: 0, logFrames: 10, checkpointedFrames: 10},
+			truncate: true,
+		},
+		{
+			name:     "big WAL incomplete",
+			walBytes: defaultWALTruncateFloorBytes + 1,
+			passive:  walCheckpointResult{busy: 0, logFrames: 10, checkpointedFrames: 5},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			watchdog := &walWatchdog{config: sqliteMaintenanceConfig{warnBytes: defaultWALWarnBytes, pinnedRuns: defaultWALPinnedRuns}}
+			_, truncate := watchdog.evaluate(tc.walBytes, tc.passive)
+			if truncate != tc.truncate {
+				t.Fatalf("truncate = %v, want %v", truncate, tc.truncate)
+			}
+		})
 	}
 }
 

@@ -19,6 +19,7 @@ const (
 	defaultWALWarnBytes           int64 = 512 * 1024 * 1024
 	defaultWALPinnedRuns                = 3
 	defaultWALTruncateBusyTimeout       = 250 * time.Millisecond
+	defaultWALTruncateFloorBytes  int64 = 4 * 1024 * 1024
 	defaultJournalSizeLimit       int64 = 64 * 1024 * 1024
 )
 
@@ -47,6 +48,20 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		}
 		config.enabled = parsed
 	}
+	// The journal size limit is part of the connection DSN, not watchdog
+	// tuning, so it is parsed and validated even when the watchdog is disabled.
+	if value, ok := os.LookupEnv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES"); ok {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: must be a positive integer")
+		}
+		config.journalSizeLimit = parsed
+	}
+	// Tuning values only matter while the watchdog runs. A disabled watchdog
+	// must not block workspace initialization on an invalid tuning value.
+	if !config.enabled {
+		return config, nil
+	}
 	if value, ok := os.LookupEnv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL"); ok {
 		parsed, err := time.ParseDuration(strings.TrimSpace(value))
 		if err != nil || parsed <= 0 {
@@ -74,13 +89,6 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 			return config, fmt.Errorf("invalid ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT: must be a positive duration")
 		}
 		config.truncateBusyTimeout = parsed
-	}
-	if value, ok := os.LookupEnv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES"); ok {
-		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-		if err != nil || parsed <= 0 {
-			return config, fmt.Errorf("invalid ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: must be a positive integer")
-		}
-		config.journalSizeLimit = parsed
 	}
 	return config, nil
 }
@@ -131,12 +139,12 @@ func newWALWatchdog(db *sql.DB, walPath string, config sqliteMaintenanceConfig) 
 	return watchdog
 }
 
-func (w *Workspace) startWALWatchdog(config sqliteMaintenanceConfig) {
+func (w *Workspace) startWALWatchdog(config sqliteMaintenanceConfig, databasePath string) {
 	if !config.enabled {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	watchdog := newWALWatchdog(w.db, w.layout.DatabasePath+"-wal", config)
+	watchdog := newWALWatchdog(w.db, databasePath+"-wal", config)
 	watchdog.cancel = cancel
 	watchdog.done = make(chan struct{})
 	w.walWatchdogCancel = cancel
@@ -207,7 +215,9 @@ func (w *walWatchdog) evaluate(walBytes int64, passive walCheckpointResult) (war
 		w.consecutive = 0
 		w.warned = false
 	}
-	truncate = valid && passive.checkpointedFrames == passive.logFrames
+	// An empty or tiny WAL has nothing worth reclaiming; truncating it on every
+	// tick would take an exclusive checkpoint on an otherwise idle database.
+	truncate = valid && passive.checkpointedFrames == passive.logFrames && walBytes > defaultWALTruncateFloorBytes
 	return warn, truncate
 }
 

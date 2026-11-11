@@ -110,7 +110,7 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		_ = db.Close()
 		return nil, err
 	}
-	w.startWALWatchdog(maintenanceConfig)
+	w.startWALWatchdog(maintenanceConfig, databasePath)
 	succeeded = true
 	return w, nil
 }

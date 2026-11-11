@@ -180,13 +180,19 @@ func (c *scopeConnection) BeginTx(ctx context.Context, options driver.TxOptions)
 	return c.Conn.Begin()
 }
 func (c *scopeConnection) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	var (
+		stmt driver.Stmt
+		err  error
+	)
 	if conn, ok := c.Conn.(driver.ConnPrepareContext); ok {
-		return conn.PrepareContext(ctx, query)
+		stmt, err = conn.PrepareContext(ctx, query)
+	} else if err = ctx.Err(); err == nil {
+		stmt, err = c.Conn.Prepare(query)
 	}
-	if err := ctx.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
-	return c.Conn.Prepare(query)
+	return &scopeStmt{Stmt: stmt, conn: c}, nil
 }
 func (c *scopeConnection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	if conn, ok := c.Conn.(driver.ExecerContext); ok {
@@ -238,6 +244,65 @@ func (c *scopeConnection) Ping(ctx context.Context) error {
 	return ctx.Err()
 }
 
+// scopeStmt keeps prepared-statement reads under the same cancellation
+// invalidation as direct queries. modernc implements database/sql's context
+// interfaces, but the wrapper still mirrors database/sql's legacy Query/Exec
+// fallback for any driver that does not, so a prepared statement cannot bypass
+// cancellation handling.
+type scopeStmt struct {
+	driver.Stmt
+	conn *scopeConnection
+}
+
+func (s *scopeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	var (
+		rows driver.Rows
+		err  error
+	)
+	if stmt, ok := s.Stmt.(driver.StmtQueryContext); ok {
+		rows, err = stmt.QueryContext(ctx, args)
+	} else if err = ctx.Err(); err == nil {
+		var values []driver.Value
+		if values, err = namedValues(args); err == nil {
+			rows, err = s.Stmt.Query(values)
+		}
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			s.conn.invalidate()
+		}
+		return nil, err
+	}
+	return &scopeRows{Rows: rows, ctx: ctx, conn: s.conn}, nil
+}
+
+func (s *scopeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if stmt, ok := s.Stmt.(driver.StmtExecContext); ok {
+		return stmt.ExecContext(ctx, args)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	values, err := namedValues(args)
+	if err != nil {
+		return nil, err
+	}
+	return s.Stmt.Exec(values)
+}
+
+// namedValues mirrors database/sql's legacy-driver fallback, which rejects
+// named parameters instead of silently binding them by position.
+func namedValues(args []driver.NamedValue) ([]driver.Value, error) {
+	values := make([]driver.Value, len(args))
+	for i, arg := range args {
+		if arg.Name != "" {
+			return nil, errors.New("sql: driver does not support the use of Named Parameters")
+		}
+		values[i] = arg.Value
+	}
+	return values, nil
+}
+
 // scopeRows owns the query context so a canceled or expired read can mark its
 // physical connection invalid before database/sql returns it to the pool. The
 // native connection is still closed only by scopeConnection.Close, which keeps
@@ -246,14 +311,27 @@ type scopeRows struct {
 	driver.Rows
 	ctx       context.Context
 	conn      *scopeConnection
+	eof       bool
 	closeOnce sync.Once
 	closeErr  error
+}
+
+func (r *scopeRows) Next(dest []driver.Value) error {
+	err := r.Rows.Next(dest)
+	if err == io.EOF {
+		r.eof = true
+	}
+	return err
 }
 
 func (r *scopeRows) Close() error {
 	r.closeOnce.Do(func() {
 		r.closeErr = r.Rows.Close()
-		if r.ctx.Err() != nil {
+		// A failed close leaves the native cursor in an unknown state, so the
+		// connection cannot safely return to the pool. A fully consumed cursor
+		// is otherwise safe even if the request context was canceled after the
+		// last row; only an early close with a canceled context is not.
+		if r.closeErr != nil || (!r.eof && r.ctx.Err() != nil) {
 			r.conn.invalidate()
 		}
 	})
@@ -304,7 +382,13 @@ func (r *scopeRows) HasNextResultSet() bool {
 
 func (r *scopeRows) NextResultSet() error {
 	if rows, ok := r.Rows.(driver.RowsNextResultSet); ok {
-		return rows.NextResultSet()
+		err := rows.NextResultSet()
+		if err == nil {
+			// A new result set has not been consumed yet, so an earlier EOF
+			// must not make an early close look like a completed read.
+			r.eof = false
+		}
+		return err
 	}
 	return io.EOF
 }

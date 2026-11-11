@@ -92,10 +92,10 @@ rollback. Default activation awaits the documented retention decision.
 
 The workspace runs a background watchdog by default. Every interval it reads
 the `state.sqlite-wal` size, runs `PRAGMA wal_checkpoint(PASSIVE)`, and only
-when PASSIVE reports `busy=0` and `checkpointed_frames == log_frames` tries a
-conditional `PRAGMA wal_checkpoint(TRUNCATE)` with a short 250 ms busy timeout.
-Runs are sequential and never overlap. A busy TRUNCATE is a normal skip, not a
-failure.
+when PASSIVE reports `busy=0`, `checkpointed_frames == log_frames`, and the WAL
+is larger than the 4 MiB truncate floor (`4194304` bytes) tries a conditional
+`PRAGMA wal_checkpoint(TRUNCATE)` with a short 250 ms busy timeout. Runs are
+sequential and never overlap. A busy TRUNCATE is a normal skip, not a failure.
 
 PASSIVE cannot override a live reader. If the WAL stays above the configured
 threshold and PASSIVE remains incomplete for three consecutive runs, core logs
@@ -103,8 +103,15 @@ one `stage=wal_pinned` WARN line with the WAL byte count and frame counts. That
 warning means the WAL is not draining; it does not prove which reader is
 responsible, because SQLite does not expose reader identities. TRUNCATE is
 conditional and best-effort, so a pinned WAL may persist until the responsible
-reader finishes or disconnects. Invalid watchdog or journal-limit values stop
-workspace initialization rather than silently changing the policy.
+reader finishes or disconnects.
+
+Setting `ANX_SQLITE_WAL_WATCHDOG=false` disables the worker and ignores the
+watchdog tuning values (interval, warn bytes, pinned runs and truncate busy
+timeout), even if they are invalid. The journal size limit is not watchdog
+tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES` still applies to every connection
+through the DSN and is still validated while the watchdog is disabled. An
+invalid journal-limit value stops workspace initialization rather than
+silently changing the policy.
 
 ### Browser links (`ANX_WEB_BASE_URL`)
 
