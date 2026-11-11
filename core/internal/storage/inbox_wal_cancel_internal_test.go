@@ -321,6 +321,77 @@ func TestInboxCancellationReleasesWALSnapshot(t *testing.T) {
 	}
 }
 
+// TestScopeRowsCanceledEarlyCloseReleasesWALSnapshot covers the storage-level
+// invalidation path directly: a multi-row read is canceled after one row and
+// closed early, so the physical connection must be discarded rather than
+// returned to the pool with a live cursor. A discarded connection releases its
+// WAL snapshot and its process lease.
+func TestScopeRowsCanceledEarlyCloseReleasesWALSnapshot(t *testing.T) {
+	ctx := context.Background()
+	ws, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+
+	for i := 0; i < 32; i++ {
+		if _, err := ws.DB().ExecContext(ctx,
+			`INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES(?,?,?,?,?)`,
+			fmt.Sprintf("wal-early-close-%02d", i), "WAL Early Close", "[]", "2026-11-11T00:00:00Z", "{}",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pool := openWALCheckpointPool(t, ws)
+	truncateWAL(t, pool)
+
+	// Expire and drain any idle connections, then hold the only remaining one
+	// so the query below must open a fresh connection. That makes the lease
+	// count deterministic: invalidation closes the fresh connection and returns
+	// the count to the baseline captured while the held connection is live.
+	ws.DB().SetConnMaxLifetime(time.Nanosecond)
+	held, err := ws.DB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	ws.DB().SetConnMaxLifetime(0)
+	beforeRefs := storage.LeaseRefsForTest(ws)
+
+	queryCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	rows, err := ws.DB().QueryContext(queryCtx, `SELECT id FROM actors ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatalf("first row unavailable: %v", rows.Err())
+	}
+	var id string
+	if err := rows.Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	// The close may report the cancellation; the invalidation is what matters.
+	_ = rows.Close()
+
+	if got := storage.LeaseRefsForTest(ws); got != beforeRefs {
+		t.Fatalf("process lease refs after canceled early close = %d, want %d", got, beforeRefs)
+	}
+
+	writeWALFrame(t, pool, "early-close")
+	busy, logFrames, checkpointed := passiveCheckpoint(t, pool)
+	if busy != 0 {
+		t.Errorf("checkpoint busy=%d, want 0", busy)
+	}
+	if logFrames <= 0 {
+		t.Errorf("checkpoint log frames=%d, want >0", logFrames)
+	}
+	if logFrames != checkpointed {
+		t.Errorf("WAL snapshot still pinned: log=%d checkpointed=%d", logFrames, checkpointed)
+	}
+}
+
 // TestInboxReadWithoutCancellationKeepsWALCheckpointable is the control: an
 // ordinary read must still succeed and leave the WAL fully checkpointable.
 func TestInboxReadWithoutCancellationKeepsWALCheckpointable(t *testing.T) {

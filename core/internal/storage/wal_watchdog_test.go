@@ -82,20 +82,35 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 }
 
 func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
-	clearSQLiteMaintenanceEnv(t)
-	t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
-	t.Setenv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL", "not-a-duration")
-	t.Setenv("ANX_SQLITE_WAL_WARN_BYTES", "not-a-number")
-	config, err := loadSQLiteMaintenanceConfig()
-	if err != nil {
-		t.Fatalf("disabled watchdog rejected tuning values: %v", err)
-	}
-	if config.enabled {
-		t.Fatal("watchdog should be disabled")
-	}
-	if config.interval != defaultWALWatchdogInterval || config.warnBytes != defaultWALWarnBytes {
-		t.Fatalf("disabled watchdog parsed tuning values: %#v", config)
-	}
+	t.Run("journal limit still applies", func(t *testing.T) {
+		clearSQLiteMaintenanceEnv(t)
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL", "not-a-duration")
+		t.Setenv("ANX_SQLITE_WAL_WARN_BYTES", "not-a-number")
+		t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "5678")
+		config, err := loadSQLiteMaintenanceConfig()
+		if err != nil {
+			t.Fatalf("disabled watchdog rejected tuning values: %v", err)
+		}
+		if config.enabled {
+			t.Fatal("watchdog should be disabled")
+		}
+		if config.interval != defaultWALWatchdogInterval || config.warnBytes != defaultWALWarnBytes {
+			t.Fatalf("disabled watchdog parsed tuning values: %#v", config)
+		}
+		if config.journalSizeLimit != 5678 {
+			t.Fatalf("journal size limit = %d, want 5678", config.journalSizeLimit)
+		}
+	})
+
+	t.Run("invalid journal limit still rejected", func(t *testing.T) {
+		clearSQLiteMaintenanceEnv(t)
+		t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+		t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "0")
+		if _, err := loadSQLiteMaintenanceConfig(); err == nil {
+			t.Fatal("disabled watchdog accepted an invalid journal size limit")
+		}
+	})
 }
 
 func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {

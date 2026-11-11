@@ -4003,7 +4003,7 @@
     "../storage/scope_migration_connections.go:*scopeConnector:Connect": "6c302352c9d87c0a09f2dfdfde9228865d09d5c08328f6e8a8faa5468d6e59db",
     "../storage/scope_migration_connections.go:*scopeProcessLease:activate": "2d7e01ca00bda0783304952e0d762bd5aa892ecb7fee9709d5a8f8816d1cd6b5",
     "../storage/scope_migration_connections.go:*scopeProcessLease:release": "d129a8cfc0f6de02ad6d9943b7616de488d1317fc365daf0736c8fd034a85a24",
-    "../storage/scope_migration_connections.go:*scopeRows:Close": "2e357a9435cc7e87cf4751d38a9f59aebf7e4279a68599eff9081c78d623be2c",
+    "../storage/scope_migration_connections.go:*scopeRows:Close": "179ce198b30026034b055bbef04e8a58b13aa02157dfe8af76d8f5d632052b6d",
     "../storage/scope_migration_connections.go:*scopeRows:Next": "5099dfab8b8f3d478de449675b0060e6ba556b2fee28efe3821d7c0c48c04a0b",
     "../storage/scope_migration_connections.go:*scopeStmt:ExecContext": "bceed2d963b24929b125ff3a51cd8fab9c9ddcecea1ca95ac2dd34f670d33648",
     "../storage/scope_migration_connections.go:*scopeStmt:QueryContext": "96cdfc2ca9081a6fe88b061e510c1ee469d7f6ccab1ec0b9a2c313d91cc54553",

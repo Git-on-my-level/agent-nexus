@@ -48,6 +48,15 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		}
 		config.enabled = parsed
 	}
+	// The journal size limit is part of the connection DSN, not watchdog
+	// tuning, so it is parsed and validated even when the watchdog is disabled.
+	if value, ok := os.LookupEnv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES"); ok {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: must be a positive integer")
+		}
+		config.journalSizeLimit = parsed
+	}
 	// Tuning values only matter while the watchdog runs. A disabled watchdog
 	// must not block workspace initialization on an invalid tuning value.
 	if !config.enabled {
@@ -80,13 +89,6 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 			return config, fmt.Errorf("invalid ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT: must be a positive duration")
 		}
 		config.truncateBusyTimeout = parsed
-	}
-	if value, ok := os.LookupEnv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES"); ok {
-		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-		if err != nil || parsed <= 0 {
-			return config, fmt.Errorf("invalid ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: must be a positive integer")
-		}
-		config.journalSizeLimit = parsed
 	}
 	return config, nil
 }

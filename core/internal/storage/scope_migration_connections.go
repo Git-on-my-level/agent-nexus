@@ -245,9 +245,10 @@ func (c *scopeConnection) Ping(ctx context.Context) error {
 }
 
 // scopeStmt keeps prepared-statement reads under the same cancellation
-// invalidation as direct queries. database/sql falls back to the legacy
-// Query/Exec methods when the driver does not implement the context variants,
-// so the wrapper mirrors that behavior.
+// invalidation as direct queries. modernc implements database/sql's context
+// interfaces, but the wrapper still mirrors database/sql's legacy Query/Exec
+// fallback for any driver that does not, so a prepared statement cannot bypass
+// cancellation handling.
 type scopeStmt struct {
 	driver.Stmt
 	conn *scopeConnection
@@ -326,10 +327,11 @@ func (r *scopeRows) Next(dest []driver.Value) error {
 func (r *scopeRows) Close() error {
 	r.closeOnce.Do(func() {
 		r.closeErr = r.Rows.Close()
-		// A fully consumed cursor is safe to return to the pool even if the
-		// request context was canceled after the last row. Only an early close
-		// or a non-EOF error leaves the native cursor in an unknown state.
-		if !r.eof && r.ctx.Err() != nil {
+		// A failed close leaves the native cursor in an unknown state, so the
+		// connection cannot safely return to the pool. A fully consumed cursor
+		// is otherwise safe even if the request context was canceled after the
+		// last row; only an early close with a canceled context is not.
+		if r.closeErr != nil || (!r.eof && r.ctx.Err() != nil) {
 			r.conn.invalidate()
 		}
 	})
@@ -380,7 +382,13 @@ func (r *scopeRows) HasNextResultSet() bool {
 
 func (r *scopeRows) NextResultSet() error {
 	if rows, ok := r.Rows.(driver.RowsNextResultSet); ok {
-		return rows.NextResultSet()
+		err := rows.NextResultSet()
+		if err == nil {
+			// A new result set has not been consumed yet, so an earlier EOF
+			// must not make an early close look like a completed read.
+			r.eof = false
+		}
+		return err
 	}
 	return io.EOF
 }
