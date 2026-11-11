@@ -447,7 +447,7 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, opts ans
 		if len(found) > 0 && (opts.sweepOnce || opts.settle <= 0 || len(last.open) == 0 || !time.Now().Before(quietUntil)) {
 			return deliver()
 		}
-		if opts.sweepOnce && (lastErr == nil || !answerWaitRetryable(lastErr) || waitCtx.Err() != nil) {
+		if opts.sweepOnce { // one collection attempt, never a retry past the deadline
 			return nil, timedOut(lastErr)
 		}
 		select {

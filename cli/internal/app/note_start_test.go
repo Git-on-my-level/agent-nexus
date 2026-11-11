@@ -215,3 +215,33 @@ func TestPendingNoteClaimIsExclusive(t *testing.T) {
 		t.Fatalf("clearing a missing record is fine: %v", err)
 	}
 }
+
+// A process that lost the claim and finds the record gone must not mint a
+// new key: the winner already sent this exact note.
+func TestLostClaimAfterWinnerSettledDoesNotResend(t *testing.T) {
+	rec := &noteRecorder{}
+	server := noteServer(t, rec)
+	t.Cleanup(server.Close)
+	a, out := dailyTestApp(t, server.URL)
+	home, _ := a.UserHomeDir()
+	// Simulate the interleaving: every claim loses (a record appears), and
+	// the record is gone again by the reload.
+	claims := 0
+	pendingClaimHook = func(path string) {
+		claims++
+		_ = os.WriteFile(path, []byte(`{"request_key":"note:winner","body":{"request_key":"note:winner"}}`), 0o600)
+	}
+	pendingLoadHook = func(path string) {
+		if claims > 0 {
+			_ = os.Remove(path)
+		}
+	}
+	t.Cleanup(func() { pendingClaimHook, pendingLoadHook = nil, nil })
+	_ = home
+	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress"}); exit == 0 || len(rec.keys) != 0 {
+		t.Fatalf("must not send after losing a settled claim: exit=%d sent=%v %s", exit, rec.keys, out.String())
+	}
+	if code := anyString(asMap(dailyJSON(t, out)["error"])["code"]); code != "note_sent_concurrently" {
+		t.Fatalf("code=%s", code)
+	}
+}

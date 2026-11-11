@@ -76,6 +76,9 @@ func (s *pendingNoteStore) path(fingerprint string) string {
 // record means "no earlier send"; an unreadable or corrupt one is an error,
 // because replacing it with a new key could post the note twice.
 func (s *pendingNoteStore) load(fingerprint string) (pendingNote, bool, error) {
+	if pendingLoadHook != nil {
+		pendingLoadHook(s.path(fingerprint))
+	}
 	raw, err := os.ReadFile(s.path(fingerprint))
 	if errors.Is(err, os.ErrNotExist) {
 		return pendingNote{}, false, nil
@@ -95,6 +98,9 @@ func (s *pendingNoteStore) load(fingerprint string) (pendingNote, bool, error) {
 // resends the winner's record instead.
 var errClaimed = errors.New("pending note already claimed")
 
+// Test hooks that force claim/load interleavings; nil in production.
+var pendingClaimHook, pendingLoadHook func(path string)
+
 func (s *pendingNoteStore) claim(fingerprint string, p pendingNote) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
@@ -110,6 +116,9 @@ func (s *pendingNoteStore) claim(fingerprint string, p pendingNote) error {
 	_, err = tmp.Write(raw)
 	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
+	}
+	if err == nil && pendingClaimHook != nil {
+		pendingClaimHook(s.path(fingerprint))
 	}
 	if err == nil {
 		// A hard link fails if the record exists; rename would replace it.
@@ -161,6 +170,7 @@ type noteSend struct {
 func (s noteSend) annotate(data map[string]any) []output.Warning {
 	if !s.resumed.IsZero() { // An earlier unconfirmed send of this note, now confirmed once.
 		data["resumed"], data["first_attempted_at"] = true, s.resumed.Format(time.RFC3339)
+		return append(s.warnings, noteWarning("note_resumed", "resent the identical note first attempted at "+s.resumed.Format(time.RFC3339)+" with its request_key; if that send had landed, this posted nothing new", nil))
 	}
 	return s.warnings
 }
@@ -176,6 +186,14 @@ func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs
 		p, ok, err := store.load(fingerprint)
 		if err != nil {
 			return nil, sent, noteKeyUnsaved(store.dir, err)
+		}
+		if !ok && attempt > 0 {
+			// Lost the claim, and the winner has already settled this exact
+			// note: it was sent once. Minting a new key would post it twice.
+			e := errnorm.Local("note_sent_concurrently", "note not sent: an identical anx note running at the same time already sent it")
+			e.Details = map[string]any{"write_applied": false}
+			e.Hint = "Check the card's notes; rerun only if the note is missing."
+			return nil, sent, e
 		}
 		if ok {
 			body, sent.resumed = p.Body, p.Created
