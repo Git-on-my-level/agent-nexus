@@ -301,8 +301,9 @@ type answerWaitOptions struct {
 	timeout time.Duration
 	settle  time.Duration
 	all     bool
-	// sweepOnce: one collection pass, no waiting (a re-armed --deadline that
-	// has already passed must not extend the wait).
+	// sweepOnce: one collection pass, no waiting and no retry (a re-armed
+	// --deadline that has already passed must not extend the wait). A failed
+	// pass is that read's error; only a successful empty pass is no answer.
 	sweepOnce bool
 }
 
@@ -448,7 +449,10 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, opts ans
 			return deliver()
 		}
 		if opts.sweepOnce { // one collection attempt, never a retry past the deadline
-			return nil, timedOut(lastErr)
+			if lastErr != nil {
+				return nil, lastErr
+			}
+			return nil, timedOut(nil)
 		}
 		select {
 		case <-waitCtx.Done():

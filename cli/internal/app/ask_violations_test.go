@@ -43,6 +43,28 @@ func TestAskReportsEveryViolationAtOnce(t *testing.T) {
 	}
 }
 
+// A YAML evidence entry that is not {label, url} is a payload shape error.
+// Preview reports it, and --force must not submit the unfilled link. An
+// over-limit field must not be what makes the refusal non-forceable.
+func TestAskEvidenceShapeCannotBeForced(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ask.md")
+	content := strings.Replace(askDecisionTemplate, "evidence: []", "evidence:\n  - \"PR=https://example.test/pr/1\"", 1)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	raw := runCLIForTest(t, dir, nil, nil, []string{"--json", "ask", "--from-file", path, "--force", "--reason", "the link is obvious"})
+	assertEnvelopeError(t, raw)
+	for _, want := range []string{`evidence[0] must be an object`, `"forceable": false`} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("forced submit missing %q in:\n%s", want, raw)
+		}
+	}
+	if strings.Contains(raw, `"forceable": true`) {
+		t.Fatalf("a bad evidence shape must not be forceable:\n%s", raw)
+	}
+}
+
 // A missing title and a kind mismatch used to stop validation at the first
 // one; they are reported with every other violation.
 func TestAskFileStructureViolationsAreReportedTogether(t *testing.T) {

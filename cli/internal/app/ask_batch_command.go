@@ -347,7 +347,7 @@ func (a *App) prepareAskBatchEntry(
 	plainWarnings, lintErrors := lintAskPresentation(entry.Title, entry.askPresentation, options)
 	warnings = append(warnings, plainWarnings...)
 	lintErrors = append(append(append([]string{}, hard...), lintErrors...), authoringErrors...)
-	if len(hard) > 0 {
+	if len(hard) > 0 || evidenceShapeInvalid(entry.Evidence) {
 		return errnorm.WithDetails(errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %s", index, strings.Join(lintErrors, "; "))), map[string]any{"violations": lintErrors, "forceable": false})
 	}
 	if len(lintErrors) > 0 && !forceFlag.value {

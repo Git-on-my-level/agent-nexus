@@ -90,3 +90,37 @@ func TestAwaitAnswersPastDeadlineSweepsOnceWithoutWaiting(t *testing.T) {
 		t.Fatalf("an answer already waiting is still returned: exit=%d %v", exit, doc)
 	}
 }
+
+// A failed collection pass is a failed read. Exit 14 would tell the agent to
+// stop waiting, so an answer a successful sweep would have returned is lost.
+func TestAwaitAnswersPastDeadlineDoesNotHideAFailedRead(t *testing.T) {
+	fake := &answerWaitFake{failing: true}
+	app := answerWaitApp(t, fake)
+	a, out, cfg := app("session-a")
+	store, _ := a.answerWaitStore(cfg)
+	_ = store.recordAsk("event:one", "one", time.Now())
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	started := time.Now()
+	exit, doc := runAwaitAnswersForTest(t, a, out, "--deadline", past)
+	errDoc := asMap(doc["error"])
+	if exit == 14 || errDoc["code"] == "deadline_reached" || time.Since(started) > 3*time.Second {
+		t.Fatalf("a failed sweep must stay a read error and not be retried: exit=%d after %s %v", exit, time.Since(started), doc)
+	}
+}
+
+// The one pass reads each outstanding ask. It must finish past the old 5s
+// floor and still hand back an answer that was already waiting.
+func TestAwaitAnswersPastDeadlineReturnsASlowSweep(t *testing.T) {
+	fake := &answerWaitFake{askDelay: 6 * time.Second}
+	app := answerWaitApp(t, fake)
+	a, out, cfg := app("session-a")
+	store, _ := a.answerWaitStore(cfg)
+	_ = store.recordAsk("event:one", "one", time.Now())
+	fake.set(nil, map[string]map[string]any{"one": answeredOutcome("response-one")})
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	started := time.Now()
+	exit, doc := runAwaitAnswersForTest(t, a, out, "--deadline", past)
+	if exit != 0 || len(asSlice(asMap(doc["result"])["answers"])) != 1 || time.Since(started) < 5*time.Second {
+		t.Fatalf("a slow sweep must return the waiting answer: exit=%d after %s %v", exit, time.Since(started), doc)
+	}
+}

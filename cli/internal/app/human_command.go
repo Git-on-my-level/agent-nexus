@@ -352,7 +352,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	if forceFlag.value && strings.TrimSpace(reasonFlag.value) == "" {
 		return nil, errnorm.Usage("invalid_request", "--force requires --reason")
 	}
-	if len(hardErrors) > 0 {
+	if len(hardErrors) > 0 || evidenceShapeInvalid(links) {
 		return nil, errnorm.WithDetails(errnorm.Usage(hardCode, fmt.Sprintf("%d problems: %s", len(lintErrors), lintErr.Error())), map[string]any{"violations": lintErrors, "forceable": false})
 	}
 	if lintErr != nil && !forceFlag.value {

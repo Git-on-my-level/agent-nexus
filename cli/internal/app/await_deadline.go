@@ -17,11 +17,6 @@ import (
 // can be re-armed after any interruption without extending the wait, and
 // reaching it with no answer exits 14 deadline_reached.
 
-// awaitDeadlineFloor bounds the one collection pass a re-armed wait makes
-// once its deadline has passed: answers already waiting are returned, but
-// nothing new is waited for (awaitSweepOnce).
-const awaitDeadlineFloor = 5 * time.Second
-
 type awaitSweepOnceKey struct{}
 
 func awaitSweepOnce(ctx context.Context) bool {
@@ -71,7 +66,14 @@ func (a *App) runAwaitUntil(ctx context.Context, args []string, cfg config.Resol
 	}
 	wait := time.Until(deadline)
 	if wait <= 0 {
-		wait, ctx = awaitDeadlineFloor, context.WithValue(ctx, awaitSweepOnceKey{}, true)
+		// One collection pass, then stop. The pass uses the command timeout:
+		// a short floor canceled a slow read of the outstanding asks and the
+		// page, and that failure was reported as an empty deadline.
+		wait = cfg.Timeout
+		if wait <= 0 {
+			wait = config.DefaultTimeout
+		}
+		ctx = context.WithValue(ctx, awaitSweepOnceKey{}, true)
 	}
 	result, err := a.runAwait(ctx, append(rest, "--timeout", wait.Round(time.Millisecond).String()), cfg)
 	var e *errnorm.Error

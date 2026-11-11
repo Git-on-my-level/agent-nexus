@@ -19,6 +19,8 @@ type askEvidenceLink struct {
 // UnmarshalYAML accepts the {label, url} object and records any other shape
 // (a bare "Label=URL" string, a list) for lint to report with its index,
 // instead of failing the whole frontmatter with a decoder type error.
+// A recorded shape is a payload rule, like a --evidence flag without '=':
+// preview lists it with the other violations, and --force must not submit it.
 func (l *askEvidenceLink) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind == yaml.MappingNode {
 		var plain struct {
@@ -96,6 +98,17 @@ evidence: []
 var askNamedPR = regexp.MustCompile(`(?i)\bPR\s*#?(\d+)\b`)
 var askNamedRef = regexp.MustCompile("(?i)\\b(doc(?:ument)?|card|topic|file)\\s+[`\"]([^`\"\\n]+)[`\"]")
 var askPointerOnly = regexp.MustCompile(`(?i)^\s*(?:please\s+)?(?:see|read|refer to|check)\s+[^\n]+\s*$`)
+
+// evidenceShapeInvalid is true when a YAML evidence entry was not a
+// {label, url} object. Its label and url were never filled in.
+func evidenceShapeInvalid(links []askEvidenceLink) bool {
+	for _, link := range links {
+		if link.shape != "" {
+			return true
+		}
+	}
+	return false
+}
 
 // lintAskAuthoring returns every evidence and grounding problem at once, not
 // the first: an ask used to be rejected once per problem, one per attempt.
