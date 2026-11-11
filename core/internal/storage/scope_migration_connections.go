@@ -261,7 +261,10 @@ func (s *scopeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) 
 	if stmt, ok := s.Stmt.(driver.StmtQueryContext); ok {
 		rows, err = stmt.QueryContext(ctx, args)
 	} else if err = ctx.Err(); err == nil {
-		rows, err = s.Stmt.Query(namedValues(args))
+		var values []driver.Value
+		if values, err = namedValues(args); err == nil {
+			rows, err = s.Stmt.Query(values)
+		}
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -279,15 +282,24 @@ func (s *scopeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return s.Stmt.Exec(namedValues(args))
+	values, err := namedValues(args)
+	if err != nil {
+		return nil, err
+	}
+	return s.Stmt.Exec(values)
 }
 
-func namedValues(args []driver.NamedValue) []driver.Value {
+// namedValues mirrors database/sql's legacy-driver fallback, which rejects
+// named parameters instead of silently binding them by position.
+func namedValues(args []driver.NamedValue) ([]driver.Value, error) {
 	values := make([]driver.Value, len(args))
 	for i, arg := range args {
+		if arg.Name != "" {
+			return nil, errors.New("sql: driver does not support the use of Named Parameters")
+		}
 		values[i] = arg.Value
 	}
-	return values
+	return values, nil
 }
 
 // scopeRows owns the query context so a canceled or expired read can mark its
