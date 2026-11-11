@@ -298,7 +298,7 @@ describe("DecisionCard", () => {
     }
   });
 
-  it("answers a PM decision record through the durable PM route", async () => {
+  it("answers a decision record through the durable decision route", async () => {
     const record = brief.decisions.find((d) => d.ref === "decision:pm_7");
     const { container, findByText } = render(DecisionCard, {
       decision: record,
@@ -315,7 +315,7 @@ describe("DecisionCard", () => {
       }),
     );
     expect(queue.queueInboxResponse).not.toHaveBeenCalled();
-    await findByText(/sent to your PM/);
+    await findByText(/^Answer sent\.$/);
   });
 
   it("keeps the answer and says so when it cannot be saved", async () => {

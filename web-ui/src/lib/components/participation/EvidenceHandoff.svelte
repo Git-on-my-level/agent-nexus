@@ -1,7 +1,7 @@
 <script>
   import ActorLabel from "$lib/components/ActorLabel.svelte";
   import InfoTip from "$lib/components/InfoTip.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import {
     actorDisplayLabel,
     actorRegistry,
@@ -12,7 +12,7 @@
     observationStatusLabel,
     observationStatusTone,
     distinctEvidenceLinks,
-  } from "$lib/pm/evidence.js";
+  } from "$lib/work/evidence.js";
   let {
     observations = [],
     unavailable = false,

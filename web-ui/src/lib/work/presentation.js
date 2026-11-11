@@ -227,7 +227,7 @@ function parseStructuredInstruction(text) {
 }
 
 /**
- * Human title for a decision. PM harnesses sometimes file the instruction as
+ * Human title for a decision. Agent harnesses sometimes file the instruction as
  * a JSON payload (`{"next_action":"…"}`); a JSON blob is never a title —
  * prefer an instruction summary field, then the task title, then a generic.
  */
@@ -339,7 +339,6 @@ export function proposerLabel(
 ) {
   const kind = String(item?.origin_kind ?? "").toLowerCase();
   const by = String(item?.proposed_by ?? "").trim();
-  if (kind === "pm_turn") return "The PM proposes";
   if (kind === "channel") return "Proposed from a channel";
   if (by && currentActorId && by === currentActorId) return "You proposed";
   if (by) return `${actorLabel(by) || by} proposes`;
@@ -553,34 +552,8 @@ export function errorMessage(error) {
     error instanceof Error
       ? error.message
       : String(error || "Unable to load workspace data.");
-  if (
-    /capacity reached|busy|already has an active turn|still queued or being answered/i.test(
-      raw,
-    ) ||
-    ["conversation", "capacity", "queue"].includes(
-      String(error?.body?.error?.details?.reason ?? ""),
-    )
-  ) {
-    const details = error?.body?.error?.details ?? {};
-    if (String(details.reason ?? "") === "queue") {
-      // Released leases re-enter the queue, so "queued" can exceed the limit;
-      // "21 of 20" reads as a bug rather than a full queue.
-      const limit = details.limit ? ` (limit ${details.limit})` : "";
-      return `The PM queue for this workspace is full${limit}. Your message is kept; send it again in a moment, once a waiting question is answered or expires.`;
-    }
-    if (String(details.reason ?? "") === "capacity") {
-      const limit = details.limit
-        ? ` (${details.in_flight ?? "?"} of ${details.limit})`
-        : "";
-      return `The PM is at its in-flight limit for this workspace${limit}. Your message is kept; send it once another turn finishes or expires, or release a stuck runner.`;
-    }
-    return "Your previous message in this conversation is still queued or being answered. Your draft stays in the composer; send it again once that turn finishes or expires, or copy it into a new conversation.";
-  }
   if (isSessionExpired(error)) {
     return "Your session has expired. Sign in again to continue.";
-  }
-  if (/PM permission denied/i.test(raw)) {
-    return "You are not signed in as someone who can use the PM. Sign in again and retry.";
   }
   // "anx-core request failed at same-origin: POST /x (400) - reason" — the
   // reason is the message; the transport prefix is log material.
@@ -596,7 +569,7 @@ const DECISION_KIND_PREFIX =
   /^\s*(?:[A-Za-z][\w /-]{0,40}\s+)?decision\s*:\s*/i;
 
 /**
- * The instruction without a "Producer decision:" style prefix. The PM writes
+ * The instruction without a "Producer decision:" style prefix. The agent writes
  * every proposal in the same voice, so the prefix is noise in a list where
  * every row would otherwise start with the same three words.
  */
@@ -726,13 +699,13 @@ export function decisionConsequence(item, work = null) {
     if (owned || source === "Managed here")
       return phase
         ? `Approving moves this initiative${target}.`
-        : "This proposal names no target phase, so it cannot be applied. Decline it and ask the PM to propose again.";
-    return `Approving asks the PM to request this change${target} at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
+        : "This proposal names no target phase, so it cannot be applied. Decline it and propose it again.";
+    return `Approving requests this change${target} at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
   }
   if (scope === "work.annotate")
-    return "Approving records the PM's note on this initiative. The source is not changed.";
+    return "Approving records this note on the initiative. The source is not changed.";
   if (["github", "multica", "ssh_git", "git"].includes(scope))
-    return `Approving authorizes the PM to act at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
+    return `Approving authorizes this change at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
   return "Approving authorizes exactly this proposal. Delivery and outcome are tracked below.";
 }
 

@@ -4,18 +4,11 @@
   import Button from "$lib/components/Button.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { isAdministrationRefusal } from "$lib/coreAuthErrors.js";
-  import { pmInstallCommand } from "$lib/pm/onboardingState.js";
   import { coreClient } from "$lib/coreClient";
-  import {
-    PM_RUNNERS,
-    DEFAULT_PM_RUNNER_KEY,
-    pmRunnerFor,
-  } from "$lib/setup/pmRunners.js";
   import {
     SETUP_TOKEN_LABEL,
     SETUP_TOKEN_LIFETIME_SECONDS,
     buildMachinePrompt,
-    buildPmPrompt,
     formatCountdown,
     hostEnrollCommand,
     resolveCliInstallCommand,
@@ -25,27 +18,20 @@
   /**
    * One way to set a machine up, wherever the reader runs out of road.
    *
-   * Access → Hosts, the empty Agents roster and PM setup all need the same
-   * answer — "install anx on the computer your agents use, join it to this
-   * workspace, prove it worked" — so they get the same component rather than
-   * three sets of instructions that drift. The only differences are which
-   * prompt it builds and which live signal the page watches; the page owns the
-   * watching, and passes the result in.
+   * Access → Hosts, the empty Agents roster and the first-agent panel all need
+   * the same answer — "install anx on the computer your agents use, join it to
+   * this workspace, prove it worked" — so they get the same component rather
+   * than three sets of instructions that drift. The page owns the live signal
+   * and passes the result in.
    *
    * The enrollment token is issued when this panel opens, not when Copy is
    * clicked: the clipboard write has to be synchronous inside the click or
    * Safari drops it.
    */
   let {
-    /** `"machine"` connects a host; `"pm"` also installs the PM service. */
-    kind = "machine",
     cliBaseUrl = "",
     cliInstallCommand = "",
     workspaceLabel = "",
-    /** Chosen PM harness; bindable so the page can remember it. */
-    runnerKey = $bindable(DEFAULT_PM_RUNNER_KEY),
-    /** The PM has connected; retire its setup token. */
-    completed = false,
     heading = "",
     lede = "",
     /** Rendered under the prompt: the page's live "has it arrived yet" line. */
@@ -86,9 +72,6 @@
   const issued = { key: "" };
   /** A token this panel issued ran out while the reader watched. */
   let tokenExpired = $state(false);
-  /** Outcome of retiring a copied PM setup token after it connects. */
-  let completionNotice = $state("");
-  const completedToken = { id: "" };
   /** Set once this panel is gone, so a late response strands nothing. */
   let destroyed = false;
   /**
@@ -103,8 +86,6 @@
   let installCommand = $derived(resolveCliInstallCommand(cliInstallCommand));
   let blockedReason = $derived(setupPromptBlockedReason({ cliBaseUrl }));
   let manualEnrollCommand = $derived(hostEnrollCommand({ cliBaseUrl }));
-  let manualPmInstallCommand = $derived(pmInstallCommand({ cliBaseUrl }));
-  let runner = $derived(pmRunnerFor(runnerKey));
 
   /** Core's expiry, or NaN when it did not report one (an older core). */
   let expiresAtMs = $derived(Date.parse(token?.expiresAt ?? ""));
@@ -121,22 +102,13 @@
   let prompt = $derived(
     !token
       ? ""
-      : kind === "pm"
-        ? buildPmPrompt({
-            workspaceLabel,
-            cliBaseUrl,
-            installCommand,
-            token: token.secret,
-            expiresAt: token.expiresAt,
-            runnerKey,
-          })
-        : buildMachinePrompt({
-            workspaceLabel,
-            cliBaseUrl,
-            installCommand,
-            token: token.secret,
-            expiresAt: token.expiresAt,
-          }),
+      : buildMachinePrompt({
+          workspaceLabel,
+          cliBaseUrl,
+          installCommand,
+          token: token.secret,
+          expiresAt: token.expiresAt,
+        }),
   );
 
   /**
@@ -151,28 +123,6 @@
   function retire(id) {
     if (!id) return;
     void coreClient.revokeHostEnrollmentToken(id).catch(() => {});
-  }
-
-  async function retireAfterPMConnect(id) {
-    if (!id || completedToken.id === id) return;
-    completedToken.id = id;
-    token = null;
-    handedOver = false;
-    try {
-      const result = await coreClient.revokeHostEnrollmentToken(id);
-      const record = result?.enrollment_token ?? result;
-      if (record?.revoked_at && !record?.consumed_at) {
-        completionNotice = "PM connected. The unused setup token was revoked.";
-      } else if (record?.consumed_at) {
-        completionNotice = "PM connected. The setup token was already used.";
-      } else {
-        completionNotice =
-          "PM connected. Check Access → Hosts to confirm the setup token's status.";
-      }
-    } catch {
-      completionNotice =
-        "PM connected. The setup token may already have been used; check Access → Hosts for its status.";
-    }
   }
 
   function describe(error, fallback) {
@@ -191,7 +141,7 @@
    * reader has already given up on.
    */
   async function issueToken({ replacing = false } = {}) {
-    if (issuing || (kind === "pm" && completed)) return;
+    if (issuing) return;
     issuing = true;
     issueError = "";
     refused = false;
@@ -223,10 +173,6 @@
         retire(issuedToken.id);
         return;
       }
-      if (kind === "pm" && completed) {
-        await retireAfterPMConnect(issuedToken.id);
-        return;
-      }
       token = issuedToken;
       handedOver = false;
       tokenExpired = false;
@@ -250,17 +196,11 @@
    * so switching workspaces re-issues and a re-render does not.
    */
   $effect(() => {
-    if (blockedReason || (kind === "pm" && completed)) return;
-    const key = `${kind}|${cliBaseUrl}`;
+    if (blockedReason) return;
+    const key = cliBaseUrl;
     if (issued.key === key) return;
     issued.key = key;
     void issueToken();
-  });
-
-  /* A PM first claim completes setup and may leave this token unused. */
-  $effect(() => {
-    if (kind !== "pm" || !completed || !token?.id) return;
-    void retireAfterPMConnect(token.id);
   });
 
   /** Only the countdown ages on screen, and only while a token is live. */
@@ -307,7 +247,7 @@
   });
 </script>
 
-<section class="space-y-4" data-setup-prompt={kind}>
+<section class="space-y-4" data-setup-prompt="machine">
   {#if heading || lede}
     <div class="space-y-1">
       {#if heading}
@@ -339,18 +279,7 @@
     {/each}
   </div>
 
-  {#if activeTab === "agent" && kind === "pm" && completed}
-    <p
-      class="rounded-md border border-ok bg-ok-soft px-3 py-2 text-micro text-ok-text"
-      role="status"
-      data-setup-pm-complete
-    >
-      {completionNotice ||
-        (completedToken.id
-          ? "PM connected. Retiring the setup token."
-          : "PM connected. No setup token is needed.")}
-    </p>
-  {:else if activeTab === "agent" && refused}
+  {#if activeTab === "agent" && refused}
     <p
       class="max-w-prose rounded-md border border-line bg-bg-soft px-3 py-2 text-micro text-fg-muted"
       data-setup-prompt-refused
@@ -373,23 +302,6 @@
     </p>
   {:else if activeTab === "agent"}
     <div class="space-y-3">
-      {#if kind === "pm"}
-        <label
-          class="flex flex-wrap items-center gap-2 text-micro text-fg-muted"
-        >
-          <span>Which agent runs the PM</span>
-          <select
-            bind:value={runnerKey}
-            class="rounded-md border border-line bg-bg px-2 py-1.5 text-meta text-fg"
-            data-setup-runner
-          >
-            {#each PM_RUNNERS as option (option.key)}
-              <option value={option.key}>{option.label}</option>
-            {/each}
-          </select>
-        </label>
-      {/if}
-
       <div class="flex flex-wrap items-center gap-2">
         <!--
           Offered only once there is something to copy. A copy control that
@@ -427,15 +339,9 @@
       </div>
 
       <p class="max-w-prose text-micro text-fg-subtle">
-        {#if kind === "pm"}
-          Paste it into {runner.label} on the computer that should run the PM. It
-          installs anx, joins the machine to this workspace if it is not in it yet,
-          installs the PM and reports back.
-        {:else}
-          Paste it into whatever agent you already use on that computer. It
-          installs anx, joins the machine to this workspace, checks the result
-          with a real call and reports back.
-        {/if}
+        Paste it into whatever agent you already use on that computer. It
+        installs anx, joins the machine to this workspace, checks the result
+        with a real call and reports back.
       </p>
 
       {#if issueError}
@@ -498,24 +404,6 @@
           <CopyButton value={manualEnrollCommand} label="Copy command" />
         </div>
       </div>
-      {#if kind === "pm"}
-        <div class="space-y-1">
-          <p class="text-micro text-fg-muted">
-            3. Install the PM service with the harness that should run it.
-          </p>
-          <div class="flex items-center gap-1 rounded bg-bg-soft px-2 py-1.5">
-            <code
-              class="min-w-0 flex-1 break-all font-mono text-micro text-fg"
-              data-pm-install-command>{manualPmInstallCommand}</code
-            >
-            <CopyButton value={manualPmInstallCommand} label="Copy command" />
-          </div>
-          <p class="text-micro text-fg-subtle">
-            Run that one in a terminal you can type into: with no --runner it
-            asks which agent should run the PM.
-          </p>
-        </div>
-      {/if}
     </div>
   {/if}
 

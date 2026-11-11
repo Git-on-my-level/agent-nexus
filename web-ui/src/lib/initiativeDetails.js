@@ -11,7 +11,7 @@ import { formatAgo } from "$lib/time/format.js";
 import { formatDay, plainInline } from "$lib/brief.js";
 import { planNextSteps } from "$lib/planNext.js";
 import { rawWorkSummary } from "$lib/workSummary.js";
-import { label as phaseLabel } from "$lib/pm/presentation.js";
+import { label as phaseLabel } from "$lib/work/presentation.js";
 import { columnFor, LANE_COLUMNS, progressSegments } from "$lib/swimlanes.js";
 
 /** Children listed before the rest become a count. */

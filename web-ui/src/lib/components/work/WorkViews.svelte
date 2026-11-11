@@ -24,7 +24,7 @@
     sortWorkByAttention,
     isClosedWork,
     CLOSED_PHASES,
-  } from "$lib/pm/presentation.js";
+  } from "$lib/work/presentation.js";
   import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
   import { coreClient } from "$lib/coreClient";
   import { prefetchWork, primeWorkSummary } from "$lib/workCache.js";

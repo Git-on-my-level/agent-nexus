@@ -17,7 +17,7 @@
 import taxonomy from "./generated/taxonomy.json";
 import { formatAge } from "./ageBadge.js";
 import { inboxSubjectNoun, splitTypedRef } from "./inboxUtils.js";
-import { CLOSED_PHASES, PHASE_LABELS } from "./pm/presentation.js";
+import { CLOSED_PHASES, PHASE_LABELS } from "./work/presentation.js";
 
 const asText = (value) => String(value ?? "").trim();
 

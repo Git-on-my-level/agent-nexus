@@ -11,20 +11,13 @@ import {
 } from "../../src/lib/navigation.js";
 
 describe("navigation model", () => {
-  it("has exactly three primary destinations", () => {
+  it("has exactly two primary destinations", () => {
     expect(
       navigationItems.map((item) => [item.label, item.href, item.hint]),
     ).toEqual([
       ["Decide", "/decide", "Waiting on you"],
       ["Watch", "/watch", "Outcomes"],
-      ["Ask", "/pm", "Your PM"],
     ]);
-  });
-
-  it("flags only Ask as needing a connected PM", () => {
-    expect(
-      navigationItems.filter((item) => item.requiresPm).map((i) => i.label),
-    ).toEqual(["Ask"]);
   });
 
   it("groups Settings apart from Diagnostics", () => {
@@ -35,10 +28,7 @@ describe("navigation model", () => {
       ]),
     ).toEqual([
       ["Workspace", ["Initiatives", "Docs", "Agents", "Archive"]],
-      [
-        "Settings",
-        ["Access", "Secrets", "Integrations", "Notifications", "PM setup"],
-      ],
+      ["Settings", ["Access", "Secrets", "Integrations", "Notifications"]],
       // Infrastructure surfaces, explicitly labelled rather than reachable
       // only by URL.
       ["Diagnostics", ["Audit", "Threads"]],
@@ -52,7 +42,6 @@ describe("navigation model", () => {
       "Secrets",
       "Integrations",
       "Notifications",
-      "PM setup",
       "Audit",
       "Threads",
     ]);
@@ -77,12 +66,12 @@ describe("navigation model", () => {
     expect(isKnownSection("/watch")).toBe(true);
     expect(isKnownSection("/initiatives")).toBe(true);
     expect(isKnownSection("/agents")).toBe(true);
-    expect(isKnownSection("/pm/setup")).toBe(true);
     expect(isKnownSection("/overview")).toBe(false);
     expect(isKnownSection("/inbox")).toBe(false);
     expect(isKnownSection("/tasks")).toBe(false);
     expect(isKnownSection("/docs")).toBe(true);
-    expect(isKnownSection("/pm")).toBe(true);
+    expect(isKnownSection("/pm")).toBe(false);
+    expect(isKnownSection("/pm/setup")).toBe(false);
     expect(isKnownSection("/access")).toBe(true);
     expect(isKnownSection("/secrets")).toBe(true);
     expect(isKnownSection("/events")).toBe(true);
@@ -134,7 +123,6 @@ describe("navigation model", () => {
     expect(isMoreHubActivePath("/initiatives/work-1")).toBe(true);
     expect(isMoreHubActivePath("/docs")).toBe(true);
     expect(isMoreHubActivePath("/agents")).toBe(true);
-    expect(isMoreHubActivePath("/pm/setup")).toBe(true);
     expect(isMoreHubActivePath("/decide")).toBe(false);
     expect(isMoreHubActivePath("/watch")).toBe(false);
     expect(isMoreHubActivePath("/pm")).toBe(false);

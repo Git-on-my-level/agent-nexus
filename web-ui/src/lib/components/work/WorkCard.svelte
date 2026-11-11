@@ -6,7 +6,7 @@
     isNexusOwned,
     sourceLabel,
     workFreshness,
-  } from "$lib/pm/presentation.js";
+  } from "$lib/work/presentation.js";
   import { workSummaryModel } from "$lib/workSummary.js";
   import { normalizePriority } from "../../../../../contracts/gen/ts/dist/enums.js";
 

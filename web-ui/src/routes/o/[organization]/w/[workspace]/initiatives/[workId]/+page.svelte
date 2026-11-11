@@ -30,7 +30,7 @@
     isKnownActor,
     principalRegistry,
   } from "$lib/actorSession";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import AnxRefPreview from "$lib/components/AnxRefPreview.svelte";
   import AnxRefChip from "$lib/components/AnxRefChip.svelte";
   import InfoTip from "$lib/components/InfoTip.svelte";
@@ -67,7 +67,7 @@
     workSourceKey,
     humanizeInstants,
     connectionName,
-  } from "$lib/pm/presentation.js";
+  } from "$lib/work/presentation.js";
   import { workProse, workSummaryModel } from "$lib/workSummary.js";
   import { nextActionOvertaken, planNextSteps } from "$lib/planNext.js";
   import { authoredProvenance, liveProvenance } from "$lib/reportProvenance.js";
@@ -84,9 +84,7 @@
     observationErrorText,
     observationStatusLabel,
     observationStatusTone,
-  } from "$lib/pm/evidence.js";
-  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
-  import { pmPresence } from "$lib/pm/presence.js";
+  } from "$lib/work/evidence.js";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state(null),
     /**
@@ -489,17 +487,6 @@
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
   let workId = $derived($page.params.workId);
-  let pmState = $derived(
-    $pmPresence.workspace === ($page.data?.workspace?.slug ?? "")
-      ? $pmPresence
-      : null,
-  );
-  // Gates the PM affordances and wording only, never a read: a proposal
-  // filed earlier still waits for a yes whether or not a PM is running now.
-  let pmVisible = $derived(pmFeaturesVisible(pmState));
-  let pmHref = $derived(
-    workspaceHref(`/pm?work_ref=${encodeURIComponent(work?.ref || workId)}`),
-  );
   let sourceName = $derived(sourceLabel(work?.source));
   let nexusOwned = $derived(work ? isNexusOwned(work) : false);
   let lastCheckedAt = $derived(work?.freshness?.last_observed_at || "");
@@ -878,16 +865,7 @@
           title={work.ref}
           onclick={() => navigator.clipboard?.writeText(work.ref)}
           >Copy ref</button
-        >{#if pmVisible}<!--
-            Named for what it does, and it carries this card: the sidebar's
-            "Ask PM" opens an empty thread, so two buttons a thumb apart
-            reading the same three words looked like one of them was a
-            mistake. No Reload beside them — the card, its plan and its chips
-            re-read themselves off the workspace event stream.
-          --><a
-            class="ui-btn-primary"
-            href={pmHref}>Ask PM about this</a
-          >{/if}{/snippet}
+        >{/snippet}
     </WorkspacePageHeader>
     <MutationSendStatus target={`card:${workId}:assignment`} />
     <MutationSendStatus target={`task:${workId}:move`} />
@@ -1533,12 +1511,8 @@
             </dl>
             {#if work.source?.authority !== "nexus"}
               <p class="mt-2 text-micro text-fg-subtle">
-                Status and workflow are owned by the source.
-                {#if pmVisible}
-                  Ask PM to request a change.
-                {:else}
-                  A change there has to be requested and approved here first.
-                {/if}
+                Status and workflow are owned by the source. A change there has
+                to be requested and approved here first.
               </p>
             {/if}
           </section>

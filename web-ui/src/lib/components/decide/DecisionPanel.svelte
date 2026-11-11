@@ -5,7 +5,7 @@
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import { proposalVoidReason } from "$lib/inboxMailbox.js";
-  import ReceiptSignal from "./ReceiptSignal.svelte";
+  import ReceiptSignal from "$lib/components/work/ReceiptSignal.svelte";
   import {
     decisionConsequence,
     decisionFields,
@@ -18,7 +18,7 @@
     safeSourceHref,
     sentenceCase,
     stripDecisionPrefix,
-  } from "$lib/pm/presentation.js";
+  } from "$lib/work/presentation.js";
 
   let {
     selected = null,
@@ -31,8 +31,6 @@
     actionError = "",
     actorLabel = (id) => id,
     currentActorId = "",
-    /** Empty when no PM agent is onboarded: the PM retry path disappears. */
-    pmHref = "",
     replacement = null,
     answer = $bindable(""),
     choice = $bindable(""),
@@ -236,7 +234,7 @@
           earlier revision, so approving it would fail. {proposer ===
           "You proposed"
             ? "Propose it again from Initiatives or the CLI."
-            : "Ask the PM to propose again."}
+            : "Propose it again."}
           <button
             class="ui-prose-link"
             type="button"
@@ -251,8 +249,7 @@
           class="mt-3 rounded-md bg-danger-soft px-3 py-2 text-meta text-danger-text"
         >
           Some of the evidence named here does not exist, so this cannot be
-          applied. Decline it and ask the PM to propose again with real
-          evidence.
+          applied. Decline it and propose it again with real evidence.
         </p>
       {/if}
       {#if proposal}
@@ -310,14 +307,9 @@
       <section class="border-t border-line-subtle pt-4">
         <p class="text-meta text-fg">
           {replacement
-            ? proposerLabel(replacement, {
-                actorLabel,
-                currentActorId,
-              }).replace(/^You proposed$/, "You") === "The PM proposes"
-              ? "The PM replaced this proposal"
-              : `${proposerLabel(replacement, { actorLabel, currentActorId })
-                  .replace(/ proposes$/, "")
-                  .replace(/^You proposed$/, "You")} replaced this proposal`
+            ? `${proposerLabel(replacement, { actorLabel, currentActorId })
+                .replace(/ proposes$/, "")
+                .replace(/^You proposed$/, "You")} replaced this proposal`
             : "This proposal was replaced"}{#if selected.superseded_reason && !replacement}:
             {selected.superseded_reason}{/if}.
           <a
@@ -358,7 +350,7 @@
             rows="3"
             required
             maxlength="16000"
-            placeholder="Why, and any boundaries the PM must respect…"
+            placeholder="Why, and any boundaries to respect…"
           ></textarea></label
         >
         <div class="flex flex-wrap items-center gap-2">
@@ -452,15 +444,7 @@
             To try again, <a class="ui-prose-link" href={workHref}
               >propose it again from the initiative</a
             > and approve the new proposal.
-          {:else if pmHref}
-            To try again,
-            <a
-              class="ui-prose-link"
-              href={`${pmHref}?work_ref=${encodeURIComponent(selected.work_ref || "")}`}
-              >ask the PM to propose it again</a
-            > and approve the new proposal.
           {:else}
-            <!-- No PM is onboarded, so nothing here can be asked to retry. -->
             To try again, propose it again and approve the new proposal.
           {/if}
         </p>

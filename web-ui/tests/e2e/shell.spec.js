@@ -7,43 +7,6 @@ async function unlockShellWithActor(page, name) {
   await page.getByRole("button", { name: "Create and continue" }).click();
 }
 
-/**
- * Report a connected PM.
- *
- * The shell shows a PM surface only on a state core confirmed, and the PM
- * routes need an authenticated principal that the dev actor gate does not
- * establish — so against the e2e core `/pm/presence` answers 401 and the slot
- * stays a blank placeholder. A nav test should be about the nav, so it says
- * which state it is testing instead of inheriting the environment's.
- */
-async function withConnectedPm(page) {
-  await page.route("**/pm/presence", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        state: "connected",
-        last_seen: new Date().toISOString(),
-        runner: "Hermes",
-        host: "studio",
-        configured: true,
-        connected: true,
-      }),
-    }),
-  );
-}
-
-/** Report a PM that has never been onboarded, so the slot offers setup. */
-async function withPmNotOnboarded(page) {
-  await page.route("**/pm/presence", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ state: "not_onboarded" }),
-    }),
-  );
-}
-
 /** Tabs whose own label does not fit on one line at this viewport. */
 async function crowdedBottomNavTabs(bottomNav) {
   return bottomNav.locator(".shell-bottom-nav-item").evaluateAll((els) =>
@@ -140,8 +103,6 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("workspaceTourSeen.local", "1");
   });
-  await withConnectedPm(page);
-
   await page.goto(`${WS_HOME}/decide`);
   await unlockShellWithActor(page, `Mobile User ${Date.now()}`);
 
@@ -155,13 +116,13 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
     page.getByRole("heading", { name: "Watch", exact: true }),
   ).toBeVisible();
 
-  // Search left the bottom bar: the bar carries Decide, Watch, Ask
-  // (only while a PM is connected) and More. Workspace search is ⌘K plus a
-  // button in each list header. Everything else is one hop down in More.
+  // Search left the bottom bar: the bar carries Decide, Watch and More.
+  // Workspace search is ⌘K plus a button in each list header. Everything else
+  // is one hop down in More.
   await expect(
     bottomNav.getByRole("button", { name: "Search workspace" }),
   ).toHaveCount(0);
-  for (const name of ["Decide", "Watch", "Ask", "More"]) {
+  for (const name of ["Decide", "Watch", "More"]) {
     await expect(bottomNav.getByRole("link", { name })).toBeVisible();
   }
   expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
@@ -172,30 +133,6 @@ test("mobile bottom navigation switches workspace routes", async ({ page }) => {
   await expect(
     page.getByRole("dialog", { name: "Command palette" }),
   ).toBeVisible();
-});
-
-test("bottom navigation hides Ask and keeps one line per tab while the PM is unconfigured", async ({
-  page,
-}) => {
-  // The narrowest phone the shell targets, in the state the connected-PM
-  // test above never reaches: with no PM, Ask is absent and the bar holds
-  // Decide, Watch and More.
-  await page.setViewportSize({ width: 320, height: 568 });
-  await page.addInitScript(() => {
-    window.localStorage.setItem("workspaceTourSeen.local", "1");
-  });
-  await withPmNotOnboarded(page);
-
-  await page.goto(`${WS_HOME}/docs`);
-  await unlockShellWithActor(page, `Setup User ${Date.now()}`);
-
-  const bottomNav = page.getByRole("navigation", {
-    name: "Primary navigation",
-  });
-  await expect(bottomNav.getByRole("link", { name: "Watch" })).toBeVisible();
-  await expect(bottomNav.getByRole("link", { name: "Ask" })).toHaveCount(0);
-
-  expect(await crowdedBottomNavTabs(bottomNav)).toEqual([]);
 });
 
 test("Docs reaches workspace search without the sidebar", async ({ page }) => {

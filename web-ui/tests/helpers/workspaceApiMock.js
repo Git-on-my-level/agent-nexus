@@ -153,29 +153,10 @@ export async function installWorkspaceApi(
   const api = {
     self: SELF,
     authenticated: true,
-    /*
-     * `GET /pm/presence`, as core answers it. A PM agent runs on the reader's
-     * own computer, so a workspace can have none; flip this to drive the UI
-     * between not onboarded, connected and offline. `null` plays an older
-     * core that has no such route.
-     */
-    pm: {
-      state: "connected",
-      runner: "Hermes",
-      host: "studio",
-      configured: true,
-      connected: true,
-      last_seen: null,
-    },
     actors: [
       { id: "actor-operator", display_name: "Operator", tags: ["human"] },
     ],
     principals: [],
-    conversations: [],
-    conversationsHasMore: false,
-    conversationsCursor: "",
-    turns: [],
-    turnsCursor: "",
     decisions: {},
     work: [],
     workCursor: "",
@@ -272,18 +253,6 @@ export async function installWorkspaceApi(
         human_auth_mode: "workspace_local",
       });
     }
-    if (path === "/pm/presence") {
-      // An older core has no such route; the state then stays unknown and no
-      // PM surface is shown.
-      if (api.pm === null) return reply({ error: { code: "not_found" } }, 404);
-      return respond("pmPresence", () => ({
-        ...api.pm,
-        last_seen:
-          api.pm.last_seen === null
-            ? new Date().toISOString()
-            : api.pm.last_seen,
-      }));
-    }
     if (path === "/auth/session") {
       return reply(
         api.authenticated
@@ -324,60 +293,7 @@ export async function installWorkspaceApi(
     if (path === "/topics") return reply({ topics: [] });
     if (path.startsWith("/stream/")) return holdOpenStream(page, route);
 
-    // ---- Ask PM ------------------------------------------------------------
-    if (path === "/pm/conversations" && method === "GET") {
-      return respond("conversations", () => ({
-        items: api.conversations,
-        has_more: api.conversationsHasMore,
-        next_cursor: api.conversationsCursor,
-      }));
-    }
-    if (path === "/pm/conversations" && method === "POST") {
-      return respond(
-        "createConversation",
-        () => {
-          const body = request.postDataJSON() ?? {};
-          const item = {
-            id: `conversation-${api.conversations.length + 1}`,
-            title: body.title,
-            work_ref: body.work_ref,
-            created_at: new Date().toISOString(),
-          };
-          api.conversations = [item, ...api.conversations];
-          return item;
-        },
-        201,
-      );
-    }
-    if (/^\/pm\/conversations\/[^/]+\/messages$/.test(path)) {
-      return respond(
-        "sendMessage",
-        () => {
-          const body = request.postDataJSON() ?? {};
-          const turn = {
-            id: `turn-${api.turns.length + 1}`,
-            text: body.text,
-            status: "queued",
-            claimed: false,
-            created_at: new Date().toISOString(),
-          };
-          api.turns = [...api.turns, turn];
-          return turn;
-        },
-        202,
-      );
-    }
-    if (/^\/pm\/conversations\/[^/]+$/.test(path)) {
-      const cursor = url.searchParams.get("cursor") || "";
-      return respond(cursor ? "olderTurns" : "conversation", () => ({
-        conversation: api.conversations[0] ?? {
-          id: "conversation-1",
-          title: "",
-        },
-        turns: cursor ? api.olderTurns || [] : api.turns,
-        next_cursor: cursor ? "" : api.turnsCursor,
-      }));
-    }
+    // ---- Decide ------------------------------------------------------------
     if (/^\/pm\/decisions\/[^/]+$/.test(path)) {
       const id = path.split("/").pop();
       const record = api.decisions[id];

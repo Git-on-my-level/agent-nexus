@@ -12,7 +12,7 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
-  import WorkViews from "$lib/components/pm/WorkViews.svelte";
+  import WorkViews from "$lib/components/work/WorkViews.svelte";
   import {
     liveWorkspaceEvents,
     TASK_LIST_EVENT_TYPES,
@@ -28,9 +28,7 @@
     sourceLabel,
     workFreshness,
     workKey,
-  } from "$lib/pm/presentation.js";
-  import { pmFeaturesVisible, pmKnownAbsent } from "$lib/pm/onboardingState.js";
-  import { pmPresence } from "$lib/pm/presence.js";
+  } from "$lib/work/presentation.js";
   import {
     actorDirectoryIncomplete,
     actorRegistry,
@@ -173,21 +171,6 @@
   let workspaceHref = $derived(
     bindWorkspaceHref($page.params.organization, $page.params.workspace),
   );
-  // With no PM agent onboarded, moving source-owned work still files a
-  // request for the reader to approve; only the PM wording and the PM
-  // affordances go away.
-  let workspaceSlug = $derived($page.data?.workspace?.slug ?? "");
-  let pmState = $derived(
-    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
-  );
-  // Gates the PM affordances and wording only, never a read.
-  let pmVisible = $derived(pmFeaturesVisible(pmState));
-  /*
-   * Refusing the source-owned move needs the opposite test, not the negation:
-   * while presence is still loading neither is true, and refusing then would
-   * tell a workspace that has a PM that it has none. Core is the authority.
-   */
-  let pmAbsent = $derived(pmKnownAbsent(pmState));
   // The swimlane board lives in Watch; `?view=lanes` redirects there
   // (`+page.js`), so this page has one board, by placement.
   let view = $derived(
@@ -577,10 +560,6 @@
           !Object.hasOwn(evidenceFor || {}, "beforeCardId")))
     )
       return;
-    if (!isNexusOwned(work) && pmAbsent) {
-      noticeNoPm(sourceLabel(work.source), { pointer });
-      return;
-    }
     if (
       evidenceFor &&
       (evidenceFor.key !== key ||
@@ -625,7 +604,7 @@
     if (!isNexusOwned(work) && !draft.approved) {
       if (
         !window.confirm(
-          `Ask the PM to request moving “${work.title}” to ${label(phase)} at ${sourceLabel(work.source)}? You approve the request in Decide.`,
+          `Request moving “${work.title}” to ${label(phase)} at ${sourceLabel(work.source)}? You approve the request in Decide.`,
         )
       )
         return;
@@ -649,17 +628,6 @@
       moveError = readableMoveError(err);
       moveSessionExpired = isSessionExpired(err);
     }
-  }
-  /** The one explanation for a source-owned move with no PM to carry it. */
-  function noticeNoPm(source, { pointer = false } = {}) {
-    setMoveNotice(
-      {
-        text: `Changing work owned by ${source} is a request a PM carries out, and this workspace has none. Set one up to request the move.`,
-        href: workspaceHref("/pm/setup"),
-        hrefLabel: "Set up your PM",
-      },
-      { pointer },
-    );
   }
   // Core's validation names the field; the reader needs the fix.
   function readableMoveError(err) {
@@ -982,13 +950,6 @@
           <path d={navIconPath("search")} />
         </svg>
       </button>
-      {#if pmVisible}
-        <!-- Below lg the bottom bar carries Ask PM; a second copy here
-             pushed the header onto two rows. -->
-        <a class="ui-btn-secondary max-lg:hidden" href={workspaceHref("/pm")}
-          >Ask PM</a
-        >
-      {/if}
       <a class="ui-btn-primary" href={workspaceHref("/initiatives/new")}
         >New initiative</a
       >
@@ -1232,13 +1193,6 @@
             (evidenceFor.phase === "done" && !evidenceFor.ref?.trim())}
           >{evidenceFor.phase === "done" ? "Mark done" : "Send move"}</button
         >
-        {#if pmVisible}
-          <a
-            class="ui-prose-link text-micro"
-            href={`${workspaceHref("/pm")}?work_ref=${encodeURIComponent(evidenceFor.work.ref || "")}`}
-            >Ask the PM instead</a
-          >
-        {/if}
         <button
           class="ui-prose-link text-micro"
           type="button"

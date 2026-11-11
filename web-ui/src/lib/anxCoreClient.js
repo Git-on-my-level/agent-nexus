@@ -441,27 +441,6 @@ const adapterCommandTable = [
     true,
   ],
   ["getWorkCapabilities", "work.capabilities"],
-  ["getPmPresence", "pm.presence"],
-  [
-    "listPmConversations",
-    "pm.conversations.list",
-    (filters) => ({ options: q(filters) }),
-  ],
-  [
-    "createPmConversation",
-    "pm.conversations.create",
-    (payload) => ({ options: b(payload) }),
-  ],
-  [
-    "getPmConversation",
-    "pm.conversations.get",
-    (id, filters) => pq(pathParams({ conversation_id: id }), filters),
-  ],
-  [
-    "sendPmMessage",
-    "pm.conversations.messages.create",
-    (id, payload) => pb(pathParams({ conversation_id: id }), payload),
-  ],
   ["getPmContext", "pm.context", (filters) => ({ options: q(filters) })],
   [
     "listPmDecisions",

@@ -244,9 +244,6 @@ test("source-owned completion recovers the original proposal without another app
     },
     () => external,
   );
-  await context.route("**/pm/presence", (route) =>
-    json(route, { state: "connected", configured: true, connected: true }),
-  );
   await context.route(/\/pm\/decisions(?:\?.*)?$/, (route) => {
     if (route.request().method() !== "POST")
       return json(route, {

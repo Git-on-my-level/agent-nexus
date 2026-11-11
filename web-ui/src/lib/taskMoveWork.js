@@ -8,7 +8,7 @@ import {
   isNexusOwned,
   label,
   workKey,
-} from "$lib/pm/presentation.js";
+} from "$lib/work/presentation.js";
 
 export const taskMoveTarget = (work) => `task:${workKey(work)}:move`;
 export const isTaskMove = (entry) =>

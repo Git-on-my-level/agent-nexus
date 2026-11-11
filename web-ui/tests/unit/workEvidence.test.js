@@ -4,7 +4,7 @@ import {
   evidenceSources,
   observationHistory,
   shortNativeId,
-} from "../../src/lib/pm/evidence.js";
+} from "../../src/lib/work/evidence.js";
 
 const ISSUE = "https://github.com/org/repo/issues/208";
 const read = (at, extra = {}) => ({

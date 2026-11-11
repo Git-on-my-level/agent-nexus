@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { integrationGroups } from "../../src/lib/pm/health.js";
+import { integrationGroups } from "../../src/lib/work/health.js";
 
 describe("integration coverage", () => {
   it("separates connections, excludes native work and never promotes task done to health", () => {

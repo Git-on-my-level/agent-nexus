@@ -114,15 +114,8 @@
     shouldRedirectToLoginForBootstrapState,
     WORKSPACE_BOOTSTRAP_STATES,
   } from "$lib/workspaceBootstrap.js";
-  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
   import { describeActivationFailure } from "$lib/workspaceFailure.js";
   import WorkspaceActivationAlert from "$lib/components/WorkspaceActivationAlert.svelte";
-  import {
-    SHELL_REFRESH_MIN_MS,
-    clearPmPresence,
-    pmPresence,
-    refreshPmPresence,
-  } from "$lib/pm/presence.js";
   import { providePageTitle } from "$lib/pageTitle.svelte.js";
 
   let { children, data } = $props();
@@ -397,28 +390,7 @@
    */
   let destinationSkeleton = $derived(getDestinationSkeleton(currentAppPath));
   let moreBottomNavActive = $derived(isMoreHubActivePath(currentAppPath));
-  const shellNavForTitle = [
-    // PM setup must be tried before Ask: `/pm` prefix-matches it.
-    ...settingsNavItems.filter((item) => item.href === "/pm/setup"),
-    ...navigationItems,
-    ...settingsNavItems,
-  ];
-
-  /*
-   * A PM agent runs on the reader's own computer, so a workspace can have
-   * none. Until one is connected Ask is not shown at all (setup is one hop
-   * down under Settings), and every other PM surface is absent (see
-   * `pm/onboardingState.js`). State the shell has not read yet shows
-   * nothing: naming Ask on a guess is worse than showing it a moment late.
-   */
-  let pmState = $derived(
-    $pmPresence.workspace === activeWorkspaceSlug ? $pmPresence : null,
-  );
-  let pmVisible = $derived(pmFeaturesVisible(pmState));
-  /** Primary items the shell renders: Ask only while a PM is connected. */
-  let shellPrimaryItems = $derived(
-    navigationItems.filter((item) => !item.requiresPm || pmVisible),
-  );
+  const shellNavForTitle = [...navigationItems, ...settingsNavItems];
 
   let pageTitle = $derived(() => {
     const navItem = shellNavForTitle.find(
@@ -579,29 +551,6 @@
     };
   });
 
-  /*
-   * A PM can be installed or stopped while this tab sits in the background,
-   * so re-read the state when the reader comes back — at most once a minute,
-   * and never while the tab is hidden. The PM setup page runs its own faster
-   * poll while it waits for a first heartbeat.
-   */
-  $effect(() => {
-    if (!browser) return;
-    const workspaceSlug = activeWorkspaceSlug;
-    if (!workspaceSlug) {
-      clearPmPresence();
-      return;
-    }
-    const onVisibility = () => {
-      if (document.hidden) return;
-      void refreshPmPresence(workspaceSlug, {
-        minIntervalMs: SHELL_REFRESH_MIN_MS,
-      });
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  });
-
   $effect(() => {
     if (!browser) {
       return;
@@ -614,28 +563,6 @@
 
     const seedPrincipal = $authenticatedAgent ? [$authenticatedAgent] : [];
     void refreshPrincipals(workspaceSlug, seedPrincipal);
-  });
-
-  /*
-   * Whether this workspace has a PM decides which surfaces exist at all, so
-   * read it as soon as there is a session to read with — and again whenever
-   * the identity changes.
-   *
-   * Keyed on the identity rather than read once after hydration: core needs a
-   * session for `pm.presence`, and in the actor gate the reader creates their
-   * identity *after* first paint. A single read then answered 401 and the
-   * state stayed unknown for the rest of the session, which now means no PM
-   * surface at all. This re-reads when the identity arrives, so a read that
-   * raced the session repairs itself instead of stranding the PM.
-   */
-  $effect(() => {
-    if (!browser) return;
-    const workspaceSlug = activeWorkspaceSlug;
-    if (!workspaceSlug || !$authSessionReady) return;
-    // Tracked so the read runs again for a different principal.
-    void $authenticatedAgent?.agent_id;
-    void $selectedActorId;
-    void refreshPmPresence(workspaceSlug, { force: true });
   });
 
   $effect(() => {
@@ -961,8 +888,6 @@
 
   function isActive(href) {
     if (href === "/decide" && currentAppPath === "/") return true;
-    // `/pm` prefix-matches PM setup, which is not the conversation.
-    if (href === "/pm" && currentAppPath.startsWith("/pm/setup")) return false;
     return currentAppPath === href || currentAppPath.startsWith(`${href}/`);
   }
 
@@ -1011,8 +936,6 @@
         return "decide";
       case "/watch":
         return "watch";
-      case "/pm":
-        return "pm";
       case "/agents":
         return "agents";
       case "/initiatives":
@@ -1048,38 +971,11 @@
     switchWorkspace(slug);
   }
 
-  function isTextEntryElement(target) {
-    return (
-      target instanceof HTMLElement &&
-      (target.isContentEditable ||
-        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-    );
-  }
   function handleWindowKeydown(event) {
     if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       if (activeWorkspaceSlug) {
         commandPaletteOpen = !commandPaletteOpen;
-      }
-      return;
-    }
-    // Ask PM is the product's primary verb; it gets a global shortcut, but
-    // never while the reader is typing or the palette is open. With no PM
-    // onboarded there is nothing to ask, so the key does nothing rather than
-    // opening a surface that cannot answer.
-    if (
-      event.key === "j" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.altKey &&
-      !commandPaletteOpen &&
-      !isTextEntryElement(event.target)
-    ) {
-      // Claim the key either way: letting the browser's own ⌘J through
-      // (downloads, in some browsers) is not "nothing happens".
-      event.preventDefault();
-      if (pmVisible && activeWorkspaceSlug) {
-        void goto(workspaceHref("/pm"));
       }
       return;
     }
@@ -1376,7 +1272,7 @@
           {/if}
 
           <nav class="shell-nav" aria-label="Primary">
-            {#each shellPrimaryItems as item (item.href)}
+            {#each navigationItems as item (item.href)}
               {@const active = isActive(item.href)}
               {@const tour = dataTourForNav(item.href)}
               <a
@@ -1726,7 +1622,7 @@
     </div>
 
     <nav class="shell-bottom-nav" aria-label="Primary navigation">
-      {#each shellPrimaryItems as item (item.href)}
+      {#each navigationItems as item (item.href)}
         {@const active = isActive(item.href)}
         {@const tour = dataTourForNav(item.href)}
         <a

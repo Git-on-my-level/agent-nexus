@@ -41,7 +41,7 @@
   import { bindWorkspaceHref } from "$lib/workspacePaths";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   import RefLink from "$lib/components/RefLink.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import { formatShortcut } from "$lib/keyboardHints.js";
   /**
    * The one rendering of a decision: Decide's list, its permalink and the
@@ -744,7 +744,7 @@
         <MutationSendStatus target={pmTarget} />
       {:else}
         <p class="text-meta text-fg-muted" data-decision-answered>
-          Answer sent to your PM.
+          Answer sent.
         </p>
       {/if}
     {:else if elsewhere}

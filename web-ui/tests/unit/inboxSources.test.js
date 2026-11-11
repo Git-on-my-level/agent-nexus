@@ -319,25 +319,24 @@ it("keeps a feed's partial marker even when it has no usable next cursor", async
   expect(result).toMatchObject({ items: [{ id: "first" }], has_more: true });
 });
 
-describe("Inbox sources when no PM is running", () => {
-  const nonPmFeeds = () => ({
+describe("Inbox sources", () => {
+  const nonDecisionFeeds = () => ({
     listWork: async () => ({ work: [{ ref: "card:own" }] }),
     listInboxItems: async () => ({ items: [{ id: "ask" }] }),
     getHomeUnread: async () => ({ groups: [] }),
   });
 
   /*
-   * A PM runs on the reader's own computer, so one can be absent while
-   * proposals it filed earlier still wait for a yes — and the Inbox is the
-   * only place to answer them. The feeds are read whatever the PM state says.
+   * Proposals filed earlier wait for a yes, and the Inbox is the only place
+   * to answer them. The feeds are read whenever there is a session.
    */
-  it("reads the PM feeds even when no PM is running", async () => {
+  it("reads the decision feeds", async () => {
     const listPmDecisions = vi.fn(async () => ({
       items: [{ id: "decision", work_ref: "card:own" }],
     }));
     const listPmActions = vi.fn(async () => ({ items: [] }));
     const results = await loadInboxSources({
-      client: { ...nonPmFeeds(), listPmDecisions, listPmActions },
+      client: { ...nonDecisionFeeds(), listPmDecisions, listPmActions },
     });
     expect(listPmDecisions).toHaveBeenCalled();
     expect(results[0].value.items).toEqual([
@@ -348,40 +347,15 @@ describe("Inbox sources when no PM is running", () => {
     expect(results[3].value.items).toEqual([{ id: "ask" }]);
   });
 
-  /*
-   * The reserved per-workspace answer: "nothing is there", not a fault the
-   * reader can act on, so the Inbox must not read as broken. A transient PM
-   * outage is a different thing and keeps its error (below).
-   */
-  it("treats a pm_not_onboarded refusal as an empty feed, not a failure", async () => {
-    const refusal = () => {
-      const error = new Error("no PM is onboarded for this workspace");
-      error.status = 409;
-      error.body = { error: { code: "pm_not_onboarded" } };
-      return Promise.reject(error);
-    };
-    const results = await loadInboxSources({
-      client: {
-        ...nonPmFeeds(),
-        listPmDecisions: refusal,
-        listPmActions: refusal,
-      },
-    });
-    for (const index of [0, 1]) {
-      expect(results[index]).toMatchObject({ status: "fulfilled" });
-      expect(results[index].value.items).toEqual([]);
-    }
-  });
-
-  it("still reports any other PM feed failure", async () => {
-    const outage = Object.assign(new Error("PM bridge unavailable"), {
+  it("still reports a decision feed failure", async () => {
+    const outage = Object.assign(new Error("decisions unavailable"), {
       status: 503,
       body: { error: { code: "unavailable" } },
     });
     for (const reason of [new Error("core unreachable"), outage]) {
       const results = await loadInboxSources({
         client: {
-          ...nonPmFeeds(),
+          ...nonDecisionFeeds(),
           listPmDecisions: async () => {
             throw reason;
           },

@@ -15,13 +15,10 @@ import {
   PROMPT_LABEL_MAX,
   anxCommand,
   buildMachinePrompt,
-  buildPmPrompt,
   isPlainHttpUrl,
   sanitizePromptLabel,
   setupPromptBlockedReason,
-  shellQuote,
 } from "../../src/lib/setup/setupPrompt.js";
-import { pmRunnerFor } from "../../src/lib/setup/pmRunners.js";
 
 /**
  * The prompts are run by an agent, unread, on someone else's computer. Asserting
@@ -87,17 +84,14 @@ function runSnippet(snippet, { dir, log }) {
 }
 
 describe("every generated snippet parses", () => {
-  it.each([
-    ["machine", buildMachinePrompt(BASE)],
-    ["pm", buildPmPrompt({ ...BASE, runnerKey: "claude" })],
-  ])("%s prompt", (_kind, prompt) => {
-    const parts = snippets(prompt);
+  it("machine prompt", () => {
+    const parts = snippets(buildMachinePrompt(BASE));
     /*
      * An exact count, not a floor: a command that drifts out of the indented
      * block stops being covered by everything below, and a floor would keep
      * passing while it did.
      */
-    expect(parts).toHaveLength(_kind === "pm" ? 9 : 8);
+    expect(parts).toHaveLength(8);
     for (const part of parts) {
       // `sh -n` parses without running: a broken line continuation or an
       // unbalanced quote fails here.
@@ -143,27 +137,6 @@ describe("the enrollment pipeline delivers what it says", () => {
     expect(out).toContain("DONE");
     expect(out).not.toMatch(/uid=/);
   });
-});
-
-describe("the PM install line", () => {
-  it.each(["claude", "hermes"])(
-    "delivers the %s runner as a single argument",
-    (runnerKey) => {
-      const stub = stubAnx();
-      const install = snippets(buildPmPrompt({ ...BASE, runnerKey })).find(
-        (part) => part.includes("pm install"),
-      );
-      expect(install).toBeTruthy();
-      const argv = runSnippet(install, stub)[0];
-      const runner = argv[argv.indexOf("--runner") + 1];
-      expect(runner).toContain("{prompt_file}");
-      // `"$1"` in the Claude runner must survive unexpanded.
-      if (runnerKey === "claude") {
-        expect(runner).toBe(`sh -c 'exec claude -p < "$1"' sh {prompt_file}`);
-      }
-      expect(argv).toContain("--wait");
-    },
-  );
 });
 
 describe("a hostile base URL cannot become a command", () => {
@@ -262,14 +235,10 @@ describe("a hostile workspace label cannot become instructions", () => {
     const clean = sanitizePromptLabel(label);
     // eslint-disable-next-line no-control-regex
     expect(clean).not.toMatch(/[\u0000-\u001f\u007f«»\\]/);
-    for (const prompt of [
-      buildMachinePrompt({ ...BASE, workspaceLabel: label }),
-      buildPmPrompt({ ...BASE, workspaceLabel: label }),
-    ]) {
-      const named = prompt.split("\n").filter((l) => l.includes(clean));
-      expect(named).toHaveLength(1);
-      expect(named[0].startsWith("below. Its display name is «")).toBe(true);
-    }
+    const prompt = buildMachinePrompt({ ...BASE, workspaceLabel: label });
+    const named = prompt.split("\n").filter((l) => l.includes(clean));
+    expect(named).toHaveLength(1);
+    expect(named[0].startsWith("below. Its display name is «")).toBe(true);
   });
 
   it("drops the name rather than printing empty delimiters", () => {
@@ -285,14 +254,11 @@ describe("branching is local, confirmation is not", () => {
    * `identity_unresolved` on a perfectly enrolled machine whose shell carries
    * no harness marker, so it cannot decide whether to enrol — but `doctor`'s
    * `host_enrollment` reads a local file, so it cannot prove the server still
-   * accepts the machine. The prompts branch on the first and finish on the
-   * second. Machine setup lets the CLI resolve its caller; PM setup uses the
-   * dedicated `pm` identity regardless of the runner selected in the UI.
+   * accepts the machine. The prompt branches on the first and finishes on the
+   * second.
    */
-  it.each([
-    ["machine", buildMachinePrompt(BASE)],
-    ["pm", buildPmPrompt(BASE)],
-  ])("%s prompt", (kind, prompt) => {
+  it("machine prompt", () => {
+    const prompt = buildMachinePrompt(BASE);
     const commands = snippets(prompt);
     const branch = prompt.slice(0, prompt.indexOf("host enroll --token-stdin"));
     expect(branch).toContain("--json doctor");
@@ -300,8 +266,6 @@ describe("branching is local, confirmation is not", () => {
     expect(branch).not.toContain("auth whoami");
     expect(branch).not.toContain("host list");
 
-    // Both prompts ask the server. Machine identity resolution comes from the
-    // caller; PM server checks use the dedicated PM actor.
     const authed = commands
       .join("\n")
       .split("\n")
@@ -313,38 +277,15 @@ describe("branching is local, confirmation is not", () => {
     expect(authed).toHaveLength(2);
     expect(authed.some((line) => line.includes("auth whoami"))).toBe(true);
     expect(authed.some((line) => line.includes("host list"))).toBe(true);
-    for (const line of authed) {
-      if (kind === "machine") expect(line).not.toContain("--as");
-      else expect(line).toContain("--as 'pm'");
-    }
+    for (const line of authed) expect(line).not.toContain("--as");
     expect(prompt).toContain("this machine's access has been taken away");
     // The local check is explicitly described as insufficient.
     expect(prompt).toContain("it cannot tell you the server still accepts it");
   });
 
-  it("passes the selected runner only to execution and keeps PM actor as pm", () => {
-    for (const runnerKey of ["claude", "hermes"]) {
-      const prompt = buildPmPrompt({ ...BASE, runnerKey });
-      const commands = snippets(prompt);
-      const install = commands.find((line) =>
-        line.includes("pm install --runner"),
-      );
-      expect(install).toBeTruthy();
-      const argv = runSnippet(install, stubAnx())[0];
-      expect(argv[argv.indexOf("--as") + 1]).toBe("pm");
-      expect(install).not.toContain(`--as '${runnerKey}'`);
-      expect(install).toContain(shellQuote(pmRunnerFor(runnerKey).argv));
-      const status = commands.find((line) => line.includes("pm status"));
-      expect(status).toContain("--as 'pm'");
-      expect(status).not.toContain(`--as '${runnerKey}'`);
-    }
-  });
-
   it("runs the server-check snippet as printed", () => {
     const stub = stubAnx();
-    const check = snippets(
-      buildPmPrompt({ ...BASE, runnerKey: "hermes" }),
-    ).find(
+    const check = snippets(buildMachinePrompt(BASE)).find(
       (part) => part.includes("auth whoami") && part.includes("host list"),
     );
     expect(check).toBeTruthy();
@@ -352,14 +293,12 @@ describe("branching is local, confirmation is not", () => {
     expect(calls).toHaveLength(2);
     expect(calls[0]).toContain("auth");
     expect(calls[0]).toContain("whoami");
-    expect(calls[0][calls[0].indexOf("--as") + 1]).toBe("pm");
     expect(calls[1]).toContain("host");
     expect(calls[1]).toContain("list");
-    expect(calls[1][calls[1].indexOf("--as") + 1]).toBe("pm");
   });
 
-  it("tells the PM prompt to skip enrollment when doctor says it is enrolled", () => {
-    const prompt = buildPmPrompt(BASE);
+  it("tells the prompt to skip enrollment when doctor says it is enrolled", () => {
+    const prompt = buildMachinePrompt(BASE);
     expect(prompt.indexOf("--json doctor")).toBeLessThan(
       prompt.indexOf("host enroll"),
     );
@@ -374,10 +313,8 @@ describe("the doctor check is described as it behaves", () => {
    * status would call a failed enrollment proven; one reading every red check
    * would report a working machine as broken.
    */
-  it.each([
-    ["machine", buildMachinePrompt(BASE)],
-    ["pm", buildPmPrompt(BASE)],
-  ])("%s prompt", (_kind, prompt) => {
+  it("machine prompt", () => {
+    const prompt = buildMachinePrompt(BASE);
     expect(prompt).toContain("exits 0 whether or not");
     expect(prompt).toContain("identity_resolution");
     expect(prompt).toContain("agentctl_presence");
@@ -395,17 +332,15 @@ describe("the doctor check is described as it behaves", () => {
 });
 
 describe("the install step leaves anx reachable", () => {
-  it.each([
-    ["machine", buildMachinePrompt(BASE)],
-    ["pm", buildPmPrompt(BASE)],
-  ])("%s prompt says where the installer puts it", (_kind, prompt) => {
+  it("machine prompt says where the installer puts it", () => {
+    const prompt = buildMachinePrompt(BASE);
     // The installer writes ~/.local/bin, which is not on PATH by default on
     // macOS; without this the one-paste flow dead-ends on a fresh machine.
     expect(prompt).toContain("~/.local/bin");
     /*
      * A prefix, not an export: harnesses that run each command in its own
-     * shell — Claude Code, the default PM runner — drop exported env between
-     * calls, so an export would leave the next command failing the same way.
+     * shell drop exported env between calls, so an export would leave the next
+     * command failing the same way.
      */
     expect(prompt).toContain('PATH="$HOME/.local/bin:$PATH" anx');
     expect(prompt).not.toContain("export PATH=");
