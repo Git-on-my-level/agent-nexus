@@ -30,6 +30,8 @@ type Workspace struct {
 	askSubjectsBatch    adaptiveMaintenanceBatch
 	inboxLifecycleBatch adaptiveMaintenanceBatch
 	compactAccessBatch  adaptiveMaintenanceBatch
+	walWatchdogCancel   context.CancelFunc
+	walWatchdogDone     chan struct{}
 	closeErr            error
 }
 
@@ -48,6 +50,10 @@ func NewLayout(root string) Layout {
 }
 
 func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace, error) {
+	maintenanceConfig, err := loadSQLiteMaintenanceConfig()
+	if err != nil {
+		return nil, err
+	}
 	layout := NewLayout(workspaceRoot)
 	if err := ensureLayout(layout); err != nil {
 		return nil, err
@@ -65,7 +71,7 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		return nil, fmt.Errorf("resolve sqlite database path: %w", err)
 	}
 
-	db, err := openScopeDatabase(sqliteDSN(databasePath), processLock)
+	db, err := openScopeDatabase(sqliteDSNWithJournalLimit(databasePath, maintenanceConfig.journalSizeLimit), processLock)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -104,6 +110,7 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 		_ = db.Close()
 		return nil, err
 	}
+	w.startWALWatchdog(maintenanceConfig)
 	succeeded = true
 	return w, nil
 }
@@ -146,6 +153,10 @@ func (w *Workspace) Close() error {
 		return nil
 	}
 	w.closeOnce.Do(func() {
+		if w.walWatchdogCancel != nil {
+			w.walWatchdogCancel()
+			<-w.walWatchdogDone
+		}
 		w.closeErr = w.db.Close()
 		if w.processLock != nil {
 			w.closeErr = errors.Join(w.closeErr, w.processLock.release(true))
@@ -155,6 +166,10 @@ func (w *Workspace) Close() error {
 }
 
 func sqliteDSN(databasePath string) string {
+	return sqliteDSNWithJournalLimit(databasePath, defaultJournalSizeLimit)
+}
+
+func sqliteDSNWithJournalLimit(databasePath string, journalSizeLimit int64) string {
 	dsn := &url.URL{
 		Scheme: "file",
 		Path:   databasePath,
@@ -164,6 +179,7 @@ func sqliteDSN(databasePath string) string {
 	// a longer busy wait reduces spurious "database is locked" under bursty local traffic.
 	query.Add("_pragma", "busy_timeout(20000)")
 	query.Add("_pragma", "journal_mode(WAL)")
+	query.Add("_pragma", fmt.Sprintf("journal_size_limit(%d)", journalSizeLimit))
 	// Write transactions use immediate locking. Read-only callers explicitly set
 	// sql.TxOptions.ReadOnly to use a deferred snapshot instead. A deferred write
 	// transaction that reads first fails

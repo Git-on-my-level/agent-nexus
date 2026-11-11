@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 // sql.DB.Close does NOT drain outstanding transactions or sql.Conn handles.
@@ -147,6 +150,11 @@ type scopeConnection struct {
 	lease     *scopeProcessLease
 	closeOnce sync.Once
 	closeErr  error
+	invalid   atomic.Bool
+}
+
+func (c *scopeConnection) invalidate() {
+	c.invalid.Store(true)
 }
 
 func (c *scopeConnection) Close() error {
@@ -188,7 +196,14 @@ func (c *scopeConnection) ExecContext(ctx context.Context, query string, args []
 }
 func (c *scopeConnection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	if conn, ok := c.Conn.(driver.QueryerContext); ok {
-		return conn.QueryContext(ctx, query, args)
+		rows, err := conn.QueryContext(ctx, query, args)
+		if err != nil {
+			if ctx.Err() != nil {
+				c.invalidate()
+			}
+			return nil, err
+		}
+		return &scopeRows{Rows: rows, ctx: ctx, conn: c}, nil
 	}
 	return nil, driver.ErrSkip
 }
@@ -199,12 +214,18 @@ func (c *scopeConnection) CheckNamedValue(value *driver.NamedValue) error {
 	return driver.ErrSkip
 }
 func (c *scopeConnection) ResetSession(ctx context.Context) error {
+	if c.invalid.Load() {
+		return driver.ErrBadConn
+	}
 	if conn, ok := c.Conn.(driver.SessionResetter); ok {
 		return conn.ResetSession(ctx)
 	}
 	return ctx.Err()
 }
 func (c *scopeConnection) IsValid() bool {
+	if c.invalid.Load() {
+		return false
+	}
 	if conn, ok := c.Conn.(driver.Validator); ok {
 		return conn.IsValid()
 	}
@@ -215,4 +236,75 @@ func (c *scopeConnection) Ping(ctx context.Context) error {
 		return conn.Ping(ctx)
 	}
 	return ctx.Err()
+}
+
+// scopeRows owns the query context so a canceled or expired read can mark its
+// physical connection invalid before database/sql returns it to the pool. The
+// native connection is still closed only by scopeConnection.Close, which keeps
+// the process lease release idempotent.
+type scopeRows struct {
+	driver.Rows
+	ctx       context.Context
+	conn      *scopeConnection
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func (r *scopeRows) Close() error {
+	r.closeOnce.Do(func() {
+		r.closeErr = r.Rows.Close()
+		if r.ctx.Err() != nil {
+			r.conn.invalidate()
+		}
+	})
+	return r.closeErr
+}
+
+func (r *scopeRows) ColumnTypeDatabaseTypeName(index int) string {
+	if rows, ok := r.Rows.(driver.RowsColumnTypeDatabaseTypeName); ok {
+		return rows.ColumnTypeDatabaseTypeName(index)
+	}
+	return ""
+}
+
+func (r *scopeRows) ColumnTypeLength(index int) (int64, bool) {
+	if rows, ok := r.Rows.(driver.RowsColumnTypeLength); ok {
+		return rows.ColumnTypeLength(index)
+	}
+	return 0, false
+}
+
+func (r *scopeRows) ColumnTypeNullable(index int) (bool, bool) {
+	if rows, ok := r.Rows.(driver.RowsColumnTypeNullable); ok {
+		return rows.ColumnTypeNullable(index)
+	}
+	return false, false
+}
+
+func (r *scopeRows) ColumnTypePrecisionScale(index int) (int64, int64, bool) {
+	if rows, ok := r.Rows.(driver.RowsColumnTypePrecisionScale); ok {
+		return rows.ColumnTypePrecisionScale(index)
+	}
+	return 0, 0, false
+}
+
+func (r *scopeRows) ColumnTypeScanType(index int) reflect.Type {
+	if rows, ok := r.Rows.(driver.RowsColumnTypeScanType); ok {
+		return rows.ColumnTypeScanType(index)
+	}
+	return reflect.TypeOf("")
+}
+
+func (r *scopeRows) HasNextResultSet() bool {
+	if rows, ok := r.Rows.(driver.RowsNextResultSet); ok {
+		return rows.HasNextResultSet()
+	}
+	return false
+}
+
+func (r *scopeRows) NextResultSet() error {
+	if rows, ok := r.Rows.(driver.RowsNextResultSet); ok {
+		return rows.NextResultSet()
+	}
+	return io.EOF
 }

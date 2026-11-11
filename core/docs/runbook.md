@@ -81,6 +81,30 @@ rollback. Default activation awaits the documented retention decision.
 | Write route rate limit per minute                                                                                                                                                 | n/a                             | `ANX_WRITE_ROUTE_RATE_LIMIT_PER_MINUTE`   | `1200`                                                                     |
 | Write route burst                                                                                                                                                                 | n/a                             | `ANX_WRITE_ROUTE_RATE_BURST`              | `200`                                                                      |
 | Graceful shutdown timeout                                                                                                                                                         | n/a                             | `ANX_SHUTDOWN_TIMEOUT`                    | `15s`                                                                      |
+| Enable the sequential SQLite WAL watchdog                                                                                                                                         | n/a                             | `ANX_SQLITE_WAL_WATCHDOG`                 | `true`                                                                     |
+| Delay between completed WAL watchdog runs                                                                                                                                         | n/a                             | `ANX_SQLITE_WAL_WATCHDOG_INTERVAL`        | `5m`                                                                       |
+| WAL-size threshold for the pinned-run streak                                                                                                                                      | n/a                             | `ANX_SQLITE_WAL_WARN_BYTES`               | `536870912` (512 MiB)                                                      |
+| Consecutive qualifying runs before one pinned WARN                                                                                                                                | n/a                             | `ANX_SQLITE_WAL_PINNED_RUNS`              | `3`                                                                        |
+| Connection-local busy timeout for conditional TRUNCATE                                                                                                                            | n/a                             | `ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT`    | `250ms`                                                                    |
+| Per-connection SQLite `journal_size_limit`                                                                                                                                        | n/a                             | `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`     | `67108864` (64 MiB)                                                        |
+
+### SQLite WAL watchdog
+
+The workspace runs a background watchdog by default. Every interval it reads
+the `state.sqlite-wal` size, runs `PRAGMA wal_checkpoint(PASSIVE)`, and only
+when PASSIVE reports `busy=0` and `checkpointed_frames == log_frames` tries a
+conditional `PRAGMA wal_checkpoint(TRUNCATE)` with a short 250 ms busy timeout.
+Runs are sequential and never overlap. A busy TRUNCATE is a normal skip, not a
+failure.
+
+PASSIVE cannot override a live reader. If the WAL stays above the configured
+threshold and PASSIVE remains incomplete for three consecutive runs, core logs
+one `stage=wal_pinned` WARN line with the WAL byte count and frame counts. That
+warning means the WAL is not draining; it does not prove which reader is
+responsible, because SQLite does not expose reader identities. TRUNCATE is
+conditional and best-effort, so a pinned WAL may persist until the responsible
+reader finishes or disconnects. Invalid watchdog or journal-limit values stop
+workspace initialization rather than silently changing the policy.
 
 ### Browser links (`ANX_WEB_BASE_URL`)
 
