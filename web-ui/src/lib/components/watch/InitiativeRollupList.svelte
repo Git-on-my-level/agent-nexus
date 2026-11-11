@@ -2,7 +2,7 @@
   /**
    * Watch's Initiatives list: one row per top-level initiative, in sections
    * by what it needs (`watchList.js`): Needs you, Lagging, Blocked, Stale,
-   * Moving, Proposed. Done folds away under the list.
+   * Moving, Not started. Done folds away under the list.
    *
    * A row is a title, one status line (what is late or stuck, then the next
    * step), a bar from core's progress, and on the right its owner and why
@@ -178,7 +178,7 @@
         <span class="block truncate text-fg-muted" data-rollup-children
           >{#if row.proposed && row.section !== "proposed"}<span
               data-source="computed:initiatives.proposed"
-              data-rollup-proposed>Proposed</span
+              data-rollup-proposed>Not started</span
             ><span aria-hidden="true" class="mx-1 text-fg-subtle">·</span
             >{/if}<span data-source="computed:initiatives.rollup.total"
             >{childrenCount(row)}</span

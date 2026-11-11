@@ -185,6 +185,7 @@ describe("watchRows on the mockup brief", () => {
       "6 open",
       "3 need you",
       "1 lagging",
+      "1 not started",
     ]);
   });
 

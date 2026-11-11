@@ -22,6 +22,7 @@ type answerWaitFake struct {
 	page     []map[string]any
 	asks     map[string]map[string]any
 	failing  bool
+	askDelay time.Duration
 	mutating atomic.Int32
 	pageHits atomic.Int32
 	askReads atomic.Int32
@@ -51,6 +52,12 @@ func (f *answerWaitFake) handler(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": f.page, "page_info": map[string]any{"has_more": false}})
 	case strings.HasPrefix(r.URL.Path, "/asks/"):
 		f.askReads.Add(1)
+		if f.askDelay > 0 {
+			delay := f.askDelay
+			f.mu.Unlock()
+			time.Sleep(delay)
+			f.mu.Lock()
+		}
 		ask := f.asks[strings.TrimPrefix(r.URL.Path, "/asks/")]
 		if ask == nil {
 			w.WriteHeader(http.StatusNotFound)

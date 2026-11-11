@@ -378,7 +378,7 @@ func TestInitiativeAuthorityUpgradePreservesMixedBoard(t *testing.T) {
 		}
 	}
 	// Reopen through migration 126 followed by the tree migration.
-	for _, q := range []string{`DROP VIEW initiative_card_positions`, `DROP INDEX idx_cards_parent`, `DROP INDEX idx_cards_tree_roots`, `DROP INDEX idx_cards_tree_tray`, `ALTER TABLE cards DROP COLUMN parent_card_id`, `ALTER TABLE cards DROP COLUMN needs_home`, `DROP VIEW initiative_legacy_parent_positions`, `DROP VIEW initiative_change_positions`, `DROP INDEX idx_events_initiative_changes`, `ALTER TABLE cards DROP COLUMN initiative_root`, `ALTER TABLE boards DROP COLUMN initiative_target`, `DELETE FROM schema_migrations WHERE version>=126`} {
+	for _, q := range []string{`DROP VIEW initiative_card_positions`, `DROP INDEX idx_cards_open_roots`, `DROP INDEX idx_cards_active_children`, `DROP INDEX idx_cards_parent`, `DROP INDEX idx_cards_tree_roots`, `DROP INDEX idx_cards_tree_tray`, `ALTER TABLE cards DROP COLUMN parent_card_id`, `ALTER TABLE cards DROP COLUMN needs_home`, `DROP VIEW initiative_legacy_parent_positions`, `DROP VIEW initiative_change_positions`, `DROP INDEX idx_events_initiative_changes`, `ALTER TABLE cards DROP COLUMN initiative_root`, `ALTER TABLE boards DROP COLUMN initiative_target`, `DELETE FROM schema_migrations WHERE version>=126`} {
 		if _, err = ws.DB().Exec(q); err != nil {
 			t.Fatal(err)
 		}

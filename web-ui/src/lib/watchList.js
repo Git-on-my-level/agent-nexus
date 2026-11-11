@@ -29,7 +29,14 @@ export const SECTIONS = [
   { key: "blocked", label: "Blocked", word: "blocked", tone: "danger" },
   { key: "stale", label: "Stale", word: "stale", tone: "muted" },
   { key: "moving", label: "Moving", word: "moving", tone: "accent" },
-  { key: "proposed", label: "Proposed", word: "proposed", tone: "subtle" },
+  // Backlog initiatives core lists with no started child. They are counted
+  // in the header too, so the open count never hides them.
+  {
+    key: "proposed",
+    label: "Not started",
+    word: "not started",
+    tone: "subtle",
+  },
   { key: "done", label: "Done", word: "done", tone: "ok" },
 ];
 const RANK = Object.fromEntries(SECTIONS.map((s, i) => [s.key, i]));
@@ -123,12 +130,15 @@ const SUMMARY = [
   ["lagging", "initiatives.rollup.past_promise"],
   ["blocked", "initiatives.blocked_count"],
   ["stale", "initiatives.last_evidence_at"],
+  ["proposed", "initiatives.proposed"],
 ];
 
 /**
  * The header line, every count on one basis (open initiatives): "5 open ·
- * 2 need you · 3 lagging · 1 stale". Zero counts are left out. When core
- * truncated the initiatives section the open count reads "50+ open".
+ * 2 need you · 3 lagging · 1 stale · 2 not started". Zero counts are left
+ * out. The open count is every open initiative core listed, the number
+ * `anx tree` reports as `open_initiatives`. When core truncated the
+ * initiatives section the open count reads "50+ open".
  *
  * @returns {{ key: string, text: string, field: string }[]}
  */

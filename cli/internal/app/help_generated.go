@@ -37,6 +37,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "adapters", Description: "Declare and administer scoped host-local live data sources"},
 	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
 	{Path: "lease", Description: "Claim a card with a TTL work lease before starting work on it"},
+	{Path: "feedback", Description: "Report a problem with ANX itself to the people who run it"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
@@ -1158,8 +1159,8 @@ Global Flags:
   --no-color
   --verbose
   --headers
-  --timeout <duration>  Total HTTP exchange budget including retries (default 60s).
-                        Default read attempt: 20s; connect and TLS: at most 10s each.
+  --timeout <duration>  Total HTTP exchange budget including retries (default 120s).
+                        Default read attempt: 40s; connect and TLS: at most 10s each.
 `) + "\n")
 
 	return b.String()
@@ -1215,8 +1216,11 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "work" {
 		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
 	}
+	if topic == "feedback" {
+		return "anx feedback \"<what went wrong or what you need>\" [--evidence <url|ref>]... [--dry-run]: report a problem with ANX itself (remote_coordination_write).\n  Posts a note on card:anx-feedback (\"ANX product feedback\", created in Unsorted on first use) so the people who run this workspace see it in Watch and anx tree, and returns upstream_issue_url, a prefilled issue for the public agent-nexus repository.\n  Same idempotent write as anx note: rerunning after a timeout never files twice.\n", true
+	}
 	if topic == "note" {
-		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  Warnings (never errors): note_no_next, note_promise_unowned, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n  --evidence keeps the live promise running; --met says this note fulfils it.\n  --decided-by <who> records a decision a human made outside ANX, with the decision as the note text.\n", true
+		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  A note with --next or --evidence starts a card that has not started (backlog or ready) when you own it or nobody does: you are assigned if it has no owner and it moves to in_progress (result.started). A card someone else owns stays put, with warning note_card_not_started.\n  Every note carries a request_key kept on disk until confirmed; rerunning the same note after a timeout resends it and never posts twice (result.resumed). A busy workspace is retried within --timeout.\n  Warnings (never errors): note_no_next, note_card_not_started, note_start_failed, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n  --evidence keeps the live promise running; --met says this note fulfils it.\n  --decided-by <who> records a decision a human made outside ANX, with the decision as the note text.\n", true
 	}
 	if topic == "done" {
 		return "anx done [card] --evidence <url|event:ref|artifact:ref>...: resolve a card with evidence and clear presence; omitted card uses presence (remote_coordination_write).\n", true
@@ -1251,7 +1255,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx orient: your brief (brief.v1 from GET /brief): who you are, answers for you, asks waiting on a human, your initiatives against their promises, and one next command (read_only). --json keeps the brief.v1 object verbatim in result; the separate top-level workspace field reports alias, base_url, selection source and other_aliases.\n", true
 	}
 	if topic == "await" {
-		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>] [--settle <dur>] [--all]: block until this session has answers it has not been handed yet, then re-arm (read_only on the server; keeps a local per-session cursor and never marks anything read). Returns answers to asks this session filed, plus answers to asks of unknown origin that arrive after its first wait. It skips asks filed by another session of this agent unless --all. After the first answer it keeps collecting for --settle (default 20s) while in-scope asks stay open, and returns at once when none do. Session: ANX_SESSION, else the harness session id; with neither, one cursor per agent. Exit 8 on timeout; a withdrawn or expired ask of yours also ends the wait, with a null answer.\n", true
+		return "anx await <ask-id|card-ref|access-request:<id>> [--until answered|state=<phase>] [--timeout <dur>]: wait on a single indexed ask stream (records an await subscription); exits 0 answered or approved, 9 rejected or denied, 10 needs_context, 11 withdrawn, 12 expired, 8 timeout.\n  anx await --answers [--timeout <dur>] [--settle <dur>] [--all]: block until this session has answers it has not been handed yet, then re-arm (read_only on the server; keeps a local per-session cursor and never marks anything read). Returns answers to asks this session filed, plus answers to asks of unknown origin that arrive after its first wait. It skips asks filed by another session of this agent unless --all. After the first answer it keeps collecting for --settle (default 20s) while in-scope asks stay open, and returns at once when none do. Session: ANX_SESSION, else the harness session id; with neither, one cursor per agent. Exit 8 on timeout; a withdrawn or expired ask of yours also ends the wait, with a null answer.\n  --deadline <when> (either form, instead of --timeout): wait until an absolute time (RFC3339, or YYYY-MM-DD for the whole UTC day). A relative value such as 8h is refused with the absolute time to pass instead, because it would move on every re-arm. Hours-long waits are one command; network outages are retried. Reaching the deadline with no answer exits 14 deadline_reached (never 8). Re-arm by rerunning the same command with the same absolute time; it never extends the wait.\n", true
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true

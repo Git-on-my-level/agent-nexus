@@ -125,38 +125,6 @@ func noteUsage() string {
 	return `usage: anx note <card> ["<text>"] [--next <when> ["<what>"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]`
 }
 
-// keptPromise is the promise an evidence note re-states. Evidence satisfies
-// every earlier note promise in the fold, so a note that names no next would
-// otherwise blank the card's clock. Core's fold decides what is live; this only
-// reads it. A lapsed promise keeps its text with a fresh checkpoint, because the
-// evidence just proved movement.
-func keptPromise(card map[string]any, now time.Time) (at time.Time, what string, ok bool) {
-	health := asMap(card["plan_health"])
-	state := anyString(health["state"])
-	if len(health) == 0 || state == "done" {
-		return time.Time{}, "", false
-	}
-	promise := asMap(health["promise"])
-	fresh := now.Add(promiseHorizon).UTC()
-	switch anyString(promise["source"]) {
-	case "note":
-		at, err := time.Parse(time.RFC3339Nano, anyString(promise["at"]))
-		if err != nil || !at.After(now) {
-			at = fresh
-		}
-		return at.UTC(), anyString(promise["what"]), true
-	case "", "default":
-		// A digest card reports on its own schedule; only a real note promise
-		// on one needs keeping.
-		if state == "digest" {
-			return time.Time{}, "", false
-		}
-		return fresh, "report progress", true
-	}
-	// Cadence and plan promises live outside notes; evidence cannot clear them.
-	return time.Time{}, "", false
-}
-
 func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	parsed, err := parseNoteArgs(args, a.clockNow())
 	if err != nil {
@@ -189,9 +157,6 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 			warnings = append(warnings, noteWarning("note_no_next", "no --next; a card renews by noting its next promise", []string{"anx", "note", cardRef, "--next", "<when>", "<what>"}))
 		}
 	} else {
-		if len(stringList(card["assignee_refs"])) == 0 && anyString(card["assignee"]) == "" && anyString(card["owner"]) == "" {
-			warnings = append(warnings, noteWarning("note_promise_unowned", "promise set on an unowned card; nobody will be prompted to renew it", []string{"anx", "work", "start", cardRef}))
-		}
 		if parsed.nextAt.Sub(a.clockNow()) > promiseHorizon {
 			warnings = append(warnings, noteWarning("note_beyond_horizon", fmt.Sprintf("--next %s is beyond the 2-day horizon; promise a nearer checkpoint", parsed.nextWhen), []string{"anx", "note", cardRef, "--next", "2d", "<checkpoint>"}))
 		}
@@ -229,17 +194,25 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	if err := validateEventsCreateInput(body, "note"); err != nil {
 		return nil, err
 	}
-	result, err := a.invokeTypedJSON(ctx, cfg, "note", "events.create", nil, nil, body)
+	result, sent, err := a.postNote(ctx, cfg, parsed, body)
 	if err != nil {
 		return nil, err
 	}
 	event := asMap(commandResultBody(result)["event"])
-	// Presence is a convenience; the note is already written.
-	_, _ = a.invokeRawJSON(ctx, cfg, "note presence", "PATCH", "/agents/me/presence", map[string]any{"current_card_ref": cardRef, "note": truncateRunes(parsed.text, 500)})
 	data := map[string]any{"card_ref": cardRef, "note": parsed.text}
 	if id := anyString(event["id"]); id != "" {
 		data["note_ref"] = "event:" + id
 	}
+	warnings = append(warnings, sent.annotate(data)...)
+	if parsed.nextSet || len(parsed.evidence) > 0 {
+		started, startWarnings := a.startNotedCard(ctx, cfg, card, cardRef, firstNonEmpty(anyString(event["actor_id"]), cfg.ActorID))
+		if started != nil {
+			data["started"] = started
+		}
+		warnings = append(warnings, startWarnings...)
+	}
+	// Presence is a convenience; the note is already written.
+	a.notePresence(ctx, cfg, cardRef, parsed.text)
 	if parsed.nextSet {
 		data["next"] = map[string]any{"at": parsed.nextAt.Format(time.RFC3339), "what": parsed.nextWhat}
 	}

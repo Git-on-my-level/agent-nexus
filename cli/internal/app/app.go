@@ -13,6 +13,7 @@ import (
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
+	"agent-nexus-cli/internal/httpclient"
 	"agent-nexus-cli/internal/output"
 	"agent-nexus-cli/runcontext"
 
@@ -45,6 +46,7 @@ type App struct {
 	writes                         writeTracker
 	webURL                         *webURLLookup
 	identityWarnings               []output.Warning // from host identity resolution; see persona_names.go
+	attributionWarnings            []output.Warning // writes resent without run attribution; see httpclient/attribution.go
 }
 
 func (a *App) clockNow() time.Time {
@@ -251,7 +253,9 @@ func (a *App) Run(args []string) int {
 		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, actorErr)
 	}
 	a.emitPMToolActivity(normalizedArgs, resolved)
-	commandName, result, runErr := a.runCommand(context.Background(), normalizedArgs, resolved)
+	skipped := &attributionSkips{}
+	commandName, result, runErr := a.runCommand(httpclient.WithRunAttributionObserver(context.Background(), skipped.observe), normalizedArgs, resolved)
+	a.attributionWarnings = skipped.warnings()
 	identity := resolveMachineCommandIdentity(commandName)
 	if runErr != nil {
 		if code, nextErr, retried := a.recoverCLIOutdated(context.Background(), args, resolved, identity.Command, runErr); retried {
@@ -259,8 +263,14 @@ func (a *App) Run(args []string) int {
 		} else if nextErr != nil {
 			runErr = nextErr
 		}
-		runErr = a.withWorkspaceHint(resolved, runErr)
+		runErr = skipped.annotateError(a.withWorkspaceHint(resolved, runErr))
 		return a.renderError(identity, resolved.JSON, runErr)
+	}
+	// Short text outputs and raw writes return before the envelope's warnings
+	// are rendered, so a skipped attribution goes to stderr there.
+	if !resolved.JSON || (result != nil && result.RawWritten) {
+		a.writeUpdateFollowUpWarnings(a.attributionWarnings)
+		a.attributionWarnings = nil
 	}
 	if (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
 		if !strings.HasPrefix(identity.Command, "update") {
@@ -320,6 +330,7 @@ func (a *App) Run(args []string) int {
 	if result != nil && len(result.Warnings) > 0 {
 		warnings = append(result.Warnings, warnings...)
 	}
+	warnings = append(a.attributionWarnings, warnings...)
 	if resolved.JSON && len(a.identityWarnings) > 0 {
 		// Text mode already printed these to stderr.
 		warnings = append(append([]output.Warning{}, a.identityWarnings...), warnings...)
@@ -464,7 +475,7 @@ func parseGlobalFlags(args []string) (config.Overrides, []string, bool, error) {
 	fs.Var(&noColorFlag, "no-color", "Disable colorized output")
 	fs.Var(&verboseFlag, "verbose", "Show the full response payload for default text output (non-JSON)")
 	fs.Var(&headersFlag, "headers", "Include response status and headers in default text output (non-JSON)")
-	fs.Var(&timeoutFlag, "timeout", "Total HTTP exchange budget including retries (default 60s; default read attempt 20s; connect/TLS at most 10s each)")
+	fs.Var(&timeoutFlag, "timeout", "Total HTTP exchange budget including retries (default 120s; default read attempt 40s, at least 30s; connect/TLS at most 10s each)")
 	fs.Var(&versionFlag, "version", "Print CLI/runtime version details")
 
 	var helpRequested bool

@@ -892,11 +892,11 @@ func (b *briefBuild) answered() ([]map[string]any, bool, error) {
 
 type briefCardRow struct {
 	briefInitiativeRow
-	handle, title, phase, thread, owner, plan, assignee string
-	outcome                                             string
-	progressDone, progressTotal                         int
-	loopAnnotated                                       int
-	loopLastRunAt                                       string
+	handle, title, phase, storedPhase, thread, owner, plan, assignee string
+	outcome                                                          string
+	progressDone, progressTotal                                      int
+	loopAnnotated                                                    int
+	loopLastRunAt                                                    string
 }
 
 func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]briefCardRow, error) {
@@ -926,12 +926,11 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	}
 
 	if source == "" {
-		source = `(SELECT card_id FROM work_grouping_brief_positions bi WHERE ` + admission + ` LIMIT 200) admitted
-		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`
+		source, prefixArgs = b.initiativeSource(where, admission)
 	}
 	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),
-	COALESCE(c.handle,''),c.title,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `,substr(COALESCE(NULLIF(trim(json_extract(m.metadata_json,'$.goal.label')),''),NULLIF(trim(json_extract(m.metadata_json,'$.goal.metric')),''),c.summary,''),1,281)
+	COALESCE(c.handle,''),c.title,` + workEffectivePhaseSQL("c") + `,c.column_key,COALESCE(c.thread_id,''),` + ownerExpr + `,COALESCE(p.body_json,''),bi.progress_done,bi.progress_total,COALESCE(c.assignee,''),` + loopColumns + `,substr(COALESCE(NULLIF(trim(json_extract(m.metadata_json,'$.goal.label')),''),NULLIF(trim(json_extract(m.metadata_json,'$.goal.metric')),''),c.summary,''),1,281)
  FROM ` + source + ` CROSS JOIN cards c ON c.id=bi.card_id LEFT JOIN card_plans p ON p.card_id=c.id LEFT JOIN work_metadata m ON m.card_id=c.id
 	WHERE COALESCE(c.archived_at,'')='' AND COALESCE(c.trashed_at,'')='' AND ` + boardFilter + ` AND ` + groupFilter + ` AND `
 	pred, predArgs := b.pmOwnerSQL("c.thread_id")
@@ -945,7 +944,7 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	out := []briefCardRow{}
 	for rows.Next() {
 		var r briefCardRow
-		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.thread, &r.owner, &r.plan, &r.progressDone, &r.progressTotal, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt, &r.outcome); err != nil {
+		if err = rows.Scan(&r.cardID, &r.open, &r.promiseAt, &r.what, &r.source, &r.sourceRef, &r.author, &r.moves, &r.lastEvidence, &r.handle, &r.title, &r.phase, &r.storedPhase, &r.thread, &r.owner, &r.plan, &r.progressDone, &r.progressTotal, &r.assignee, &r.loopAnnotated, &r.loopLastRunAt, &r.outcome); err != nil {
 			return nil, err
 		}
 		if b.reader.Visible != nil && !b.reader.Visible(r.thread, r.owner) {
@@ -960,29 +959,9 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 // evidence first), then recently done; at most BriefSectionLimit in all.
 func (b *briefBuild) initiatives() ([]map[string]any, bool, error) { return b.initiativeSection(false) }
 func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, error) {
-	limit := BriefSectionLimit + 1
-	promised, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
+	rows, truncated, err := b.initiativeCandidates(loopsOnly)
 	if err != nil {
 		return nil, false, err
-	}
-	rows := promised
-	if len(rows) < limit {
-		none, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at LIMIT ?`, limit-len(rows))
-		if err != nil {
-			return nil, false, err
-		}
-		rows = append(rows, none...)
-	}
-	if len(rows) < limit {
-		done, err := b.queryInitiatives(loopsOnly, `bi.open=0 ORDER BY bi.last_evidence_at DESC LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
-		if err != nil {
-			return nil, false, err
-		}
-		rows = append(rows, done...)
-	}
-	truncated := len(rows) > BriefSectionLimit
-	if truncated {
-		rows = rows[:BriefSectionLimit]
 	}
 	ids := make([]string, 0, len(rows))
 	for _, r := range rows {
@@ -1028,7 +1007,7 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 			"id": r.cardID, "ref": ref, "title": r.title, "owner": nil, "state": state.State, "placement": briefPlacement(r.phase),
 			"promise": nil, "past_promise_for_seconds": nil, "promise_moves": state.Moves, "last_evidence_at": nil,
 			"progress": briefProgress(r.progressDone, r.progressTotal), "blocked_count": counts[r.cardID].blocked, "waiting_on_you_count": counts[r.cardID].waiting,
-			"outcome": briefOutcome(r.outcome), "proposed": briefPlacement(r.phase) == "backlog",
+			"outcome": briefOutcome(r.outcome), "proposed": briefPlacement(r.phase) == "backlog", "stored_placement": briefStoredPlacement(r.phase, r.storedPhase),
 			"note": nil, "possibly_moot": possiblyMootJSON(moot[r.cardID]),
 		}
 		if refs := boardCardAssigneeRefs(r.assignee); len(refs) > 0 {
@@ -1100,6 +1079,7 @@ func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, 
 		delete(item, "id")
 		delete(item, "is_initiative")
 		delete(item, "needs_home")
+		dropNilField(item, "stored_placement")
 	}
 	return out, truncated, nil
 }

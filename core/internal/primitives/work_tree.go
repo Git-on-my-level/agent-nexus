@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Paths are display and input aliases over stable card IDs. Each segment is a
@@ -21,6 +22,8 @@ const (
 
 type workTreeRow struct {
 	id, handle, title, state, assignee string
+	storedState                        string // state is effective (workEffectivePhaseSQL)
+	loop                               bool
 	parent                             sql.NullString
 	needsHome                          bool
 	initiative                         bool // reader-relative (workIsInitiativeSQL)
@@ -34,7 +37,7 @@ func scanWorkTreeRows(rows *sql.Rows) ([]workTreeRow, error) {
 	for rows.Next() {
 		var r workTreeRow
 		var handle, assignee sql.NullString
-		if err := rows.Scan(&r.id, &handle, &r.title, &r.state, &assignee, &r.parent, &r.needsHome, &r.initiative); err != nil {
+		if err := rows.Scan(&r.id, &handle, &r.title, &r.state, &r.storedState, &assignee, &r.parent, &r.needsHome, &r.initiative, &r.loop); err != nil {
 			return nil, err
 		}
 		r.handle, r.assignee = strings.TrimSpace(handle.String), assignee.String
@@ -43,7 +46,15 @@ func scanWorkTreeRows(rows *sql.Rows) ([]workTreeRow, error) {
 	return out, rows.Err()
 }
 
-var workTreeColumns = `c.id,c.handle,c.title,c.column_key,c.assignee,c.parent_card_id,c.needs_home,` + workIsInitiativeSQL("c")
+// workTreeColumns reads the effective phase beside the stored one, and whether
+// the card is a loop by the brief's rule, so tree and Watch count alike.
+// Path walks need only identity and placement, so they skip both derivations.
+var workTreePathColumns = `c.id,c.handle,c.title,c.column_key,c.column_key,c.assignee,c.parent_card_id,c.needs_home,` + workIsInitiativeSQL("c") + `,0`
+
+func workTreeColumns(now time.Time) string {
+	return `c.id,c.handle,c.title,` + workEffectivePhaseSQL("c") + `,c.column_key,c.assignee,c.parent_card_id,c.needs_home,` + workIsInitiativeSQL("c") +
+		`,COALESCE((SELECT bi.loop_annotated=1 OR COALESCE(bi.loop_last_run_at,'')>='` + loopTS(now.Add(-loopWindow)) + `' FROM brief_initiatives bi WHERE bi.card_id=c.id),0)`
+}
 
 func workTreeOpen(includeDone bool) string {
 	if includeDone {
@@ -62,7 +73,7 @@ func workPathFor(ctx context.Context, q briefQueryer, id string) (string, error)
 		if steps > 32 {
 			return "", nil
 		}
-		rows, err := q.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM cards c WHERE c.id=? AND c.trashed_at IS NULL`, at)
+		rows, err := q.QueryContext(ctx, `SELECT `+workTreePathColumns+` FROM cards c WHERE c.id=? AND c.trashed_at IS NULL`, at)
 		if err != nil {
 			return "", err
 		}
@@ -120,7 +131,7 @@ func (s *Store) ResolveWorkPath(ctx context.Context, path string) (map[string]an
 			args = []any{segments[0] == workTreeUnsortedRoot}
 		}
 		args = append([]any{segment, segment}, args...)
-		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM (SELECT id FROM cards WHERE id=? UNION SELECT id FROM cards WHERE handle IS NOT NULL AND trim(handle)<>'' AND handle=?) requested CROSS JOIN cards c ON c.id=requested.id WHERE `+where+` AND c.trashed_at IS NULL ORDER BY c.created_at,c.id LIMIT 1`, args...)
+		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreePathColumns+` FROM (SELECT id FROM cards WHERE id=? UNION SELECT id FROM cards WHERE handle IS NOT NULL AND trim(handle)<>'' AND handle=?) requested CROSS JOIN cards c ON c.id=requested.id WHERE `+where+` AND c.trashed_at IS NULL ORDER BY c.created_at,c.id LIMIT 1`, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -152,6 +163,7 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 	}
 	defer closeRead()
 	truncated := false
+	columns := workTreeColumns(time.Now())
 	// Admit routing identities before scoped canonical hydration. Hidden rows
 	// never cause a refill or contribute to returned truncation metadata.
 	level := func(index, where string, args ...any) ([]workTreeRow, error) {
@@ -161,7 +173,7 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 		if index != "idx_cards_parent" {
 			live, order = ` AND c.trashed_at IS NULL`, `c.created_at,c.id`
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM (SELECT c.id FROM main.cards c INDEXED BY `+index+` WHERE `+where+live+` ORDER BY `+order+` LIMIT ?) admitted CROSS JOIN cards c ON c.id=admitted.id WHERE c.trashed_at IS NULL AND c.archived_at IS NULL`+workTreeOpen(includeDone)+` ORDER BY c.created_at,c.id`, append(args, workTreeNodeLimit+1)...)
+		rows, err := s.db.QueryContext(ctx, `SELECT `+columns+` FROM (SELECT c.id FROM main.cards c INDEXED BY `+index+` WHERE `+where+live+` ORDER BY `+order+` LIMIT ?) admitted CROSS JOIN cards c ON c.id=admitted.id WHERE c.trashed_at IS NULL AND c.archived_at IS NULL`+workTreeOpen(includeDone)+` ORDER BY c.created_at,c.id`, append(args, workTreeNodeLimit+1)...)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +188,14 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 		if refs := boardCardAssigneeRefs(r.assignee); len(refs) > 0 {
 			owner = refs[0]
 		}
-		return map[string]any{"ref": "card:" + r.segment(), "title": r.title, "state": r.state, "path": path, "owner": owner, "needs_home": r.needsHome, "is_initiative": r.initiative, "children": []map[string]any{}, "has_more": false}
+		n := map[string]any{"ref": "card:" + r.segment(), "title": r.title, "state": r.state, "path": path, "owner": owner, "needs_home": r.needsHome, "is_initiative": r.initiative, "children": []map[string]any{}, "has_more": false}
+		if r.storedState != r.state {
+			n["stored_state"] = r.storedState
+		}
+		if r.loop {
+			n["is_loop"] = true
+		}
+		return n
 	}
 	// Expand children breadth-first: one indexed query per level, never per node.
 	expand := func(roots []map[string]any, ids []string, levels int) error {
@@ -235,7 +254,7 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 		if err != nil {
 			return nil, err
 		}
-		rows, err := s.db.QueryContext(ctx, `SELECT `+workTreeColumns+` FROM cards c WHERE c.id=? AND c.trashed_at IS NULL`, resolved)
+		rows, err := s.db.QueryContext(ctx, `SELECT `+columns+` FROM cards c WHERE c.id=? AND c.trashed_at IS NULL`, resolved)
 		if err != nil {
 			return nil, err
 		}
@@ -282,6 +301,16 @@ func (s *Store) WorkTree(ctx context.Context, root string, depth int, includeDon
 			return nil, err
 		}
 		out[section.key] = nodes
+		if !section.tray {
+			// Watch lists exactly these: open initiatives that are not loops.
+			open := 0
+			for _, n := range nodes {
+				if n["is_loop"] != true && n["state"] != "done" && n["state"] != "cancelled" {
+					open++
+				}
+			}
+			out["open_initiatives"] = open
+		}
 	}
 	out["truncated"] = truncated
 	return out, nil
@@ -310,7 +339,7 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 	if (ref == "") == (query == "") {
 		return nil, workInvalid("where needs exactly one of ref or q")
 	}
-	out := map[string]any{"ref": nil, "path": nil, "parent_ref": nil, "is_initiative": false, "needs_home": false, "suggestions": []map[string]any{}, "next_actions": []map[string]any{}}
+	out := map[string]any{"ref": nil, "path": nil, "parent_ref": nil, "is_initiative": false, "needs_home": false, "state": nil, "owner": nil, "suggestions": []map[string]any{}, "next_actions": []map[string]any{}}
 	input := map[string]any{"title": query}
 	cardRef, cardID := "", ""
 	if ref != "" {
@@ -328,12 +357,24 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 			return nil, err
 		}
 		// A hidden parent reads as no parent (see workIsInitiativeSQL).
-		var parent sql.NullString
+		var parent, assignee sql.NullString
 		var needsHome, initiative bool
-		if err = s.db.QueryRowContext(ctx, `SELECT (SELECT p.id FROM cards p WHERE p.id=c.parent_card_id),c.needs_home,`+workIsInitiativeSQL("c")+` FROM cards c WHERE c.id=?`, id).Scan(&parent, &needsHome, &initiative); err != nil {
+		var state, stored string
+		if err = s.db.QueryRowContext(ctx, `SELECT (SELECT p.id FROM cards p WHERE p.id=c.parent_card_id),c.needs_home,`+workIsInitiativeSQL("c")+`,`+workEffectivePhaseSQL("c")+`,c.column_key,c.assignee FROM cards c WHERE c.id=?`, id).Scan(&parent, &needsHome, &initiative, &state, &stored, &assignee); err != nil {
 			return nil, err
 		}
 		out["ref"], out["needs_home"], out["is_initiative"] = cardRef, needsHome, initiative
+		// An agent checking its own card learns whether it has started.
+		out["state"] = state
+		if stored != state {
+			out["stored_state"] = stored
+		}
+		if refs := boardCardAssigneeRefs(assignee.String); len(refs) > 0 {
+			out["owner"] = refs[0]
+		}
+		if state == "backlog" || state == "ready" {
+			out["next_actions"] = []map[string]any{{"label": "Start it (take ownership, move to in_progress)", "command_id": "work.start", "argv": []string{"anx", "work", "start", cardRef}, "mutates": true, "side_effect_class": "remote_coordination_write"}}
+		}
 		if path != "" {
 			out["path"] = path
 		}
@@ -378,7 +419,7 @@ func (s *Store) WorkWhere(ctx context.Context, ref, query string) (map[string]an
 	if cardRef != "" {
 		actions = append(actions, map[string]any{"label": "Make it an initiative", "command_id": "work.move", "argv": []string{"anx", "work", "move", target, "--root", "--reason", "<why this is a separate outcome>"}, "mutates": true, "side_effect_class": "remote_coordination_write"})
 	}
-	out["next_actions"] = actions
+	out["next_actions"] = append(actions, out["next_actions"].([]map[string]any)...)
 	return out, nil
 }
 

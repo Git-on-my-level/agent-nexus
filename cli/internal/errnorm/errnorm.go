@@ -171,6 +171,8 @@ func ExitCode(err error) int {
 		return 12
 	case "lease_held":
 		return 13
+	case "deadline_reached":
+		return 14
 	}
 	if typed.Kind == KindUsage {
 		return 2
@@ -322,6 +324,7 @@ var defaultMetadataByCode = map[string]Metadata{
 	"cli_outdated":                  {Recoverable: true, Hint: "Run `anx update`, then retry."},
 	"config_resolution_failed":      {Recoverable: true, Hint: "Set --base-url or ANX_BASE_URL, enroll this host, and select an agent with --as or ANX_AS."},
 	"conflict":                      {Recoverable: true, Hint: "The resource changed underneath this request; re-read it and retry"},
+	"deadline_reached":              {Recoverable: true, Hint: "The wait reached its --deadline with no answer. Rerun the same anx await command to keep waiting until that time, or pass a later --deadline."},
 	"lease_held":                    {Recoverable: false, Hint: "Another owner holds this card's work lease; do not start the work. Wait for expires_at or ask the holder to release it."},
 	"lease_expired":                 {Recoverable: true, Hint: "Your work lease expired; run `anx lease acquire` again to take a new epoch, since another owner may have started."},
 	"lease_not_held":                {Recoverable: true, Hint: "Nobody holds this lease; run `anx lease acquire` before renewing."},

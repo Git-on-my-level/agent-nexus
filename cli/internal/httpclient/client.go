@@ -82,7 +82,7 @@ func New(resolved config.Resolved) (*Client, error) {
 	if transport == stockTransport {
 		transport = networkTransport
 	}
-	httpClient := &http.Client{Timeout: timeout, Transport: noWriteReplay{base: transport}}
+	httpClient := &http.Client{Timeout: timeout, Transport: attributionFallback{base: noWriteReplay{base: transport}}}
 	return &Client{
 		baseURL:     strings.TrimRight(baseURL, "/"),
 		httpClient:  httpClient,

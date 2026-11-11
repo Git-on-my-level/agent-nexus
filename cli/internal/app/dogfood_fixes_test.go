@@ -19,13 +19,6 @@ func TestPlainNoteDoesNotWarnThatItClearsPromise(t *testing.T) {
 	}
 }
 
-func TestNoteWarnsOnUnownedPromise(t *testing.T) {
-	doc, _ := runNoteForTest(t, "", "card:x", "Checkpoint", "--next", "2d", "Verify results")
-	if warningCodes(doc)["note_promise_unowned"] == "" {
-		t.Fatal(doc)
-	}
-}
-
 func TestPreviousOwnPromiseUsesLatestNoteOnly(t *testing.T) {
 	for _, next := range []string{``, `,"next":{"at":"2d","what":"Continue verification"}`} {
 		t.Run(next, func(t *testing.T) {

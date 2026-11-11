@@ -321,9 +321,7 @@ func (a *App) prepareAskBatchEntry(
 	threadCache map[string]string,
 	forges []workspaceconfig.Forge,
 ) error {
-	if err := entry.askPresentation.validateBounds(); err != nil {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %v", index, err))
-	}
+	hard := entry.askPresentation.boundViolations()
 	if entry.Title == "" {
 		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d].title is required", index))
 	}
@@ -345,17 +343,15 @@ func (a *App) prepareAskBatchEntry(
 	for _, alt := range entry.Alts {
 		options = append(options, alt)
 	}
-	warnings, lintErr := lintAskAuthoring(strings.TrimSpace(entry.Body+"\n"+entry.Details), entry.Refs, entry.Evidence, forges)
+	warnings, authoringErrors := lintAskAuthoring(strings.TrimSpace(entry.Body+"\n"+entry.Details), entry.Refs, entry.Evidence, forges)
 	plainWarnings, lintErrors := lintAskPresentation(entry.Title, entry.askPresentation, options)
 	warnings = append(warnings, plainWarnings...)
-	if lintErr != nil {
-		lintErrors = append(lintErrors, lintErr.Error())
+	lintErrors = append(append(append([]string{}, hard...), lintErrors...), authoringErrors...)
+	if len(hard) > 0 || evidenceShapeInvalid(entry.Evidence) {
+		return errnorm.WithDetails(errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d]: %s", index, strings.Join(lintErrors, "; "))), map[string]any{"violations": lintErrors, "forceable": false})
 	}
-	if len(lintErrors) > 0 {
-		lintErr = fmt.Errorf("%s", strings.Join(lintErrors, "; "))
-	}
-	if lintErr != nil && !forceFlag.value {
-		return errnorm.Usage("ask_authoring", fmt.Sprintf("asks[%d]: %s; or use --force --reason <explanation>", index, lintErr.Error()))
+	if len(lintErrors) > 0 && !forceFlag.value {
+		return errnorm.WithDetails(errnorm.Usage("ask_authoring", fmt.Sprintf("asks[%d]: %s; or use --force --reason <explanation>", index, strings.Join(lintErrors, "; "))), map[string]any{"violations": lintErrors, "forceable": true})
 	}
 	entry.lintWarnings = warnings
 

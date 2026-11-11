@@ -12,7 +12,10 @@ import (
 const (
 	DefaultBaseURL = "http://127.0.0.1:8000"
 	DefaultAgent   = "default"
-	DefaultTimeout = 60 * time.Second
+	// DefaultTimeout covers a routine write that waits out one busy-writer
+	// period on the server (20s) and is retried; 60s was shorter than routine
+	// writes on a busy hosted workspace, so agents passed --timeout 100s.
+	DefaultTimeout = 120 * time.Second
 )
 
 type Overrides struct {

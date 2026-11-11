@@ -50,7 +50,7 @@ describe("InitiativeRollupList", () => {
       "Needs you · 3",
       "Lagging · 1",
       "Moving · 1",
-      "Proposed · 1",
+      "Not started · 1",
       "Done · 1 Show",
     ]);
     expect(rowEl(container, "card:docs-site")).toBeNull();
