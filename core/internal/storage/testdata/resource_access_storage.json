@@ -3794,7 +3794,8 @@
     "../sidecar/host.go:*Host:Run": "6e323989f6903e95f01c8018c92d02982014f67cfaf0ecb6a55ebea1c90be20e",
     "../sidecar/host.go:*Host:Snapshot": "608c2d62a7e43ac5ac617777db0e0d0e2fccf8a01dc703fbc0dc8fb5eb2489d6",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "872d19731c5f191a06d3ccbdbac15da88b81771371b2a974395cd133b4c2162a",
-    "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "91c83638acb8f7c09020805b52f3a5a9594037f9a2c9b1eb820e8ff9ba87abea",
+    "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "4bd04d991df3f4cb29ef623fbbdca3ff91cbfda6f3d1ef769ee4c3a08891f246",
+    "../sqliteutil/maintenance.go:SetConnectionBusyTimeout": "bde644aa5e22c7f23c16907a1fc4e33c16a77379c62b875132f5885fe9d4e681",
     "../storage/access_admission.go:installAccessAdmission": "3fa73839030d3db96811a21ee6ba236720a8bea005a6965cffc420b1b1253636",
     "../storage/access_admission.go:installAdmissionCompactSync": "cf8503ef65d42311a21830c9382241ee2dff5e6852f0c1246f34f33b3a1bdf01",
     "../storage/access_admission_backfill.go:accessAdmissionMigrationChunk": "93a81a129d3aeb5c85bad5c1d4bc4b6e9800aaf4380f10400214c59f182d74ee",
@@ -3998,10 +3999,11 @@
     "../storage/scope_migration_connections.go:*scopeConnection:Close": "949b18b2fff1dcfc7a922cca4587d74bb3414224a4217bb74296e61d3c51c4a4",
     "../storage/scope_migration_connections.go:*scopeConnection:ExecContext": "abb449935ecbf784ca408d907064b265c95e4bf13a3af561749c70779457c560",
     "../storage/scope_migration_connections.go:*scopeConnection:PrepareContext": "a26ebec44b53e32d9c83623054cf3ea3eff1f871c57153997427d53540cf132b",
-    "../storage/scope_migration_connections.go:*scopeConnection:QueryContext": "d00a3d5c9a0e2fe83499b94dd666629ef04d9e168d98edbaed28e8672a1d690a",
+    "../storage/scope_migration_connections.go:*scopeConnection:QueryContext": "d450a9c1d32db10390e10b512fe4c77b753537b537bc3bd03d705d7a5c1541fc",
     "../storage/scope_migration_connections.go:*scopeConnector:Connect": "6c302352c9d87c0a09f2dfdfde9228865d09d5c08328f6e8a8faa5468d6e59db",
     "../storage/scope_migration_connections.go:*scopeProcessLease:activate": "2d7e01ca00bda0783304952e0d762bd5aa892ecb7fee9709d5a8f8816d1cd6b5",
     "../storage/scope_migration_connections.go:*scopeProcessLease:release": "d129a8cfc0f6de02ad6d9943b7616de488d1317fc365daf0736c8fd034a85a24",
+    "../storage/scope_migration_connections.go:*scopeRows:Close": "ac89c4113311ff43b2c52e6cd7a2d5eb9c263540ad0cac72e516e4fb942d6b13",
     "../storage/scope_migration_connections.go:enableExpandedScopeLease": "62e641bfaf8ad84716b7913cf14e015a1cb32e2f1b8651464cc305c5eb01e834",
     "../storage/scope_migration_connections.go:openScopeDatabase": "81f3586613e2a2934ff7b7de7da0e70f24d6190c5c7e925b7ccd2ee2cc01600a",
     "../storage/scope_migration_connections.go:scopeDriver:Open": "ea0cbd5a21dca8e191f1c4abcf1217769d98597fb9172425faa3aeec487df697",
@@ -4021,6 +4023,12 @@
     "../storage/sqlite_temp.go:PrepareSQLiteTempDirectory": "f3c9433e98f293dfae13e07969f9b86186541308be81f6d2caf756790b7dc0b2",
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
     "../storage/usage_tracking.go:*Workspace:InitializeUsageTracking": "fa5492c7faf7d3945e23ebedfcf8b479d41446b07f75514dab0838f15c66ca8e",
+    "../storage/wal_watchdog.go:*Workspace:startWALWatchdog": "6e3d08a81e16ad5e907627794460ac3f1c8ca63610282e5fd7529149bccf5b43",
+    "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:Close": "346739194aa0d4ef669a7de50f6c718d299352972db0119362d06c363c4055b8",
+    "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:Passive": "042961b49b10ca8afc5f6e0777dad930ee9ba8bab2ebfb1aa99278620993b4f6",
+    "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:TruncateCheckpoint": "32c9c7b569ed757b4e1b40e523a7936fce3c7db95b91a636b3a9565bf198a36a",
+    "../storage/wal_watchdog.go:*walWatchdog:run": "a777accb4940aed3c946b633172fd372715319ea72a2e8cf6e565044009e88f3",
+    "../storage/wal_watchdog.go:*walWatchdog:tick": "a628cd2ef5db66adef5d05113197e88d14ed4c4b7ac7418e736a7473d09897dc",
     "../storage/watch_trend_days.go:installWatchTrendDays": "81e896ca8afa68e6c7633efb0a3ef3f39b2ce3a00dd5f326703f3bf30d13cd1a",
     "../storage/watch_trend_positions.go:installWatchTrendPositions": "af6002326eceb9c46a502ae2bf9e2465cc27dc0da8724f6aa2b0837522b0b93d",
     "../storage/watch_trend_positions.go:trendCardPositions": "531df216c8a0b7ba8d962fd984dddd813d1b9dcbea45621b00545d2fc0580bdc",
@@ -4038,9 +4046,10 @@
     "../storage/work_tree.go:BackfillWorkTree": "fde7b992373bbb988682bfd9facb46dd241df0601bf0d63b8264811c222f26f4",
     "../storage/work_tree.go:backfillWorkTree": "72e89e2a49d40290286cdb3d144de1b12f89b07d09b89eb462b0dfa2e9eca364",
     "../storage/work_tree.go:installWorkTree": "96337ce98b39d40905bd00204e8c4f534d0c162377ce2e791397ebeac9a7b517",
-    "../storage/workspace.go:*Workspace:Close": "6b1509132109f1701d126c71e60fdebb81153a932ca4d2be98377f4b08a5c17b",
-    "../storage/workspace.go:InitializeWorkspace": "71629dd9f1a06ec16cd090006e2206f90b3eb775244ba86b897c19b6abbcac02",
-    "../storage/workspace.go:sqliteDSN": "657b24a5c4048f37634b9530f18e3aef82a44d24bf012430f8df28e7ee364de5",
+    "../storage/workspace.go:*Workspace:Close": "3ae4002896bf37d58543da6997d8b6948591a2f145e5dd0ce615f4b45ad8c95d",
+    "../storage/workspace.go:InitializeWorkspace": "c394cf140b938a6497438ee0197c52e9b7218f18babf3b62d57f089a70aada02",
+    "../storage/workspace.go:sqliteDSN": "c3e917ba87cb37932431794588c86fa0fdb61cbeef90735c959f8393c816a3cf",
+    "../storage/workspace.go:sqliteDSNWithJournalLimit": "5af78a08f72a3ae4b4573c0dad9795a1099c9d059a483d6fb89d98f6356d80a7",
     "../testsql/counter.go:*connector:Connect": "6c0bcceccbaad39f0a9b8405b6635e57ec5bc0ef689e3fe03e0e7dc7fde23c9e",
     "../testsql/counter.go:*countedConn:BeginTx": "cb2ce52282f9b02d66c33095801ca4f34ebb9a22db9195f3b14df5fb4bc4aea1",
     "../testsql/counter.go:*countedConn:ExecContext": "19b105025025cd75a56e6a8f55e870f8a82976666fc26612ded2ec71d4a01ce4",
@@ -4084,12 +4093,17 @@
     "../testutil/perfguard/work.go:installWorkTrace": "20693ec50f01e251d446fa1734baa1fc77f77140ad874d577bd8ebc14484e3a4"
   },
   "external_key_publications": {
-    "work_evidence_record": ["evidence_json"],
+    "work_evidence_record": [
+      "evidence_json"
+    ],
     "work_metadata": [
       "metadata_json.source",
       "metadata_json.source_refs.*",
       "metadata_json._anx_source_evidence_refs.*"
     ],
-    "work_observation": ["body_json.facts", "body_json.evidence.*"]
+    "work_observation": [
+      "body_json.facts",
+      "body_json.evidence.*"
+    ]
   }
 }
