@@ -2,7 +2,7 @@ package server
 
 import (
 	"agent-nexus-core/internal/commandcenter"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/schema"
 	"bytes"
 	"context"
@@ -172,12 +172,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedStreamPrivacyInbox(t, store, publicThread, streamPrivacyInboxItem(publicThread, "public-control-ask", "Visible inbox control"))
-	selected := seedMachinePrincipalForLockoutTest(t, ctx, db, "matrix-selected", "matrix-selected-actor", "matrix.selected", "matrix-selected-token")
-	runtime, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: selected.ActorID}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, err := runtime.Service.CreateConversation(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.CreateConversation{RequestKey: "private", Title: "Confidential conversation sentinel", WorkRef: anyString(card.Card["ref"])})
+	runtime, err := newOnboardedDecideRuntime(t, db, store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,14 +183,13 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	personaPaths := strings.NewReplacer("{host_id}", throwaway.Host.ID, "{agent_name}", "throwaway")
 	now := time.Now().UTC()
 	for kind, value := range map[string]any{
-		"decision": pm.Decision{ID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Instruction: "Confidential decision sentinel", Status: pm.AwaitingAnswer, Revision: 1, CreatedAt: now},
-		"action":   pm.Action{ID: "matrix-private-action", DecisionID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Status: pm.Pending},
-		"turn":     pm.Turn{ID: "matrix-private-turn", ConversationID: conversation.ID, WorkspaceID: "ws_main", ActorID: owner.ActorID, Text: "Confidential turn sentinel", Status: pm.Pending},
+		"decision": decide.Decision{ID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Instruction: "Confidential decision sentinel", Status: decide.AwaitingAnswer, Revision: 1, CreatedAt: now},
+		"action":   decide.Action{ID: "matrix-private-action", DecisionID: "matrix-private-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: anyString(card.Card["ref"]), Status: decide.Pending},
 	} {
 		raw, _ := json.Marshal(value)
 		var item map[string]any
 		_ = json.Unmarshal(raw, &item)
-		if _, err = db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?)`, kind, item["id"], "ws_main", owner.ActorID, conversation.ID, raw); err != nil {
+		if _, err = db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?)`, kind, item["id"], "ws_main", owner.ActorID, "", raw); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,12 +203,12 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env.server.Config.Handler = NewHandler("0.2.2", WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithPrimitiveStore(store), WithSchemaContract(contract), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithPMRuntime(runtime))
+	env.server.Config.Handler = NewHandler("0.2.2", WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithPrimitiveStore(store), WithSchemaContract(contract), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithDecideRuntime(runtime))
 	if _, err = db.ExecContext(ctx, `INSERT INTO access_requests(id,principal_id,actor_id,username,grant_name,reason,created_at,request_event_id,inbox_item_id) VALUES('matrix-private-access',?,?,?,'auth-admin','Confidential access reason','now',?,'matrix-access-inbox')`, agent.AgentID, agent.ActorID, "matrix.agent", event["id"]); err != nil {
 		t.Fatal(err)
 	}
-	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{conversation_id}", conversation.ID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{turn_id}", "matrix-private-turn", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
-	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, conversation.ID, "matrix-private-decision", "matrix-private-action", "matrix-private-turn", "matrix-private-run", "Confidential"}
+	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "Confidential"}
 	snapshot := func() string {
 		var v string
 		if err := db.QueryRowContext(ctx, `SELECT json_object('cards',(SELECT json_group_array(json_object('id',id,'updated_at',updated_at,'due_at',due_at,'summary',summary)) FROM cards),'events',(SELECT COUNT(*) FROM events),'wakeups',(SELECT COUNT(*) FROM agent_wakeups))`).Scan(&v); err != nil {

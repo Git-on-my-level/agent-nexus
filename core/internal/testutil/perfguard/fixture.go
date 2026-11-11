@@ -3,7 +3,7 @@
 package perfguard
 
 import (
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -43,7 +43,7 @@ func seedRows(ctx context.Context, db *sql.DB, contentDir, owner string, seriesA
 		return err
 	}
 	if current {
-		if _, err := pm.NewStore(db); err != nil {
+		if _, err := decide.NewStore(db); err != nil {
 			return err
 		}
 	} else {

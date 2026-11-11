@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -55,22 +55,22 @@ func handleGetBriefV1(w http.ResponseWriter, r *http.Request, opts handlerOption
 // answer as pm_proposal decisions, through the PM service's bounded,
 // permission-checked awaiting-decision read. A PM failure never fails the brief.
 func appendBriefPMDecisions(r *http.Request, opts handlerOptions, brief map[string]any) {
-	if opts.pmRuntime == nil || opts.pmRuntime.Service == nil {
+	if opts.decideRuntime == nil || opts.decideRuntime.Service == nil {
 		return
 	}
 	principal, ok := cachedAuthenticatedPrincipal(r)
 	if !ok {
 		return
 	}
-	p := pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: true}
-	decisions, partial, err := opts.pmRuntime.Service.AwaitingDecisions(r.Context(), p)
+	p := decide.Principal{WorkspaceID: opts.decideRuntime.cfg.Decide.WorkspaceID, ActorID: principal.ActorID, Human: true}
+	decisions, partial, err := opts.decideRuntime.Service.AwaitingDecisions(r.Context(), p)
 	if err != nil {
 		return
 	}
 	items, _ := brief["decisions"].([]map[string]any)
 	now := time.Now().UTC()
 	for _, d := range decisions {
-		if d.Status != pm.AwaitingAnswer || !d.CanAnswer {
+		if d.Status != decide.AwaitingAnswer || !d.CanAnswer {
 			continue
 		}
 		title := strings.TrimSpace(d.Instruction)

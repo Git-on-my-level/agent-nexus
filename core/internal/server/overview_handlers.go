@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/resourceaccess"
 )
 
@@ -207,10 +207,10 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		}
 	}
 	stage = time.Now()
-	if opts.pmRuntime != nil && opts.pmRuntime.Service != nil {
+	if opts.decideRuntime != nil && opts.decideRuntime.Service != nil {
 		if principal, ok := cachedAuthenticatedPrincipal(r); ok {
-			p := pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == "human"}
-			decisions, actions, partial, e := opts.pmRuntime.Service.OverviewDecisions(r.Context(), p)
+			p := decide.Principal{WorkspaceID: opts.decideRuntime.cfg.Decide.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == "human"}
+			decisions, actions, partial, e := opts.decideRuntime.Service.OverviewDecisions(r.Context(), p)
 			needs["truncated"] = needs["truncated"] == true || partial
 			hidden := map[string]bool{}
 			if resolver, ok := opts.primitiveStore.(planStore); ok && e == nil {
@@ -220,7 +220,7 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					// Awaiting decisions already carry the scoped live snapshot
 					// used by PM presentation. Only historical action context
 					// needs the broader archived-but-readable ref projection.
-					if !canonical || d.Status != pm.AwaitingAnswer {
+					if !canonical || d.Status != decide.AwaitingAnswer {
 						refs = append(refs, d.WorkRef)
 					}
 				}
@@ -241,23 +241,23 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					}
 				}
 			}
-			if e != nil && !errors.Is(e, pm.ErrNotOnboarded) {
+			if e != nil {
 				needs["status"] = "unavailable"
 				needs["message"] = "Decisions could not be loaded."
 			} else {
 				for _, d := range decisions {
-					if hidden[d.WorkRef] || (d.Status == pm.AwaitingAnswer && (d.WorkMissing || (d.AlreadyAtTarget != nil && *d.AlreadyAtTarget) || (d.TargetCurrent != nil && !*d.TargetCurrent))) {
+					if hidden[d.WorkRef] || (d.Status == decide.AwaitingAnswer && (d.WorkMissing || (d.AlreadyAtTarget != nil && *d.AlreadyAtTarget) || (d.TargetCurrent != nil && !*d.TargetCurrent))) {
 						continue
 					}
-					actionable := d.Status == pm.AwaitingAnswer && d.CanAnswer
+					actionable := d.Status == decide.AwaitingAnswer && d.CanAnswer
 					for _, a := range actions[d.ID] {
-						if a.DecisionID != d.ID || d.Status != pm.Answered {
+						if a.DecisionID != d.ID || d.Status != decide.Answered {
 							continue
 						}
-						if a.Status == pm.Failed {
+						if a.Status == decide.Failed {
 							actionable = true
 						}
-						if (a.Status == pm.Pending || a.Status == "pending") && a.Deliverable && d.ActorID == p.ActorID {
+						if (a.Status == decide.Pending || a.Status == "pending") && a.Deliverable && d.ActorID == p.ActorID {
 							sent := false
 							for _, attempt := range a.Attempts {
 								if attempt.SentAt != nil {

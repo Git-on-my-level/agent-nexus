@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/observation"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 )
@@ -266,7 +266,7 @@ func TestResourceAccessStorageInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ws.Close()
-	if _, err = pm.NewStore(ws.DB()); err != nil {
+	if _, err = decide.NewStore(ws.DB()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = observation.NewInvestigationStore(ws.DB(), func(context.Context, string) error { return nil }); err != nil {

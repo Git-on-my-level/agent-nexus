@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	reports "agent-nexus-visualreport"
 )
@@ -247,17 +247,17 @@ func TestReportActivityIncludesAuthorizedDecisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, env.workspace.DB(), store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = runtime.Service.ProposeDecision(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.DecisionInput{RequestKey: "dashboard", WorkRef: anyString(work["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
+	_, err = runtime.Service.ProposeDecision(ctx, decide.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, decide.DecisionInput{RequestKey: "dashboard", WorkRef: anyString(work["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest("GET", "/", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: string(auth.PrincipalKindHuman)})
-	reader := reportReader{r: req, opts: handlerOptions{primitiveStore: store, pmRuntime: runtime}, now: time.Now(), visibility: map[string]bool{}}
+	reader := reportReader{r: req, opts: handlerOptions{primitiveStore: store, decideRuntime: runtime}, now: time.Now(), visibility: map[string]bool{}}
 	data, _, err := reader.activity(reports.Query{Limit: 10})
 	if err != nil {
 		t.Fatal(err)

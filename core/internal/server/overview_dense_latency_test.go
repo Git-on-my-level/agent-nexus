@@ -15,7 +15,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/commandcenter"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/testsql"
@@ -206,11 +206,11 @@ func TestPerformanceOverviewDenseAccessWorkspaceLatency(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	store := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
 	authStore := auth.NewStore(db)
-	runtime, err := newOnboardedPMRuntime(t, db, store, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, db, store, authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(store), WithAuthStore(authStore), WithActorRegistry(actors.NewStore(db)), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithPMRuntime(runtime)))
+	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(store), WithAuthStore(authStore), WithActorRegistry(actors.NewStore(db)), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithDecideRuntime(runtime)))
 	t.Cleanup(server.Close)
 	for _, mode := range []string{"legacy", "scoped", "amplified"} {
 		if mode == "amplified" {
@@ -386,11 +386,11 @@ func TestOverviewPrivatePayloadExcludedAcrossEpochsAndInboxReaders(t *testing.T)
 		}
 	}
 	assertPrivateControls(t)
-	runtime, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, env.workspace.DB(), store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(store), WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithRunStore(commandcenter.NewStore(env.workspace.DB(), commandcenter.SQLIdentities{DB: env.workspace.DB()})), WithPMRuntime(runtime)))
+	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(store), WithAuthStore(env.authStore), WithActorRegistry(env.registry), WithRunStore(commandcenter.NewStore(env.workspace.DB(), commandcenter.SQLIdentities{DB: env.workspace.DB()})), WithDecideRuntime(runtime)))
 	t.Cleanup(server.Close)
 	for _, mode := range []string{"legacy", "scoped"} {
 		if mode == "scoped" {

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/storage"
 	"modernc.org/sqlite"
@@ -26,7 +26,7 @@ func verificationWorkerFixture(t *testing.T, extraSQL string) (*sql.DB, *Store, 
 	}
 	t.Cleanup(func() { _ = w.Close() })
 	db := w.DB()
-	if _, err = pm.NewStore(db); err != nil {
+	if _, err = decide.NewStore(db); err != nil {
 		t.Fatal(err)
 	}
 	s := New(db)

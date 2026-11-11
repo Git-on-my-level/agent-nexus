@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/scopedrepo"
 )
@@ -33,7 +33,7 @@ func TestScopeInboxHTTPCanonicalAskLifecycleInvalidation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := pm.NewStore(db); err != nil {
+	if _, err := decide.NewStore(db); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := db.BeginTx(ctx, nil)

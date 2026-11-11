@@ -13,7 +13,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/commandcenter"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
 )
@@ -61,11 +61,11 @@ func testOverviewWorkspaceLatency(t *testing.T, cards, principals int, measure b
 	t.Cleanup(func() { db.Close() })
 	measured := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
 	authStore := auth.NewStore(db)
-	runtime, err := newOnboardedPMRuntime(t, db, measured, authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, db, measured, authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(measured), WithAuthStore(authStore), WithActorRegistry(actors.NewStore(db)), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithPMRuntime(runtime)))
+	server := httptest.NewServer(NewHandler("test", WithPrimitiveStore(measured), WithAuthStore(authStore), WithActorRegistry(actors.NewStore(db)), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})), WithDecideRuntime(runtime)))
 	t.Cleanup(server.Close)
 	for _, path := range []string{"/overview", "/inbox", "/inbox/summary"} {
 		t.Run(path, func(t *testing.T) {

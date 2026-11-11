@@ -1,7 +1,7 @@
 package storage_test
 
 import (
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
@@ -30,7 +30,7 @@ func TestResourceAccessReadIndexMigration62(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pm.NewStore(ws.DB()); err != nil {
+	if _, err = decide.NewStore(ws.DB()); err != nil {
 		t.Fatal(err)
 	}
 	// Reconstruct v61: bodies exist, but neither PM nor inbox bodies have a

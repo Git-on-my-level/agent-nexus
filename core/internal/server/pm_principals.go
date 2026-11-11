@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 )
 
 type pmPrincipalStore interface {
@@ -65,13 +65,13 @@ func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.Auth
 	}); ok {
 		principal, err := direct.PrincipalForActor(ctx, actorID)
 		if errors.Is(err, auth.ErrAgentNotFound) {
-			return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+			return auth.AuthPrincipalSummary{}, decide.ErrForbidden
 		}
 		if err != nil {
 			return auth.AuthPrincipalSummary{}, err
 		}
 		if principal.ActorID != actorID || principal.Revoked {
-			return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+			return auth.AuthPrincipalSummary{}, decide.ErrForbidden
 		}
 		l.mu.Lock()
 		if len(l.identities) >= 256 {
@@ -99,7 +99,7 @@ func (l *pmPrincipalLookup) find(ctx context.Context, actorID string) (auth.Auth
 			}
 		}
 		if next == "" {
-			return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+			return auth.AuthPrincipalSummary{}, decide.ErrForbidden
 		}
 		cursor = next
 	}
@@ -111,8 +111,8 @@ func (l *pmPrincipalLookup) findForAuthorization(ctx context.Context, actorID st
 	if err == nil {
 		return principal, nil
 	}
-	if errors.Is(err, pm.ErrForbidden) || errors.Is(err, auth.ErrAgentNotFound) {
-		return auth.AuthPrincipalSummary{}, pm.ErrForbidden
+	if errors.Is(err, decide.ErrForbidden) || errors.Is(err, auth.ErrAgentNotFound) {
+		return auth.AuthPrincipalSummary{}, decide.ErrForbidden
 	}
-	return auth.AuthPrincipalSummary{}, fmt.Errorf("%w: principal authorization could not be read; retry the request", pm.ErrUnavailable)
+	return auth.AuthPrincipalSummary{}, fmt.Errorf("%w: principal authorization could not be read; retry the request", decide.ErrUnavailable)
 }

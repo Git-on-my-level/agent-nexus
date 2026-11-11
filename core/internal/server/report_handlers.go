@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/plans"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 	reports "agent-nexus-visualreport"
@@ -707,15 +707,15 @@ func (reader *reportReader) decisionActivity() ([]map[string]any, bool, error) {
 
 func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, error) {
 	items := []map[string]any{}
-	runtime := reader.opts.pmRuntime
+	runtime := reader.opts.decideRuntime
 	if runtime == nil || runtime.Service == nil {
 		return items, false, nil
 	}
 	principal, ok := cachedAuthenticatedPrincipal(reader.r)
 	if !ok || principal == nil {
-		return nil, false, pm.ErrForbidden
+		return nil, false, decide.ErrForbidden
 	}
-	p := pm.Principal{WorkspaceID: runtime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == string(auth.PrincipalKindHuman)}
+	p := decide.Principal{WorkspaceID: runtime.cfg.Decide.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == string(auth.PrincipalKindHuman)}
 	limit := reader.decisionLimit
 	if limit <= 0 {
 		limit = maxReportCandidates
@@ -723,9 +723,6 @@ func (reader *reportReader) readDecisionActivity() ([]map[string]any, bool, erro
 	cursor := ""
 	for count := 0; count < limit; {
 		page, err := runtime.Service.DecisionPage(reader.r.Context(), p, limit, cursor)
-		if errors.Is(err, pm.ErrNotOnboarded) {
-			return items, false, nil
-		}
 		if err != nil {
 			return nil, false, err
 		}

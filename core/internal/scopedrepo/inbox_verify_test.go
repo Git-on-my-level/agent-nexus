@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopes"
@@ -23,7 +23,7 @@ func inboxVerificationFixture(t *testing.T, n int, install bool) (*sql.DB, *scop
 	must(t, err)
 	t.Cleanup(func() { ws.Close() })
 	db := ws.DB()
-	_, err = pm.NewStore(db)
+	_, err = decide.NewStore(db)
 	must(t, err)
 	s := scopedrepo.New(db)
 	for _, init := range []func(context.Context) error{s.Initialize, s.InitializeFeedSchema, s.InitializeInboxOrderSchema, s.InitializeInboxVerificationSchema} {
