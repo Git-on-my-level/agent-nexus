@@ -72,20 +72,30 @@ func (s *pendingNoteStore) path(fingerprint string) string {
 }
 
 // load returns the stored unconfirmed send of this note, however old: its
-// outcome is unknown, so only its own key may send it again.
-func (s *pendingNoteStore) load(fingerprint string) (pendingNote, bool) {
+// outcome is unknown, so only its own key may send it again. Only a missing
+// record means "no earlier send"; an unreadable or corrupt one is an error,
+// because replacing it with a new key could post the note twice.
+func (s *pendingNoteStore) load(fingerprint string) (pendingNote, bool, error) {
 	raw, err := os.ReadFile(s.path(fingerprint))
+	if errors.Is(err, os.ErrNotExist) {
+		return pendingNote{}, false, nil
+	}
 	if err != nil {
-		return pendingNote{}, false
+		return pendingNote{}, false, err
 	}
 	var p pendingNote
-	if json.Unmarshal(raw, &p) != nil || p.Key == "" || p.Body == nil {
-		return pendingNote{}, false
+	if err := json.Unmarshal(raw, &p); err != nil || p.Key == "" || p.Body == nil {
+		return pendingNote{}, false, errors.New("pending note record " + s.path(fingerprint) + " is corrupt")
 	}
-	return p, true
+	return p, true, nil
 }
 
-func (s *pendingNoteStore) save(fingerprint string, p pendingNote) error {
+// claim stores a new pending note only if none exists, so two identical
+// invocations racing cannot each mint a key: the loser gets errClaimed and
+// resends the winner's record instead.
+var errClaimed = errors.New("pending note already claimed")
+
+func (s *pendingNoteStore) claim(fingerprint string, p pendingNote) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
@@ -102,15 +112,23 @@ func (s *pendingNoteStore) save(fingerprint string, p pendingNote) error {
 		err = closeErr
 	}
 	if err == nil {
-		err = os.Rename(tmp.Name(), s.path(fingerprint))
+		// A hard link fails if the record exists; rename would replace it.
+		if err = os.Link(tmp.Name(), s.path(fingerprint)); errors.Is(err, os.ErrExist) {
+			err = errClaimed
+		}
 	}
-	if err != nil {
-		os.Remove(tmp.Name())
-	}
+	os.Remove(tmp.Name())
 	return err
 }
 
-func (s *pendingNoteStore) clear(fingerprint string) { _ = os.Remove(s.path(fingerprint)) }
+// clear removes a settled record. If that fails the record would make the
+// next identical note replay this one, so the caller warns.
+func (s *pendingNoteStore) clear(fingerprint string) error {
+	if err := os.Remove(s.path(fingerprint)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
 
 // noteWriteRetryable: the server did not apply the note (busy writer, 5xx) or
 // the outcome is unknown. Both are safe to resend with the same request_key.
@@ -133,27 +151,55 @@ func noteWriteRetryable(err error) bool {
 
 // postNote sends the note event. A stored pending note with the same
 // fingerprint is resent as stored; otherwise body is stored first.
-// The returned time is when a resumed note was first attempted (zero if new).
-func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs, body map[string]any) (*commandResult, time.Time, error) {
-	var resumed time.Time
+type noteSend struct {
+	resumed  time.Time // when a resumed note was first attempted (zero if new)
+	warnings []output.Warning
+}
+
+// annotate records a resumed send on the note's result and returns the
+// send's warnings.
+func (s noteSend) annotate(data map[string]any) []output.Warning {
+	if !s.resumed.IsZero() { // An earlier unconfirmed send of this note, now confirmed once.
+		data["resumed"], data["first_attempted_at"] = true, s.resumed.Format(time.RFC3339)
+	}
+	return s.warnings
+}
+
+func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs, body map[string]any) (*commandResult, noteSend, error) {
+	var sent noteSend
 	fingerprint := noteFingerprint(cfg, parsed)
 	store, err := a.pendingNotes(cfg)
 	if err != nil {
-		return nil, resumed, noteKeyUnsaved("", err)
+		return nil, sent, noteKeyUnsaved("", err)
 	}
-	if p, ok := store.load(fingerprint); ok {
-		body, resumed = p.Body, p.Created
-		if resumed.IsZero() {
-			resumed = time.Unix(0, 0).UTC()
+	for attempt := 0; ; attempt++ {
+		p, ok, err := store.load(fingerprint)
+		if err != nil {
+			return nil, sent, noteKeyUnsaved(store.dir, err)
 		}
-	} else {
+		if ok {
+			body, sent.resumed = p.Body, p.Created
+			if sent.resumed.IsZero() {
+				sent.resumed = time.Unix(0, 0).UTC()
+			}
+			break
+		}
 		key := make([]byte, 16)
 		if _, err := rand.Read(key); err != nil {
-			return nil, resumed, errnorm.Local("request_key_failed", "failed to allocate note request key")
+			return nil, sent, errnorm.Local("request_key_failed", "failed to allocate note request key")
 		}
 		body["request_key"] = "note:" + hex.EncodeToString(key)
-		if err := store.save(fingerprint, pendingNote{Key: anyString(body["request_key"]), Body: body, Created: a.clockNow().UTC()}); err != nil {
-			return nil, resumed, noteKeyUnsaved(store.dir, err)
+		err = store.claim(fingerprint, pendingNote{Key: anyString(body["request_key"]), Body: body, Created: a.clockNow().UTC()})
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, errClaimed) || attempt > 0 {
+			return nil, sent, noteKeyUnsaved(store.dir, err)
+		}
+	}
+	settle := func() {
+		if err := store.clear(fingerprint); err != nil {
+			sent.warnings = append(sent.warnings, noteWarning("note_key_not_cleared", "note settled, but its local retry record could not be removed ("+err.Error()+"); an identical note sent next will replay this one instead of posting. Remove "+store.path(fingerprint), nil))
 		}
 	}
 	key := anyString(body["request_key"])
@@ -168,22 +214,22 @@ func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs
 		attemptCfg.Timeout = time.Until(deadline)
 		result, err := a.invokeTypedJSON(ctx, attemptCfg, "note", "events.create", nil, nil, body)
 		if err == nil {
-			store.clear(fingerprint)
-			return result, resumed, nil
+			settle()
+			return result, sent, nil
 		}
 		if !noteWriteRetryable(err) {
-			store.clear(fingerprint) // Definitive refusal: nothing was written.
-			return nil, resumed, err
+			settle() // Definitive refusal: nothing was written.
+			return nil, sent, err
 		}
 		wait := backoff
 		if time.Until(deadline) <= wait+time.Second || ctx.Err() != nil {
-			return nil, resumed, noteNotConfirmed(err, key, attempt)
+			return nil, sent, noteNotConfirmed(err, key, attempt)
 		}
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, resumed, noteNotConfirmed(err, key, attempt)
+			return nil, sent, noteNotConfirmed(err, key, attempt)
 		case <-timer.C:
 		}
 		backoff = min(2*backoff, noteRetryBackoffMax)

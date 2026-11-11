@@ -2,6 +2,7 @@ package primitives
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 )
@@ -195,4 +196,69 @@ func TestBriefMarksInitiativesTruncatedWhenOpenRootsOverflowAdmission(t *testing
 	if !brief["truncated"].(map[string]bool)["initiatives"] {
 		t.Fatalf("open roots past the admission window must mark the section truncated: %d listed", len(brief["initiatives"].([]map[string]any)))
 	}
+}
+
+// Cards a reader cannot list neither fill the admission window nor mark the
+// section truncated: the count discloses nothing about them.
+func TestBriefAdmissionIgnoresCardsTheReaderCannotList(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	saved := briefOpenRootAdmission
+	briefOpenRootAdmission = 2
+	t.Cleanup(func() { briefOpenRootAdmission = saved })
+	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", workString(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err = s.CreateWork(ctx, "owner", workString(private["id"]), map[string]any{"id": fmt.Sprintf("a-secret-%d", i), "title": "Secret", "initiative": true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	visible := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		w, err := s.CreateWork(ctx, "owner", workString(publicBoard["id"]), map[string]any{"id": fmt.Sprintf("z-public-%d", i), "title": "Public", "initiative": true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		visible[workString(w["ref"])] = true
+	}
+	refreshedBrief(t, s, ctx)
+	read := func(actor string) map[string]any {
+		t.Helper()
+		brief, err := s.Brief(WithRequestAccessScope(ctx, AccessScope{ActorID: actor}), BriefReader{ActorID: actor, Kind: "human", Visible: func(_, owner string) bool { return owner == "" || owner == actor }}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return brief
+	}
+	stranger := read("stranger")
+	listed := map[string]bool{}
+	for _, item := range stranger["initiatives"].([]map[string]any) {
+		listed[workString(item["ref"])] = true
+	}
+	if len(listed) != 2 || !listed[firstKey(visible, 0)] || !listed[firstKey(visible, 1)] {
+		t.Fatalf("hidden roots crowded out visible ones: %v", listed)
+	}
+	if stranger["truncated"].(map[string]bool)["initiatives"] {
+		t.Fatal("hidden roots must not mark the stranger's section truncated")
+	}
+	if !read("owner")["truncated"].(map[string]bool)["initiatives"] {
+		t.Fatal("the owner can list six roots past a window of two: truncated")
+	}
+}
+
+func firstKey(m map[string]bool, i int) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys[i]
 }

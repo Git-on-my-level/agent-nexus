@@ -17,9 +17,17 @@ import (
 // can be re-armed after any interruption without extending the wait, and
 // reaching it with no answer exits 14 deadline_reached.
 
-// awaitDeadlineFloor lets a re-armed wait whose deadline has just passed
-// still collect answers that are already waiting.
+// awaitDeadlineFloor bounds the one collection pass a re-armed wait makes
+// once its deadline has passed: answers already waiting are returned, but
+// nothing new is waited for (awaitSweepOnce).
 const awaitDeadlineFloor = 5 * time.Second
+
+type awaitSweepOnceKey struct{}
+
+func awaitSweepOnce(ctx context.Context) bool {
+	once, _ := ctx.Value(awaitSweepOnceKey{}).(bool)
+	return once
+}
 
 func parseAwaitDeadline(flag trackedString, timeoutSet bool, now time.Time) (time.Time, bool, error) {
 	if !flag.set {
@@ -61,7 +69,10 @@ func (a *App) runAwaitUntil(ctx context.Context, args []string, cfg config.Resol
 		}
 		rest = append(rest, arg)
 	}
-	wait := max(time.Until(deadline), awaitDeadlineFloor)
+	wait := time.Until(deadline)
+	if wait <= 0 {
+		wait, ctx = awaitDeadlineFloor, context.WithValue(ctx, awaitSweepOnceKey{}, true)
+	}
 	result, err := a.runAwait(ctx, append(rest, "--timeout", wait.Round(time.Millisecond).String()), cfg)
 	var e *errnorm.Error
 	if err != nil && errors.As(err, &e) && e.Code == "timeout" {

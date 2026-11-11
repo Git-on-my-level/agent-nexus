@@ -926,7 +926,7 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 	}
 
 	if source == "" {
-		source = briefInitiativeSource(where, admission)
+		source, prefixArgs = b.initiativeSource(where, admission)
 	}
 	loopColumns := "bi.loop_annotated,COALESCE(bi.loop_last_run_at,'')"
 	selectSQL := `SELECT bi.card_id,bi.open,COALESCE(bi.promise_at,''),bi.promise_what,bi.promise_source,bi.promise_source_ref,bi.promise_author,bi.promise_moves,COALESCE(bi.last_evidence_at,''),

@@ -194,7 +194,7 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	if err := validateEventsCreateInput(body, "note"); err != nil {
 		return nil, err
 	}
-	result, resumed, err := a.postNote(ctx, cfg, parsed, body)
+	result, sent, err := a.postNote(ctx, cfg, parsed, body)
 	if err != nil {
 		return nil, err
 	}
@@ -203,9 +203,7 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	if id := anyString(event["id"]); id != "" {
 		data["note_ref"] = "event:" + id
 	}
-	if !resumed.IsZero() { // An earlier unconfirmed send of this note, now confirmed once.
-		data["resumed"], data["first_attempted_at"] = true, resumed.Format(time.RFC3339)
-	}
+	warnings = append(warnings, sent.annotate(data)...)
 	if parsed.nextSet || len(parsed.evidence) > 0 {
 		started, startWarnings := a.startNotedCard(ctx, cfg, card, cardRef, firstNonEmpty(anyString(event["actor_id"]), cfg.ActorID))
 		if started != nil {

@@ -242,7 +242,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 982   | web-ui/src/lib/brief.js                                                            |
 | 973   | web-ui/src/lib/components/decide/DecisionCard.svelte                               |
 | 959   | core/internal/server/stream_handlers.go                                            |
-| 956   | cli/internal/app/loop_tier.go                                                      |
+| 954   | cli/internal/app/loop_tier.go                                                      |
 | 946   | core/cmd/anx-core/main.go                                                          |
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |
 | 926   | cli/internal/app/skills_sync.go                                                    |

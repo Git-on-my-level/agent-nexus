@@ -301,6 +301,9 @@ type answerWaitOptions struct {
 	timeout time.Duration
 	settle  time.Duration
 	all     bool
+	// sweepOnce: one collection pass, no waiting (a re-armed --deadline that
+	// has already passed must not extend the wait).
+	sweepOnce bool
 }
 
 type answerWaitSweep struct {
@@ -321,6 +324,7 @@ type answerWaitSweep struct {
 func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, opts answerWaitOptions) (*commandResult, error) {
 	waitCtx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
+	opts.sweepOnce = opts.sweepOnce || awaitSweepOnce(ctx)
 	store, err := a.answerWaitStore(cfg)
 	if err != nil {
 		return nil, errnorm.Wrap(errnorm.KindLocal, "answer_wait_state_failed", "cannot open local answer wait state", err)
@@ -440,8 +444,11 @@ func (a *App) runAwaitAnswers(ctx context.Context, cfg config.Resolved, opts ans
 			seenCount = len(found)
 			quietUntil = time.Now().Add(opts.settle)
 		}
-		if len(found) > 0 && (opts.settle <= 0 || len(last.open) == 0 || !time.Now().Before(quietUntil)) {
+		if len(found) > 0 && (opts.sweepOnce || opts.settle <= 0 || len(last.open) == 0 || !time.Now().Before(quietUntil)) {
 			return deliver()
+		}
+		if opts.sweepOnce && (lastErr == nil || !answerWaitRetryable(lastErr) || waitCtx.Err() != nil) {
+			return nil, timedOut(lastErr)
 		}
 		select {
 		case <-waitCtx.Done():

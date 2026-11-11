@@ -67,3 +67,26 @@ func TestAwaitDeadlineFlagValidation(t *testing.T) {
 		t.Fatalf("date deadline at=%v ok=%v err=%v", at, ok, err)
 	}
 }
+
+// Re-arming a deadline that has passed returns answers already waiting but
+// waits for nothing new: it must not extend the wait.
+func TestAwaitAnswersPastDeadlineSweepsOnceWithoutWaiting(t *testing.T) {
+	fake := &answerWaitFake{}
+	app := answerWaitApp(t, fake)
+	a, out, cfg := app("session-a")
+	store, _ := a.answerWaitStore(cfg)
+	_ = store.recordAsk("event:one", "one", time.Now())
+	fake.set(nil, map[string]map[string]any{"one": {"status": "open"}})
+	past := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	started := time.Now()
+	exit, doc := runAwaitAnswersForTest(t, a, out, "--deadline", past)
+	if exit != 14 || time.Since(started) > 3*time.Second {
+		t.Fatalf("a passed deadline must end at once with exit 14: exit=%d after %s %v", exit, time.Since(started), doc)
+	}
+	out.Reset()
+	fake.set(nil, map[string]map[string]any{"one": answeredOutcome("response-one")})
+	exit, doc = runAwaitAnswersForTest(t, a, out, "--deadline", past)
+	if exit != 0 || len(asSlice(asMap(doc["result"])["answers"])) != 1 {
+		t.Fatalf("an answer already waiting is still returned: exit=%d %v", exit, doc)
+	}
+}

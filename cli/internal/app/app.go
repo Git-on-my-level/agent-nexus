@@ -266,6 +266,12 @@ func (a *App) Run(args []string) int {
 		runErr = skipped.annotateError(a.withWorkspaceHint(resolved, runErr))
 		return a.renderError(identity, resolved.JSON, runErr)
 	}
+	// Short text outputs and raw writes return before the envelope's warnings
+	// are rendered, so a skipped attribution goes to stderr there.
+	if !resolved.JSON || (result != nil && result.RawWritten) {
+		a.writeUpdateFollowUpWarnings(a.attributionWarnings)
+		a.attributionWarnings = nil
+	}
 	if (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
 		if !strings.HasPrefix(identity.Command, "update") {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)

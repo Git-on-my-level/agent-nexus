@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -156,5 +157,61 @@ func TestOldUnconfirmedNoteKeepsItsKey(t *testing.T) {
 	result := asMap(dailyJSON(t, out)["result"])
 	if len(rec.keys) != 1 || rec.keys[0] != first || result["first_attempted_at"] != start.UTC().Format(time.RFC3339) {
 		t.Fatalf("three days later the rerun must resend key %s: sent %v result %v", first, rec.keys, result)
+	}
+}
+
+// A corrupt or unreadable pending record is not "no earlier send": replacing
+// it with a new key could post the note twice, so the note is refused.
+func TestCorruptPendingNoteRecordRefusesTheNote(t *testing.T) {
+	rec := &noteRecorder{}
+	server := noteServer(t, rec)
+	t.Cleanup(server.Close)
+	a, out := dailyTestApp(t, server.URL)
+	home, _ := a.UserHomeDir()
+	root := filepath.Join(home, ".config", "anx", "pending-notes")
+	// Create the store with one real unconfirmed send, then corrupt it.
+	rec.busy = 100
+	if exit := a.Run([]string{"--json", "--as", "worker", "--timeout", "2s", "note", "card:x", "Progress"}); exit == 0 {
+		t.Fatalf("unconfirmed note must fail: %s", out.String())
+	}
+	records, _ := filepath.Glob(filepath.Join(root, "*", "*.json"))
+	if len(records) != 1 {
+		t.Fatalf("one pending record expected: %v", records)
+	}
+	if err := os.WriteFile(records[0], []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rec.mu.Lock()
+	rec.busy, rec.keys = 0, nil
+	rec.mu.Unlock()
+	out.Reset()
+	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress"}); exit == 0 || len(rec.keys) != 0 {
+		t.Fatalf("a corrupt record must refuse the note: exit=%d sent=%v %s", exit, rec.keys, out.String())
+	}
+	if code := anyString(asMap(dailyJSON(t, out)["error"])["code"]); code != "note_key_unsaved" {
+		t.Fatalf("code=%s", code)
+	}
+}
+
+// Two identical invocations racing claim one key: the loser resends the
+// winner's record instead of minting its own.
+func TestPendingNoteClaimIsExclusive(t *testing.T) {
+	store := &pendingNoteStore{dir: t.TempDir()}
+	first := pendingNote{Key: "note:first", Body: map[string]any{"request_key": "note:first"}, Created: time.Now()}
+	if err := store.claim("fp", first); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.claim("fp", pendingNote{Key: "note:second", Body: map[string]any{"request_key": "note:second"}, Created: time.Now()}); !errors.Is(err, errClaimed) {
+		t.Fatalf("second claim must lose: %v", err)
+	}
+	got, ok, err := store.load("fp")
+	if err != nil || !ok || got.Key != "note:first" {
+		t.Fatalf("the winner's record must stand: %v %v %v", got, ok, err)
+	}
+	if err := store.clear("fp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.clear("fp"); err != nil {
+		t.Fatalf("clearing a missing record is fine: %v", err)
 	}
 }

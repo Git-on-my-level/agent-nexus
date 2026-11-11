@@ -253,7 +253,7 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	var answers, all trackedBool
 	fs.Var(&until, "until", "answered or state=<phase>")
 	fs.Var(&timeout, "timeout", "Maximum wait duration, default 30m")
-	fs.Var(&deadlineFlag, "deadline", "Wait until this absolute time (RFC3339, YYYY-MM-DD, or a duration from now like 8h); exits 14 deadline_reached with no answer")
+	fs.Var(&deadlineFlag, "deadline", "Wait until this absolute time (RFC3339, or YYYY-MM-DD for the whole UTC day); exits 14 deadline_reached with no answer")
 	fs.Var(&answers, "answers", "Wait for answers to this session's asks that it has not been handed yet")
 	fs.Var(&settle, "settle", "With --answers: how long to keep collecting after an answer while asks stay open, default 20s")
 	fs.Var(&all, "all", "With --answers: include asks filed by other sessions of this agent")
