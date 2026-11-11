@@ -3,21 +3,15 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 )
 
 func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	h := newPasskeyLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
-	h.selectPMAgent(t, "worker")
-	connectPMForIntegration(t, h, "worker")
 	h.registerHumanPasskey(t, "maya", "Maya Chen", h.createHumanInviteToken(t))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Synthetic PM approval test", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
 	work := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Synthetic PM commitment"}, "work", "create", "--from-file", "-")
@@ -49,196 +43,6 @@ func TestUnifiedPMDecisionDurabilityAndApprovalBoundary(t *testing.T) {
 	if rows, ok := items.([]any); !ok || len(rows) != 0 {
 		t.Fatalf("unapproved decision generated actions: %s", actions.Stdout)
 	}
-	conversation := h.runCLIExpectOK(t, "worker", map[string]any{"request_key": "synthetic-conversation", "title": "Synthetic PM", "work_ref": ref}, "pm", "conversations", "create", "--from-file", "-")
-	conversationID := mustStringPath(t, conversation.Payload, "result.id")
-	response := h.runCLI(t, "worker", map[string]any{"request_key": "queued-runner", "text": "Review this synthetic commitment"}, "pm", "conversations", "message", conversationID, "--from-file", "-")
-	if response.ExitCode != 0 {
-		t.Fatalf("queued turn without bridge must be accepted: %s", response.Stdout)
-	}
-	if mustStringPath(t, response.Payload, "result.status") != "sending" {
-		t.Fatalf("queued turn status: %s", response.Stdout)
-	}
-	h.runCLIExpectOK(t, "worker", nil, "pm", "conversations", "get", conversationID)
-}
-
-func TestPMServeFakeHarnessCompletesTurn(t *testing.T) {
-	h := newLiveCoreHarness(t)
-	h.enrollHost(t, "pm")
-	h.selectPMAgent(t, "pm")
-
-	script := filepath.Join(t.TempDir(), "fake-harness.sh")
-	body := "#!/bin/sh\n" +
-		"cat \"$1\" >/dev/null\n" +
-		"printf '%s\\n' 'Synthetic PM reply. See card:fixture-card and decision:pm_testdecision.'\n" +
-		"printf '%s\\n' '---evidence---'\n" +
-		"printf '%s\\n' 'decision:pm_testdecision'\n"
-	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	workDir := filepath.Join(t.TempDir(), "pm-runner")
-	if err := os.MkdirAll(workDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	serveCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--as", "pm",
-		"pm", "serve",
-		"--work-dir", workDir,
-		"--poll-interval", "200ms",
-		"--runner", script+" {prompt}",
-	)
-	serve.Env = append(os.Environ(),
-		"HOME="+h.homeDir,
-		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
-	)
-	serveLog := filepath.Join(t.TempDir(), "pm-serve.log")
-	logFile, err := os.Create(serveLog)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer logFile.Close()
-	serve.Stdout = logFile
-	serve.Stderr = logFile
-	if err := serve.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		cancel()
-		_, _ = serve.Process.Wait()
-	}()
-
-	waitForPMServeConnection(t, h, serveLog)
-	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
-	status := mustStringPath(t, asked.Payload, "result.turn.status")
-	if status != "delivered" {
-		t.Fatalf("fake harness turn status %s stdout=%s stderr=%s serve=%s", status, asked.Stdout, asked.Stderr, readFileOrEmpty(serveLog))
-	}
-	response := mustStringPath(t, asked.Payload, "result.turn.response")
-	if !strings.Contains(response, "card:fixture-card") {
-		t.Fatalf("response %q", response)
-	}
-	if strings.Contains(response, "---evidence---") {
-		t.Fatalf("evidence trailer leaked into stored reply: %q", response)
-	}
-	refs, _ := getPathValue(asked.Payload, "result.turn.evidence_refs")
-	joined := fmt.Sprint(refs)
-	if strings.Contains(joined, "card:fixture-card") {
-		t.Fatalf("prose mention attached as evidence: %v", refs)
-	}
-	if strings.Contains(joined, "decision:pm_testdecision") {
-		t.Fatalf("unresolvable evidence ref was kept: %v serve=%s", refs, readFileOrEmpty(serveLog))
-	}
-	serveOut := readFileOrEmpty(serveLog)
-	if !strings.Contains(serveOut, "pm serve: dropping evidence ref decision:pm_testdecision:") {
-		t.Fatalf("expected drop log, serve=%s refs=%v", serveOut, refs)
-	}
-}
-
-func TestPMServeFakeHarnessSurfacesFailure(t *testing.T) {
-	h := newLiveCoreHarness(t)
-	h.enrollHost(t, "pm")
-	h.selectPMAgent(t, "pm")
-
-	script := filepath.Join(t.TempDir(), "fail-harness.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho harness exploded >&2\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	workDir := filepath.Join(t.TempDir(), "pm-runner")
-	if err := os.MkdirAll(workDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	serveCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	serve := exec.CommandContext(serveCtx, h.cliBin,
-		"--json", "--base-url", h.baseURL, "--as", "pm",
-		"pm", "serve",
-		"--work-dir", workDir,
-		"--poll-interval", "200ms",
-		"--runner", script+" {prompt}",
-	)
-	serve.Env = append(os.Environ(),
-		"HOME="+h.homeDir,
-		"XDG_CONFIG_HOME="+filepath.Join(h.homeDir, ".config"),
-	)
-	serveLog := filepath.Join(t.TempDir(), "pm-serve.log")
-	logFile, err := os.Create(serveLog)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer logFile.Close()
-	serve.Stdout, serve.Stderr = logFile, logFile
-	if err := serve.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		cancel()
-		_, _ = serve.Process.Wait()
-	}()
-
-	waitForPMServeConnection(t, h, serveLog)
-	asked := h.runCLIExpectOK(t, "maya", nil, "pm", "ask", "--wait", "What needs my decision?")
-	status := mustStringPath(t, asked.Payload, "result.turn.status")
-	if status != "failed" {
-		t.Fatalf("expected failed, got %s stdout=%s", status, asked.Stdout)
-	}
-	failure := mustStringPath(t, asked.Payload, "result.turn.failure")
-	if !strings.Contains(failure, "did not produce a reply") || !strings.Contains(failure, "status 1") {
-		t.Fatalf("failure %q", failure)
-	}
-}
-
-// Process creation is not readiness: pm serve must complete its first authenticated
-// connect before a new PM question can pass the server's onboarding gate.
-func waitForPMServeConnection(t *testing.T, h *liveCoreHarness, logPath string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		presence := h.runCLIExpectOK(t, "pm", nil, "pm", "presence")
-		if mustStringPath(t, presence.Payload, "result.state") == "connected" {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("PM runner did not connect before asking: %s", readFileOrEmpty(logPath))
-}
-
-func readFileOrEmpty(path string) string {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return string(raw)
-}
-
-func TestUnifiedPMPaginationAcrossRestarts(t *testing.T) {
-	h := newLiveCoreHarness(t)
-	h.enrollHost(t, "reader")
-	connectPMForIntegration(t, h, "pm")
-	for i := 0; i < 3; i++ {
-		h.runCLIExpectOK(t, "reader", map[string]any{"request_key": fmt.Sprint("conversation-", i), "title": fmt.Sprint("Synthetic conversation ", i)}, "pm", "conversations", "create", "--from-file", "-")
-	}
-	first := h.runCLIExpectOK(t, "reader", nil, "pm", "conversations", "list", "--limit", "1")
-	raw, _ := getPathValue(first.Payload, "result.items")
-	if rows, ok := raw.([]any); !ok || len(rows) != 1 {
-		t.Fatalf("limit not honored: %s", first.Stdout)
-	}
-	cursor := mustStringPath(t, first.Payload, "result.next_cursor")
-	restartCoreForWorkTest(t, h)
-	second := h.runCLIExpectOK(t, "reader", nil, "pm", "conversations", "list", "--limit", "1", "--cursor", cursor)
-	next, _ := getPathValue(second.Payload, "result.items")
-	if fmt.Sprint(raw) == fmt.Sprint(next) {
-		t.Fatalf("cursor replayed first page: %s", second.Stdout)
-	}
-	wrongKind := h.runCLI(t, "reader", nil, "pm", "decisions", "list", "--limit", "1", "--cursor", cursor)
-	if wrongKind.ExitCode == 0 {
-		t.Fatalf("conversation cursor accepted for decisions: %s", wrongKind.Stdout)
-	}
-	wrongPrincipal := h.runCLI(t, "other", nil, "pm", "conversations", "list", "--limit", "1", "--cursor", cursor)
-	if wrongPrincipal.ExitCode == 0 {
-		t.Fatalf("cursor crossed principal boundary: %s", wrongPrincipal.Stdout)
-	}
 }
 
 func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness, extraEnv ...string) {
@@ -260,16 +64,10 @@ func restartCoreForWorkTest(t *testing.T, h *liveCoreHarness, extraEnv ...string
 	waitForHealthy(t, h.baseURL, h.logPath)
 }
 
-// Domain scenarios onboard through the authenticated CLI/API boundary rather
-// than seeding presence rows or bypassing the server's first-connection gate.
-func connectPMForIntegration(t *testing.T, h *liveCoreHarness, agent string) {
-	t.Helper()
-	before := h.runCLIExpectOK(t, agent, nil, "pm", "presence")
-	if state := mustStringPath(t, before.Payload, "result.state"); state != "not_onboarded" {
-		t.Fatalf("initial PM state %q", state)
+func readFileOrEmpty(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
 	}
-	connected := h.runCLIExpectOK(t, agent, map[string]any{"runner": "integration", "host": "integration-computer"}, "pm", "connect", "--from-file", "-")
-	if state := mustStringPath(t, connected.Payload, "result.state"); state != "connected" {
-		t.Fatalf("PM did not connect: %s", connected.Stdout)
-	}
+	return string(raw)
 }

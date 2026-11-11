@@ -33,7 +33,6 @@ type App struct {
 	StdoutIsTTY                    func() bool
 	hasOMPAncestor                 func() bool
 	now                            func() time.Time
-	pmTurns                        *pmTurnMemory
 	runtimeIdentity                func() (*runtimeIdentityReport, error)
 	startUpdateWorker              func(executable, configDir string) error
 	startServerUpdateWorker        func(executable, configDir, baseURL string) error
@@ -100,7 +99,6 @@ func New() *App {
 		Getwd:                   os.Getwd,
 		ReadFile:                os.ReadFile,
 		hasOMPAncestor:          ompAncestor,
-		pmTurns:                 newPMTurnMemory(),
 		startSkillsRefresh:      startDetachedSkillsRefresh,
 		startUpdateWorker:       startDetachedUpdateWorker,
 		startServerUpdateWorker: startDetachedServerUpdateWorker,
@@ -189,9 +187,6 @@ func (a *App) Run(args []string) int {
 		isWorkCommandGroup(strings.Join(remaining, " "))
 
 	preflightCommandName, usageErr := preflightConfigIndependentUsage(remaining)
-	if len(remaining) >= 2 && remaining[0] == "pm" && remaining[1] == "context" && (a.Getenv("ANX_PM_TURN_ID") != "" || a.Getenv("ANX_PM_LEASE_TOKEN") != "") && !isTrailingHelpOnlyInvocation(remaining) {
-		preflightCommandName, usageErr = "pm context", validatePMContextArgs(remaining[2:])
-	}
 	if usageErr != nil {
 		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), jsonMode, usageErr)
 	}
@@ -217,25 +212,11 @@ func (a *App) Run(args []string) int {
 		resolved.Sources["integration_workspace"] = *overrides.Workspace
 		resolved.Sources["sync_workspace"] = *overrides.Workspace
 	}
-	hasRunner := false
-	for _, arg := range remaining {
-		if arg == "--runner" || arg == "-runner" || strings.HasPrefix(arg, "--runner=") || strings.HasPrefix(arg, "-runner=") {
-			hasRunner = true
-		}
-	}
-	wizard := cmdPeek == "pm" && subPeek == "install" && !hasRunner && !resolved.JSON && a.StdinIsTTY != nil && a.StdinIsTTY()
-	if wizard {
-		resolved.Sources["pm_install_mode"] = "interactive"
-	}
-	if (!wizard || overrides.Workspace != nil) && (!workspaceIndependentCommand(remaining) || legacyBridge || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil) {
+	if !workspaceIndependentCommand(remaining) || legacyBridge || cmdPeek == "config" && subPeek == "workspaces" && overrides.Workspace != nil {
 		resolved, err = a.resolveWorkspace(resolved, overrides.Workspace)
 		if err != nil {
 			return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, err)
 		}
-	}
-	resolved, identityWarning := a.resolvePMTurnLeaseIdentity(remaining, resolved)
-	if identityWarning != "" {
-		fmt.Fprintln(a.Stderr, identityWarning)
 	}
 	if resolved.AccessToken == "" && len(remaining) > 0 && needsAgentIdentity(remaining) {
 		if _, _, nameErr := a.identityName(resolved); nameErr == nil {
@@ -252,7 +233,6 @@ func (a *App) Run(args []string) int {
 	if actorErr != nil {
 		return a.renderError(resolveMachineCommandIdentity(preflightCommandName), resolved.JSON, actorErr)
 	}
-	a.emitPMToolActivity(normalizedArgs, resolved)
 	skipped := &attributionSkips{}
 	commandName, result, runErr := a.runCommand(httpclient.WithRunAttributionObserver(context.Background(), skipped.observe), normalizedArgs, resolved)
 	a.attributionWarnings = skipped.warnings()
@@ -364,9 +344,6 @@ func (a *App) writeAskAutoCreatedWarning(warnings []output.Warning) {
 }
 
 func needsAgentIdentity(args []string) bool {
-	if len(args) >= 2 && args[0] == "pm" && (args[1] == "install" || args[1] == "status" || args[1] == "uninstall") {
-		return false
-	}
 	if len(args) == 0 {
 		return false
 	}

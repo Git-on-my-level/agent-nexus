@@ -36,9 +36,6 @@ var workCommands = map[string]workCommandSpec{
 	"work receipt":               {method: "POST", summary: "Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay."},
 	"pm card":                    {method: "POST", summary: "Read any visible card in full under the requesting reader."},
 	"pm propose":                 {method: "POST", summary: "Propose a card status or note for human approval in Inbox."},
-	"pm disconnect":              {path: "/pm/disconnect", method: "POST", summary: "Reset workspace PM onboarding after explicit uninstall."},
-	"pm connect":                 {path: "/pm/connect", method: "POST", body: true, summary: "Register a local PM connection with bounded runner and host labels."},
-	"pm presence":                {path: "/pm/presence", method: "GET", summary: "Read recent PM connection state."},
 	"report render":              {path: "/docs/{id}/report", method: "GET", idFlag: "document-id", summary: "Materialize authorized report panels; --panels id,id selects individual panels.", filters: []string{"panels"}},
 	"sessions register":          {path: "/sessions", method: "POST", body: true, summary: "Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work."},
 	"sessions get":               {path: "/sessions/{id}", method: "GET", idFlag: "session-id", summary: "Read your own registered provider session and bounded activity; does not expose conversation history."},
@@ -61,30 +58,16 @@ var workCommands = map[string]workCommandSpec{
 	"work capabilities":          {path: "/work/capabilities", method: "GET", summary: "Read capabilities actually advertised by the authenticated central API."},
 	"work observations list":     {path: "/work/{id}/observations", method: "GET", idFlag: "work-id", summary: "Read append-only evidence for a work card, preserving pagination and uncertainty.", filters: []string{"limit", "cursor"}},
 	"work observations submit":   {path: "/work/{id}/observations", method: "POST", idFlag: "work-id", body: true, summary: "Submit an authenticated remote observation; preserve its idempotency key on retry."},
-	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.", filters: []string{"work-ref", "query", "limit", "cursor"}},
-	"pm conversations list":      {path: "/pm/conversations", method: "GET", summary: "List durable PM conversations with principal-bound pagination.", filters: []string{"limit", "cursor"}},
-	"pm conversations create":    {path: "/pm/conversations", method: "POST", body: true, summary: "Create a durable conversation using request_key, title and optional work_ref."},
-	"pm conversations get":       {path: "/pm/conversations/{id}", method: "GET", idFlag: "conversation-id", summary: "Read a conversation and its durable turns."},
-	"pm conversations message":   {path: "/pm/conversations/{id}/messages", method: "POST", idFlag: "conversation-id", body: true, summary: "Queue a PM message using request_key and text; an accepted turn is not a completed outcome."},
+	"pm context":                 {path: "/pm/context", method: "GET", summary: "Read Decide context: visible cards, open decisions and recent activity.", filters: []string{"work-ref", "query", "limit", "cursor"}},
 	"pm decisions list":          {path: "/pm/decisions", method: "GET", summary: "List durable decisions with principal-bound pagination.", filters: []string{"limit", "cursor"}},
 	"pm decisions get":           {path: "/pm/decisions/{id}", method: "GET", idFlag: "decision-id", summary: "Read an instruction, authorization scope, revision and answer status."},
-	"pm decisions create":        {path: "/pm/decisions", method: "POST", body: true, summary: "Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn."},
+	"pm decisions create":        {path: "/pm/decisions", method: "POST", body: true, summary: "Propose an instruction bound to work, scope and target_revision; never approves it."},
 	"pm decisions answer":        {path: "/pm/decisions/{id}/answer", method: "POST", idFlag: "decision-id", body: true, summary: "Answer with revision, approve and text; the server requires an authorized human principal."},
 	"pm decisions dispatch":      {path: "/pm/decisions/{id}/dispatch", method: "POST", idFlag: "decision-id", summary: "Explicitly dispatch authorized intent; inspect action receipt for actual outcome."},
 	"pm actions list":            {path: "/pm/actions", method: "GET", summary: "Report durable action and receipt statuses with principal-bound pagination.", filters: []string{"limit", "cursor"}},
-	"pm bindings list":           {path: "/pm/bindings", method: "GET", summary: "List channel identity bindings for this workspace; an operator check, never a send.", filters: []string{"limit", "cursor"}},
-	"pm bindings create":         {path: "/pm/bindings", method: "POST", body: true, summary: "Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only."},
 	"pm actions get":             {path: "/pm/actions/{id}", method: "GET", idFlag: "action-id", summary: "Read authorization, attempts and receipt; source_reported is not verified."},
 	"pm actions reconcile":       {path: "/pm/actions/{id}/reconcile", method: "POST", idFlag: "action-id", summary: "Request authoritative read-back of an action receipt; does not resend the action."},
 	"pm actions acknowledge":     {path: "/pm/actions/{id}/acknowledge", method: "POST", idFlag: "action-id", summary: "Acknowledge a failed or unresolvable action."},
-	"pm turns context":           {path: "/pm/turns/{id}/context", method: "POST", idFlag: "turn-id", summary: "Read context as the requesting actor; only the selected PM agent may call this.", filters: []string{"query", "limit", "cursor"}},
-	"pm turns claim":             {path: "/pm/turns/claim", method: "POST", optionalBody: true, summary: "Claim the next queued turn with an exclusive runner lease. 204 means none."},
-	"pm turns fail":              {path: "/pm/turns/{id}/fail", method: "POST", idFlag: "turn-id", body: true, summary: "Mark a claimed turn failed with a reason; does not complete work."},
-	"pm turns propose":           {path: "/pm/turns/{id}/decisions", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent proposes an instruction for the requesting actor, never approval."},
-	"pm turns complete":          {path: "/pm/turns/{id}/complete", method: "POST", idFlag: "turn-id", body: true, summary: "Selected PM agent records response text and evidence_refs; does not complete work."},
-	"pm turns release":           {path: "/pm/turns/{id}/release", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner returns a claimed turn to the queue."},
-	"pm turns heartbeat":         {path: "/pm/turns/{id}/heartbeat", method: "POST", idFlag: "turn-id", body: true, summary: "Lease owner renews a claimed turn's lease; renew at less than half the lease TTL."},
-	"pm turns get":               {path: "/pm/turns/{id}", method: "GET", idFlag: "turn-id", summary: "Read a PM conversation turn."},
 }
 
 type parsedWorkCommand struct {
@@ -95,8 +78,6 @@ type parsedWorkCommand struct {
 	reason, toBoard                string
 	topLevel, initiative           bool
 	title                          string
-	leaseToken                     string
-	runnerID                       string
 	query                          url.Values
 }
 
@@ -136,7 +117,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
-	var id, fromFile, leaseToken, runnerID, handle, under, into, after, requestKey trackedString
+	var id, fromFile, handle, under, into, after, requestKey trackedString
 	var reason, toBoard, title trackedString
 	var limit trackedInt
 	var topLevel, initiative trackedBool
@@ -171,12 +152,6 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		fs.Var(&initiative, "initiative", "Explicitly create a top-level initiative")
 		fs.Var(&title, "title", "Card title (or use --from-file)")
 		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
-	}
-	if workCommandUsesLeaseToken(out.name) {
-		fs.Var(&leaseToken, "lease-token", "Active PM lease token")
-	}
-	if workCommandUsesRunnerID(out.name) {
-		fs.Var(&runnerID, "runner-id", "Runner identity; defaults to the authenticated actor id")
 	}
 	for _, key := range spec.filters {
 		if key == "limit" {
@@ -230,7 +205,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		if out.name == "work ungrouped" {
 			maxLimit = 50
 		}
-		if out.name == "pm context" || out.name == "pm turns context" {
+		if out.name == "pm context" {
 			maxLimit = 50
 		}
 		if limit.value < 1 || limit.value > maxLimit {
@@ -275,8 +250,6 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		return out, errnorm.Usage("invalid_request", "--into <card> is required")
 	}
 	out.fromFile = strings.TrimSpace(fromFile.value)
-	out.leaseToken = strings.TrimSpace(leaseToken.value)
-	out.runnerID = strings.TrimSpace(runnerID.value)
 	if spec.body && out.fromFile == "" {
 		return out, errnorm.Usage("invalid_request", "--from-file <path|-> is required for anx "+out.name)
 	}
@@ -303,39 +276,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 				finishPMCardRead(r)
 			}
 			return r, "pm card", err
-		case "context":
-			if a.Getenv("ANX_PM_TURN_ID") != "" || a.Getenv("ANX_PM_LEASE_TOKEN") != "" {
-				if err := validatePMContextArgs(args[2:]); err != nil {
-					return nil, "pm context", err
-				}
-				r, err := a.runPMCardRead(ctx, nil, cfg)
-				if err == nil {
-					finishPMCardRead(r)
-				}
-				return r, "pm context", err
-			}
-		}
-	}
-	if len(args) >= 2 && args[0] == "pm" {
-		switch args[1] {
-		case "install", "status", "uninstall":
-			result, err := a.runPMService(ctx, args[1], args[2:], cfg)
-			return result, "pm " + args[1], err
-		case "serve":
-			result, err := a.runPMServe(ctx, args[2:], cfg)
-			return result, "pm serve", err
-		case "curate":
-			result, err := a.runPMCurate(ctx, args[2:], cfg)
-			return result, "pm curate", err
-		case "ask":
-			result, err := a.runPMAsk(ctx, args[2:], cfg)
-			return result, "pm ask", err
-		case "channels":
-			if len(args) >= 3 && args[2] == "doctor" {
-				result, err := a.runPMChannelsDoctor(ctx, args[3:], cfg)
-				return result, "pm channels doctor", err
-			}
-			return nil, "pm channels", errnorm.Usage("subcommand_required", "usage: anx pm channels doctor")
 		}
 	}
 	if topic := strings.Join(args, " "); isWorkCommandGroup(topic) {
@@ -398,14 +338,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 				return nil, parsed.name, errnorm.Usage("invalid_request", "initiative and under cannot be combined")
 			}
 		}
-		switch parsed.name {
-		case "pm turns claim":
-			applyPMTurnClaimBody(parsed, cfg, object)
-		case "pm turns context":
-			applyPMTurnContextBody(a, parsed, object)
-		case "pm turns propose":
-			applyPMLeaseToken(a, parsed, object)
-		}
 	}
 	if strings.HasPrefix(parsed.name, "work ") {
 		if parsed.id != "" {
@@ -424,7 +356,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	method := parsed.spec.method
 	path := strings.ReplaceAll(parsed.spec.path, "{id}", url.PathEscape(parsed.id))
 	query := parsed.query
-	if parsed.name == "work context" || parsed.name == "pm turns context" {
+	if parsed.name == "work context" {
 		query = nil
 	}
 	if len(query) > 0 {
@@ -442,20 +374,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		}
 	}
 	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
-	if parsed.name == "pm turns claim" {
-		if cap, ok := parsePMClaimCapacity(result, err); ok {
-			return applyPMClaimCapacityResult(result, cap), parsed.name, nil
-		}
-		if err == nil {
-			status, _ := asMap(result.Data)["status_code"].(int)
-			if status == 204 {
-				data := asMap(result.Data)
-				data["body"] = map[string]any{"claimed": false, "reason": "nothing to claim"}
-				result.Text = "No claimable turn"
-				return result, parsed.name, nil
-			}
-		}
-	}
 	if err != nil {
 		if parsed.id != "" && (parsed.name == "pm actions reconcile" || parsed.name == "pm actions acknowledge") {
 			errnorm.AnnotateDetail(err, "action_id", parsed.id)

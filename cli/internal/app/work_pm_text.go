@@ -1,5 +1,5 @@
-// Text projections for the PM-facing `anx work` reads: decisions, turns,
-// conversations, dispatch actions and their attempt timestamps.
+// Text projections for the Decide-facing `anx work` reads: decisions,
+// dispatch actions and their attempt timestamps.
 
 package app
 
@@ -50,75 +50,12 @@ func decisionFreshnessFlag(item map[string]any) string {
 	return ""
 }
 
-func formatPMTurnGetText(root map[string]any) string {
-	status := renderPMTurnStatus(root)
-	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), status)
-	if claimedAt := anyString(root["claimed_at"]); claimedAt != "" {
-		line += "  claimed_at=" + claimedAt
-	}
-	return line + fmt.Sprintf("  deadline=%s  failure=%s", anyString(root["deadline"]), anyString(root["failure"]))
-}
-
-func formatPMTurnClaimText(root map[string]any) string {
-	if cap, ok := pmClaimCapacityFromMap(root); ok {
-		return formatPMClaimCapacityText(cap)
-	}
-	line := fmt.Sprintf("%s  status=%s", anyString(root["id"]), renderPMTurnStatus(root))
-	if runner := firstNonEmpty(anyString(root["lease_owner"]), anyString(root["runner_id"])); runner != "" {
-		line += "  runner_id=" + runner
-	}
-	if token := anyString(root["lease_token"]); token != "" {
-		line += "  lease_token=" + token
-	}
-	return line
-}
-
 func formatPMActionAcknowledgeText(root map[string]any) string {
 	status := firstNonEmpty(anyString(root["status"]), "unknown")
 	if asBool(root["closed_without_delivery"]) {
 		status = "closed, nothing delivered"
 	}
 	return fmt.Sprintf("%s  status=%s  acknowledged_at=%s", anyString(root["id"]), status, anyString(root["acknowledged_at"]))
-}
-
-func renderPMTurnStatus(turn map[string]any) string {
-	if strings.EqualFold(anyString(turn["failure_kind"]), "expired") {
-		return "expired"
-	}
-	status := firstNonEmpty(anyString(turn["status"]), "unknown")
-	if status != "sending" {
-		return status
-	}
-	if asBool(turn["claimed"]) {
-		return "in progress"
-	}
-	return "queued"
-}
-
-func conversationListStatus(item map[string]any) string {
-	if turn := conversationLatestTurn(item); len(turn) > 0 {
-		if status := renderPMTurnStatus(turn); status != "" && status != "unknown" {
-			return status
-		}
-	}
-	status := anyString(item["status"])
-	if status == "" || status == "unknown" {
-		return ""
-	}
-	return renderPMTurnStatus(item)
-}
-
-func conversationLatestTurn(item map[string]any) map[string]any {
-	for _, key := range []string{"latest_turn", "last_turn", "turn"} {
-		if turn := asMap(item[key]); len(turn) > 0 {
-			return turn
-		}
-	}
-	turns := asSlice(item["turns"])
-	if len(turns) == 0 {
-		return nil
-	}
-	return asMap(turns[len(turns)-1])
 }
 
 func formatPMActionReconcileText(root map[string]any) string {

@@ -153,7 +153,7 @@ func ExitCode(err error) int {
 		return 3
 	case "quota_exceeded", "conflict", "source_revision_changed", "lease_mismatch", "lease_not_held", "actor_exists", "username_taken":
 		return 4
-	case "pm_actor_mismatch", "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "agent_archived", "wake_proof_required":
+	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "agent_archived", "wake_proof_required":
 		return 5
 	case "outcome_unknown", "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
 		return 6
@@ -315,7 +315,6 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
 	"human_required":                {Recoverable: false, Hint: humanRequiredHint},
-	"pm_actor_mismatch":             {Recoverable: false, Hint: "Ask the workspace operator to rebind ANX_PM_AGENT_ACTOR_ID to the acting actor and restart anx-core."},
 	"forbidden":                     {Recoverable: false, Hint: forbiddenHint},
 	"authorization_denied":          {Recoverable: false, Hint: forbiddenHint},
 	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
