@@ -281,8 +281,8 @@ func TestInboxCancellationReleasesWALSnapshot(t *testing.T) {
 			truncateWAL(t, pool)
 
 			// Hold one connection so the handler's first read must open a second
-			// connection. The canceled read then reuses that second connection, and
-			// the lease count shows whether it was discarded or returned to the pool.
+			// connection. The canceled read fully consumes its single-row cursor, so
+			// the connection is safe to return to the pool and keeps its lease.
 			held, err := ws.DB().Conn(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -314,8 +314,8 @@ func TestInboxCancellationReleasesWALSnapshot(t *testing.T) {
 			if logFrames != checkpointed {
 				t.Errorf("WAL snapshot still pinned: log=%d checkpointed=%d", logFrames, checkpointed)
 			}
-			if got := storage.LeaseRefsForTest(ws); got != beforeRefs {
-				t.Errorf("process lease refs after canceled read = %d, want %d", got, beforeRefs)
+			if got := storage.LeaseRefsForTest(ws); got != beforeRefs+1 {
+				t.Errorf("process lease refs after fully consumed canceled read = %d, want %d", got, beforeRefs+1)
 			}
 		})
 	}

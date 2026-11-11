@@ -3998,12 +3998,15 @@
     "../storage/scope_migration_connections.go:*scopeConnection:BeginTx": "92b3261171ad17aa7389ac9ae9550d7779423b6e671e7cc67b1ee2a4dc174eaa",
     "../storage/scope_migration_connections.go:*scopeConnection:Close": "949b18b2fff1dcfc7a922cca4587d74bb3414224a4217bb74296e61d3c51c4a4",
     "../storage/scope_migration_connections.go:*scopeConnection:ExecContext": "abb449935ecbf784ca408d907064b265c95e4bf13a3af561749c70779457c560",
-    "../storage/scope_migration_connections.go:*scopeConnection:PrepareContext": "a26ebec44b53e32d9c83623054cf3ea3eff1f871c57153997427d53540cf132b",
+    "../storage/scope_migration_connections.go:*scopeConnection:PrepareContext": "3b57b335ad2c76429e3728a905489787dced89433a79a5b45397e29a98d90716",
     "../storage/scope_migration_connections.go:*scopeConnection:QueryContext": "d450a9c1d32db10390e10b512fe4c77b753537b537bc3bd03d705d7a5c1541fc",
     "../storage/scope_migration_connections.go:*scopeConnector:Connect": "6c302352c9d87c0a09f2dfdfde9228865d09d5c08328f6e8a8faa5468d6e59db",
     "../storage/scope_migration_connections.go:*scopeProcessLease:activate": "2d7e01ca00bda0783304952e0d762bd5aa892ecb7fee9709d5a8f8816d1cd6b5",
     "../storage/scope_migration_connections.go:*scopeProcessLease:release": "d129a8cfc0f6de02ad6d9943b7616de488d1317fc365daf0736c8fd034a85a24",
-    "../storage/scope_migration_connections.go:*scopeRows:Close": "ac89c4113311ff43b2c52e6cd7a2d5eb9c263540ad0cac72e516e4fb942d6b13",
+    "../storage/scope_migration_connections.go:*scopeRows:Close": "2e357a9435cc7e87cf4751d38a9f59aebf7e4279a68599eff9081c78d623be2c",
+    "../storage/scope_migration_connections.go:*scopeRows:Next": "5099dfab8b8f3d478de449675b0060e6ba556b2fee28efe3821d7c0c48c04a0b",
+    "../storage/scope_migration_connections.go:*scopeStmt:ExecContext": "fc1786ed835c9d05dba61680916ae2efcf6063bfce41a647a4fa22116e7cea06",
+    "../storage/scope_migration_connections.go:*scopeStmt:QueryContext": "94268105904dcedf66f4ac0189743c46f641bca2c4a7115c88c97393f7e8e8c3",
     "../storage/scope_migration_connections.go:enableExpandedScopeLease": "62e641bfaf8ad84716b7913cf14e015a1cb32e2f1b8651464cc305c5eb01e834",
     "../storage/scope_migration_connections.go:openScopeDatabase": "81f3586613e2a2934ff7b7de7da0e70f24d6190c5c7e925b7ccd2ee2cc01600a",
     "../storage/scope_migration_connections.go:scopeDriver:Open": "ea0cbd5a21dca8e191f1c4abcf1217769d98597fb9172425faa3aeec487df697",
@@ -4023,7 +4026,7 @@
     "../storage/sqlite_temp.go:PrepareSQLiteTempDirectory": "f3c9433e98f293dfae13e07969f9b86186541308be81f6d2caf756790b7dc0b2",
     "../storage/topic_workspace_page_indexes.go:installTopicWorkspacePageIndexes": "f56cfaf7c97af7f5b413f241307eb9f789bbfe832c76e95d20284a02959a6f16",
     "../storage/usage_tracking.go:*Workspace:InitializeUsageTracking": "fa5492c7faf7d3945e23ebedfcf8b479d41446b07f75514dab0838f15c66ca8e",
-    "../storage/wal_watchdog.go:*Workspace:startWALWatchdog": "6e3d08a81e16ad5e907627794460ac3f1c8ca63610282e5fd7529149bccf5b43",
+    "../storage/wal_watchdog.go:*Workspace:startWALWatchdog": "0aaba967a7324615079e6037663fb43abdf0eec96ed959f1b183f37292b1bef1",
     "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:Close": "346739194aa0d4ef669a7de50f6c718d299352972db0119362d06c363c4055b8",
     "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:Passive": "042961b49b10ca8afc5f6e0777dad930ee9ba8bab2ebfb1aa99278620993b4f6",
     "../storage/wal_watchdog.go:*sqliteWALCheckpointExecutor:TruncateCheckpoint": "32c9c7b569ed757b4e1b40e523a7936fce3c7db95b91a636b3a9565bf198a36a",
@@ -4047,7 +4050,7 @@
     "../storage/work_tree.go:backfillWorkTree": "72e89e2a49d40290286cdb3d144de1b12f89b07d09b89eb462b0dfa2e9eca364",
     "../storage/work_tree.go:installWorkTree": "96337ce98b39d40905bd00204e8c4f534d0c162377ce2e791397ebeac9a7b517",
     "../storage/workspace.go:*Workspace:Close": "3ae4002896bf37d58543da6997d8b6948591a2f145e5dd0ce615f4b45ad8c95d",
-    "../storage/workspace.go:InitializeWorkspace": "c394cf140b938a6497438ee0197c52e9b7218f18babf3b62d57f089a70aada02",
+    "../storage/workspace.go:InitializeWorkspace": "e5846a56b8d5785d21afd960ae62cc51bdb3502e3c6cd385b0b98585e6e1464d",
     "../storage/workspace.go:sqliteDSN": "c3e917ba87cb37932431794588c86fa0fdb61cbeef90735c959f8393c816a3cf",
     "../storage/workspace.go:sqliteDSNWithJournalLimit": "5af78a08f72a3ae4b4573c0dad9795a1099c9d059a483d6fb89d98f6356d80a7",
     "../testsql/counter.go:*connector:Connect": "6c0bcceccbaad39f0a9b8405b6635e57ec5bc0ef689e3fe03e0e7dc7fde23c9e",
@@ -4093,17 +4096,12 @@
     "../testutil/perfguard/work.go:installWorkTrace": "20693ec50f01e251d446fa1734baa1fc77f77140ad874d577bd8ebc14484e3a4"
   },
   "external_key_publications": {
-    "work_evidence_record": [
-      "evidence_json"
-    ],
+    "work_evidence_record": ["evidence_json"],
     "work_metadata": [
       "metadata_json.source",
       "metadata_json.source_refs.*",
       "metadata_json._anx_source_evidence_refs.*"
     ],
-    "work_observation": [
-      "body_json.facts",
-      "body_json.evidence.*"
-    ]
+    "work_observation": ["body_json.facts", "body_json.evidence.*"]
   }
 }
