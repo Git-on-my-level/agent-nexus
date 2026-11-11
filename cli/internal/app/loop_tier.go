@@ -203,8 +203,8 @@ func (a *App) runNote(ctx context.Context, args []string, cfg config.Resolved) (
 	if id := anyString(event["id"]); id != "" {
 		data["note_ref"] = "event:" + id
 	}
-	if resumed {
-		data["resumed"] = true // An earlier unconfirmed send of this note, now confirmed once.
+	if !resumed.IsZero() { // An earlier unconfirmed send of this note, now confirmed once.
+		data["resumed"], data["first_attempted_at"] = true, resumed.Format(time.RFC3339)
 	}
 	if parsed.nextSet || len(parsed.evidence) > 0 {
 		started, startWarnings := a.startNotedCard(ctx, cfg, card, cardRef, firstNonEmpty(anyString(event["actor_id"]), cfg.ActorID))

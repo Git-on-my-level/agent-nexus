@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,26 @@ func TestAskReportsEveryViolationAtOnce(t *testing.T) {
 	for _, want := range []string{"recommendation.action is 300 characters", "evidence[0] must be an object", "PR #4242 has no matching evidence URL", `"forceable": false`} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("submit missing %q in:\n%s", want, raw)
+		}
+	}
+}
+
+// A missing title and a kind mismatch used to stop validation at the first
+// one; they are reported with every other violation.
+func TestAskFileStructureViolationsAreReportedTogether(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ask.md")
+	content := strings.Replace(askDecisionTemplate, "    Measure one daily report run before buying more capacity.", "    "+strings.Repeat("Measure it. ", 25), 1)
+	content = regexp.MustCompile(`(?m)^title:.*\n`).ReplaceAllString(content, "kind: task\n")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"--preview"}, {}} {
+		raw := runCLIForTest(t, dir, nil, nil, append([]string{"--json", "ask", "--from-file", path}, args...))
+		for _, want := range []string{"title is required", `kind \"task\" does not match anx ask`, "recommendation.action is 300 characters"} {
+			if !strings.Contains(raw, want) {
+				t.Fatalf("%v missing %q in:\n%s", args, want, raw)
+			}
 		}
 	}
 }

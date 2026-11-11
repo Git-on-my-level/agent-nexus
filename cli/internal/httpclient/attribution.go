@@ -89,8 +89,13 @@ func (t attributionFallback) RoundTrip(req *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, err
 	}
+	// Only a resend the server accepted wrote anything unattributed; a failed
+	// resend reports its own error and must not claim a write was saved.
+	if retried.StatusCode >= 300 {
+		return retried, nil
+	}
 	if observe, ok := req.Context().Value(attributionObserverKey{}).(func(map[string]any)); ok && observe != nil {
-		details := map[string]any{"run": run, "reason": strings.TrimSpace(refusal.Error.Message)}
+		details := map[string]any{"run": run, "message": strings.TrimSpace(refusal.Error.Message)}
 		for key, value := range refusal.Error.Details {
 			if _, taken := details[key]; !taken {
 				details[key] = value

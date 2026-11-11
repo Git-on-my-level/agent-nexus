@@ -50,8 +50,14 @@ func TestRunAttributionRefusalResendsTheWriteUnattributed(t *testing.T) {
 	if fmt.Sprint(seen) != fmt.Sprint(want) {
 		t.Fatalf("requests %q, want %q", seen, want)
 	}
-	if len(observed) != 1 || observed[0]["run"] != "agentctl/exec-parent" || observed[0]["reason"] != "run belongs to another agent" || observed[0]["details"] != nil && observed[0]["reason"] == "" {
+	if len(observed) != 1 || observed[0]["run"] != "agentctl/exec-parent" || observed[0]["message"] != "run belongs to another agent" || observed[0]["reason"] != "run_owned_by_other_agent" {
 		t.Fatalf("observer %v", observed)
+	}
+	// A resend the server also refuses wrote nothing: no skip is reported.
+	seen = nil
+	resp, err = c.RawCall(ctx, RawRequest{Method: "POST", Path: "/bad", Body: []byte(`{}`)})
+	if err != nil || resp.StatusCode != http.StatusBadRequest || len(seen) != 2 || len(observed) != 1 {
+		t.Fatalf("a failed resend must not report a saved write: status=%d err=%v seen=%v observed=%v", resp.StatusCode, err, seen, observed)
 	}
 	// Any other refusal is returned unchanged, once.
 	seen = nil

@@ -11,7 +11,7 @@
   "core/internal/auth/hosts.go": 1240,
   "core/internal/auth/store.go": 1039,
   "core/internal/pm/decisions.go": 864,
-  "core/internal/primitives/brief.go": 1447,
+  "core/internal/primitives/brief.go": 1427,
   "core/internal/primitives/card_leases.go": 832,
   "core/internal/primitives/curation_store.go": 813,
   "core/internal/primitives/derived_store.go": 1197,

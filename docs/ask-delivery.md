@@ -118,9 +118,11 @@ anx inbox read <ask-ref>          # mark one answer read; accepts event:<id> and
 `anx inbox list --status answered` always includes the caller's own answered
 asks and agrees with `anx orient` → `my_asks_and_answers`.
 
-A long wait is one command. `--deadline` takes an absolute time (or a
-duration from now) instead of `--timeout`; rerunning the same command after an
-interruption keeps the same end, so a supervisor can re-arm it freely. Network
+A long wait is one command. `--deadline` takes an absolute time (RFC3339, or
+a UTC date for the whole day) instead of `--timeout`; rerunning the same
+command after an interruption keeps the same end, so a supervisor can re-arm it
+freely. A relative value such as `8h` is refused (`deadline_relative`, with the
+absolute time to pass), because it would move on every re-arm. Network
 outages during the wait are retried. Reaching the deadline with no answer exits
 14 with `deadline_reached`, distinct from exit 8, which remains the `--timeout`
 and transport-timeout exit.

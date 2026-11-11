@@ -34,7 +34,7 @@ Where things live. Generated; never hand-edited.
 | ------------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | cli/cmd/anx                                | 2     | anx is the Agent Nexus command-line runtime for agents and automation                                                                                                                                                                                                 |
 | cli/cmd/anx-docs-gen                       | 2     | anx-docs-gen writes the CLI's runtime help markdown into docs/generated so the committed documentation stays in sync with the built command surface.                                                                                                                  |
-| cli/internal/app                           | 202   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
+| cli/internal/app                           | 203   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
 | cli/internal/authcli                       | 2     | Package authcli defines the result and payload types shared by the CLI's authentication and auth-admin commands (invites, principals, audit events, bootstrap status) so their handlers and output envelopes keep one shape.                                          |
 | cli/internal/bridge                        | 7     | Package bridge owns the single OS-user host service, local registration and migration state.                                                                                                                                                                          |
 | cli/internal/bridgeconfig                  | 2     | Package bridgeconfig loads the host bridge's TOML configuration and owns its on-disk root directory layout.                                                                                                                                                           |
@@ -223,8 +223,8 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1553  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
 | 1457  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
-| 1447  | core/internal/primitives/brief.go                                                  |
 | 1443  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
+| 1427  | core/internal/primitives/brief.go                                                  |
 | 1364  | web-ui/src/lib/components/CommandPalette.svelte                                    |
 | 1321  | web-ui/src/lib/components/DiscussionDrawer.svelte                                  |
 | 1320  | web-ui/src/lib/components/work/SwimlaneBoard.svelte                                |

@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"agent-nexus-cli/internal/config"
@@ -26,12 +25,13 @@ import (
 // every stage's own budget. Now each note carries a request_key that is stored
 // on disk before the first send and reused, with the exact body, by every
 // rerun of the same note until the server confirms it; core replays a
-// confirmed key instead of posting twice. Busy and uncertain answers are
-// retried inside the client timeout, and a failure says whether rerunning is
-// safe.
+// confirmed key instead of posting twice. A note whose key cannot be stored
+// is not sent (the repo rule: work that is not persisted is not sent), and an
+// unconfirmed key never expires: dropping it would let a rerun post twice.
+// Busy and uncertain answers are retried inside the client timeout, and a
+// failure says rerunning is safe.
 
 const (
-	pendingNoteTTL       = 24 * time.Hour
 	noteRetryBackoffBase = time.Second
 	noteRetryBackoffMax  = 5 * time.Second
 	// notePresenceBudget bounds the best-effort presence update after a note.
@@ -71,13 +71,15 @@ func (s *pendingNoteStore) path(fingerprint string) string {
 	return filepath.Join(s.dir, fingerprint+".json")
 }
 
-func (s *pendingNoteStore) load(fingerprint string, now time.Time) (pendingNote, bool) {
+// load returns the stored unconfirmed send of this note, however old: its
+// outcome is unknown, so only its own key may send it again.
+func (s *pendingNoteStore) load(fingerprint string) (pendingNote, bool) {
 	raw, err := os.ReadFile(s.path(fingerprint))
 	if err != nil {
 		return pendingNote{}, false
 	}
 	var p pendingNote
-	if json.Unmarshal(raw, &p) != nil || p.Key == "" || p.Body == nil || now.Sub(p.Created) > pendingNoteTTL {
+	if json.Unmarshal(raw, &p) != nil || p.Key == "" || p.Body == nil {
 		return pendingNote{}, false
 	}
 	return p, true
@@ -131,30 +133,30 @@ func noteWriteRetryable(err error) bool {
 
 // postNote sends the note event. A stored pending note with the same
 // fingerprint is resent as stored; otherwise body is stored first.
-func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs, body map[string]any) (*commandResult, bool, error) {
-	now := a.clockNow()
+// The returned time is when a resumed note was first attempted (zero if new).
+func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs, body map[string]any) (*commandResult, time.Time, error) {
+	var resumed time.Time
 	fingerprint := noteFingerprint(cfg, parsed)
-	store, storeErr := a.pendingNotes(cfg)
-	resumed := false
-	if storeErr == nil {
-		if p, ok := store.load(fingerprint, now); ok {
-			body, resumed = p.Body, true
-		}
+	store, err := a.pendingNotes(cfg)
+	if err != nil {
+		return nil, resumed, noteKeyUnsaved("", err)
 	}
-	if strings.TrimSpace(anyString(body["request_key"])) == "" {
+	if p, ok := store.load(fingerprint); ok {
+		body, resumed = p.Body, p.Created
+		if resumed.IsZero() {
+			resumed = time.Unix(0, 0).UTC()
+		}
+	} else {
 		key := make([]byte, 16)
 		if _, err := rand.Read(key); err != nil {
-			return nil, false, errnorm.Local("request_key_failed", "failed to allocate note request key")
+			return nil, resumed, errnorm.Local("request_key_failed", "failed to allocate note request key")
 		}
 		body["request_key"] = "note:" + hex.EncodeToString(key)
+		if err := store.save(fingerprint, pendingNote{Key: anyString(body["request_key"]), Body: body, Created: a.clockNow().UTC()}); err != nil {
+			return nil, resumed, noteKeyUnsaved(store.dir, err)
+		}
 	}
 	key := anyString(body["request_key"])
-	persisted := false
-	if storeErr == nil && !resumed {
-		persisted = store.save(fingerprint, pendingNote{Key: key, Body: body, Created: now}) == nil
-	} else if resumed {
-		persisted = true
-	}
 	budget := cfg.Timeout
 	if budget <= 0 {
 		budget = config.DefaultTimeout
@@ -166,45 +168,46 @@ func (a *App) postNote(ctx context.Context, cfg config.Resolved, parsed noteArgs
 		attemptCfg.Timeout = time.Until(deadline)
 		result, err := a.invokeTypedJSON(ctx, attemptCfg, "note", "events.create", nil, nil, body)
 		if err == nil {
-			if persisted {
-				store.clear(fingerprint)
-			}
+			store.clear(fingerprint)
 			return result, resumed, nil
 		}
 		if !noteWriteRetryable(err) {
-			if persisted {
-				store.clear(fingerprint) // Definitive refusal: nothing was written.
-			}
+			store.clear(fingerprint) // Definitive refusal: nothing was written.
 			return nil, resumed, err
 		}
 		wait := backoff
 		if time.Until(deadline) <= wait+time.Second || ctx.Err() != nil {
-			return nil, resumed, noteNotConfirmed(err, key, attempt, persisted)
+			return nil, resumed, noteNotConfirmed(err, key, attempt)
 		}
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return nil, resumed, noteNotConfirmed(err, key, attempt, persisted)
+			return nil, resumed, noteNotConfirmed(err, key, attempt)
 		case <-timer.C:
 		}
 		backoff = min(2*backoff, noteRetryBackoffMax)
 	}
 }
 
-func noteNotConfirmed(cause error, key string, attempts int, persisted bool) error {
+func noteNotConfirmed(cause error, key string, attempts int) error {
 	e := errnorm.Normalize(cause)
 	details, _ := e.Details.(map[string]any)
 	if details == nil {
 		details = map[string]any{}
 	}
-	details["request_key"], details["attempts"], details["safe_to_rerun"] = key, attempts, persisted
+	details["request_key"], details["attempts"], details["safe_to_rerun"] = key, attempts, true
 	e.Details = details
-	if persisted {
-		e.Hint = "The note was not confirmed. Rerun the same anx note command: it resends this note with the same request_key, so it cannot post twice. Raise --timeout if the workspace stays busy."
-	} else {
-		e.Hint = "The note was not confirmed and its request_key could not be stored locally; check the card's notes before posting again."
-	}
+	e.Hint = "The note was not confirmed. Rerun the same anx note command: it resends this note with the same request_key, so it cannot post twice. Raise --timeout if the workspace stays busy."
+	return e
+}
+
+// noteKeyUnsaved refuses to send a note whose request_key could not be stored:
+// an unconfirmed send could then never be retried without risking a duplicate.
+func noteKeyUnsaved(dir string, cause error) error {
+	e := errnorm.Local("note_key_unsaved", "note not sent: its retry key could not be stored locally ("+cause.Error()+")")
+	e.Details = map[string]any{"dir": dir, "write_applied": false}
+	e.Hint = "Nothing was written. Make the anx config directory writable (or set ANX_CONFIG_DIR to a writable directory) and rerun the same command."
 	return e
 }
 
@@ -267,33 +270,6 @@ func (a *App) notePresence(ctx context.Context, cfg config.Resolved, cardRef, te
 	presenceCfg := cfg
 	presenceCfg.Timeout = min(notePresenceBudget, max(cfg.Timeout, time.Second))
 	_, _ = a.invokeRawJSON(ctx, presenceCfg, "note presence", "PATCH", "/agents/me/presence", map[string]any{"current_card_ref": cardRef, "note": truncateRunes(text, 500)})
-}
-
-// attributionSkips turns writes resent without run attribution into one
-// warning per command that says why and how to keep attribution.
-type attributionSkips struct {
-	mu      sync.Mutex
-	details map[string]any
-}
-
-func (s *attributionSkips) observe(details map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.details == nil {
-		s.details = details
-	}
-}
-
-func (s *attributionSkips) warnings() []output.Warning {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.details == nil {
-		return nil
-	}
-	run := anyString(s.details["run"])
-	message := "write saved without run attribution: core refused " + run + " (" + firstNonEmpty(anyString(s.details["reason"]), "run attribution invalid") + "). " +
-		"A run is attributed to the agent that first wrote in it; write with that agent's --as to attribute, or unset AGENTCTL_EXECUTION_ID when writing as a different identity."
-	return []output.Warning{{Code: "run_attribution_skipped", Message: message, Details: s.details}}
 }
 
 // keptPromise is the promise an evidence note re-states. Evidence satisfies

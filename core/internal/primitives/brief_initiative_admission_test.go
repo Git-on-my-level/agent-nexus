@@ -129,3 +129,70 @@ func TestUnstartedInitiativeWithActiveChildrenReadsInProgress(t *testing.T) {
 		t.Fatalf("stored phase changed: %v %v", err, stored["phase"])
 	}
 }
+
+// A card whose stored parent the reader cannot see is that reader's
+// initiative. Admitting only stored roots would drop it from the brief.
+func TestBriefListsVisibleChildOfHiddenParentAsInitiative(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Private board"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PatchThread(ctx, "owner", workString(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := s.CreateWork(ctx, "owner", workString(private["id"]), map[string]any{"title": "Private root", "initiative": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create the public board first: unboarded work joins the first board.
+	public, err := s.CreateWork(ctx, "owner", workString(publicBoard["id"]), map[string]any{"title": "Public initiative", "initiative": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.CreateWork(ctx, "owner", "", map[string]any{"title": "Public child", "under": public["ref"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.GroupWork(ctx, "owner", workString(child["ref"]), workString(secret["ref"]), ""); err != nil {
+		t.Fatal(err)
+	}
+	refreshedBrief(t, s, ctx)
+	reader := WithRequestAccessScope(ctx, AccessScope{ActorID: "stranger"})
+	brief, err := s.Brief(reader, BriefReader{ActorID: "stranger", Kind: "human", Visible: func(_, owner string) bool { return owner == "" || owner == "stranger" }}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, item := range brief["initiatives"].([]map[string]any) {
+		listed[workString(item["ref"])] = true
+	}
+	if !listed[workString(child["ref"])] || !listed[workString(public["ref"])] || listed[workString(secret["ref"])] {
+		t.Fatalf("stranger must see the public child as an initiative and never the private root: %v", listed)
+	}
+}
+
+// More open top-level cards than the admission window reads (loops and
+// hidden cards fill it too) must mark the section truncated, never shrink
+// the open count silently.
+func TestBriefMarksInitiativesTruncatedWhenOpenRootsOverflowAdmission(t *testing.T) {
+	s, ctx := newWorkTreeTestStore(t)
+	saved := briefOpenRootAdmission
+	briefOpenRootAdmission = 3
+	t.Cleanup(func() { briefOpenRootAdmission = saved })
+	for i := 0; i < 3; i++ {
+		mustWork(t, s, ctx, map[string]any{"title": fmt.Sprintf("Initiative %d", i), "initiative": true})
+	}
+	if brief := refreshedBrief(t, s, ctx); brief["truncated"].(map[string]bool)["initiatives"] {
+		t.Fatalf("a full window that holds every open root is not truncated")
+	}
+	mustWork(t, s, ctx, map[string]any{"title": "One more", "initiative": true})
+	brief := refreshedBrief(t, s, ctx)
+	if !brief["truncated"].(map[string]bool)["initiatives"] {
+		t.Fatalf("open roots past the admission window must mark the section truncated: %d listed", len(brief["initiatives"].([]map[string]any)))
+	}
+}

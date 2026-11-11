@@ -2,8 +2,11 @@ package app
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func runNoteOn(t *testing.T, rec *noteRecorder, args ...string) (map[string]any, int) {
@@ -106,5 +109,52 @@ func TestUnconfirmedNoteRerunReusesItsRequestKey(t *testing.T) {
 	rec.mu.Unlock()
 	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress", "--next", "1d", "next step"}); exit != 0 || len(rec.keys) != 1 || rec.keys[0] == first {
 		t.Fatalf("after confirmation the same text is a new note with a new key: exit=%d keys=%v", exit, rec.keys)
+	}
+}
+
+// A note whose retry key cannot be stored is not sent: an unconfirmed send
+// could never be retried safely.
+func TestNoteIsNotSentWhenItsKeyCannotBeStored(t *testing.T) {
+	rec := &noteRecorder{}
+	server := noteServer(t, rec)
+	t.Cleanup(server.Close)
+	a, out := dailyTestApp(t, server.URL)
+	home, _ := a.UserHomeDir()
+	// A file where the pending-notes directory belongs makes every save fail.
+	if err := os.WriteFile(filepath.Join(home, ".config", "anx", "pending-notes"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress", "--next", "1d", "next step"}); exit == 0 {
+		t.Fatalf("a note with no stored key must not be sent: %s", out.String())
+	}
+	if code := anyString(asMap(dailyJSON(t, out)["error"])["code"]); code != "note_key_unsaved" || len(rec.keys) != 0 {
+		t.Fatalf("code=%s sent=%v", code, rec.keys)
+	}
+}
+
+// An unconfirmed note stays resendable with its own key however old it is;
+// a rerun days later must not mint a new key and post a duplicate.
+func TestOldUnconfirmedNoteKeepsItsKey(t *testing.T) {
+	rec := &noteRecorder{busy: 100}
+	server := noteServer(t, rec)
+	t.Cleanup(server.Close)
+	a, out := dailyTestApp(t, server.URL)
+	start := time.Now()
+	a.now = func() time.Time { return start }
+	if exit := a.Run([]string{"--json", "--as", "worker", "--timeout", "2s", "note", "card:x", "Progress"}); exit == 0 {
+		t.Fatalf("unconfirmed note must fail: %s", out.String())
+	}
+	first := anyString(asMap(asMap(dailyJSON(t, out)["error"])["details"])["request_key"])
+	rec.mu.Lock()
+	rec.busy, rec.keys = 0, nil
+	rec.mu.Unlock()
+	a.now = func() time.Time { return start.Add(72 * time.Hour) }
+	out.Reset()
+	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress"}); exit != 0 {
+		t.Fatalf("rerun exit=%d %s", exit, out.String())
+	}
+	result := asMap(dailyJSON(t, out)["result"])
+	if len(rec.keys) != 1 || rec.keys[0] != first || result["first_attempted_at"] != start.UTC().Format(time.RFC3339) {
+		t.Fatalf("three days later the rerun must resend key %s: sent %v result %v", first, rec.keys, result)
 	}
 }

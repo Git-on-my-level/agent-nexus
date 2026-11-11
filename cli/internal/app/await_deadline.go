@@ -12,9 +12,10 @@ import (
 
 // An overnight wait for a human answer used to need a shell loop re-running
 // anx await and grepping for code=timeout, because every wait ended with the
-// same exit 8 a network timeout uses. --deadline names an absolute end: the
-// same command can be re-armed after any interruption without extending the
-// wait, and reaching it with no answer exits 14 deadline_reached.
+// same exit 8 a network timeout uses. --deadline names an absolute end (a
+// relative one is refused with the absolute time to pass): the same command
+// can be re-armed after any interruption without extending the wait, and
+// reaching it with no answer exits 14 deadline_reached.
 
 // awaitDeadlineFloor lets a re-armed wait whose deadline has just passed
 // still collect answers that are already waiting.
@@ -31,10 +32,18 @@ func parseAwaitDeadline(flag trackedString, timeoutSet bool, now time.Time) (tim
 	if at, err := time.Parse(time.RFC3339, raw); err == nil {
 		return at, true, nil
 	}
-	if at, ok := parsePromiseWhen(raw, now); ok {
-		return at, true, nil
+	if at, err := time.Parse("2006-01-02", raw); err == nil {
+		return at.Add(24*time.Hour - time.Second).UTC(), true, nil // the whole UTC day
 	}
-	return time.Time{}, false, errnorm.Usage("invalid_request", "--deadline must be an RFC3339 time, a UTC date (YYYY-MM-DD) or a positive duration like 8h; for a re-armable wait pass an absolute time")
+	// A relative deadline would move every time the command is re-armed, which
+	// is the loop this flag exists to end. Name the absolute time instead.
+	if at, ok := parsePromiseWhen(raw, now); ok {
+		abs := at.UTC().Format(time.RFC3339)
+		return time.Time{}, false, errnorm.WithDetails(errnorm.Usage("deadline_relative",
+			"--deadline "+raw+" is relative and would move on every re-arm; pass the absolute time: --deadline "+abs),
+			map[string]any{"deadline": abs})
+	}
+	return time.Time{}, false, errnorm.Usage("invalid_request", "--deadline must be an RFC3339 time (2026-11-12T06:00:00Z) or a UTC date (YYYY-MM-DD, the whole day); it is absolute so re-arming never extends it")
 }
 
 // runAwaitUntil reruns the same await with the remaining time as its timeout

@@ -298,7 +298,7 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 
 	// Hard violations make the request invalid at the server; --force cannot
 	// override them. They are reported together with the lint below.
-	hardErrors := presentation.boundViolations()
+	hardErrors := append(append([]string{}, fmFromFile.fileViolations...), presentation.boundViolations()...)
 	if proposalLintErr != nil {
 		hardErrors = append(hardErrors, errnorm.Normalize(proposalLintErr).Message)
 	}

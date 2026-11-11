@@ -13,6 +13,7 @@ type humanAttentionFileFrontmatter struct {
 	askPresentation     `yaml:",inline"`
 	Evidence            []askEvidenceLink `yaml:"evidence"`
 	Supersedes          string            `yaml:"supersedes"`
+	fileViolations      []string          // collected, never returned one at a time
 	Title               string            `yaml:"title"`
 	SubjectRef          string            `yaml:"subject_ref"`
 	ThreadID            string            `yaml:"thread_id"`
@@ -93,12 +94,13 @@ func (a *App) loadHumanAttentionFromMarkdownFile(path string, expectedKind strin
 	}
 	fm.Proposals = proposals
 
+	// These, and a missing recommendation, are reported with every other
+	// violation (fileViolations), in preview and on submit.
 	if fm.Title == "" {
-		return empty, "", nil, errnorm.Usage("invalid_request", "frontmatter title is required")
+		fm.fileViolations = append(fm.fileViolations, "title is required in the frontmatter")
 	}
-	// A missing recommendation is reported with every other violation.
 	if fm.Kind != "" && !strings.EqualFold(fm.Kind, expectedKind) {
-		return empty, "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("frontmatter kind %q does not match anx %s", fm.Kind, expectedKind))
+		fm.fileViolations = append(fm.fileViolations, fmt.Sprintf("kind %q does not match anx %s", fm.Kind, expectedKind))
 	}
 
 	responseProposals, err := buildCLIHumanAttentionResponseProposals(fm.RecommendedResponse, fm.Proposals)

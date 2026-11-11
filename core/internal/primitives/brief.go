@@ -959,29 +959,9 @@ func (b *briefBuild) queryInitiatives(loops bool, where string, args ...any) ([]
 // evidence first), then recently done; at most BriefSectionLimit in all.
 func (b *briefBuild) initiatives() ([]map[string]any, bool, error) { return b.initiativeSection(false) }
 func (b *briefBuild) initiativeSection(loopsOnly bool) ([]map[string]any, bool, error) {
-	limit := BriefSectionLimit + 1
-	promised, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NOT NULL ORDER BY bi.promise_at LIMIT ?`, limit)
+	rows, truncated, err := b.initiativeCandidates(loopsOnly)
 	if err != nil {
 		return nil, false, err
-	}
-	rows := promised
-	if len(rows) < limit {
-		none, err := b.queryInitiatives(loopsOnly, `bi.open=1 AND bi.promise_at IS NULL ORDER BY bi.last_evidence_at LIMIT ?`, limit-len(rows))
-		if err != nil {
-			return nil, false, err
-		}
-		rows = append(rows, none...)
-	}
-	if len(rows) < limit {
-		done, err := b.queryInitiatives(loopsOnly, `bi.open=0 ORDER BY bi.last_evidence_at DESC LIMIT ?`, min(briefDoneLimit, limit-len(rows)))
-		if err != nil {
-			return nil, false, err
-		}
-		rows = append(rows, done...)
-	}
-	truncated := len(rows) > BriefSectionLimit
-	if truncated {
-		rows = rows[:BriefSectionLimit]
 	}
 	ids := make([]string, 0, len(rows))
 	for _, r := range rows {
