@@ -6,9 +6,9 @@ import (
 )
 
 // briefOpenRootAdmission bounds the open top-level cards one brief section
-// reads. Past it the section is far beyond BriefSectionLimit and reports
-// truncated anyway.
-var briefOpenRootAdmission = 500 // var: tests shrink it
+// admits: the same 200 rows the old promise window hydrated, so a poll costs
+// what it did before. Past it the section reads truncated.
+var briefOpenRootAdmission = 200 // var: tests shrink it
 
 // openRootSQL is the predicate of idx_cards_open_roots: open, live,
 // top-level cards outside the Unsorted tray.
@@ -22,11 +22,13 @@ func openRootSQL(card string) string {
 // admit only the first 200 rows of every card's promise or evidence order and
 // keep the top-level ones afterwards, so in a busy workspace the children
 // filled the window and Watch silently listed fewer initiatives than anx tree,
-// with the section not marked truncated. Admission reads the reader's scoped
-// cards relation and skips loops and other owners' PM-private threads, so
-// nothing this reader cannot list fills the window, and the overflow check
-// (openRootsOverflow) counts what this reader could list. The cost is bounded
-// by openRootScan rows of idx_cards_open_roots plus per-row access probes.
+// with the section not marked truncated. Admission is an index-only read of
+// idx_cards_open_roots; the section query then hydrates the admitted rows
+// through the reader's scoped relation, as before. When the workspace has more
+// open top-level cards than admission reads (openRootsOverflow), the section
+// reads truncated and Watch shows "N+ open" instead of under-reporting. That
+// bit is workspace-wide, like initiative_budget.truncated: it reveals only that
+// the workspace holds over 200 open top-level cards, never which.
 //
 // The promise-ordered window is still unioned in, best effort as before: a
 // card whose stored parent the reader cannot see is that reader's initiative
@@ -40,44 +42,24 @@ func openRootSQL(card string) string {
 func (b *briefBuild) initiativeSource(where, admission string) (string, []any) {
 	window := `SELECT card_id FROM (SELECT card_id FROM work_grouping_brief_positions bi WHERE ` + admission + ` LIMIT 200)`
 	if strings.HasPrefix(where, "bi.open=1 ") {
-		roots, args := b.openRootsSQL(briefOpenRootAdmission)
-		return `(SELECT card_id FROM (` + roots + `)
+		return `(SELECT card_id FROM (` + openRootsAdmissionSQL(briefOpenRootAdmission) + `)
 		 UNION ` + window + `) admitted
-		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`, args
+		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`, nil
 	}
 	return `(` + window + `) admitted
 		 CROSS JOIN brief_initiatives bi ON bi.card_id=admitted.card_id`, nil
 }
 
-// openRootsSQL selects up to limit open top-level non-loop cards this reader
-// may list. Identities are admitted through idx_cards_open_roots (at most
-// openRootScan rows, never a wider index) and hydrated through the scoped
-// cards relation, as WorkTree admits roots.
-func (b *briefBuild) openRootsSQL(limit int) (string, []any) {
-	pred, args := b.pmOwnerSQL("c0.thread_id")
-	cutoff := loopTS(b.now.Add(-loopWindow))
-	return `SELECT c0.id AS card_id FROM (SELECT r.id FROM main.cards r INDEXED BY idx_cards_open_roots WHERE ` + openRootSQL("r") + ` LIMIT ` + strconv.Itoa(openRootScan()) + `) open_roots
-		 CROSS JOIN cards c0 ON c0.id=open_roots.id WHERE ` + openRootSQL("c0") +
-		` AND NOT EXISTS(SELECT 1 FROM brief_initiatives loop_bi WHERE loop_bi.card_id=c0.id AND (loop_bi.loop_annotated=1 OR COALESCE(loop_bi.loop_last_run_at,'')>='` + cutoff + `'))` +
-		` AND ` + pred + ` LIMIT ` + strconv.Itoa(limit), args
+func openRootsAdmissionSQL(limit int) string {
+	return `SELECT r.id AS card_id FROM main.cards r INDEXED BY idx_cards_open_roots WHERE ` + openRootSQL("r") + ` LIMIT ` + strconv.Itoa(limit)
 }
 
-// openRootScan bounds the open top-level cards admission reads, listable or
-// not; past it the section is truncated for every reader.
-func openRootScan() int { return 4 * briefOpenRootAdmission }
-
-// openRootsOverflow reports whether this reader has more listable open
-// initiatives than admission reads, or the bounded scan was exhausted; the
-// section then reads truncated, and Watch shows "N+ open" rather than
-// under-reporting. Hidden cards are counted only in that coarse scan bound,
-// so a reader learns at most that the workspace has over openRootScan open
-// top-level cards.
+// openRootsOverflow reports whether admission left open top-level cards
+// unread; the section then reads truncated. One bounded index-only scan.
 func (b *briefBuild) openRootsOverflow() (bool, error) {
-	roots, args := b.openRootsSQL(briefOpenRootAdmission + 1)
-	var listable, scanned int
-	err := b.s.db.QueryRowContext(b.groupingContext(), `SELECT (SELECT COUNT(*) FROM (`+roots+`)),
-		(SELECT COUNT(*) FROM (SELECT 1 FROM main.cards r INDEXED BY idx_cards_open_roots WHERE `+openRootSQL("r")+` LIMIT `+strconv.Itoa(openRootScan())+`))`, args...).Scan(&listable, &scanned)
-	return listable > briefOpenRootAdmission || scanned >= openRootScan(), err
+	var n int
+	err := b.s.db.QueryRowContext(b.ctx, `SELECT COUNT(*) FROM (`+openRootsAdmissionSQL(briefOpenRootAdmission+1)+`)`).Scan(&n)
+	return n > briefOpenRootAdmission, err
 }
 
 // initiativeCandidates reads a section's rows in display order: promised

@@ -198,12 +198,13 @@ func TestBriefMarksInitiativesTruncatedWhenOpenRootsOverflowAdmission(t *testing
 	}
 }
 
-// Cards a reader cannot list neither fill the admission window nor mark the
-// section truncated: the count discloses nothing about them.
-func TestBriefAdmissionIgnoresCardsTheReaderCannotList(t *testing.T) {
+// Hidden cards never make a reader's section under-report: within the
+// admission window every visible initiative is listed and the section is not
+// truncated; past it (any reader, any visibility) the section reads truncated,
+// a workspace-wide bit like initiative_budget.truncated.
+func TestBriefAdmissionWithHiddenRootsListsOrTruncates(t *testing.T) {
 	s, ctx := newWorkTreeTestStore(t)
 	saved := briefOpenRootAdmission
-	briefOpenRootAdmission = 2
 	t.Cleanup(func() { briefOpenRootAdmission = saved })
 	publicBoard, err := s.CreateBoard(ctx, "owner", map[string]any{"title": "Public board"})
 	if err != nil {
@@ -230,27 +231,27 @@ func TestBriefAdmissionIgnoresCardsTheReaderCannotList(t *testing.T) {
 		visible[workString(w["ref"])] = true
 	}
 	refreshedBrief(t, s, ctx)
-	read := func(actor string) map[string]any {
+	read := func(actor string) (map[string]bool, bool) {
 		t.Helper()
 		brief, err := s.Brief(WithRequestAccessScope(ctx, AccessScope{ActorID: actor}), BriefReader{ActorID: actor, Kind: "human", Visible: func(_, owner string) bool { return owner == "" || owner == actor }}, time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
-		return brief
+		listed := map[string]bool{}
+		for _, item := range brief["initiatives"].([]map[string]any) {
+			listed[workString(item["ref"])] = true
+		}
+		return listed, brief["truncated"].(map[string]bool)["initiatives"]
 	}
-	stranger := read("stranger")
-	listed := map[string]bool{}
-	for _, item := range stranger["initiatives"].([]map[string]any) {
-		listed[workString(item["ref"])] = true
+	briefOpenRootAdmission = 6
+	if listed, truncated := read("stranger"); truncated || len(listed) != 2 || !listed[firstKey(visible, 0)] || !listed[firstKey(visible, 1)] {
+		t.Fatalf("within the window the stranger sees exactly the public initiatives, untruncated: %v truncated=%v", listed, truncated)
 	}
-	if len(listed) != 2 || !listed[firstKey(visible, 0)] || !listed[firstKey(visible, 1)] {
-		t.Fatalf("hidden roots crowded out visible ones: %v", listed)
-	}
-	if stranger["truncated"].(map[string]bool)["initiatives"] {
-		t.Fatal("hidden roots must not mark the stranger's section truncated")
-	}
-	if !read("owner")["truncated"].(map[string]bool)["initiatives"] {
-		t.Fatal("the owner can list six roots past a window of two: truncated")
+	briefOpenRootAdmission = 2
+	for _, actor := range []string{"stranger", "owner"} {
+		if listed, truncated := read(actor); !truncated {
+			t.Fatalf("%s: six open roots past a window of two must read truncated, listed %v", actor, listed)
+		}
 	}
 }
 
