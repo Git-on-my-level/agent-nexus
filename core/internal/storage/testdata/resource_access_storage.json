@@ -3791,7 +3791,7 @@
     "../sidecar/host.go:*Host:Snapshot": "608c2d62a7e43ac5ac617777db0e0d0e2fccf8a01dc703fbc0dc8fb5eb2489d6",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "872d19731c5f191a06d3ccbdbac15da88b81771371b2a974395cd133b4c2162a",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "4bd04d991df3f4cb29ef623fbbdca3ff91cbfda6f3d1ef769ee4c3a08891f246",
-    "../sqliteutil/maintenance.go:SetConnectionBusyTimeout": "7e7774e8abfacf9fa5c494f2c11eb6e94de3ad0be84043524050801af4bf05b4",
+    "../sqliteutil/maintenance.go:SetConnectionBusyTimeout": "bde644aa5e22c7f23c16907a1fc4e33c16a77379c62b875132f5885fe9d4e681",
     "../storage/access_admission.go:installAccessAdmission": "3fa73839030d3db96811a21ee6ba236720a8bea005a6965cffc420b1b1253636",
     "../storage/access_admission.go:installAdmissionCompactSync": "cf8503ef65d42311a21830c9382241ee2dff5e6852f0c1246f34f33b3a1bdf01",
     "../storage/access_admission_backfill.go:accessAdmissionMigrationChunk": "93a81a129d3aeb5c85bad5c1d4bc4b6e9800aaf4380f10400214c59f182d74ee",

@@ -19,22 +19,26 @@ func BeginMaintenanceChunk(ctx context.Context, db *sql.DB) (*sql.Tx, func(), er
 // SetConnectionBusyTimeout saves the connection-local busy timeout, sets wait,
 // and returns a restore function. The restore function uses a short independent
 // background timeout and invalidates the connection if restoration fails, so a
-// worker-only timeout can never leak into serving.
+// worker-only timeout can never leak into serving. A write that fails after the
+// original value was read is restored the same way before the error is returned:
+// the driver can apply the pragma and still report failure.
 func SetConnectionBusyTimeout(ctx context.Context, conn *sql.Conn, wait time.Duration) (func(), error) {
 	var timeout int
 	if err := conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&timeout); err != nil {
 		return nil, err
 	}
-	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", wait.Milliseconds())); err != nil {
-		return nil, err
-	}
-	return func() {
+	restore := func() {
 		restoreCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
 		if _, err := conn.ExecContext(restoreCtx, fmt.Sprintf("PRAGMA busy_timeout=%d", timeout)); err != nil {
 			conn.Raw(func(any) error { return driver.ErrBadConn })
 		}
-	}, nil
+	}
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout=%d", wait.Milliseconds())); err != nil {
+		restore()
+		return nil, err
+	}
+	return restore, nil
 }
 
 // BeginMaintenanceChunkWithBusyWait catches a short writer handoff without
