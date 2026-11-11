@@ -1,6 +1,6 @@
 {
   "name": "agent-nexus-ui",
-  "version": "0.13.61",
+  "version": "0.13.62",
   "private": true,
   "type": "module",
   "engines": {
