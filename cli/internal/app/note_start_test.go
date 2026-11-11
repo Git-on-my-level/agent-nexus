@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -101,8 +102,9 @@ func TestUnconfirmedNoteRerunReusesItsRequestKey(t *testing.T) {
 	if exit := a.Run([]string{"--json", "--as", "worker", "note", "card:x", "Progress", "--next", "1d", "next step"}); exit != 0 {
 		t.Fatalf("rerun exit=%d %s", exit, out.String())
 	}
-	if len(rec.keys) != 1 || rec.keys[0] != first || asMap(dailyJSON(t, out)["result"])["resumed"] != true {
-		t.Fatalf("rerun must resend the stored note with key %s, sent %v", first, rec.keys)
+	rerun := dailyJSON(t, out)
+	if len(rec.keys) != 1 || rec.keys[0] != first || asMap(rerun["result"])["resumed"] != true || !strings.Contains(fmt.Sprint(rerun["warnings"]), "note_resumed") {
+		t.Fatalf("rerun must resend the stored note with key %s and warn note_resumed, sent %v: %v", first, rec.keys, rerun)
 	}
 	out.Reset()
 	rec.mu.Lock()

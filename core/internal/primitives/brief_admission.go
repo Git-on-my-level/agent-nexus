@@ -30,8 +30,11 @@ func openRootSQL(card string) string {
 //
 // The promise-ordered window is still unioned in, best effort as before: a
 // card whose stored parent the reader cannot see is that reader's initiative
-// (workIsInitiativeSQL), and only this window finds it. anx tree lists stored
-// roots only, so such cards are outside the open count both views share.
+// (workIsInitiativeSQL), and only this window finds it. Known limitation: past
+// 200 earlier-promised cards such a card can be omitted without truncation.
+// anx tree lists stored roots only, so it is outside the open count both views
+// share; admitting it exactly needs a bounded enumeration of the reader's
+// hidden parents, which the access layer does not offer yet.
 // The done section keeps the evidence-ordered window alone: done initiatives
 // fold away and are not counted.
 func (b *briefBuild) initiativeSource(where, admission string) (string, []any) {
