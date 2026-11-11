@@ -70,6 +70,7 @@ replace agent-nexus-contracts-go-client => ../contracts/gen/go
 
 require (
 	agent-nexus-markdownhygiene v0.0.0
+	filippo.io/age v1.2.1
 	github.com/klauspost/compress v1.18.0
 	golang.org/x/sys v0.34.0
 )

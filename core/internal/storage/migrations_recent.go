@@ -57,4 +57,9 @@ var recentMigrations = []migration{
 		// (workEffectivePhaseSQL); this index answers "any active child" in one seek.
 		`CREATE INDEX IF NOT EXISTS idx_cards_active_children ON cards(parent_card_id) WHERE parent_card_id IS NOT NULL AND trashed_at IS NULL AND archived_at IS NULL AND column_key IN ('in_progress','review','blocked')`,
 	}},
+	// The built-in PM product is retired. Archive its durable rows first, then
+	// remove product kinds and tables. Decide decisions/actions stay in
+	// pm_records. Archive configuration is required whenever product data
+	// exists; the migration fails closed rather than dropping without a copy.
+	{Version: 138, AfterApply: migrateRemoveBuiltinPM},
 }
