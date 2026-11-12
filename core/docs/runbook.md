@@ -196,6 +196,41 @@ setting. `scripts/hosted/backup-workspace.sh` exports the same default (or prese
 an explicit override) for its separate `sqlite3` process and never sweeps files
 while a core may be serving. Backup output still occupies its chosen destination.
 
+## Migration 138: remove built-in PM product data
+
+Migration 138 archives the retired built-in PM product rows and then deletes
+them. Decide records (`decision`, `action`, `cursor`) are kept.
+
+Prerequisites:
+
+- Set `ANX_BACKUP_AGE_RECIPIENTS` and `ANX_VAULT_REC_RECIPIENT` to public age
+  recipients in the core process environment before upgrading. When PM product
+  rows exist and either value is missing or malformed, the migration fails
+  closed: startup aborts, no product row is deleted, and version 138 is not
+  recorded. A workspace with no product rows needs no recipients.
+- Reserve disk headroom for a second copy of the PM product data plus the
+  compressed/encrypted archive. The archive is written beside `state.sqlite`
+  in the workspace root, so size the state volume, not only `/tmp`.
+
+Archive location and handling:
+
+- The archive is `state.pm-archive-138-<UTC>.tar.zst.age` beside
+  `state.sqlite`. Its receipt (path, size, SHA-256, recipient fingerprint) is
+  stored in `pm_archive_receipts`.
+- Routine backup bundles do not include this archive. During the canary, copy
+  it off-host to the operations archive location before relying on the
+  migration as the only copy.
+- Verify the canary archive by decrypting it with the operations identity and
+  checking that the manifest and table parts are readable. A resumed migration
+  re-verifies the recorded size, SHA-256, and age header before deleting
+  anything; a damaged or missing archive aborts startup.
+
+Rollback:
+
+- Restore the pre-138 workspace backup. Do not start an older binary against
+  the migrated database: the product rows and tables are gone, and the old
+  binary cannot reconstruct them from the archive.
+
 ## Local development run
 
 ```bash
