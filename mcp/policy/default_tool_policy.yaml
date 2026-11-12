@@ -68,15 +68,9 @@ hosted_default_commands:
   - "topics.workspace"
   - "pm.actions.get"
   - "pm.actions.list"
-  - "pm.bindings.list"
   - "pm.context"
-  - "pm.presence"
-  - "pm.conversations.get"
-  - "pm.conversations.list"
   - "pm.decisions.get"
   - "pm.decisions.list"
-  - "pm.turns.context"
-  - "pm.turns.get"
   - "work.capabilities"
   - "work.get"
   - "work.list"
@@ -708,36 +702,9 @@ commands:
   "pm.actions.reconcile":
     classification: exposed_write
     reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.bindings.list":
-    classification: exposed_read
-    reason: "Read which exact channel identities are bound to workspace principals; an operator check that sends nothing."
-  "pm.bindings.create":
-    classification: gated_admin
-    reason: "Binds an external channel user to a workspace principal; requires explicit human administration."
-  "pm.connect":
-    classification: unsupported_bootstrap_auth
-    reason: Local runner bootstrap is owned by anx pm serve; model tools must not claim workspace PM ownership.
-  "pm.disconnect":
-    classification: unsupported_bootstrap_auth
-    reason: Explicit local PM uninstall resets workspace onboarding; model tools must not remove PM registration.
-  "pm.presence":
-    classification: exposed_read
-    reason: "Read computed workspace PM connection state, bounded display labels and timestamps without turn data or commands."
   "pm.context":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.conversations.create":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.conversations.get":
-    classification: exposed_read
-    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.conversations.list":
-    classification: exposed_read
-    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.conversations.messages.create":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
   "pm.decisions.answer":
     classification: gated_sensitive
     reason: "Human approval or consequential source handoff; explicit exposure never bypasses core authorization."
@@ -753,30 +720,6 @@ commands:
   "pm.decisions.list":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.turns.complete":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.turns.claim":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.turns.fail":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.turns.context":
-    classification: exposed_read
-    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.turns.get":
-    classification: exposed_read
-    reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
-  "pm.turns.heartbeat":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.turns.release":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
-  "pm.turns.decisions.create":
-    classification: exposed_write
-    reason: "Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority."
   "work.capabilities":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."

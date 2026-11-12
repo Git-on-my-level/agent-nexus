@@ -1529,12 +1529,11 @@ on indexed candidate lookups. It permits no scans or budget increases; the
 200-subject owner/stranger probes measured one SQL execution and at most 8,685 VM
 instructions.
 
-## Claimed PM card and workspace reads (SCA-733)
+## PM card and workspace reads (SCA-733)
 
-`POST /pm/turns/{id}/context` validates the selected PM and lease, then binds
-the conversation requester and pins one epoch-validated read snapshot. Pinned
-reads admit at most eight refs; a full card read admits one requester-visible ref,
-including an unpinned plan step. Batches cover aliases, card bodies, metadata,
+`GET /pm/context` uses the authenticated reader's ordinary visibility and pins
+one epoch-validated read snapshot. Card-scoped reads admit one requester-visible
+ref, including an unpinned plan step; a full context read stays bounded. Batches cover aliases, card bodies, metadata,
 plans, and six candidates each for asks, activity and awaiting decisions per card.
 Hidden candidates do not refill.
 

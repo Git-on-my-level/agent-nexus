@@ -456,21 +456,6 @@
   },
   {
     "method": "POST",
-    "path": "/pm/bindings",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/conversations",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/conversations/{conversation_id}/messages",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
     "path": "/pm/decisions",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
@@ -482,46 +467,6 @@
   {
     "method": "POST",
     "path": "/pm/decisions/{decision_id}/dispatch",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/ingress/discord",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/ingress/telegram",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/claim",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/complete",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/decisions",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/fail",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/heartbeat",
-    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/release",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
   {
@@ -633,16 +578,6 @@
     "method": "POST",
     "path": "/agent-inbox/subscriptions",
     "reason": "Bounded subscription creation or acknowledgement; records no host command."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/connect",
-    "reason": "Authenticated local PM registration and connection timestamp write; indexed workspace CAS and point lookup, bounded labels, no historical scan."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/disconnect",
-    "reason": "Explicit selected-PM reset: primary-key presence/migration-marker writes and status-indexed unfinished-turn mutation. No historical read or materialization; mutation cost proportional to unfinished turns."
   },
   {
     "method": "POST",

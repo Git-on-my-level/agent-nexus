@@ -612,14 +612,6 @@ func (h *liveCoreHarness) actorID(t *testing.T, agent string) string {
 	return mustStringPath(t, res.Payload, "result.agent.actor_id")
 }
 
-func (h *liveCoreHarness) selectPMAgent(t *testing.T, agent string) {
-	t.Helper()
-	who := h.runCLIExpectOK(t, agent, nil, "auth", "whoami")
-	actor := mustStringPath(t, who.Payload, "result.agent.actor_id")
-	handle := mustStringPath(t, who.Payload, "result.agent.handle")
-	restartCoreForWorkTest(t, h, "ANX_PM_AGENT_ACTOR_ID="+actor, "ANX_PM_AGENT_HANDLE="+handle)
-}
-
 func (h *liveCoreHarness) registerHumanPasskey(t *testing.T, agent, displayName, inviteToken string) {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{"display_name": displayName, "invite_token": inviteToken})

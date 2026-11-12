@@ -68,7 +68,7 @@ Where things live. Generated; never hand-edited.
 | core/cmd/test-sql-fixture                  | 1     | Test-only legacy fixture writer.                                                                                                                                                                                                                                      |
 | core/internal/actors                       | 2     | Package actors stores the workspace actor registry                                                                                                                                                                                                                    |
 | core/internal/askpresentation              | 1     | Package askpresentation carries additive, authored decision copy.                                                                                                                                                                                                     |
-| core/internal/auth                         | 28    | Package auth owns principal identity and credentials for core                                                                                                                                                                                                         |
+| core/internal/auth                         | 27    | Package auth owns principal identity and credentials for core                                                                                                                                                                                                         |
 | core/internal/authaudit                    | 2     | Package authaudit defines the occurred_at sort key used to order authorization audit events                                                                                                                                                                           |
 | core/internal/backupage                    | 1     | Package backupage provides the public-recipient age streaming used by backup writers.                                                                                                                                                                                 |
 | core/internal/blob                         | 7     | Package blob stores artifact content outside SQLite through one Backend interface with filesystem and S3-compatible object-store implementations, plus staged writes, preload checks and usage accounting.                                                            |
@@ -209,7 +209,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 2838  | web-ui/src/lib/devWorkspaceFixtures.js                                             |
 | 2432  | core/cmd/contract-gen/main.go                                                      |
 | 2300  | core/internal/server/handler.go                                                    |
-| 2275  | web-ui/scripts/qa-visual.mjs                                                       |
+| 2255  | web-ui/scripts/qa-visual.mjs                                                       |
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |
 | 1946  | cli/dogfood/pi/run.mjs                                                             |
 | 1893  | web-ui/scripts/seed-core-from-mock.mjs                                             |
@@ -232,7 +232,6 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1240  | core/internal/auth/hosts.go                                                        |
 | 1197  | core/internal/primitives/derived_store.go                                          |
 | 1074  | web-ui/src/lib/visualReportCharts.js                                               |
-| 1042  | cli/internal/errnorm/enrich.go                                                     |
 | 1039  | core/internal/auth/store.go                                                        |
 | 1039  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/+page.svelte                 |
 | 1016  | web-ui/scripts/game-dev-studio-seed-data.mjs                                       |
@@ -247,6 +246,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 908   | core/internal/primitives/watch_trends.go                                           |
 | 902   | core/cmd/anx-core/main.go                                                          |
 | 892   | mcp/executor/executor.go                                                           |
+| 891   | cli/internal/errnorm/enrich.go                                                     |
 | 887   | web-ui/src/lib/visualReports.js                                                    |
 | 884   | web-ui/src/lib/workSummary.js                                                      |
 | 881   | web-ui/src/lib/components/work/WorkViews.svelte                                    |

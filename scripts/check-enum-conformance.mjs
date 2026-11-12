@@ -88,7 +88,7 @@ const ALLOWED = [
     reason: "open, unblocked columns",
   },
   {
-    file: "core/internal/pm/decisions.go",
+    file: "core/internal/decide/decisions.go",
     contains: 'case "backlog", "ready", "in_progress", "blocked", "review":',
     reason: "columns that are not done",
   },
@@ -118,7 +118,7 @@ const ALLOWED = [
     reason: "placements that are not blocked",
   },
   {
-    file: "web-ui/src/lib/components/pm/WorkViews.svelte",
+    file: "web-ui/src/lib/components/work/WorkViews.svelte",
     contains: '["backlog", "in_progress", "blocked", "review", "done"]',
     reason: "work phases always shown as groups",
   },

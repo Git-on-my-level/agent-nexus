@@ -129,12 +129,12 @@ class RepoTest(unittest.TestCase):
         self.write("core/go.mod",
                    "module fake\n\ngo 1.21\n\nrequire local/test-channels v0.0.0\n\n"
                    "replace local/test-channels => ../tests/channels\n")
-        self.write("core/internal/pm/pm.go", "package pm\n\nvar PM int\n")
-        self.write("core/internal/pm/channels_e2e_test.go",
-                   "package pm\n\nimport (\n\t\"testing\"\n\n\tchannels \"local/test-channels\"\n)\n\n"
+        self.write("core/internal/example/example.go", "package example\n\nvar Example int\n")
+        self.write("core/internal/example/channels_e2e_test.go",
+                   "package example\n\nimport (\n\t\"testing\"\n\n\tchannels \"local/test-channels\"\n)\n\n"
                    "func TestChannels(t *testing.T) { channels.Telegram() }\n")
         self.write("core/internal/server/server.go",
-                   "package server\n\nimport \"fake/internal/pm\"\n\nvar _ = pm.PM\n")
+                   "package server\n\nimport \"fake/internal/pm\"\n\nvar _ = example.Example\n")
         self.write("tests/channels/go.mod", "module local/test-channels\n\ngo 1.21\n")
         self.write("tests/channels/telegram.go", "package channels\n\nfunc Telegram() {}\n")
         self.write("tests/channels/fake_test.go",

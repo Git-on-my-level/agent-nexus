@@ -19,7 +19,7 @@ func RunWorkTrackingClocks(ctx context.Context, tracking *WorkTrackingClock) {
 	<-done
 }
 
-// RunWatcherHealthClock is independent of any PM runner and its claim loop.
+// RunWatcherHealthClock runs bounded loop-health maintenance.
 func RunWatcherHealthClock(ctx context.Context, store *primitives.Store) {
 	cfg := primitives.DefaultWatcherHealthConfig()
 	cfg.AgentActivityWithin = watcherDuration("ANX_WATCHER_AGENT_ACTIVITY_WITHIN", cfg.AgentActivityWithin)

@@ -361,7 +361,7 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 							t.Errorf("persona archive/restore status %d, want %d: %s", resp.StatusCode, want, out)
 						}
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
-						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/pm/bindings" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
+						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {
@@ -488,12 +488,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"current_card_ref": "card:" + card, "note": "attempt"}
 	case "/runs":
 		return map[string]any{"launcher": "agentctl", "last_observed_at": time.Now().UTC().Format(time.RFC3339Nano), "labels": []string{}, "external_id": "attempt", "host_id": "matrix-host", "agent_id": agent, "adapter": "test", "state": "running", "liveness": "alive", "card_ref": "card:" + card}
-	case "/pm/conversations":
-		return map[string]any{"request_key": "attempt", "title": "attempt", "work_ref": "card:" + card}
 	case "/pm/decisions":
 		return map[string]any{"request_key": "attempt", "work_ref": "card:" + card, "scope": "work.phase", "target_revision": "1.1", "instruction": "attempt"}
-	case "/pm/turns/claim":
-		return map[string]any{"runner_id": "attempt"}
 	case "/reports/preview":
 		return map[string]any{"report": map[string]any{"kind": "anx.visual-report", "schema_version": 1, "title": "Privacy control", "summary": "Workspace report", "generated_at": "2026-10-04T10:00:00Z", "sources": []any{}, "projects": []any{map[string]any{"id": "workspace", "title": "Workspace", "summary": "Current work", "outcome": "Ship"}}, "panels": []any{map[string]any{"id": "private", "type": "live-initiatives", "data": map[string]any{"board_refs": []string{"board:" + board}}, "project_id": "workspace", "title": "Initiatives", "author": "ANX", "provenance": "reported", "observed_at": nil, "freshness": "unavailable", "source_ids": []any{}}}}}
 	default:
