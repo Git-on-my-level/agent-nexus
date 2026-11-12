@@ -57,7 +57,7 @@ func installAdmissionCanonicalVertices(ctx context.Context, tx *sql.Tx) error {
 	expr := func(s, p string) string { return strings.ReplaceAll(s, "@", p) }
 
 	valid := func(k string) string {
-		return k + ` NOT LIKE 'filter/%' AND ` + k + ` NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')`
+		return k + ` NOT LIKE 'filter/%' AND ` + k + ` NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history','card_history')`
 	}
 	key := func(k, id, originID, from, condition string) string {
 		prefix := `INSERT INTO resource_access_admission_keys(origin,origin_id,kind,id,ref,navigation,atom,published) `
@@ -68,7 +68,9 @@ func installAdmissionCanonicalVertices(ctx context.Context, tx *sql.Tx) error {
 	}
 	add := func(k, id, from string) string {
 		originID := `json_array(` + k + `,` + id + `)`
-		return key(k, id, originID, from, "1") + key("'document'", id, originID, from, k+`='document_history'`)
+		return key(k, id, originID, from, "1") +
+			key("'document'", id, originID, from, k+`='document_history'`) +
+			key("'card'", id, originID, from, k+`='card_history'`)
 	}
 
 	var backfill []string
