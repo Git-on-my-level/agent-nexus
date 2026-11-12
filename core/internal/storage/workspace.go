@@ -50,11 +50,28 @@ func NewLayout(root string) Layout {
 }
 
 func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace, error) {
+	return initializeWorkspace(ctx, NewLayout(workspaceRoot))
+}
+
+// OpenWorkspaceDatabase opens an existing database file as a workspace. It is
+// for offline maintenance tools that receive a database copy rather than a
+// workspace root; the file's directory supplies the serving lease and scratch
+// directories. It runs the same migrations and readiness checks as startup.
+func OpenWorkspaceDatabase(ctx context.Context, databasePath string) (*Workspace, error) {
+	absolute, err := filepath.Abs(databasePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve sqlite database path: %w", err)
+	}
+	layout := NewLayout(filepath.Dir(absolute))
+	layout.DatabasePath = absolute
+	return initializeWorkspace(ctx, layout)
+}
+
+func initializeWorkspace(ctx context.Context, layout Layout) (*Workspace, error) {
 	maintenanceConfig, err := loadSQLiteMaintenanceConfig()
 	if err != nil {
 		return nil, err
 	}
-	layout := NewLayout(workspaceRoot)
 	if err := ensureLayout(layout); err != nil {
 		return nil, err
 	}

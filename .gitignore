@@ -40,3 +40,6 @@ _ui_working_tree.patch
 
 # Playwright / ad-hoc screenshot output (repo root)
 output/
+
+# Ad-hoc local build output for the access-equivalence harness
+/core/anx-access-equivalence
