@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,7 @@ type CompactResult struct {
 	DestinationBytes int64
 	SavedBytes       int64
 	LivePageBytes    int64
+	WALBytes         int64
 	FreeBytes        int64
 	ReserveBytes     int64
 	PageSize         int64
@@ -69,7 +71,10 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 		return result, err
 	}
 	reserve := options.ReserveBytes
-	if reserve <= 0 {
+	if reserve < 0 {
+		return result, errors.New("reserve bytes must not be negative")
+	}
+	if reserve == 0 {
 		reserve = DefaultCompactReserveBytes
 	}
 	result.ReserveBytes = reserve
@@ -123,15 +128,28 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 	if result.LivePageBytes < 0 {
 		result.LivePageBytes = 0
 	}
+	// The source WAL shares the destination filesystem and can grow while the
+	// copy runs, so it counts against the headroom the copy must leave free.
+	result.WALBytes, err = sqliteFileBytes(source + "-wal")
+	if err != nil {
+		return result, fmt.Errorf("check source WAL size: %w", err)
+	}
 	result.FreeBytes, err = filesystemFreeBytes(filepath.Dir(destination))
 	if err != nil {
 		return result, fmt.Errorf("check destination free space: %w", err)
 	}
+	if result.LivePageBytes > math.MaxInt64-reserve {
+		return result, errors.New("compaction free-space estimate overflows: reserve bytes too large")
+	}
 	required := result.LivePageBytes + reserve
+	if result.WALBytes > math.MaxInt64-required {
+		return result, errors.New("compaction free-space estimate overflows: source WAL too large")
+	}
+	required += result.WALBytes
 	if result.FreeBytes < required {
 		return result, fmt.Errorf(
-			"insufficient free space on destination filesystem: need %d bytes (live pages %d + reserve %d), have %d",
-			required, result.LivePageBytes, reserve, result.FreeBytes,
+			"insufficient free space on destination filesystem: need %d bytes (live pages %d + WAL %d + reserve %d), have %d",
+			required, result.LivePageBytes, result.WALBytes, reserve, result.FreeBytes,
 		)
 	}
 
@@ -140,10 +158,23 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 		return result, err
 	}
 	succeeded := false
+	attached := false
 	defer func() {
-		if !succeeded {
-			_ = os.Remove(destination)
+		if succeeded {
+			return
 		}
+		// Detach and close the verification connection before deleting the
+		// partial artifact; an open handle can keep the file from being
+		// removed on some platforms. Use a fresh context so cleanup still
+		// runs after the caller's context is canceled.
+		if attached {
+			_, _ = conn.ExecContext(context.Background(), `DETACH DATABASE compact_output`)
+		}
+		_ = conn.Close()
+		// Closing the private pool releases the actual SQLite handle; returning
+		// the connection to an idle pool would keep the output file open.
+		_ = db.Close()
+		_ = os.Remove(destination)
 	}()
 	if err = f.Close(); err != nil {
 		return result, err
@@ -161,6 +192,7 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 	if _, err = conn.ExecContext(ctx, `ATTACH DATABASE ? AS compact_output`, destination); err != nil {
 		return result, err
 	}
+	attached = true
 	var integrity string
 	if err = conn.QueryRowContext(ctx, `PRAGMA compact_output.integrity_check`).Scan(&integrity); err != nil || integrity != "ok" {
 		return result, errors.New("compacted file failed integrity check")
@@ -250,4 +282,15 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 	result.SavedBytes = result.SourceBytes - result.DestinationBytes
 	succeeded = true
 	return result, nil
+}
+
+func sqliteFileBytes(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return info.Size(), nil
 }

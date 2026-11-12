@@ -1,12 +1,12 @@
 # Per-workspace SQLite compaction and online space reclaim
 
-This is the hosted-operator procedure for shrinking one workspace database and
+This is the operator procedure for shrinking one workspace database and
 then keeping it reclaimable online. It is **offline and per workspace**: never
 run it against a live core, never run it across workspaces in one step, and
 never let the updater or a supervisor restart the target while it runs.
 
-The offline helper writes a new file with `auto_vacuum=INCREMENTAL` and
-`page_size=4096`. The online watchdog can then return freed pages to the
+The offline helper writes a new file with `auto_vacuum=INCREMENTAL` and the
+source page size. The online watchdog can then return freed pages to the
 filesystem in bounded `PRAGMA incremental_vacuum(N)` slices. An existing
 `auto_vacuum=NONE` file does not shrink on its own; it must be compacted once
 with this procedure.
@@ -21,9 +21,10 @@ with this procedure.
 - The destination is a sibling path on the **same filesystem** as
   `state.sqlite`, so the final rename is atomic.
 - Free space on that filesystem is at least the source's live-page bytes plus
-  the reserve. The helper computes live pages as
-  `(page_count - freelist_count) * page_size` and defaults the reserve to
-  **2 GiB**. It refuses before creating the output when the check fails. Use
+  its WAL size plus the reserve. The helper computes live pages as
+  `(page_count - freelist_count) * page_size`, adds the current
+  `state.sqlite-wal` size, and defaults the reserve to **2 GiB**. It refuses
+  before creating the output when the check fails. Use
   `--reserve-bytes` only to raise the reserve for a constrained host; do not
   lower it to force a copy onto a nearly full volume.
 - The source is not already the destination, and the destination does not
@@ -65,16 +66,18 @@ source and listen port. Do not reconstruct a port from an instance name.
    and always requires that certification.
 
    Require exit 0 and the `Verified copy` line. It reports before/after/saved
-   bytes, `auto_vacuum=2`, `page_size=4096`, live-page bytes, free space and the
-   reserve. The helper takes the serving OS lease and an exclusive SQLite lock,
+   bytes, `auto_vacuum=2`, the source page size, live-page bytes, WAL bytes,
+   free space and the reserve. The helper takes the serving OS lease and an
+   exclusive SQLite lock,
    runs `VACUUM INTO`, verifies `integrity_check`, compares every table in both
    directions, checks PM cursor identities, verifies the output's
    `auto_vacuum=2` and page size, and fsyncs the result. On failure it removes
    its incomplete output and leaves the source unchanged.
 5. **Verify the copy before publishing.** While the core is still stopped,
    open the new file read-only and require `PRAGMA integrity_check` = `ok`,
-   `PRAGMA auto_vacuum` = `2`, `PRAGMA page_size` = `4096`, and representative
-   row counts. Do not publish an unverified copy.
+   `PRAGMA auto_vacuum` = `2`, `PRAGMA page_size` equal to the source page size
+   recorded before compaction, and representative row counts. Do not publish an
+   unverified copy.
 6. **Publish atomically, keeping the old file.** Checkpoint and close the
    source connection, and confirm the WAL is absent or empty. Preserve UID/GID
    and restrictive mode. Rename the original to `state.sqlite.pre-compact`,
@@ -100,8 +103,8 @@ Roll out one workspace at a time and record before/after bytes, free space,
 helper output and smoke results:
 
 1. A small canary workspace.
-2. A personal workspace.
-3. `omi` (the largest target).
+2. A medium workspace.
+3. The largest workspace.
 
 Stop the rollout on any helper failure, free-space refusal, integrity mismatch,
 unexpected `auto_vacuum`/page size, or smoke-check failure. Do not batch
@@ -113,7 +116,8 @@ Once the workspace runs on the compacted file, the normal watchdog tick can
 reclaim freed pages without another outage. It acts only when
 `PRAGMA auto_vacuum=2` and the freelist exceeds both the absolute and relative
 thresholds, then runs at most `ANX_SQLITE_INCREMENTAL_VACUUM_PAGES` (default
-2048 pages, 8 MiB at 4 KiB pages) per tick with a short busy timeout. It is a
+2048 pages, 8 MiB at 4 KiB pages; maximum 65536) per tick with a short busy
+timeout. It is a
 no-op on `auto_vacuum=NONE` databases. See the
 [core runbook](../core/docs/runbook.md#sqlite-incremental-vacuum) for the
 threshold and timeout knobs. This online path does not convert an existing

@@ -72,6 +72,9 @@ func TestCompactSQLiteOfflineSetsIncrementalAutoVacuumAndPreservesRelations(t *t
 	if result.SavedBytes != result.SourceBytes-result.DestinationBytes {
 		t.Fatalf("saved bytes = %d", result.SavedBytes)
 	}
+	if result.WALBytes != 0 {
+		t.Fatalf("result WAL bytes = %d, want 0 for a checkpointed source", result.WALBytes)
+	}
 
 	output := openCompactTestDB(t, destination)
 	var autoVacuum, pageSize int
@@ -141,6 +144,37 @@ func TestCompactSQLiteOfflineRefusesInsufficientFreeSpace(t *testing.T) {
 	}
 }
 
+func TestCompactSQLiteOfflineRejectsInvalidReserve(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "state.sqlite")
+	db := openCompactTestDB(t, source)
+	if _, err := db.Exec(`CREATE TABLE items(id INTEGER PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		reserve int64
+		want    string
+	}{
+		{name: "negative", reserve: -1, want: "reserve bytes must not be negative"},
+		{name: "overflow", reserve: math.MaxInt64, want: "free-space estimate overflows"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			destination := filepath.Join(dir, tc.name+".sqlite")
+			_, err := CompactSQLiteOffline(context.Background(), source, destination, CompactOptions{ReserveBytes: tc.reserve})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q, got %v", tc.want, err)
+			}
+			if _, statErr := os.Stat(destination); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("rejected compaction created a destination: %v", statErr)
+			}
+		})
+	}
+}
+
 func TestCompactSQLiteOfflineRefusesSamePathAndExistingDestination(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "state.sqlite")
@@ -188,5 +222,21 @@ func TestCompactSQLiteOfflineRemovesFailedOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(destination); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("failed compaction retained output: %v", err)
+	}
+
+	// Cleanup must detach and close the output before removing it, leaving the
+	// destination free for a corrected retry rather than a stale partial file.
+	repair := openCompactTestDB(t, source)
+	if _, err := repair.Exec(`DROP TABLE pm_records`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repair.Exec(`CREATE TABLE pm_records(kind TEXT, id TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repair.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CompactSQLiteOffline(context.Background(), source, destination, CompactOptions{ReserveBytes: 1}); err != nil {
+		t.Fatalf("retry after failed cleanup: %v", err)
 	}
 }

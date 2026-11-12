@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +117,35 @@ func TestIncrementalVacuumNoOpOnNoneDatabase(t *testing.T) {
 	}
 	if after.freelistCount != before.freelistCount {
 		t.Fatalf("NONE freelist changed: before=%d after=%d", before.freelistCount, after.freelistCount)
+	}
+}
+
+func TestIncrementalVacuumCloseWithCanceledContextDiscardsConnection(t *testing.T) {
+	db, conn := openIncrementalVacuumTestDB(t, "INCREMENTAL")
+	executor := &sqliteIncrementalVacuumExecutor{conn: conn}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// Marking the connection bad can make the subsequent Close report
+	// ErrConnDone; callers ignore Close errors, and the discard is what matters.
+	if err := executor.Close(ctx); err != nil && !errors.Is(err, sql.ErrConnDone) {
+		t.Fatalf("Close with canceled context: %v", err)
+	}
+	// A canceled-context close must return driver.ErrBadConn so database/sql
+	// discards the connection instead of pooling it; an idle pooled connection
+	// would leave the open connection count at one.
+	if open := db.Stats().OpenConnections; open != 0 {
+		t.Fatalf("open connections after canceled close = %d, want 0 (connection was pooled)", open)
+	}
+}
+
+func TestIncrementalVacuumCloseWithLiveContextReturnsConnection(t *testing.T) {
+	db, conn := openIncrementalVacuumTestDB(t, "INCREMENTAL")
+	executor := &sqliteIncrementalVacuumExecutor{conn: conn}
+	if err := executor.Close(context.Background()); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if open := db.Stats().OpenConnections; open != 1 {
+		t.Fatalf("open connections after close = %d, want 1 (idle pooled connection)", open)
 	}
 }
 

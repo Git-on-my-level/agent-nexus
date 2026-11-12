@@ -199,6 +199,7 @@ func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", value: "nope"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "0"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "-1"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "65537"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "nope"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "0s"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "-1ms"},

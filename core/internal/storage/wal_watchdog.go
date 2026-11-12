@@ -124,8 +124,8 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 	}
 	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES"); ok {
 		parsed, err := strconv.Atoi(strings.TrimSpace(value))
-		if err != nil || parsed <= 0 {
-			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_PAGES: must be a positive integer")
+		if err != nil || parsed <= 0 || parsed > maxIncrementalVacuumPages {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_PAGES: must be an integer from 1 to %d", maxIncrementalVacuumPages)
 		}
 		config.incrementalVacuum.pages = parsed
 	}
@@ -307,7 +307,7 @@ func (w *walWatchdog) reclaimIncremental(ctx context.Context) {
 	if result.reclaimed > 0 {
 		w.logf(
 			"anx-core: SQLite incremental vacuum stage=incremental_vacuum pages_reclaimed=%d freelist_before=%d freelist_after=%d page_count=%d",
-			result.reclaimed, result.stats.freelistCount+result.reclaimed, result.stats.freelistCount, result.stats.pageCount,
+			result.reclaimed, result.freelistBefore, result.stats.freelistCount, result.stats.pageCount,
 		)
 	}
 }

@@ -40,8 +40,8 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf(
-		"Verified copy: before=%d after=%d saved=%d bytes auto_vacuum=%d page_size=%d live_pages=%d free_before=%d reserve=%d. Keep the core stopped until replacement; source was retained.\n",
+		"Verified copy: before=%d after=%d saved=%d bytes auto_vacuum=%d page_size=%d live_pages=%d wal=%d free_before=%d reserve=%d. Keep the core stopped until replacement; source was retained.\n",
 		result.SourceBytes, result.DestinationBytes, result.SavedBytes, result.AutoVacuum,
-		result.PageSize, result.LivePageBytes, result.FreeBytes, result.ReserveBytes,
+		result.PageSize, result.LivePageBytes, result.WALBytes, result.FreeBytes, result.ReserveBytes,
 	)
 }

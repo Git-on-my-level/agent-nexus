@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ const (
 	defaultIncrementalVacuumMinFreelistBytes   int64 = 64 * 1024 * 1024
 	defaultIncrementalVacuumMinFreelistPercent       = 10
 	defaultIncrementalVacuumPages                    = 2048
+	maxIncrementalVacuumPages                        = 65536
 	defaultIncrementalVacuumBusyTimeout              = 250 * time.Millisecond
 )
 
@@ -44,9 +46,10 @@ func (c incrementalVacuumConfig) shouldReclaim(stats incrementalVacuumStats) boo
 }
 
 type incrementalVacuumResult struct {
-	stats     incrementalVacuumStats
-	reclaimed int64
-	skipped   bool
+	stats          incrementalVacuumStats
+	freelistBefore int64
+	reclaimed      int64
+	skipped        bool
 }
 
 type incrementalVacuumExecutor interface {
@@ -70,6 +73,7 @@ func (e *sqliteIncrementalVacuumExecutor) Reclaim(ctx context.Context, config in
 		return result, err
 	}
 	result.stats = before
+	result.freelistBefore = before.freelistCount
 	if !config.shouldReclaim(before) {
 		result.skipped = true
 		return result, nil
@@ -90,6 +94,11 @@ func (e *sqliteIncrementalVacuumExecutor) Reclaim(ctx context.Context, config in
 }
 
 func (e *sqliteIncrementalVacuumExecutor) Close(ctx context.Context) error {
+	// A canceled tick must not return a connection whose context is already
+	// done to the pool; mark it bad so database/sql discards it instead.
+	if ctx.Err() != nil {
+		_ = e.conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
 	return e.conn.Close()
 }
 
