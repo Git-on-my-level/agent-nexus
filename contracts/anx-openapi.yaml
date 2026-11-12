@@ -1095,7 +1095,7 @@ paths:
     post:
       operationId: pmDecisionsAnswer
       summary: Answer and authorize a scoped decision
-      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies human, channel, or pm_turn proposals and proposed_by identifies the proposing actor, so clients can direct reproposal truthfully. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies the recorded provenance (human, or legacy channel or pm_turn) and proposed_by identifies the proposing actor so clients can display attribution truthfully. New proposals are human-only; channel and pm_turn values appear only on legacy records. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
       tags:
       - pm
       x-anx-surface: canonical
@@ -10563,7 +10563,7 @@ components:
           type: string
           readOnly: true
           enum: [human, pm_turn, channel]
-          description: Human principal proposals retain human even through a channel; the existing origin field records the validated channel identity. pm_turn and channel values are retained for legacy records. Absent on legacy decisions without provenance.
+          description: Legacy human channel proposals retain origin_kind human; the existing origin field records the validated historical channel identity. pm_turn and channel values are retained for legacy records only. New proposals record origin_kind human and do not accept caller-supplied origin. Absent on legacy decisions without provenance.
         turn_id:
           type: string
           readOnly: true

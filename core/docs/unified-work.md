@@ -313,8 +313,9 @@ record `origin_kind` `human`; caller-supplied origin is not accepted. Legacy
 `pm_turn` and `channel` records remain readable as historical, read-only
 provenance, but no new turn or channel-origin proposals are created.
 Superseded records retain their own attribution; reusing identical intent
-retains the original proposal's attribution. A different proposer or legacy
-origin kind is different intent. Legacy decisions without recorded provenance
+(same approver, work, scope, instruction, payload, and target revision)
+retains the original proposal's attribution. Proposer and delivery origin are
+provenance, not part of intent. Legacy decisions without recorded provenance
 omit these fields rather than inventing attribution.
 
 When a proposal replaces an awaiting decision, the create/propose response
