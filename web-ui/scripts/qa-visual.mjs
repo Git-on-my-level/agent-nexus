@@ -291,8 +291,6 @@ export const QA_SCENES = [
       await page
         .getByRole("button", { name: "Revoke administration", exact: true })
         .waitFor();
-      // Ask is rendered only after PM presence resolves.
-      await page.getByRole("link", { name: "Ask", exact: true }).waitFor();
     },
   },
   {
