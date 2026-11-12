@@ -29,6 +29,19 @@ const (
 
 var pmProductKinds = []string{"turn", "conversation", "binding", "delivery", "delivery_retry"}
 
+// Package-level seams keep the destructive migration's failure paths testable.
+// Production behavior is the direct implementation in each variable.
+var (
+	pmArchiveDumpTable     = dumpPMTable
+	pmArchiveVerify        = verifyPMArchive
+	pmArchiveRename        = os.Rename
+	pmArchiveFileSync      = func(file *os.File) error { return file.Sync() }
+	pmArchiveEncryptClose  = func(closer io.Closer) error { return closer.Close() }
+	pmArchiveWritePart     = func(dst io.Writer, src io.Reader) (int64, error) { return io.Copy(dst, src) }
+	pmArchiveDirSync       = syncPMArchiveDir
+	pmArchiveRecordReceipt = recordPMArchiveReceipt
+)
+
 // These indexes serve only product record kinds. Decide indexes on pm_records
 // are deliberately kept.
 var pmProductIndexes = []string{
@@ -90,17 +103,12 @@ func migrateRemoveBuiltinPM(ctx context.Context, tx *sql.Tx) error {
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO `+pmArchiveReceiptsTable+`(workspace_id,archive_path,sha256,size_bytes,recipients_fingerprint,schema_version,created_at) VALUES(?,?,?,?,?,?,?)`,
-			written.WorkspaceID, written.ArchivePath, written.SHA256, written.SizeBytes, written.RecipientsFingerprint, written.SchemaVersion, written.CreatedAt); err != nil {
-			return fmt.Errorf("record PM archive receipt: %w", err)
+		if err := pmArchiveRecordReceipt(ctx, tx, written); err != nil {
+			return err
 		}
 	case receipt != nil:
-		info, statErr := os.Stat(receipt.ArchivePath)
-		if statErr != nil {
-			return fmt.Errorf("PM archive receipt exists but its archive is missing: %w", statErr)
-		}
-		if !info.Mode().IsRegular() || info.Size() <= 0 {
-			return errors.New("PM archive receipt exists but its archive is empty or not a regular file")
+		if err := pmArchiveVerify(receipt.ArchivePath, receipt.SizeBytes, receipt.SHA256); err != nil {
+			return fmt.Errorf("PM archive receipt verification failed: %w", err)
 		}
 	}
 	// If productRows == 0 and there is no receipt, the product tables hold no
@@ -111,6 +119,29 @@ func migrateRemoveBuiltinPM(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	return resolvePMWatcherArtifacts(ctx, tx)
+}
+
+func recordPMArchiveReceipt(ctx context.Context, tx *sql.Tx, receipt *pmArchiveReceipt) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO `+pmArchiveReceiptsTable+`(workspace_id,archive_path,sha256,size_bytes,recipients_fingerprint,schema_version,created_at) VALUES(?,?,?,?,?,?,?)`,
+		receipt.WorkspaceID, receipt.ArchivePath, receipt.SHA256, receipt.SizeBytes, receipt.RecipientsFingerprint, receipt.SchemaVersion, receipt.CreatedAt); err != nil {
+		return fmt.Errorf("record PM archive receipt: %w", err)
+	}
+	return nil
+}
+
+func syncPMArchiveDir(root string) error {
+	dir, err := os.Open(root)
+	if err != nil {
+		return fmt.Errorf("open PM archive directory: %w", err)
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return fmt.Errorf("sync PM archive directory: %w", err)
+	}
+	if err := dir.Close(); err != nil {
+		return fmt.Errorf("close PM archive directory: %w", err)
+	}
+	return nil
 }
 
 func sqliteDatabasePath(ctx context.Context, tx *sql.Tx) (string, error) {
@@ -265,7 +296,7 @@ func writePMArchive(ctx context.Context, tx *sql.Tx, databasePath, workspaceID s
 		if table == pmArchiveReceiptsTable {
 			continue
 		}
-		part, err := dumpPMTable(ctx, tx, staging, table)
+		part, err := pmArchiveDumpTable(ctx, tx, staging, table)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +369,7 @@ func writePMArchive(ctx context.Context, tx *sql.Tx, databasePath, workspaceID s
 		if err != nil {
 			return nil, err
 		}
-		_, copyErr := io.Copy(tarWriter, source)
+		_, copyErr := pmArchiveWritePart(tarWriter, source)
 		closeErr := source.Close()
 		if copyErr != nil {
 			return nil, fmt.Errorf("write PM archive part %s: %w", name, copyErr)
@@ -353,10 +384,10 @@ func writePMArchive(ctx context.Context, tx *sql.Tx, databasePath, workspaceID s
 	if err := zstdWriter.Close(); err != nil {
 		return nil, fmt.Errorf("finish PM archive compression: %w", err)
 	}
-	if err := ageWriter.Close(); err != nil {
+	if err := pmArchiveEncryptClose(ageWriter); err != nil {
 		return nil, fmt.Errorf("finish PM archive encryption: %w", err)
 	}
-	if err := tempFile.Sync(); err != nil {
+	if err := pmArchiveFileSync(tempFile); err != nil {
 		return nil, fmt.Errorf("sync PM archive: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
@@ -368,16 +399,15 @@ func writePMArchive(ctx context.Context, tx *sql.Tx, databasePath, workspaceID s
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyPMArchive(tempPath, info.Size(), cipherDigest); err != nil {
+	if err := pmArchiveVerify(tempPath, info.Size(), cipherDigest); err != nil {
 		return nil, err
 	}
-	if err := os.Rename(tempPath, finalPath); err != nil {
+	if err := pmArchiveRename(tempPath, finalPath); err != nil {
 		return nil, fmt.Errorf("publish PM archive: %w", err)
 	}
 	removeTemp = false
-	if dir, err := os.Open(root); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
+	if err := pmArchiveDirSync(root); err != nil {
+		return nil, err
 	}
 	return &pmArchiveReceipt{
 		WorkspaceID:           workspaceID,
@@ -404,6 +434,16 @@ func verifyPMArchive(path string, size int64, expectedDigest string) error {
 	}
 	if expectedDigest == "" {
 		return errors.New("PM archive verification failed: missing ciphertext digest")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat PM archive for verification: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("PM archive verification failed: archive is not a regular file")
+	}
+	if info.Size() != size {
+		return fmt.Errorf("PM archive verification failed: size mismatch (recorded %d, actual %d)", size, info.Size())
 	}
 	file, err := os.Open(path)
 	if err != nil {

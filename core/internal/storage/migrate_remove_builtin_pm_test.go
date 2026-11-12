@@ -227,6 +227,114 @@ func TestRemoveBuiltinPMFailsClosedWithInvalidRecipients(t *testing.T) {
 	assertLegacyPMDataIntact(t, db)
 }
 
+func TestRemoveBuiltinPMRejectsDamagedReceiptArchiveOnResume(t *testing.T) {
+	cases := []struct {
+		name   string
+		damage func(t *testing.T, path string)
+	}{
+		{"corrupted", func(t *testing.T, path string) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data[len(data)/2] ^= 0xff
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"truncated", func(t *testing.T, path string) {
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Truncate(path, info.Size()/2); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			root := t.TempDir()
+			ws, err := storage.InitializeWorkspace(ctx, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedLegacyPMWorkspace(t, ws.DB())
+			resetPMArchiveMigration(t, ws.DB())
+			if err := ws.Close(); err != nil {
+				t.Fatal(err)
+			}
+			ops, err := age.GenerateX25519Identity()
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec, err := age.GenerateX25519Identity()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+			t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+			ws, err = storage.InitializeWorkspace(ctx, root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var archivePath string
+			if err = ws.DB().QueryRow(`SELECT archive_path FROM pm_archive_receipts`).Scan(&archivePath); err != nil {
+				t.Fatal(err)
+			}
+			// Put product rows back and rewind only the ledger, leaving the
+			// receipt in place to simulate a resumed migration.
+			reseedPMProductData(t, ws.DB())
+			if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version=138`); err != nil {
+				t.Fatal(err)
+			}
+			if err = ws.Close(); err != nil {
+				t.Fatal(err)
+			}
+			tc.damage(t, archivePath)
+
+			if _, err := storage.InitializeWorkspace(ctx, root); err == nil {
+				t.Fatal("expected damaged receipt archive to abort the migration")
+			}
+			db := openWorkspaceDB(t, root)
+			defer db.Close()
+			assertLegacyPMDataIntact(t, db)
+			assertMigrationAbsent(t, db, 138)
+		})
+	}
+}
+
+func reseedPMProductData(t *testing.T, db *sql.DB) {
+	t.Helper()
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS pm_presence(workspace_id TEXT NOT NULL,actor_id TEXT NOT NULL,last_seen_at TEXT NOT NULL,signal TEXT NOT NULL,first_seen_at TEXT NOT NULL DEFAULT '',PRIMARY KEY(workspace_id,actor_id))`,
+		`INSERT OR REPLACE INTO pm_records VALUES('turn','turn-1','ws_main','pm-agent','',1,'{"status":"delivered"}')`,
+		`INSERT OR REPLACE INTO pm_records VALUES('conversation','conversation-1','ws_main','pm-agent','',1,'{}')`,
+		`INSERT OR REPLACE INTO pm_records VALUES('binding','binding-1','ws_main','owner','',1,'{}')`,
+		`INSERT OR REPLACE INTO pm_records VALUES('delivery','delivery-1','ws_main','pm-agent','',1,'{}')`,
+		`INSERT OR REPLACE INTO pm_records VALUES('delivery_retry','delivery-retry-1','ws_main','pm-agent','',1,'{}')`,
+		`INSERT OR REPLACE INTO pm_presence VALUES('ws_main','pm-agent','2026-01-01T00:00:00Z','connect','2026-01-01T00:00:00Z')`,
+	}
+	for _, statement := range statements {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("reseed %q: %v", statement, err)
+		}
+	}
+}
+
+func assertMigrationAbsent(t *testing.T, db *sql.DB, version int) {
+	t.Helper()
+	var applied int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, version).Scan(&applied); err != nil {
+		t.Fatal(err)
+	}
+	if applied != 0 {
+		t.Fatalf("migration %d recorded after failed resume", version)
+	}
+}
+
 func resetPMArchiveMigration(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version=138; DROP TABLE IF EXISTS pm_archive_receipts`); err != nil {
