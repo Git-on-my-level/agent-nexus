@@ -82,6 +82,8 @@ func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledge
 	// above, exactly as the per-revision edges it replaces did.
 	parents = append(parents, resourceaccess.DocumentHistoryKind)
 	children[resourceaccess.DocumentHistoryKind] = []string{"SELECT 'document' child_kind,d.id child_id"}
+	parents = append(parents, resourceaccess.CardHistoryKind)
+	children[resourceaccess.CardHistoryKind] = []string{"SELECT 'card' child_kind,d.id child_id"}
 	// Dispatch structural probes once per vertex kind instead of running a
 	// separate recursive UNION arm for every possible parent/child pairing.
 	// Each collection remains an indexed lookup of this vertex's children.
@@ -104,14 +106,14 @@ func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledge
 	// contributor must constrain the document before MATCH/rank/limit are applied.
 	terms = append(terms, "SELECT 'document',r.id"+carry+" FROM "+name+" d JOIN main.events e ON d.kind='event' AND e.id=d.id JOIN main.documents r ON r.thread_id=e.thread_id WHERE e.type='message_posted' AND COALESCE(e.thread_id,'')<>''")
 	refs := func(join, ref string) {
-		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')")
+		terms = append(terms, "SELECT e.source_type,e.source_id"+carry+" FROM "+name+" d "+join+" JOIN main.ref_edges e INDEXED BY idx_ref_edges_access_cover ON e.target_type=d.kind AND e.target_id="+ref+" COLLATE NOCASE AND e.edge_type='ref' WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history','card_history')")
 		keys := []string{resourceaccess.AtomKeySQL("(d.kind||':'||" + ref + ")")}
 		if join == "" {
 			// Raw and typed ID atoms use the same target index. One recursive
 			// term avoids visiting and deduplicating the same children twice.
 			keys = []string{resourceaccess.AtomKeySQL("(d.kind||':'||d.id)"), "CASE WHEN d.kind<>'plan' THEN " + resourceaccess.AtomKeySQL("d.id") + " END"}
 		}
-		terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d "+join, carry, reader, "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')", keys)...)
+		terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d "+join, carry, reader, "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history','card_history')", keys)...)
 	}
 	refs("", "d.id")
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
@@ -145,7 +147,7 @@ func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledge
 	}
 	emptyHandle += " END"
 	emptyRef := "((" + emptyHandle + ")='' OR EXISTS(SELECT 1 FROM main.resource_handle_aliases r WHERE r.resource_type=d.kind AND r.resource_id=d.id AND r.alias_handle='') OR EXISTS(SELECT 1 FROM main.resource_access_tombstones r WHERE r.kind=d.kind AND r.id=d.id AND r.ref=''))"
-	validKind := "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')"
+	validKind := "d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history','card_history')"
 	// SQLite otherwise evaluates the legacy spelling probes before discovering
 	// that no empty edge exists. Gate them with a cheap covering-index lookup.
 	emptyNavigation := "EXISTS(SELECT 1 FROM main.ref_edges empty WHERE empty.target_type=d.kind AND empty.target_id='' COLLATE NOCASE AND empty.edge_type='ref')"
@@ -174,7 +176,7 @@ func ownershipRefs(name, relation string) string {
  LEFT JOIN main.resource_access_identities i ON i.kind=d.kind AND i.resource_id=d.id
  LEFT JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id AND m.authority<>'nexus'
  JOIN json_each(json_array(d.id,i.ref,json_extract(m.metadata_json,'$.source.url'))) j
- WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','document_history') AND j.value IS NOT NULL AND j.value<>'')`
+ WHERE d.kind NOT LIKE 'filter/%' AND d.kind NOT IN ('work_evidence_record','work_evidence_alias','document_history','card_history') AND j.value IS NOT NULL AND j.value<>'')`
 }
 
 func privateOwnershipGraph() string {

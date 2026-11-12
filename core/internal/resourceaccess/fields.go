@@ -49,6 +49,15 @@ var OwnershipSources = []OwnershipSource{
 // never a resource identity, and its single structural child is the document.
 const DocumentHistoryKind = "document_history"
 
+// CardHistoryKind keys one deduplicated edge set per card for the reference
+// atoms of all its revisions and their exclusively owned revision artifacts.
+// A card, its revisions and their artifacts already share one denial outcome
+// through structural edges, so keying their reference edges by the card
+// preserves every authorization result while storing each target once per
+// card instead of once per revision. It is a graph vertex only, never a
+// resource identity, and its single structural child is the card.
+const CardHistoryKind = "card_history"
+
 // FilterSources are ancillary rows with no navigable canonical resource kind.
 // Their complete rows are filtered by the same predicate before query limits.
 var FilterSources = map[string][]string{

@@ -62,4 +62,9 @@ var recentMigrations = []migration{
 	// pm_records. Archive configuration is required whenever product data
 	// exists; the migration fails closed rather than dropping without a copy.
 	{Version: 138, AfterApply: migrateRemoveBuiltinPM},
+	// Key revision and exclusive revision-artifact reference edges by their
+	// card (see card_access_history.go). Installs triggers only; existing
+	// edges move in bounded maintenance. 139-142 are reserved for the
+	// compact-access, audit and card-manifest PRs.
+	{Version: 143, AfterApply: installCardAccessHistory},
 }

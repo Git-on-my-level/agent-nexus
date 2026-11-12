@@ -172,6 +172,9 @@ func settle(ctx context.Context, w *storage.Workspace) error {
 	if err = drain("document_history", w.MaintainDocumentAccessHistoryBatch); err != nil {
 		return err
 	}
+	if err = drain("card_history", w.MaintainCardAccessHistoryBatch); err != nil {
+		return err
+	}
 	// Exercise the rollback reader's own repair path, retaining its strict
 	// refusal to serve stale aggregates until the dirty queue is empty.
 	previous := os.Getenv("ANX_INDEPENDENT_DOCUMENT_SEARCH")

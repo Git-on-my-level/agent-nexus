@@ -45,7 +45,7 @@ func installAccessAdmissionSpellings(ctx context.Context, tx *sql.Tx) error {
 	// _anx_denied_atoms formatting exactly, including document aliases and URLs.
 	insert := func(origin, originID, kind, id, value, from string, raw bool) string {
 		refs := `json_array(CASE WHEN k='external_key' OR k='card' AND (v LIKE 'http://%' OR v LIKE 'https://%') THEN v ELSE k||':'||v END,CASE WHEN k='document' THEN 'doc:'||v END)`
-		valid := `k NOT LIKE 'filter/%' AND k NOT IN ('work_evidence_record','work_evidence_alias','document_history')`
+		valid := `k NOT LIKE 'filter/%' AND k NOT IN ('work_evidence_record','work_evidence_alias','document_history','card_history')`
 		if raw {
 			refs = `json_array(v)`
 			valid = `k NOT LIKE 'filter/%' AND k NOT IN ('brief_loop','plan','work_evidence_record','work_evidence_alias','external_key')`
@@ -57,11 +57,12 @@ func installAccessAdmissionSpellings(ctx context.Context, tx *sql.Tx) error {
 		return `INSERT INTO resource_access_admission_spellings SELECT '` + origin + `',o,k,i,j.value,` + isRef + `,unhex(` + resourceaccess.AtomKeySQL("j.value") + `),` + `unhex(` + resourceaccess.ProseKeySQL("j.value") + `)` + ` FROM (SELECT ` + originID + ` o,` + kind + ` k,` + id + ` i,` + value + ` v FROM ` + from + `) CROSS JOIN json_each(` + refs + `) j WHERE ` + valid + ` AND j.value IS NOT NULL AND j.value<>'' ON CONFLICT DO NOTHING;`
 	}
 	vertex := func(kind, id, from string) string {
-		// document_history -> document is a virtual canonical edge even when
-		// no live document row remains (retained purge provenance).
+		// document_history -> document and card_history -> card are virtual
+		// canonical edges even when no live parent row remains (retained purge
+		// provenance).
 		originID := `json_array(` + kind + `,` + id + `)`
-		// Carry the originating vertex separately from a virtual document.
-		vertices := `(SELECT ` + originID + ` o,` + kind + ` k,` + id + ` i FROM ` + from + ` UNION SELECT ` + originID + `,'document',` + id + ` FROM ` + from + ` WHERE ` + kind + `='document_history') v`
+		// Carry the originating vertex separately from a virtual parent.
+		vertices := `(SELECT ` + originID + ` o,` + kind + ` k,` + id + ` i FROM ` + from + ` UNION SELECT ` + originID + `,'document',` + id + ` FROM ` + from + ` WHERE ` + kind + `='document_history' UNION SELECT ` + originID + `,'card',` + id + ` FROM ` + from + ` WHERE ` + kind + `='card_history') v`
 		return insert("vertex", "v.o", "v.k", "v.i", "v.i", vertices, false) + insert("vertex", "v.o", "v.k", "v.i", "v.i", vertices, true)
 	}
 	removeVertex := func(kind, id string) string {

@@ -81,15 +81,19 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	links := `INSERT OR IGNORE INTO resource_access_admission_links(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger) `
 	keys := `INSERT OR IGNORE INTO resource_access_admission_keys(origin,origin_id,kind,id,ref,navigation,atom,published) `
 	virtualHistoryKeys := func(origin, originID, kind, id, from, condition string) string {
-		// The canonical document_history -> document edge exists even after a
-		// purge removed the live document. Its virtual document must still
-		// resolve raw/typed exact references and navigational ref edges.
-		where := kind + `='document_history' AND (` + condition + `)`
-		return keys + `SELECT '` + origin + `',` + originID + `,'document',` + id + `,` + id + `,1,unhex(` + resourceaccess.AtomKeySQL(`'document:'||`+id) + `),0 FROM ` + from + `(SELECT 1) WHERE ` + where + `; ` +
-			keys + `SELECT '` + origin + `',` + originID + `,'document',` + id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(id) + `),0 FROM ` + from + `(SELECT 1) WHERE ` + where + `;`
+		// The canonical document_history -> document and card_history -> card
+		// edges exist even after a purge removed the live parent. Their virtual
+		// parent must still resolve raw/typed exact references and navigational
+		// ref edges.
+		virtual := func(historyKind, targetKind string) string {
+			where := kind + `='` + historyKind + `' AND (` + condition + `)`
+			return keys + `SELECT '` + origin + `',` + originID + `,'` + targetKind + `',` + id + `,` + id + `,1,unhex(` + resourceaccess.AtomKeySQL(`'`+targetKind+`:'||`+id) + `),0 FROM ` + from + `(SELECT 1) WHERE ` + where + `; ` +
+				keys + `SELECT '` + origin + `',` + originID + `,'` + targetKind + `',` + id + `,'',0,unhex(` + resourceaccess.AtomKeySQL(id) + `),0 FROM ` + from + `(SELECT 1) WHERE ` + where + `;`
+		}
+		return virtual("document_history", "document") + virtual("card_history", "card")
 	}
 	valid := func(kind string) string {
-		return kind + ` NOT LIKE 'filter/%' AND ` + kind + ` NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history')`
+		return kind + ` NOT LIKE 'filter/%' AND ` + kind + ` NOT IN ('work_evidence_record','work_evidence_alias','external_key','document_history','card_history')`
 	}
 	publication := `('work_metadata','work_observation','work_evidence_record','work_evidence_alias')`
 	refOrigin := func(p string) string {
@@ -169,6 +173,9 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 	}{
 		{"history", "documents", "id", func(p, f string) string {
 			return links + `SELECT 'history',` + p + `id,0,'document_history',` + p + `id,'document',` + p + `id,0 FROM ` + f + `(SELECT 1) WHERE true;`
+		}, ""},
+		{"card_history", "cards", "id", func(p, f string) string {
+			return links + `SELECT 'card_history',` + p + `id,0,'card_history',` + p + `id,'card',` + p + `id,0 FROM ` + f + `(SELECT 1) WHERE true;`
 		}, ""},
 		{"comment", "events", "id", func(p, f string) string {
 			return links + `SELECT 'comment',` + p + `id,0,'event',` + p + `id,'document',d.id,0 FROM ` + f + `documents d WHERE ` + p + `type='message_posted' AND d.thread_id=` + p + `thread_id AND COALESCE(` + p + `thread_id,'')<>'';`
