@@ -62,4 +62,20 @@ var recentMigrations = []migration{
 	// pm_records. Archive configuration is required whenever product data
 	// exists; the migration fails closed rather than dropping without a copy.
 	{Version: 138, AfterApply: migrateRemoveBuiltinPM},
+	// Drop indexes whose leading columns and ordering are already served by a
+	// wider index, or that no query reads. Fresh databases no longer create
+	// them; this removes them from upgraded workspaces.
+	//   idx_events_thread_ts          -> idx_events_thread_ts_id (thread_id, ts DESC, id DESC)
+	//   idx_events_overview_answers   -> idx_events_type_ts_id (type, ts DESC, id DESC)
+	//   idx_auth_audit_events_occurred_at -> idx_auth_audit_events_event_type
+	//     (event_type, occurred_at DESC, id DESC) for the only occurred_at
+	//     ordering query (migration 132's sponsor backfill); runtime audit
+	//     listing orders by occurred_at_sort_key.
+	//   idx_auth_audit_events_invite_id -> no query filters by invite_id.
+	{Version: 147, Statements: []string{
+		`DROP INDEX IF EXISTS idx_events_thread_ts;`,
+		`DROP INDEX IF EXISTS idx_events_overview_answers;`,
+		`DROP INDEX IF EXISTS idx_auth_audit_events_occurred_at;`,
+		`DROP INDEX IF EXISTS idx_auth_audit_events_invite_id;`,
+	}},
 }

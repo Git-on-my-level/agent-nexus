@@ -2715,3 +2715,28 @@ and zero full scans.
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=4 GOFLAGS='-p=2' go test -C core ./internal/storage \
   -run '^TestPerformanceWatcherHealthReleasedUpgrade$' -count=1 -v -timeout=10m
 ```
+
+## Redundant index removal
+
+Migration 147 drops four indexes that no current runtime plan needs. Fresh
+databases no longer create them, so fresh and upgraded schemas agree.
+
+- `idx_events_thread_ts(thread_id, ts)` is a prefix of
+  `idx_events_thread_ts_id(thread_id, ts DESC, id DESC)`. Thread event reads
+  already seek the wider index; the narrower one only added write and page cost.
+- `idx_events_overview_answers(type, ts, id)` has the same keys as
+  `idx_events_type_ts_id(type, ts DESC, id DESC)`. Type-filtered event reads
+  already use the wider index, including the overview answer page.
+- `idx_auth_audit_events_occurred_at(occurred_at DESC, id DESC)` is not read at
+  runtime: audit listing orders by `occurred_at_sort_key`, and the only
+  `occurred_at` ordering query (migration 132's sponsor backfill) filters
+  `event_type` and seeks `idx_auth_audit_events_event_type`, which carries the
+  same `occurred_at DESC, id DESC` order.
+- `idx_auth_audit_events_invite_id(invite_id, occurred_at DESC, id DESC)` has no
+  reader; audit inserts write `invite_id` but no query filters on it.
+
+`TestDropRedundantIndexes` verifies both fresh initialization and a schema-138
+upgrade. The performance plan allowlist is unchanged: current SQL already
+selects the replacement indexes, so no observed plan shape changes. Historical
+allowlist entries that mention the dropped names are not produced by current
+queries.
