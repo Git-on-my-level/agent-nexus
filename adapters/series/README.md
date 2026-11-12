@@ -54,6 +54,14 @@ anx series push pending-jobs --from-command -- ./count-jobs
 # stdout may be a number or {"series":"pending-jobs","state":"healthy"}.
 ```
 
+`anx series push` reuses its scoped series token across runs for the same
+workspace, acting agent and adapter while at least 60 seconds remain before the
+server-issued expiry. The token is cached owner-only under the CLI config
+directory; host-agent and refresh credentials are never cached. If a push gets
+`401` for a cached token, the helper discards it, mints once and retries that
+push once. `anx adapters revoke <name>` and `anx adapters delete <name>` clear the
+local cached token for that adapter after the server accepts the change.
+
 No additional `anx-hosts` collector is needed: enrolled host/agent presence is
 already native ANX data (`anx host list`, `anx agents list` and the Agents page).
 Prefer that live source for fleet health over a duplicate heartbeat series.

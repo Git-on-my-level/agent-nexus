@@ -9,14 +9,22 @@ exact owning enrolled agent, expected interval, and series names/kinds/units:
 `anx adapters declare --body-file adapter.json`. Core resolves the host from the
 agent. The owning agent then uses `anx series push builds 12 --label initiative=launch`.
 The CLI finds the declared adapter and exchanges its existing host-agent token
-for a short-lived scoped series-write token before sending the point. It never
-creates an undeclared series. `--adapter name` avoids the lookup.
+for a short-lived scoped series-write token before sending the point. It reuses
+that scoped token across pushes for the same workspace base URL, acting agent
+and adapter while at least 60 seconds remain before expiry, so minute-scheduled
+adapters do not mint a token for every point. The cache is stored owner-only
+under the CLI config directory and never contains the host-agent or refresh
+credentials. If a push is rejected as unauthorized, the CLI discards the cached
+token, mints one fresh token and retries that push only once. It never creates
+an undeclared series. `--adapter name` avoids the lookup.
 
 Use `anx adapters list|revoke <name>|delete <name>` to manage sources. Revocation
 immediately blocks admitted and future writes, but keeps history. Delete also
-removes series data; a tombstone invalidates old tokens permanently. Declaration
-and permission changes are in the existing auth audit log. Full host-agent
-credentials are never handed to core as third-party source credentials.
+removes series data; a tombstone invalidates old tokens permanently. A local
+`adapters revoke` or `adapters delete` also clears cached tokens for that
+adapter. Declaration and permission changes are in the existing auth audit log.
+Full host-agent credentials are never handed to core as third-party source
+credentials.
 
 `anx series list`, `anx series show builds`, and
 `anx series query builds --range 7d --step 1h --agg sum --label initiative=launch`

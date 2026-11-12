@@ -209,7 +209,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 2838  | web-ui/src/lib/devWorkspaceFixtures.js                                             |
 | 2432  | core/cmd/contract-gen/main.go                                                      |
 | 2300  | core/internal/server/handler.go                                                    |
-| 2255  | web-ui/scripts/qa-visual.mjs                                                       |
+| 2253  | web-ui/scripts/qa-visual.mjs                                                       |
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |
 | 1946  | cli/dogfood/pi/run.mjs                                                             |
 | 1893  | web-ui/scripts/seed-core-from-mock.mjs                                             |
