@@ -9,9 +9,9 @@ discover/upload project history.
 
 - `anx-participant/SKILL.md`: lean participation, clear project matching, explicit
   task refs, source authority, privacy, provenance and meaningful status updates
-- `anx-pm/SKILL.md`: additional discovery, synthesis and coordination guidance
-  for an explicitly designated **existing ordinary agent**. It grants no extra
-  permissions, creates no runtime, and is not an independent goal driver
+- `anx-pm/SKILL.md`: how any **ordinary agent** acts as project PM on top of
+  Decide and work using the normal CLI. It grants no extra permissions, creates
+  no runtime, and requires no runner, turn lease or Ask PM UI
 - `catalog.json`: schema-v1 role, name, skill-contract version and SHA-256 over
   the exact UTF-8 `SKILL.md` bytes. The CLI embeds these same source files and
   rejects mismatched metadata. Change the skill-contract version and digest
@@ -38,8 +38,8 @@ The CLI uses the shared `~/.agents/skills` root for Codex and OMP, plus the
 canonical user skill roots for Claude Code, Cursor, Hermes, Gemini CLI, Pi,
 Continue and OpenCode. It creates a skill directory only for a detected harness.
 The participant skill is installed by default. `anx skills sync --pm` also
-installs and remembers the optional PM skill; PM availability does not designate
-every agent on the host.
+installs and remembers the optional PM skill; installing it does not grant any
+agent extra authority or make it the workspace PM.
 
 ANX refreshes only clean marker-owned files. The marker records skill version,
 CLI version, source revision and content digest. Edited and unmanaged files stay
@@ -87,9 +87,9 @@ A reviewed agentctl config bundle may select this repository as its Skill Hub:
 }
 ```
 
-Use `cli/skills/pm.json` only for hosts on which the user wants the richer PM
-instructions available. Availability of a skill is not designation of every
-agent on that host. The skill still requires explicit designation.
+Use `cli/skills/pm.json` only for hosts on which the user wants the PM
+instructions available. Any agent can act as PM with the skill; installing it
+grants no extra authority and does not make the agent the workspace PM.
 
 The placeholder above is deliberately not an executable configuration. Wait
 until the selected ANX revision contains these packs. Pin a reviewed commit

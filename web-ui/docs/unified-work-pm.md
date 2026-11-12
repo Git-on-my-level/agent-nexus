@@ -1,8 +1,9 @@
-# Unified work and PM operator surface
+# Unified work and Decide operator surface
 
-Primary navigation is Inbox, Tasks, and Docs. Ask PM is an action, not a
-destination category. Tasks table and board project the same canonical `/work`
-records. Work stays backed by existing cards. Filters are shareable URL
+Primary navigation is Inbox, Tasks, and Docs. The built-in Ask PM conversation
+and its `/pm` routes were removed in 2026-11; any ordinary agent acts as PM with
+the `anx-pm` skill and the normal CLI. Tasks table and board project the same
+canonical `/work` records. Work stays backed by existing cards. Filters are shareable URL
 parameters, and list pagination uses opaque server cursors. External source
 statuses remain visible even when their normalized phase is unfamiliar.
 
@@ -27,8 +28,6 @@ All routes are under `/o/{organization}/w/{workspace}`.
   action, observation history, and refresh requests.
 - `/docs`, `/docs/{document_ref}`: shared knowledge. Comments are first-class;
   a doc can become a discussion room.
-- `/pm`: Ask PM — private durable conversation, queued turns, replay-safe
-  request keys. Suggested questions populate the composer without sending.
 - `/integrations`, `/access`, `/secrets`, `/events`: settings (also under
   `/more` on mobile). Events is the audit log.
 
@@ -46,7 +45,7 @@ never in primary nav.
 
 All persistent actions use the authenticated workspace core client and generated
 command registry. There is no browser database, alternate authority,
-provider/model registry, worker launcher, or fabricated PM reply. Observed time,
+provider/model registry, worker launcher, or fabricated reply. Observed time,
 source activity, and meaningful progress are displayed separately. An observation
 that claims verification remains a reported claim unless core supplies trusted
 verification. A queued refresh only records a request. Delivered and acknowledged
@@ -63,7 +62,6 @@ make -C web-ui check
 pnpm --dir web-ui run build
 ```
 
-The runtime requires the canonical Work/PM contract and corresponding core
+The runtime requires the canonical Work/Decide contract and corresponding core
 handlers. An unconfigured reader or source executor produces an explicit
-unavailable/queued state. `anx pm serve` is the PM runner; it does not require
-`ANX_PM_BRIDGE_ENABLED`.
+unavailable state.

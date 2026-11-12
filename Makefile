@@ -26,7 +26,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate pm-serve http-record-test http-record-run http-record-compile http-record-replay bridge-test release-check release-patch platform-constraints core-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate http-record-test http-record-run http-record-compile http-record-replay bridge-test release-check release-patch platform-constraints core-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -157,12 +157,6 @@ cli-integration-test: ## Run CLI real-binary integration tests (non-default)
 
 scenario-validate: ## Validate seeded scenario counts against a running core
 	ANX_CORE_BASE_URL="$(CORE_BASE_URL)" ANX_DEV_SEED_SCENARIO="$(DEV_SEED_SCENARIO)" ./scripts/anx-scenario-validate
-
-PM_WORK_DIR ?= $(CURDIR)/.tmp/pm-runner
-PM_RUNNER ?= omp -p --mode json --model zai/glm-5.3 --auto-approve
-
-pm-serve: cli-build ## Run anx pm serve as the derived PM agent (requires an enrolled host)
-	$(CURDIR)/$(CLI_DIR)/anx --base-url "$(CORE_BASE_URL)" --as pm pm serve --work-dir "$(PM_WORK_DIR)" --runner '$(PM_RUNNER)'
 
 http-record-test: ## Run tests for the local HTTP recording proxy
 	cd $(HTTP_RECORD_DIR) && go test ./...

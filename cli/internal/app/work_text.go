@@ -15,10 +15,10 @@ import (
 
 func workHelpText(topic string) (string, bool) {
 	if topic == "pm card" {
-		return "Usage: anx pm card <card-ref>\nRead any visible card in full inside a claimed PM turn.", true
+		return "Usage: anx pm card <card-ref>\nRead any visible card in full under the requesting reader.", true
 	}
 	if topic == "pm propose" {
-		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.", true
+		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity comes from the authenticated principal.", true
 	}
 	if topic == "pm context" {
 		meta, _ := registry.LoadEmbedded()

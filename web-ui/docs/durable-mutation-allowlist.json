@@ -194,7 +194,7 @@
   },
   "routes/o/[organization]/w/[workspace]/events/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -202,7 +202,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -210,7 +210,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte": {
     "classification": "stage-2",
-    "reason": "TODO: work refresh intent/replay; fetch is PM presence wiring and resolveRefs is a read helper.",
+    "reason": "TODO: work refresh intent/replay; fetch is work refresh wiring and resolveRefs is a read helper.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1,
@@ -220,7 +220,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/new/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -228,7 +228,7 @@
   },
   "routes/o/[organization]/w/[workspace]/integrations/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1

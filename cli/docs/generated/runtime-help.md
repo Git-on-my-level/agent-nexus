@@ -10913,7 +10913,7 @@ Read any visible card in full under the requesting reader.
 
 ```text
 Usage: anx pm card <card-ref>
-Read any visible card in full inside a claimed PM turn.
+Read any visible card in full under the requesting reader.
 ```
 
 ## `pm propose`
@@ -10922,7 +10922,7 @@ Propose a card status or note for human approval in Inbox.
 
 ```text
 Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]
-Proposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.
+Proposes for human approval in Inbox. done requires evidence. Identity comes from the authenticated principal.
 ```
 
 ## `work cadence`

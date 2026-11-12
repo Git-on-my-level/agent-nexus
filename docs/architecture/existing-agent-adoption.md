@@ -6,7 +6,8 @@ Date: 2026-10-02.
 This is a target and acceptance plan, not a claim that every capability already
 ships. The decisions below supersede conflicting onboarding/runtime assumptions
 in [the earlier unified-work plan](unified-work-pm-plan.md), especially its
-dedicated PM runner and mandatory accountable-owner assumptions. The existing
+dedicated PM runner (removed in 2026-11) and mandatory accountable-owner
+assumptions. The existing
 evidence, privacy, human-decision, and source-authority invariants still apply.
 
 ## Accepted product decisions
@@ -21,8 +22,9 @@ evidence, privacy, human-decision, and source-authority invariants still apply.
 3. **Designate an existing ordinary agent as PM.** Connect its existing reachable
    endpoint/session/channel when supported. Keep it usable outside Nexus. The PM
    receives a richer coordination skill, not new approval or mutation authority.
-   The current `anx pm serve` launch-per-turn adapter is optional compatibility
-   machinery; it is not proof of existing-agent attachment.
+   The built-in `anx pm serve` launch-per-turn adapter has been removed. Any
+   ordinary agent acts as PM through the `anx-pm` skill and the normal CLI; the
+   skill is not proof of existing-agent attachment.
 4. **Make authority explicit.** A project may use native Nexus commitments or
    externally authoritative work projected into Nexus. Both coexist. Preserve
    source IDs, assignees, original state, coverage, last successful read, and
@@ -92,9 +94,9 @@ The initial implementation inspection used OSS main `369dec2` and SaaS main
   discovery currently filters through a short hardcoded harness list.
 - A skill can be installed explicitly, but installation alone does not prove
   that an existing session loaded it, and update maintenance is not automatic.
-- Existing PM queues and decision fences are useful foundations. The current
-  launcher is not yet an existing-agent endpoint contract, and selected-PM
-  private-thread access needs precise participant-scoped review.
+- Existing Decide queues and decision fences are useful foundations. The
+  built-in PM launcher has been removed; any ordinary agent acts as PM through
+  the `anx-pm` skill and the normal CLI.
 - Hosted bearer proxy parity must be verified by exact method and route;
   `/work` or `/pm` prefix-wide authorization is not an acceptable fix.
 
@@ -114,7 +116,7 @@ deploys the matching artifacts. It is one stage of this plan.
 | Participation views | Task-scoped activity and bounded agent-detail coverage, privacy filtering, stale/unavailable states, and evidence context | Browser qualification on the final integrated revision; agent-detail counts remain partial task participation coverage, not a global session census |
 | Skills | Canonical participant/PM guidance, version/hash metadata, scoped configure/status/verify, drift-preserving owned refresh, and release pack contents | Real native-harness loading and activation; automatic enrollment-to-harness setup and live user configuration remain unverified |
 | Optional runtime provider | Versioned agentctl identity evidence and schema-v1 skill packs; explicit generic path remains available | Capabilities are evidence with limits; native resume/history and external contact must be verified separately for each provider |
-| Existing PM | Existing queue and human decision/action fences are retained; a richer PM skill is included | Existing-session attachment, recipient-pinned conversation privacy, requester-scoped reads, and honest pull status are a separate gated follow-on |
+| Existing PM | Decide queue and human decision/action fences are retained; the `anx-pm` skill lets any ordinary agent act as PM | Live skill loading and activation in each harness remain unverified |
 | Project/source adoption | Native and externally authoritative tasks remain compatible with explicit participation | Consent-scoped local discovery, automatic unambiguous association, actual source-tool canaries, coverage/freshness reporting, and rich reconciled project overviews |
 | Rollout | Review, CI, release archives/checksums, and exact-image deployment prerequisites | Operator cloud deployment, serving-image verification, and live dogfooding; no cloud rollout is implied by publication |
 
@@ -152,14 +154,10 @@ of them or evidence that the later product experience is complete.
       gaps are explicit. Missing, old, malformed, or unavailable providers do
       not block explicit registration or override an explicit Nexus identity.
 
-### 2. Existing-PM connection and maintained participant skills
+### 2. PM skill and maintained participant skills
 
-- [ ] Select an existing ordinary participant as PM and bind a supported existing
-      communication endpoint with explicit privacy and recipient scope.
-- [ ] Exercise incoming request, answer, interruption, retry, disconnection and
-      reconnect. Do not launch a replacement agent merely because it is offline.
-- [ ] PM operations preserve requester-scoped context and human authorization;
-      selecting the PM does not expose unrelated private conversations.
+- [ ] Any ordinary participant can act as PM with the `anx-pm` skill; the skill
+      grants no extra authority and exposes no unrelated private conversations.
 - [ ] Ship lean participant and richer PM skills. Installation/configuration
       reports version and evidence of activation separately; refresh owned skill
       content safely while preserving user edits and unsupported harness status.
@@ -199,9 +197,9 @@ of them or evidence that the later product experience is complete.
   caller-scoped idempotency/version checks before adding broad UI machinery.
 - Keep the first generic registration explicit; layer automatic association only
   after clear-project evidence and privacy behavior have dedicated tests.
-- Keep PM attachment independent of any specific native harness. Prefer a
-  transport descriptor and observed capability matrix over promising arbitrary
-  bidirectional contact with every installed application.
+- Keep PM guidance independent of any specific native harness. Prefer a skill
+  and observed capability matrix over promising arbitrary bidirectional contact
+  with every installed application.
 - Treat historical sessions as pointers and summarized evidence rather than
   building a central transcript database.
 - If a gate needs new persistent access, an external contact, source mutation,

@@ -1150,7 +1150,7 @@ statement budget.
 `internal/server/testdata/resource_access_routes.json` is the authority for route
 coverage. Every entry must have either a budget in `performance_routes.json` or
 an explicit mutation reason in `performance_write_routes.json`. Read-only POSTs
-(ref resolution, report previews, PM turn context and secret reveals) have budgets too. A new or
+(ref resolution, report previews, Decide context and secret reveals) have budgets too. A new or
 stale entry fails in the short tier; GETs cannot be classified as mutations.
 
 Each route uses an owner (or the appropriate agent) and an unrelated principal.

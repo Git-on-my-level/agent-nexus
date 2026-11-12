@@ -202,8 +202,8 @@ assigns and moves native work; it is not a registration shortcut. Project
 association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
-The bundled participant skill advertises `anx.participant.v8`; explicitly
-designated PMs can load the additional `anx.pm.v3` skill. After host enrollment,
+The bundled participant skill advertises `anx.participant.v8`; any ordinary
+agent can load the additional `anx.pm.v8` skill to act as project PM. After host enrollment,
 the CLI offers `anx skills sync`. Preview with `anx skills sync --dry-run`, then
 run `anx skills sync` to install or refresh clean managed copies for detected
 Claude Code, Codex/OMP, Cursor, Hermes, Gemini CLI, Pi, Continue and OpenCode
@@ -221,8 +221,8 @@ an upgrade and once per day after a mutating command. Disable this with
 `anx skills sync --no-auto-sync` or `ANX_SKILLS_AUTO_SYNC=0`. File verification
 never proves an existing session loaded the skill. Supported harness delivery
 composes with agentctl packs, not a second ANX harness catalog. See [managed
-skill sources and migration](../skills/README.md). Automatic enrollment setup,
-real harness activation and existing-PM endpoint connection remain later gates in the
+skill sources and migration](../skills/README.md). Automatic enrollment setup and
+real harness activation remain later gates in the
 [adoption plan](../../docs/architecture/existing-agent-adoption.md).
 
 ## Runs from agentctl
@@ -559,11 +559,13 @@ contract. `anx help work` and `anx help work observations submit` work offline.
 
 ### PM decisions and receipt reporting
 
+The built-in Ask PM product, its runner, turn leases, presence and channel
+ingress were removed in 2026-11. Any ordinary agent acts as project PM with the
+bundled `anx-pm` skill and the normal CLI; see [PM is a skill](pm-connection.md).
+Decide, cards and goals remain.
+
 ```sh
 anx pm context --work-ref card:launch --limit 20
-anx pm conversations list
-anx pm conversations create --from-file conversation.json
-anx pm conversations message <conversation-id> --from-file message.json
 anx pm decisions list
 anx pm decisions get <decision-id>
 anx pm decisions create --from-file instruction.json
@@ -583,323 +585,8 @@ and receipt, including `source_reported`, `unknown` and
 `receipt.independently_verified`. `reconcile` requests read-back, never a resend.
 There is no client command to manufacture a verified receipt.
 
-Conversation creation uses `request_key`, `title` and optional `work_ref`; messages
-use `request_key` and `text`. Preserve request keys on retry. A queued turn is not
-an assistant response or completed work. Status vocabulary is `sending`,
-`unknown`, `failed`, or completed with `response` (`delivered`).
-
-The selected PM agent can use `pm turns claim`, `pm turns context <turn-id>`,
-`pm turns propose <turn-id> --from-file ...`, `pm turns complete <turn-id>
---from-file ...`, and `pm turns fail <turn-id> --from-file ...`. Other agents
-cannot impersonate it. Claim is lease-based and idempotent for the same
-`runner_id`; HTTP 204 means no claimable turn. `--runner-id` defaults to the
-authenticated actor id. These commands use the caller resolved by `anx`; if
-identity resolution fails in the PM service, select its dedicated `pm` identity
-with `--as pm` or `ANX_AS=pm`; its first authenticated call registers that name
-on this host if it is new. Rerun `anx doctor` after applying the repair. Text output prints `runner_id` and `lease_token` so
-the same runner can release later:
-
-```sh
-anx pm turns claim --runner-id "$RUNNER_ID"
-# turn-1  status=in progress  runner_id=runner-1  lease_token=...
-anx pm turns release turn-1 --from-file - <<'EOF'
-{"runner_id":"runner-1","lease_token":"<lease_token from claim>"}
-EOF
-```
-
-Channel ingress (Telegram and Discord) creates conversations with `origin` and
-posts through the same `/pm/conversations/{id}/messages` pipeline; those turns
-are claimed, completed, and failed identically. The channels lane owns
-transport authentication.
-
-### Install the PM on your computer
-
-The PM runs on **your own computer**, including when your workspace core is remote.
-Keep the computer awake and online while asking PM questions. Enroll its host key
-and select the workspace with `anx config use <alias>` (or `--workspace <alias>`).
-The default `pm` host profile is registered and selected automatically when its
-local runner first connects. An explicitly selected workspace PM remains authoritative.
-
-Run `anx --as pm pm install` without a `--runner` flag in a terminal for the onboarding wizard.
-Global flags such as `--base-url`, `--workspace` and `--as` still enter the wizard;
-an explicitly selected workspace is retained. Pick
-a workspace and Hermes, Claude Code, or a custom command. The wizard tests the
-runner once, installs the service, then waits for a fresh local claim and server
-heartbeat before printing **PM connected**. Runner credentials must already work
-on this computer. EOF or an invalid choice cancels before installation.
-
-`--runner` selects the non-interactive path. Add `--wait --wait-timeout 90s` to wait for
-connection; `--json` remains non-interactive. These are optional runner examples:
-
-```sh
-# Claude Code reads the private prompt file through stdin.
-anx --as pm pm install --runner "sh -c 'exec claude -p < \"\$1\"' sh {prompt_file}"
-# Hermes supports a query file; no question text appears in its argv.
-anx --as pm pm install --runner 'hermes chat --query-file {prompt_file} -Q'
-anx --as pm pm status
-anx --as pm pm install --json           # idempotent repair using saved runner config
-anx --as pm pm uninstall               # remove locally and reset workspace PM setup
-anx --as pm pm uninstall --keep-registration # move machines; preserve expected PM return
-```
-
-The default service profile is `pm`; `--as <name>` chooses another profile.
-`install` snapshots the selected workspace URL, absolute credential config dir,
-CLI binary path and runner command. It stores the runner in a mode-0600
-`settings.json`; subsequent installs reuse it unless `--runner` overrides it.
-Run install again after moving/replacing the CLI binary or changing the workspace URL.
-No access tokens or provider keys are copied into service definitions. Configure
-provider authentication in the runner's existing local credential store, or use a
-local wrapper that reads it; shell-exported keys do not survive service installation.
-The service inherits only your home and PATH. Never put credentials in runner argv.
-
-macOS uses a per-user LaunchAgent (requires a graphical login). Linux uses
-`systemd --user` (requires a user manager; service lifetime follows your login
-unless you configure lingering yourself). Both restart the runner automatically.
-Logs, prompt files and last accepted claim live under
-`$XDG_STATE_HOME/anx/pm/<service>` (default `~/.local/state/anx/pm/<service>`).
-Prompt files are mode 0600 and removed after execution. `{prompt_file}` substitutes
-only the path; legacy `{prompt}` also means a path. Without a placeholder, agentctl
-receives `--prompt-file`. Do not use command substitution to put prompt text in argv.
-`status --json` reports installed/running, workspace, profile, logs, last claim and last connect failure; see [PM connection diagnostics](pm-connection.md) for install preflight and actor-binding repair.
-Uninstall removes the selected local service/state and calls authenticated
-`POST /pm/disconnect` as the selected PM principal. The workspace returns to
-`not_onboarded`; unfinished queued/running turns fail with `pm_not_onboarded`,
-while historical conversations and existing decisions remain readable and answerable.
-Workspace credentials are retained. If reset fails, local removal still completes,
-and a warning prints an exact `anx ... pm disconnect` retry command.
-Use `--keep-registration` when moving the PM to another computer: it skips the
-server reset, so ordinary silence becomes offline after 90 seconds. Only a new
-explicit `pm connect` (performed by `pm install` or `pm serve`) re-enables a disconnected PM;
-stale claims or heartbeats cannot revive it. Revoking host credentials prevents reconnecting; selecting a different
-workspace PM requires that actor to connect before its features become available.
-
-PM features require onboarding: a registered PM has connected through `anx pm install` or `anx pm serve`
-at least once. Before that, PM-only requests return HTTP 409 `pm_not_onboarded`
-and do not queue new questions or proposals. Existing history, proposals and
-human approval/decline remain accessible even before onboarding. Upgrades infer
-legacy onboarding from indexed prior PM activity and report it as offline until
-a real runner connects. Ordinary workspace features remain available.
-The existing `GET /agents/me` bootstrap includes `pm` with `state`
-(`not_onboarded`, `connected`, or `offline`), nullable `last_seen`, `runner`, and
-`host`. `GET /pm/presence` exposes the same state plus legacy presence fields.
-A connection older than 90 seconds is offline; onboarding is retained across
-restarts. Offline PM features remain available and queued questions wait for
-the runner to return. A connected runner can still fail a turn; presence is
-a connection signal, not a model health guarantee.
-
-### PM runner (`anx pm serve`)
-
-The PM is an external agent. Do not call a model in-process. `make serve` seeds
-persona `pm` (`actor-gds-pm` / `dev.pm`) for the default game-dev-studio
-scenario. Enroll a host and use the registered identity selected for the PM;
-the seeded scenario's identity is `pm`.
-Wake routing and
-`ANX_PM_BRIDGE_ENABLED` are not required.
-
-Export `ZAI_API_KEY` in the shell that launches `pm serve`. The runner does not
-read `~/.hermes/auth.json` or inject the key. If the harness argv names `zai`
-and that variable is unset, the turn fails with a sentence that names
-`ZAI_API_KEY`.
-
-The harness child receives the **full parent environment**, then `HOME` is
-reset to the login account home from passwd (`user.Current().HomeDir`). That
-is where harness config lives (omp `models.yml`, Hermes, Codex). Isolated
-`ANX_AS` applies to the `anx` process identity, not to the child harness. Set
-`ANX_PM_AGENT` to the PM's actual registered identity before running these
-examples; the seeded local scenario uses `pm`. After a successful claim the runner also
-sets `ANX_PM_LEASE_TOKEN` for that turn. `anx pm turns propose` and
-`anx pm turns context` send it when `--lease-token` is omitted, so the harness
-does not have to copy the token into `--from-file`. The lease token is in the
-runner process environment: any same-uid process can read it. A stolen token
-only lets its holder complete, fail, or release that one turn until the
-deadline. Ctrl-C / SIGTERM kills the direct harness process group (SIGTERM,
-then SIGKILL after a short grace). A harness's detached children (those that
-have left that process group) survive a successful run; only Ctrl-C /
-SIGTERM of `pm serve` cleans up an in-flight group — find leftovers with
-`ps -o pid,pgid,command`. An `agentctl` background execution outlives the
-runner; the log prints its execution id so you can `agentctl cancel <id>`.
-
-Seatbelt on this OS cannot hide another same-uid process's environment, so
-run the harness as a different uid or on a different host from core's JIT
-generated-reader process. The runner's `ANX_PM_LEASE_TOKEN` is in that same
-unprotected environment; a stolen token is limited to complete/fail/release
-of that one turn until the deadline. Example, separate uid:
-
-```sh
-sudo -u pm-runner env ZAI_API_KEY="$ZAI_API_KEY" \
-  ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
-  --work-dir .tmp/pm-runner \
-  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
-```
-
-Example, separate host: start core locally, then on the runner machine
-run `ANX_BASE_URL="${ANX_CORE_BASE_URL:?Set the runner-reachable core URL}" ZAI_API_KEY="$ZAI_API_KEY" ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve ...`.
-
-```sh
-make cli-build
-export ZAI_API_KEY
-ANX_DEV_BLOB_BACKEND=filesystem make serve
-ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
-  --work-dir .tmp/pm-runner \
-  --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'
-./cli/anx pm ask --wait \
-  "What needs my decision?"
-```
-
-`--runner` is the native harness argv. Two forms:
-
-- Without `{prompt}`: argv after `agentctl run --`. Example:
-  `omp -p --mode json --model zai/glm-5.3 --auto-approve`
-- With `{prompt}`: argv is executed directly. `{prompt}` is replaced with the
-  absolute prompt file path. `agentctl` is not required.
-
-omp may silently substitute models; every omp run must show
-`"provider":"zai","model":"glm-5.3"` in the harness JSON
-(`grep -o '"provider":"[^"]*","model":"[^"]*"'`). GPT models never go through
-omp. The prompt stays small: the PM loads tracker context through
-`anx work list|get` and `anx pm context`, never from a stuffed dump. Proposed
-decisions must bind `work_ref` to a task. To attach evidence, the harness must
-end its answer with a `---evidence---` block (one typed ref per line: `card:`,
-`work:`, `artifact:`, `event:`, `decision:`, `topic:`, `document:`) or a JSON
-`evidence_refs` array on the same object as the assistant text. Nested tool
-output is not harvested. Mentions in prose are not recorded. `pm serve`
-verifies each attached ref against core (`topics get` / `docs get` included)
-and drops unresolvable ones instead of failing the turn.
-
-Turn text is capped at the claimed turn's `max_output_bytes`. When the turn
-omits that field, the runner uses 64000 (core's maximum accepted turn text)
-minus room for a truncation marker. Evidence is parsed from the full harness
-output first; if the stored reply is cut, the runner appends
-`[reply truncated by anx pm serve at <N> bytes; <M> bytes were dropped]` and
-logs a stderr warning with those sizes. The marker is included in the byte
-budget so core still accepts the text.
-
-`complete` and `fail` are retried on network errors, HTTP 5xx, and 429, with
-bounded exponential backoff (1s, 2s, 4s, 8s, 16s; at most about one minute or
-until the turn deadline). Identical terminal replays are idempotent, so a
-retry after a lost response is safe. `lease_required` is not retried. If the
-lease was lost (`lease_mismatch`, `turn_closed`, `turn_not_claimed`), the
-runner reads the turn: already terminal logs `turn already <status>; nothing
-to do` and moves on. A lost `complete` counts as one delivery attempt; the
-process does not release-and-reclaim that turn, and the next poll claims it
-again. A saved reply is delivered on that claim (never followed by a harness
-run). After 3 failed `complete` calls for the same turn (including the first
-delivery that wrote the file), the runner fails the turn with the
-reader-facing reason `The PM produced a reply but it could not be delivered.
-Ask again, or check that a runner is attached.` Core error `code` and
-`message` stay on stderr (`pm serve: turn … undeliverable: <code>: <message>`).
-The next poll can then claim a later waiting turn. A turn is given up after 3
-harness runs in this process. If no saved reply exists, the runner fails the
-turn with `The PM could not produce a deliverable reply after several
-attempts.` (technical detail stays on stderr).
-
-While a harness run is in progress, the runner renews the lease with
-`POST /pm/turns/{turn_id}/heartbeat`. The interval is half the remaining time from
-claim `lease_expires_at` when present, otherwise every 20s (for a 60s core
-lease TTL). A transient failure (network error, HTTP 5xx, timeout) retries
-after 2s, then 4s, capped at 8s, until a successful renewal or the lease
-expires. Only a 409 `lease_mismatch` / `turn_closed` heartbeat cancels that
-harness, logs `lease lost`, and follows lease-loss recovery (read the turn;
-still pending and claimable re-claims and retries). A 404 heartbeat (older
-core) disables heartbeats for the process and is logged once.
-
-If `complete` cannot be delivered after retries for a reason other than lease
-loss, the runner writes the reply to `turn-<id>.reply.md` (0600) in
-`--work-dir`, releases the lease (`released turn … : undeliverable terminal
-call`), and logs that the turn stays claimable until its deadline. The next
-claim of that turn in this process retries `complete` from the saved reply
-with the same bounded budget and does **not** run the harness while that file
-exists. After 3 failed `complete` calls the runner fails the turn as above so
-the queue is not starved. The reply file is then deleted and the turn is
-forgotten. If `fail` itself is refused with `lease_mismatch` or
-`turn_closed`, the runner treats the turn as no longer ours, logs why,
-deletes the file, and moves on. The file is also deleted after a successful
-complete or when the turn is already terminal. If the saved reply is
-unreadable or corrupt, the runner logs and falls back to the harness.
-Runner-internal failures (harness crash, timeout, missing secret) still fail
-the turn with a reader-facing reason; technical detail stays on stderr.
-Shutdown releases log `released turn … : shutdown`.
-
-`--max-concurrent N` (default 1) runs up to N turns in this process. Each
-worker claims with a distinct runner id `<runner_id>-<slot>` (slots 1..N),
-so core treats them as N runners. Capacity counts leases: N must be ≤
-`ANX_PM_MAX_CONCURRENT`.
-
-Output bytes and wall time come from core `pm.Config` (defaults 16000 bytes and
-2 minutes; core accepts `ANX_PM_MAX_OUTPUT_BYTES` up to 64000). `make serve` sets `ANX_PM_TURN_TIMEOUT=10m` so omp/glm-5.3 can use
-tools before the lease expires. `ANX_PM_MAX_CONCURRENT` (default 2) bounds
-workspace sending turns. `make pm-serve` runs the seeded PM persona.
-
-When stderr is not a TTY, runner logs are flushed immediately and harness
-stdout/stderr are copied to stderr. On restart, `pm turns claim` with the same
-worker runner ids (`<runner_id>-<slot>`) recovers in-flight leases;
-past-deadline sending turns expire to `failed` with a visible reason.
-
-Hermes and Codex can also run directly with a private prompt file:
-
-```sh
-# Hermes (direct)
-ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
-  --work-dir .tmp/pm-runner \
-  --runner 'hermes chat --query-file {prompt_file} -Q'
-
-# Codex (direct)
-ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
-  --work-dir .tmp/pm-runner \
-  --runner "sh -c 'exec codex exec --skip-git-repo-check - < \"\$1\"' sh {prompt_file}"
-
-# Same harnesses through agentctl (no {prompt} placeholder)
-ANX_AS="${ANX_PM_AGENT:?Set the registered PM identity}" ./cli/anx --as "$ANX_PM_AGENT" pm serve \
-  --work-dir .tmp/pm-runner \
-  --runner 'hermes -p --provider zai --model glm-5.3'
-```
-
-PM context is bounded to 1..50 items. PM conversation/decision/action lists accept
-`--limit` (1..200) and `--cursor`, returning `next_cursor` and `has_more`. Cursors are
-bound to the current workspace, principal and record kind; do not reuse one after
-switching derived agents. Lists do not support server-side project filtering; use
-`work list --project-ref` for project-scoped work queries.
-
-For cross-lane validation only, the real-binary harness accepts
-`ANX_INTEGRATION_CORE_BINARY` pointing to a compiled core artifact. Without it the
-harness builds this checkout's core. This is not a mock backend; record the core
-source revision when using the override.
-
-### PM channels (`anx pm channels doctor`)
-
-Telegram and Discord ingress are webhook/interaction only. Bind a channel
-identity before the PM will accept messages:
-
-```sh
-anx pm bindings create --from-file binding.json
-anx pm channels doctor \
-  --telegram-webhook-url "${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}" \
-  --discord-webhook-url "${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}"
-```
-
-Doctor reads env (never prints token values), probes those URLs with GET, and
-lists `/pm/bindings`. It does not POST an update, send a Bot API message, or
-open a Discord gateway.
-
-Core env (set on `anx-core`, not in Git):
-
-| Env                              | Role                                                         |
-| -------------------------------- | ------------------------------------------------------------ |
-| `ANX_PM_TELEGRAM_WEBHOOK_SECRET` | Telegram secret header; at least 32 characters               |
-| `ANX_PM_TELEGRAM_BOT_ID`         | Expected bot / tenant id                                     |
-| `ANX_PM_TELEGRAM_BOT_TOKEN`      | Outbound `sendMessage`                                       |
-| `ANX_PM_DISCORD_PUBLIC_KEY`      | 32-byte hex Ed25519 public key                               |
-| `ANX_PM_DISCORD_APPLICATION_ID`  | Expected application id                                      |
-| `ANX_PM_DISCORD_BOT_TOKEN`       | Outbound REST `Bot` token                                    |
-| `ANX_PM_TELEGRAM_API_BASE`       | Test-only Bot API base (local fake)                          |
-| `ANX_PM_DISCORD_API_BASE`        | Test-only Discord REST base (local fake, include `/api/v10`) |
-| `ANX_PM_TELEGRAM_WEBHOOK_URL`    | Optional doctor GET target                                   |
-| `ANX_PM_DISCORD_WEBHOOK_URL`     | Optional doctor GET target                                   |
-
-When dedicated bots exist: create the bots, set the env vars, register the
-webhook/interactions URL at core ingress, bind each human identity, then run
-doctor. Do not point existing production bot streams at this workspace. Local
-proof uses `tests/channels/` fakes, not live Telegram or Discord.
+PM context is bounded to 1..50 items. Decision and action lists accept
+`--limit` and `--cursor`.
 
 ## Docs as a cross-host knowledge base
 

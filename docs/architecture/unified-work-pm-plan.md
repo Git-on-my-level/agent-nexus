@@ -1,7 +1,10 @@
 # Unified work tracking and conversational PM
 
-Status: accepted implementation direction; implementation and qualification in progress.
-This document states the target, not a claim that the features below already work.
+Status: historical design record. The built-in Ask PM product, its runner, turn
+leases, presence and channel ingress were removed in 2026-11. Any ordinary agent
+now acts as PM through the `anx-pm` skill and the normal CLI; Decide, cards and
+goals remain. Read the runner and channel sections below as history, not current
+instruction.
 The **Rulings (2026-09-08)** section at the end supersedes any earlier line it conflicts with.
 The [existing-agent adoption decisions (2026-10-02)](existing-agent-adoption.md)
 supersede conflicting PM onboarding/runtime, mandatory-owner, and rollout-shape
@@ -172,16 +175,14 @@ navigation. Their data and APIs stay until a lane deletes them deliberately;
 Events survive as an audit log under settings. Settings holds Access, Secrets,
 Integrations and the audit log.
 
-### PM stays an external agent, bridged through the existing harnesses
+### PM stays an external agent, using the ordinary CLI
 
-The PM is not an in-process model call. It must run through the agent harnesses
-the operator selects (omp, Hermes, Codex, opencode, Claude, Cursor) so it gains
-their tools (bash, python, ssh, git) and improves as they do. Simplify the bridge
-to one runner: `anx pm serve` claims queued turns, fetches the turn context, runs
-the configured harness through `agentctl` with the `anx` CLI as the PM's tools,
-and completes the turn. No wake-routing or online-handle prerequisite for this
-path. Authorization is enforced by anx-core per requesting principal; the PM
-process runs on a trusted host with that host's credentials.
+The PM is not an in-process model call. Any agent running in the harnesses the
+operator already uses (omp, Hermes, Codex, opencode, Claude, Cursor) can act as
+PM with the `anx-pm` skill and the normal `anx` CLI. There is no dedicated
+runner, queued turn, lease or Ask PM UI. Authorization is enforced by anx-core
+per requesting principal; the agent keeps its existing permissions and gains no
+extra authority from the skill.
 
 Validate the configured harness on an isolated test host before using it for live work.
 
