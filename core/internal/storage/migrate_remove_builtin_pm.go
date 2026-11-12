@@ -657,13 +657,22 @@ func withdrawPMWatcherAsks(ctx context.Context, tx *sql.Tx) error {
 		if err != nil {
 			return err
 		}
-		handle := handles.Candidate("human_attention_withdrawn", "event-"+eventID)
-		if len(handle) > 31 {
-			handle = strings.TrimRight(handle[:31], "-")
+		prefix := handles.Candidate("human_attention_withdrawn", "event-"+eventID)
+		if len(prefix) > 31 {
+			prefix = strings.TrimRight(prefix[:31], "-")
 		}
+		digest := sha256.Sum256([]byte(eventID))
+		handle := prefix + "-" + hex.EncodeToString(digest[:16])
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO events(id,handle,type,ts,actor_id,thread_id,refs_json,payload_json,created_at) VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)`,
 			eventID, handle, "human_attention_withdrawn", now, "system", ask.thread, string(refsJSON), string(payloadJSON)); err != nil {
 			return fmt.Errorf("write PM watcher withdrawal: %w", err)
+		}
+		var withdrawn int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE id=? AND type='human_attention_withdrawn'`, eventID).Scan(&withdrawn); err != nil {
+			return fmt.Errorf("confirm PM watcher withdrawal: %w", err)
+		}
+		if withdrawn != 1 {
+			return fmt.Errorf("PM watcher withdrawal event %s was not written", eventID)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'withdrawn','system',?)`,
 			ask.id, eventID, now); err != nil {

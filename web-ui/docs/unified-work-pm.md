@@ -1,7 +1,7 @@
 # Unified work and Decide operator surface
 
 Primary navigation is Inbox, Tasks, and Docs. The built-in Ask PM conversation
-and its `/pm` routes were removed in 2026-11; any ordinary agent acts as PM with
+and its `/pm` routes were removed in 2026-11; any ordinary agent can support project PM work with
 the `anx-pm` skill and the normal CLI. Tasks table and board project the same
 canonical `/work` records. Work stays backed by existing cards. Filters are shareable URL
 parameters, and list pagination uses opaque server cursors. External source

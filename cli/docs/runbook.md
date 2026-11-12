@@ -203,7 +203,7 @@ association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
 The bundled participant skill advertises `anx.participant.v8`; any ordinary
-agent can load the additional `anx.pm.v8` skill to act as project PM. After host enrollment,
+agent can load the additional `anx.pm.v8` skill to support project PM work. After host enrollment,
 the CLI offers `anx skills sync`. Preview with `anx skills sync --dry-run`, then
 run `anx skills sync` to install or refresh clean managed copies for detected
 Claude Code, Codex/OMP, Cursor, Hermes, Gemini CLI, Pi, Continue and OpenCode
@@ -560,8 +560,8 @@ contract. `anx help work` and `anx help work observations submit` work offline.
 ### PM decisions and receipt reporting
 
 The built-in Ask PM product, its runner, turn leases, presence and channel
-ingress were removed in 2026-11. Any ordinary agent acts as project PM with the
-bundled `anx-pm` skill and the normal CLI; see [PM is a skill](pm-connection.md).
+ingress were removed in 2026-11. Any ordinary agent can support project PM work with the
+bundled `anx-pm` skill and the normal CLI (`pm.propose` and `pm.approve` remain human-only); see [PM is a skill](pm-connection.md).
 Decide, cards and goals remain.
 
 ```sh

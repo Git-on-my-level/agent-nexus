@@ -533,7 +533,7 @@ Waiting rows read everything from the roster: `waiting_ask` carries the ask's ti
 The built-in Ask PM conversation, its setup and presence surfaces, and the
 `/pm` and `/pm/setup` routes were removed in 2026-11. There is no PM runner to
 connect, no presence state to gate on, and no PM chat to open. Any ordinary
-agent acts as project PM with the `anx-pm` skill and the normal CLI.
+agent can support project PM work with the `anx-pm` skill and the normal CLI (`pm.propose` and `pm.approve` remain human-only).
 
 Decide remains: Inbox still lists decisions awaiting a human answer, and the
 Inbox and Tasks surfaces still read the decision and receipt feeds. A

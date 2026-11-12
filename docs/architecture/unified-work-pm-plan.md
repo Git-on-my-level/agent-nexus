@@ -2,7 +2,7 @@
 
 Status: historical design record. The built-in Ask PM product, its runner, turn
 leases, presence and channel ingress were removed in 2026-11. Any ordinary agent
-now acts as PM through the `anx-pm` skill and the normal CLI; Decide, cards and
+now supports project PM work through the `anx-pm` skill and the normal CLI (`pm.propose` and `pm.approve` remain human-only); Decide, cards and
 goals remain. Read the runner and channel sections below as history, not current
 instruction.
 The **Rulings (2026-09-08)** section at the end supersedes any earlier line it conflicts with.

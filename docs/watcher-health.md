@@ -7,7 +7,7 @@ asks; nothing automatically retires, resumes or reassigns a loop. The initiative
 rules remain unchanged.
 
 The built-in PM presence and turn-deadline alarms were removed in 2026-11 with
-the Ask PM product. Any ordinary agent acts as PM with the `anx-pm` skill; there
+the Ask PM product. Any ordinary agent can support project PM work with the `anx-pm` skill (`pm.propose` and `pm.approve` remain human-only); there
 is no runner presence to monitor.
 
 For a loop, Core retains `failing`, `overdue` and `stalled` precedence. After two

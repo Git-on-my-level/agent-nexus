@@ -170,6 +170,107 @@ func TestRemoveBuiltinPMArchivesThenDropsProductData(t *testing.T) {
 	}
 }
 
+func TestRemoveBuiltinPMWithdrawsEveryOpenWatcherAsk(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := ws.DB()
+	insertAsk(t, db, "ask-pm-a", "thread-pm-a", `{"payload":{"title":"Restore the workspace PM?","watcher_health_kind":"pm","requester_actor_id":"owner","subject_ref":"decide"},"title":"Restore the workspace PM?"}`)
+	insertAsk(t, db, "ask-pm-b", "", `{"payload":{"title":"PM watcher needs attention","watcher_health_kind":"pm","requester_actor_id":"owner","subject_ref":"card:work"},"title":"PM watcher needs attention"}`)
+	insertAsk(t, db, "ask-other", "thread-keep", `{"payload":{"title":"Other watcher","requester_actor_id":"owner","subject_ref":"card:other"},"title":"Other watcher"}`)
+	for _, ask := range []struct{ id, card, requester, thread string }{
+		{"ask-pm-a", "decide", "owner", "thread-pm-a"},
+		{"ask-pm-b", "card:work", "owner", ""},
+		{"ask-other", "card:other", "owner", "thread-keep"},
+	} {
+		if _, err := db.Exec(`INSERT OR IGNORE INTO ask_subjects(ask_id,card_id,requester,thread_id,open) VALUES(?,?,?,?,1)`, ask.id, ask.card, ask.requester, ask.thread); err != nil {
+			t.Fatal(err)
+		}
+	}
+	resetPMArchiveMigration(t, db)
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	assertMigrationApplied(t, db, 138)
+
+	rows, err := db.Query(`SELECT id,handle FROM events WHERE type='human_attention_withdrawn' AND id LIKE 'pm-archive-138-withdraw-%' ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	handles := map[string]string{}
+	for rows.Next() {
+		var id, handle string
+		if err := rows.Scan(&id, &handle); err != nil {
+			t.Fatal(err)
+		}
+		if handle == "" {
+			t.Fatalf("withdrawal event %s has an empty handle", id)
+		}
+		handles[id] = handle
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(handles) != 2 {
+		t.Fatalf("expected two withdrawal events, got %d (%v)", len(handles), handles)
+	}
+	seenHandles := map[string]string{}
+	for id, handle := range handles {
+		if other, ok := seenHandles[handle]; ok {
+			t.Fatalf("withdrawal events %s and %s share handle %q", id, other, handle)
+		}
+		seenHandles[handle] = id
+	}
+
+	for _, askID := range []string{"ask-pm-a", "ask-pm-b"} {
+		var resolutionEvent string
+		if err := db.QueryRow(`SELECT resolution_event_id FROM human_attention_request_resolutions WHERE request_event_id=?`, askID).Scan(&resolutionEvent); err != nil {
+			t.Fatalf("PM ask %s was not resolved: %v", askID, err)
+		}
+		var eventExists int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE id=?`, resolutionEvent).Scan(&eventExists); err != nil {
+			t.Fatal(err)
+		}
+		if eventExists != 1 {
+			t.Fatalf("PM ask %s resolution points at missing event %q", askID, resolutionEvent)
+		}
+		var open int
+		if err := db.QueryRow(`SELECT open FROM ask_subjects WHERE ask_id=?`, askID).Scan(&open); err != nil {
+			t.Fatal(err)
+		}
+		if open != 0 {
+			t.Fatalf("PM ask %s still open", askID)
+		}
+	}
+	if got := openAskCount(t, db, "Restore the workspace PM?"); got != 0 {
+		t.Fatalf("first PM ask still open: %d", got)
+	}
+	if got := openAskCount(t, db, "PM watcher needs attention"); got != 0 {
+		t.Fatalf("second PM ask still open: %d", got)
+	}
+	if got := openAskCount(t, db, "Other watcher"); got != 1 {
+		t.Fatalf("unrelated ask changed: %d", got)
+	}
+	var otherOpen int
+	if err := db.QueryRow(`SELECT open FROM ask_subjects WHERE ask_id='ask-other'`).Scan(&otherOpen); err != nil {
+		t.Fatal(err)
+	}
+	if otherOpen != 1 {
+		t.Fatalf("unrelated ask_subjects row closed: %d", otherOpen)
+	}
+}
+
 func TestRemoveBuiltinPMFailsClosedWithoutRecipients(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()

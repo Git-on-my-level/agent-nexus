@@ -23,7 +23,7 @@ evidence, privacy, human-decision, and source-authority invariants still apply.
    endpoint/session/channel when supported. Keep it usable outside Nexus. The PM
    receives a richer coordination skill, not new approval or mutation authority.
    The built-in `anx pm serve` launch-per-turn adapter has been removed. Any
-   ordinary agent acts as PM through the `anx-pm` skill and the normal CLI; the
+   ordinary agent supports project PM work through the `anx-pm` skill and the normal CLI (`pm.propose` and `pm.approve` remain human-only); the
    skill is not proof of existing-agent attachment.
 4. **Make authority explicit.** A project may use native Nexus commitments or
    externally authoritative work projected into Nexus. Both coexist. Preserve
@@ -95,7 +95,7 @@ The initial implementation inspection used OSS main `369dec2` and SaaS main
 - A skill can be installed explicitly, but installation alone does not prove
   that an existing session loaded it, and update maintenance is not automatic.
 - Existing Decide queues and decision fences are useful foundations. The
-  built-in PM launcher has been removed; any ordinary agent acts as PM through
+  built-in PM launcher has been removed; any ordinary agent supports project PM work through
   the `anx-pm` skill and the normal CLI.
 - Hosted bearer proxy parity must be verified by exact method and route;
   `/work` or `/pm` prefix-wide authorization is not an acceptable fix.

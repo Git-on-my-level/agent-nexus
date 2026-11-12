@@ -4539,7 +4539,6 @@ Inputs:
   - body `work_ref` (string)
   Optional:
   - body `actor_id` (string)
-  - body `origin` (any)
   - body `payload.evidence_refs` (list<string>)
   - body `payload.note` (string)
   - body `payload.phase` (string)

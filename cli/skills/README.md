@@ -9,9 +9,10 @@ discover/upload project history.
 
 - `anx-participant/SKILL.md`: lean participation, clear project matching, explicit
   task refs, source authority, privacy, provenance and meaningful status updates
-- `anx-pm/SKILL.md`: how any **ordinary agent** acts as project PM on top of
-  Decide and work using the normal CLI. It grants no extra permissions, creates
-  no runtime, and requires no runner, turn lease or Ask PM UI
+- `anx-pm/SKILL.md`: how any **ordinary agent** supports project PM work on top of
+  Decide and work using the normal CLI. It grants no extra permissions (`pm.propose`
+  and `pm.approve` stay human-only), creates no runtime, and requires no runner,
+  turn lease or Ask PM UI
 - `catalog.json`: schema-v1 role, name, skill-contract version and SHA-256 over
   the exact UTF-8 `SKILL.md` bytes. The CLI embeds these same source files and
   rejects mismatched metadata. Change the skill-contract version and digest
