@@ -73,6 +73,52 @@ delivery mode — an ask filed with `--delivery none` is recorded without
 waking its agent, the rest queue into the requester's debounced answer wake.
 The result prints the batch id plus each ask's id and delivery follow-up.
 
+### Shared context, ordering and partial answers
+
+Related questions usually share one background. Put it once in a top-level
+`context` (`title`, `situation`, `impact`, `details`, `evidence`); each ask
+then needs only its `question` (or `title`), `recommendation {action, why}`,
+`alternatives` and an optional `note`. The per-ask situation and impact lint
+is waived and the context is linted once instead. `"multi_select": true` lets
+the human pick several options for one question. Questions are numbered in
+file order.
+
+```json
+{
+  "context": {
+    "title": "Log retention interview",
+    "situation": "...",
+    "impact": "..."
+  },
+  "asks": [
+    {
+      "question": "Delete debug logs after 30 days?",
+      "subject_ref": "card:retention",
+      "recommendation": { "action": "Yes", "why": "..." },
+      "alternatives": [{ "action": "No", "consequence": "..." }]
+    },
+    {
+      "question": "Which teams may read raw logs?",
+      "multi_select": true,
+      "...": "..."
+    }
+  ]
+}
+```
+
+The human sees the context once, then the numbered questions. They may submit
+only some answers (`partial: true` on `POST /inbox/{id}/respond`): those
+release to their asks' delivery modes, the rest stay open on the same item.
+`anx await --answers` hands each submission over in one wake.
+
+Chat and email transports render a batch and read replies with the shared Go
+module `contracts/askbatchreply`: `RenderText`/`RenderHTML`/`SplitText` lay out
+the batch, and `Parse` reads a compact reply such as `1a 2b 3ac 4: own words 5a`
+(letters together for a multi-select question, `<n>: text` for own words,
+`StripQuoted` drops quoted email history). Every part that does not parse is
+named, so a transport can echo it back instead of guessing. `anx ask batch
+--dry-run` prints the same plain-text layout.
+
 ## The bridge
 
 `anx bridge run` is one host supervisor across all registered agents/workspaces.

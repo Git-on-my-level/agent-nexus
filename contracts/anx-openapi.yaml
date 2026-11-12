@@ -12743,12 +12743,15 @@ components:
           required: [id, asks]
           properties:
             id: {type: string}
+            context: {$ref: '#/components/schemas/AskBatchContext'}
             asks:
               type: array
               maxItems: 10
+              description: Open members in question order (position), then filing order.
               items:
                 allOf:
                   - {$ref: '#/components/schemas/AskPresentation'}
+                  - {$ref: '#/components/schemas/AskBatchQuestionFields'}
                   - type: object
                     required: [request_event_ref, title, subject_ref, response_proposals]
                     properties:
@@ -13699,8 +13702,16 @@ components:
         without a wake; `original` releases each member on its own delivery mode. A filed
         batch also accepts answers (one entry per
         member); flat fields and notify overrides must then be empty, and each member releases
-        on its own delivery mode. The same idempotency key replays the original combined result.
+        on its own delivery mode. With partial=true the answers may cover only some open members:
+        those are recorded and released together, the rest stay open on the same batch item.
+        The same idempotency key replays the original combined result.
       properties:
+        partial:
+          type: boolean
+          description: >
+            Filed ask batch only. Answers may cover a subset of the open members; the others stay
+            open on the same inbox item, which then lists only them. Rejected with a flat
+            response_text. Answering every open member closes the batch as usual.
         idempotency_key: {type: string, minLength: 1, maxLength: 128, description: Stable key for one intended response. Reuse the same key and body after an ambiguous failure to retrieve the original event and result.}
         actor_id: { type: string }
         inbox_item_id:
@@ -13758,6 +13769,7 @@ components:
         notify:
           type: object
           additionalProperties: true
+        open_ask_count: {type: integer, description: Present after a partial answer; members of the batch still open.}
         markdown_hygiene: { $ref: '#/components/schemas/MarkdownHygiene' }
       required: [batch_id, answers, notify]
 
@@ -13854,8 +13866,11 @@ components:
       description: >
         Files 2 to 10 human_attention_requested events as one atomic batch addressed to one
         backing thread. Each ask must pass the same validation as POST /events; the server
-        assigns the shared batch id and rejects client-supplied batch ids.
+        assigns the shared batch id and rejects client-supplied batch ids. Asks are numbered in
+        array order (payload.batch_position, server-assigned). A member payload may set
+        multi_select (the human may pick several proposals) and a short note.
       properties:
+        context: {$ref: '#/components/schemas/AskBatchContext'}
         actor_id: { type: string }
         request_key: { type: string, maxLength: 128, description: Stable key for one intended batch; replay returns the original batch result. }
         asks:
@@ -13863,6 +13878,37 @@ components:
           items: { $ref: '#/components/schemas/Event' }
           description: 2 to 10 human_attention_requested events sharing one thread_id.
       required: [asks]
+
+    AskBatchContext:
+      type: object
+      description: >
+        Background shared by every question of a batch, stated once above the numbered questions.
+        The server copies it into each member's payload.batch_context; clients may not set that
+        field themselves. Members of a batch with a context need no situation or impact of their own.
+      required: [situation]
+      additionalProperties: false
+      properties:
+        title: {type: string, maxLength: 160, description: Names the whole batch; becomes the batch item's title.}
+        situation: {type: string, minLength: 1, maxLength: 4000}
+        impact: {type: string, maxLength: 4000}
+        details: {type: string, maxLength: 32000}
+        evidence:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [label, url]
+            properties:
+              label: {type: string, maxLength: 240}
+              url: {type: string, minLength: 1, maxLength: 2000}
+
+    AskBatchQuestionFields:
+      type: object
+      description: Per-question fields of a filed batch member, in batch items and brief batch members.
+      properties:
+        position: {type: integer, minimum: 1, maximum: 10, description: 1-based question number in filing order. Absent on batches filed before ordering existed.}
+        multi_select: {type: boolean, description: The human may choose several proposals; the answer text joins them.}
+        note: {type: string, maxLength: 4000}
 
     CreateAskBatchResponse:
       type: object
@@ -14732,13 +14778,19 @@ components:
           properties:
             key: { type: string }
             count: { type: integer, description: Open members listed here, including this decision. }
+            context: {$ref: '#/components/schemas/AskBatchContext'}
             members:
               type: array
               maxItems: 10
+              description: A filed batch lists its members in question order.
               items:
                 type: object
                 required: [ref, inbox_item_id, title]
                 properties:
+                  position: {$ref: '#/components/schemas/AskBatchQuestionFields/properties/position'}
+                  multi_select: {$ref: '#/components/schemas/AskBatchQuestionFields/properties/multi_select'}
+                  note: {$ref: '#/components/schemas/AskBatchQuestionFields/properties/note'}
+                  proposals: { type: array, maxItems: 6, items: { type: string }, description: This member's own proposals, recommended first. }
                   ref: { type: string }
                   inbox_item_id: { type: string }
                   event_ref: { type: string, description: "Authoritative ask event reference (event:<id>) for this member." }

@@ -307,6 +307,7 @@ func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
 type briefDecisionMeta struct {
 	askID, thread, inboxKind, subject, batchID string
 	created                                    time.Time
+	question, context                          map[string]any // filed batch fields
 }
 
 // renderAsks returns the rendered items and, in the same order, the meta
@@ -421,11 +422,11 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			item["curation"] = curation
 		}
 		out = append(out, item)
-		metas = append(metas, briefDecisionMeta{
+		metas = append(metas, withBatchQuestion(briefDecisionMeta{
 			askID: a.AskID, thread: r.thread, inboxKind: briefInboxKind(a.Kind),
 			subject: a.SubjectRef, batchID: strings.TrimSpace(anyStringValue(payload["batch_id"])),
 			created: briefEventTime(event, a.CreatedAt),
-		})
+		}, payload))
 	}
 	return out, metas, truncated, nil
 }
@@ -591,11 +592,7 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 		if group[0] != i {
 			continue
 		}
-		list := make([]map[string]any, 0, len(group))
-		for _, mi := range group {
-			list = append(list, briefBatchMember(items[mi], metas[mi]))
-		}
-		items[i]["batch"] = map[string]any{"key": key, "count": len(group), "members": list}
+		items[i]["batch"] = briefBatchView(items, metas, key, group)
 		if respondID := batchRespondInboxID(key, group, metas, anchors); respondID != "" {
 			items[i]["ref"] = respondID
 			items[i]["inbox_item_id"] = respondID
@@ -634,37 +631,6 @@ func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]brie
 		}
 	}
 	return out, nil
-}
-
-func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]any {
-	member := map[string]any{"ref": item["ref"], "inbox_item_id": item["inbox_item_id"], "title": item["title"]}
-	askpresentation.Copy(member, item)
-	if eventRef := strings.TrimSpace(anyStringValue(item["event_ref"])); eventRef != "" {
-		member["event_ref"] = eventRef
-	} else if meta.askID != "" {
-		member["event_ref"] = "event:" + meta.askID
-	}
-	if meta.subject != "" {
-		member["subject_ref"] = meta.subject
-	}
-	if blocks, ok := item["blocks"].([]map[string]any); ok && len(blocks) > 0 {
-		copied := make([]map[string]any, 0, len(blocks))
-		for _, block := range blocks {
-			ref := strings.TrimSpace(anyStringValue(block["ref"]))
-			if ref == "" {
-				continue
-			}
-			entry := map[string]any{"ref": ref}
-			if title := strings.TrimSpace(anyStringValue(block["title"])); title != "" {
-				entry["title"] = title
-			}
-			copied = append(copied, entry)
-		}
-		if len(copied) > 0 {
-			member["blocks"] = copied
-		}
-	}
-	return member
 }
 
 // batchRespondInboxID is the single inbox id that answers the group. A filed

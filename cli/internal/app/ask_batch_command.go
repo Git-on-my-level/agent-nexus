@@ -23,8 +23,9 @@ import (
 func askBatchUsageText() string {
 	return strings.TrimSpace(`anx ask batch --from-file asks.json
 Files 2-10 related asks as one batch. The human inbox shows ONE item with one decision section per ask and a single submit; every answer records atomically and releases together to each ask's delivery mode.
-asks.json holds {"asks":[...]} where each entry accepts title (required), situation, impact, recommendation {action,why} (required by lint), alternatives [{action,consequence}], if_no_answer, details, body, subject_ref, thread_id, refs, recommend (required), alts, request_id, coverage_hint, evidence [{label,url}], supersedes, and a per-ask delivery override. A top-level "delivery" is the default mode. "-" reads the JSON from stdin.
-Every ask passes the same authoring lint as ` + "`anx ask`" + ` (--force --reason overrides it for the whole batch), and all asks must share one backing thread.
+asks.json holds {"asks":[...]} where each entry accepts title or question (required), situation, impact, recommendation {action,why} (required by lint), alternatives [{action,consequence}], if_no_answer, details, body, subject_ref, thread_id, refs, recommend (required), alts, request_id, coverage_hint, evidence [{label,url}], supersedes, note, multi_select (the human may pick several options), and a per-ask delivery override. A top-level "delivery" is the default mode. "-" reads the JSON from stdin.
+Shared context: a top-level "context" {title, situation, impact, details, evidence} states the background once for every question. Asks then need no situation or impact of their own; the context is linted once instead. Questions are numbered in file order.
+Every ask passes the same authoring lint as ` + "`anx ask`" + ` (--force --reason overrides it for the whole batch), and all asks must share one backing thread. --dry-run prints the batch as a chat or email reader sees it.
 Repeats: a batch whose asks are all open or answered on the card returns them instead of filing again, so retrying is safe. If only some are, nothing is filed. --again files a new batch when the facts changed.
 Follow-up: anx inbox list --status answered, or anx await --answers for batch delivery.
 `)
@@ -48,7 +49,10 @@ type askBatchEntry struct {
 	By           string            `json:"by"`
 	Blocks       []string          `json:"blocks"`
 	Priority     string            `json:"priority"`
+	Note         string            `json:"note"`
+	MultiSelect  bool              `json:"multi_select"`
 	decision     askDecision
+	shared       bool // the batch states a shared context
 
 	proposals      []any               `json:"-"`
 	decided        askDeliveryDecision `json:"-"`
@@ -117,6 +121,10 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		return nil, errnorm.Usage("invalid_request", fmt.Sprintf("asks must contain between %d and %d ask entries (a single ask belongs to anx ask)", askBatchMinMembers, askBatchMaxMembers))
 	}
 	batchDefaultDelivery, _ := document["delivery"].(string)
+	batchContext, err := decodeAskBatchContext(document["context"])
+	if err != nil {
+		return nil, errnorm.Usage("invalid_request", err.Error())
+	}
 
 	entries := make([]askBatchEntry, 0, len(rawAsks))
 	for index, rawAsk := range rawAsks {
@@ -124,6 +132,7 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		if err != nil {
 			return nil, err
 		}
+		entry.shared = batchContext != nil
 		entries = append(entries, entry)
 	}
 
@@ -139,6 +148,20 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 	}
 
 	forges := a.workspaceForges(cfg)
+	var contextWarnings []output.Warning
+	if batchContext != nil {
+		warnings, lintErrors, hard := batchContext.lint(forges)
+		if len(hard) > 0 {
+			violations := append(hard, lintErrors...)
+			return nil, errnorm.WithDetails(errnorm.Usage("invalid_request", "context: "+strings.Join(violations, "; ")), map[string]any{"violations": violations, "forceable": false})
+		}
+		if len(lintErrors) > 0 && !forceFlag.value {
+			return nil, errnorm.WithDetails(errnorm.Usage("ask_authoring", "context: "+strings.Join(lintErrors, "; ")+"; or use --force --reason <explanation>"), map[string]any{"violations": lintErrors, "forceable": true})
+		}
+		for _, message := range warnings {
+			contextWarnings = append(contextWarnings, output.Warning{Code: "ask_authoring", Message: "context: " + message})
+		}
+	}
 	sharedThread := ""
 	threadCache := map[string]string{}
 	for index := range entries {
@@ -164,6 +187,9 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		members = append(members, a.buildAskBatchMember(&entries[index]))
 	}
 	bodyMap := map[string]any{"asks": members}
+	if batchContext != nil {
+		bodyMap["context"] = batchContext.payload()
+	}
 	if actorIDFlag.set {
 		bodyMap["actor_id"] = strings.TrimSpace(actorIDFlag.value)
 	}
@@ -175,15 +201,17 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		result := dryRunResult("ask batch", "asks.batch.create", nil, nil, bodyMap)
 		if data, ok := result.Data.(map[string]any); ok {
 			data["batch_size"] = len(entries)
+			data["preview"] = askBatchPreview(entries, batchContext)
 		}
-		result.Warnings = append(result.Warnings, askBatchWarnings(entries)...)
+		result.Warnings = append(append(result.Warnings, contextWarnings...), askBatchWarnings(entries)...)
 		return result, nil
 	}
 
 	// Recorded before publishing, as a single ask is.
 	askWaitWarnings := []output.Warning{}
 	for index := range entries {
-		if warning := a.recordAskForSession(cfg, "event:"+entries[index].eventID, entries[index].Title); warning != nil {
+		// The first member's local id groups the batch for anx await --answers.
+		if warning := a.recordAskForSession(cfg, "event:"+entries[index].eventID, entries[index].Title, entries[0].eventID); warning != nil {
 			askWaitWarnings = append(askWaitWarnings, *warning)
 		}
 	}
@@ -221,7 +249,7 @@ func (a *App) runAskBatch(ctx context.Context, args []string, cfg config.Resolve
 		"ask_count": len(askViews),
 		"asks":      askViews,
 	}
-	result.Warnings = append(result.Warnings, askBatchWarnings(entries)...)
+	result.Warnings = append(append(result.Warnings, contextWarnings...), askBatchWarnings(entries)...)
 	if registrationFailures > 0 {
 		result.Warnings = append(result.Warnings, askBatchRegistrationWarning(registrationFailures))
 	}
@@ -255,6 +283,20 @@ func decodeAskBatchEntry(raw any, index int) (askBatchEntry, error) {
 		return invalid("invalid structured ask fields: " + err.Error())
 	}
 	entry.Title = strings.TrimSpace(anyString(object["title"]))
+	if question := strings.TrimSpace(anyString(object["question"])); question != "" {
+		if entry.Title != "" && entry.Title != question {
+			return invalid("give the question as title or question, not both")
+		}
+		entry.Title = question
+	}
+	entry.Note = strings.TrimSpace(anyString(object["note"]))
+	if raw, present := object["multi_select"]; present {
+		multi, ok := raw.(bool)
+		if !ok {
+			return invalid("multi_select must be true or false")
+		}
+		entry.MultiSelect = multi
+	}
 	entry.Body = strings.TrimSpace(anyString(object["body"]))
 	entry.SubjectRef = strings.TrimSpace(anyString(object["subject_ref"]))
 	entry.ThreadID = strings.TrimSpace(anyString(object["thread_id"]))
@@ -323,7 +365,7 @@ func (a *App) prepareAskBatchEntry(
 ) error {
 	hard := entry.askPresentation.boundViolations()
 	if entry.Title == "" {
-		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d].title is required", index))
+		return errnorm.Usage("invalid_request", fmt.Sprintf("asks[%d].title (or question) is required", index))
 	}
 	if strings.ContainsAny(entry.Title, "\r\n") {
 		return errnorm.Usage("ask_title_invalid", fmt.Sprintf("asks[%d].title must be one line; move detail into body", index))
@@ -344,7 +386,7 @@ func (a *App) prepareAskBatchEntry(
 		options = append(options, alt)
 	}
 	warnings, authoringErrors := lintAskAuthoring(strings.TrimSpace(entry.Body+"\n"+entry.Details), entry.Refs, entry.Evidence, forges)
-	plainWarnings, lintErrors := lintAskPresentation(entry.Title, entry.askPresentation, options)
+	plainWarnings, lintErrors := lintAskPresentationShared(entry.Title, entry.askPresentation, options, entry.shared)
 	warnings = append(warnings, plainWarnings...)
 	lintErrors = append(append(append([]string{}, hard...), lintErrors...), authoringErrors...)
 	if len(hard) > 0 || evidenceShapeInvalid(entry.Evidence) {
@@ -450,6 +492,12 @@ func (a *App) buildAskBatchMember(entry *askBatchEntry) map[string]any {
 	}
 	if entry.Body != "" {
 		payload["body"] = entry.Body
+	}
+	if entry.Note != "" {
+		payload["note"] = entry.Note
+	}
+	if entry.MultiSelect {
+		payload["multi_select"] = true
 	}
 	if entry.RequestID != "" {
 		payload["request_id"] = entry.RequestID

@@ -45,6 +45,9 @@ type inboxRespondRequest struct {
 	NotifyTargetActorID string               `json:"notify_target_actor_id"`
 	NotifyTargetAgentID string               `json:"notify_target_agent_id"`
 	Answers             []inboxRespondAnswer `json:"answers"`
+	// Partial lets answers cover only some open members of a filed batch;
+	// omitempty keeps the hash of every earlier batch request unchanged.
+	Partial bool `json:"partial,omitempty"`
 }
 
 // inboxRespondRequestCore preserves the exact field order single-ask response

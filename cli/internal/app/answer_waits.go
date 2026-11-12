@@ -80,6 +80,9 @@ type answerWaitPending struct {
 	AskID      string `json:"ask_id"`
 	Title      string `json:"title,omitempty"`
 	RecordedAt string `json:"recorded_at"`
+	// Batch groups the asks filed together by anx ask batch. A wait polls a
+	// batch as one unit, so one human submission is handed over in one wake.
+	Batch string `json:"batch,omitempty"`
 }
 
 type answerWaitSeen struct {
@@ -119,11 +122,15 @@ func answerWaitAskFile(askID string) string {
 
 // recordAsk claims an ask for this session. Each ask is its own file, so a
 // filing can never lose a race with a running wait.
-func (s *answerWaitStore) recordAsk(askID, title string, now time.Time) error {
+func (s *answerWaitStore) recordAsk(askID, title string, now time.Time, batch ...string) error {
 	if err := s.ensure(); err != nil {
 		return err
 	}
-	raw, err := json.Marshal(answerWaitPending{AskID: askID, Title: title, RecordedAt: now.UTC().Format(time.RFC3339Nano)})
+	pending := answerWaitPending{AskID: askID, Title: title, RecordedAt: now.UTC().Format(time.RFC3339Nano)}
+	if len(batch) > 0 {
+		pending.Batch = batch[0]
+	}
+	raw, err := json.Marshal(pending)
 	if err != nil {
 		return err
 	}
@@ -268,10 +275,10 @@ func (s *answerWaitStore) saveSeen(ids []string) error {
 }
 
 // recordAskForSession is best effort: an ask is never refused over local state.
-func (a *App) recordAskForSession(cfg config.Resolved, askID, title string) *output.Warning {
+func (a *App) recordAskForSession(cfg config.Resolved, askID, title string, batch ...string) *output.Warning {
 	store, err := a.answerWaitStore(cfg)
 	if err == nil {
-		err = store.recordAsk(askID, title, time.Now())
+		err = store.recordAsk(askID, title, time.Now(), batch...)
 	}
 	if err != nil {
 		return &output.Warning{Code: "answer_wait_unrecorded", Message: "could not record this ask for anx await --answers; wait on it with anx await " + askID}
@@ -486,9 +493,10 @@ func answerWaitRetryable(err error) bool {
 func (a *App) sweepAnswers(ctx context.Context, cfg config.Resolved, store *answerWaitStore, actorID string, seen map[string]bool, baselined, all bool, pollOffset int) (*answerWaitSweep, error) {
 	sweep := &answerWaitSweep{found: map[string]map[string]any{}, owed: map[string]string{}, open: map[string]bool{}}
 	pendingAsks := store.pending()
+	inTurn := answerWaitTurn(pendingAsks, pollOffset)
 	for index, pending := range pendingAsks {
 		// An ask outside this poll's turn is assumed still open.
-		if len(pendingAsks) > answerWaitPollBudget && (index-pollOffset%len(pendingAsks)+len(pendingAsks))%len(pendingAsks) >= answerWaitPollBudget {
+		if !inTurn[index] {
 			sweep.open[pending.AskID] = true
 			continue
 		}
@@ -552,6 +560,31 @@ func (a *App) sweepAnswers(ctx context.Context, cfg config.Resolved, store *answ
 		sweep.found[id] = item
 	}
 	return sweep, nil
+}
+
+// answerWaitTurn picks the pending asks this poll reads: a rotating window of
+// answerWaitPollBudget asks, widened to every member of a batch that has one
+// member in the window. A batch submission records its answers atomically, so
+// reading all of its members in the same poll hands the whole submission over
+// in one wake instead of splitting it across polls. The widening is bounded by
+// the batch cap (10), so a poll reads at most budget+9 per batch it touches.
+func answerWaitTurn(pending []answerWaitPending, pollOffset int) map[int]bool {
+	turn := make(map[int]bool, len(pending))
+	batches := map[string]bool{}
+	for index, ask := range pending {
+		if len(pending) <= answerWaitPollBudget || (index-pollOffset%len(pending)+len(pending))%len(pending) < answerWaitPollBudget {
+			turn[index] = true
+			if ask.Batch != "" {
+				batches[ask.Batch] = true
+			}
+		}
+	}
+	for index, ask := range pending {
+		if ask.Batch != "" && batches[ask.Batch] {
+			turn[index] = true
+		}
+	}
+	return turn
 }
 
 func answerWaitItemKey(item map[string]any) string {

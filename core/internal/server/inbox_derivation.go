@@ -264,13 +264,21 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 		return derivedInboxItem{}, false
 	}
 
+	// Sections and the lead follow the batch's own question order. Batches
+	// filed before positions existed keep the anchor order (no positions).
+	display := append([]map[string]any{}, ordered...)
+	sort.SliceStable(display, func(i, j int) bool {
+		left, _ := display[i]["payload"].(map[string]any)
+		right, _ := display[j]["payload"].(map[string]any)
+		return askBatchPosition(left) < askBatchPosition(right)
+	})
 	sections := make([]map[string]any, 0, len(ordered))
-	for _, member := range ordered {
+	for _, member := range display {
 		memberEventID := strings.TrimSpace(anyString(member["id"]))
 		if memberEventID == "" {
 			return derivedInboxItem{}, false
 		}
-		if _, decided := decidedIDs["event:"+memberEventID]; decided {
+		if batchMemberDecided(decidedIDs, member) {
 			continue
 		}
 		payload, _ := member["payload"].(map[string]any)
@@ -288,6 +296,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 			"response_proposals": HumanAttentionResponseProposalsToAnySlice(proposals),
 		}
 		askpresentation.Copy(section, payload)
+		askBatchQuestionFields(section, payload)
 		if body := strings.TrimSpace(anyString(payload["body"])); body != "" {
 			section["body"] = body
 		}
@@ -299,22 +308,22 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 	if len(sections) == 0 {
 		return derivedInboxItem{}, false
 	}
-	// The lead is the oldest still-open member: it carries the display and
-	// access fields, so a withdrawn private member neither names nor gates
-	// the item for readers who could never see it.
+	// The lead is the first still-open member in question order: it carries
+	// the display and access fields, so a withdrawn private member neither
+	// names nor gates the item for readers who could never see it.
 	var leadPayload map[string]any
 	leadEventID := ""
 	leadTS := anchor["ts"]
-	for _, member := range ordered {
+	for _, member := range display {
 		memberEventID := strings.TrimSpace(anyString(member["id"]))
-		if _, decided := decidedIDs["event:"+memberEventID]; decided {
+		if batchMemberDecided(decidedIDs, member) {
 			continue
 		}
 		payload, _ := member["payload"].(map[string]any)
 		if payload == nil {
 			return derivedInboxItem{}, false
 		}
-		// `ordered` is sorted, so the first open member is the oldest.
+		// `display` is in question order, so this is the first open question.
 		leadPayload = payload
 		leadEventID = memberEventID
 		leadTS = member["ts"]
@@ -327,8 +336,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 	subjectRef := strings.TrimSpace(anyString(leadPayload["subject_ref"]))
 	if subjectRef == "" {
 		for _, member := range ordered {
-			memberEventID := strings.TrimSpace(anyString(member["id"]))
-			if _, decided := decidedIDs["event:"+memberEventID]; decided {
+			if batchMemberDecided(decidedIDs, member) {
 				continue
 			}
 			if refs := pickSubjectRefFromEventRefs(mustEventRefs(member), threadID); refs != "" {
@@ -341,7 +349,11 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 		subjectRef = "thread:" + threadID
 	}
 
-	title := strings.TrimSpace(anyString(leadPayload["title"]))
+	sharedContext := askBatchSharedContext(ordered)
+	title := strings.TrimSpace(anyString(sharedContext["title"]))
+	if title == "" {
+		title = strings.TrimSpace(anyString(leadPayload["title"]))
+	}
 	if title == "" {
 		title = "Human attention requested"
 	}
@@ -374,6 +386,9 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 			"asks": sections,
 		},
 	}
+	if sharedContext != nil {
+		data["batch"].(map[string]any)["context"] = sharedContext
+	}
 	askpresentation.Copy(data, leadPayload)
 	if delivery := strings.TrimSpace(anyString(leadPayload["delivery"])); delivery != "" {
 		data["delivery"] = delivery
@@ -386,6 +401,20 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 		ID:        id,
 		TriggerAt: triggerAt,
 	}, true
+}
+
+// batchMemberDecided reports a withdrawn or answered member. Stored response
+// refs may name the ask by its event handle rather than its id, so both are
+// checked; a partial batch answer closes its members only through these.
+func batchMemberDecided(decidedIDs map[string]struct{}, member map[string]any) bool {
+	for _, key := range []string{"id", "handle"} {
+		if value := strings.TrimSpace(anyString(member[key])); value != "" {
+			if _, decided := decidedIDs["event:"+value]; decided {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mustEventRefs(event map[string]any) []string {

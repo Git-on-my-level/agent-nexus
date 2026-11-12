@@ -16,3 +16,5 @@ replace agent-nexus-cli => ../cli
 replace agent-nexus-markdownhygiene => ../contracts/markdownhygiene
 
 replace agent-nexus-visualreport => ../contracts/visualreport
+
+replace agent-nexus-askbatchreply => ../contracts/askbatchreply

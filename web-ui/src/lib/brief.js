@@ -16,6 +16,7 @@ import {
   normalizePriority,
 } from "../../../contracts/gen/ts/dist/enums.js";
 import { normalizeLoop } from "$lib/loops.js";
+import { normalizeBatch } from "$lib/decideBatch.js";
 
 /** Computed initiative states, in attention order. */
 export const WATCH_STATES = [
@@ -254,46 +255,9 @@ function normalizeDecision(raw) {
     // A host enrollment answers on the Access page's own routes.
     accessRequestId: text(raw.access_request_id),
     curation: normalizeCuration(raw.curation, refTitle(raw.subject)),
-    batch: normalizeBatch(raw.batch),
+    batch: normalizeBatch(raw.batch, { normalizeAskPresentation, refTitle }),
     // Core orders proposals with the recommendation first; keep that order.
     proposals: decisionProposals(raw),
-  };
-}
-
-/**
- * A batch: several open asks shown as one decision. Asks filed together
- * through POST /asks/batch carry a `filed:` key and cannot be ungrouped; an
- * accepted curation batch can.
- */
-function normalizeBatch(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const key = text(raw.key);
-  if (!key) return null;
-  const members = (Array.isArray(raw.members) ? raw.members : [])
-    .filter((member) => member && typeof member === "object")
-    .map((member) => {
-      const eventRef =
-        text(member.event_ref) ||
-        text(member.eventRef) ||
-        (text(member.event_id) ? `event:${text(member.event_id)}` : "");
-      return {
-        ref: text(member.ref),
-        inboxItemId: text(member.inbox_item_id) || text(member.inboxItemId),
-        ...(eventRef ? { eventRef } : {}),
-        title: text(member.title),
-        ...normalizeAskPresentation(member),
-        subjectRef: text(member.subject_ref) || text(member.subjectRef),
-        blocks: (Array.isArray(member.blocks) ? member.blocks : [])
-          .map(refTitle)
-          .filter(Boolean),
-      };
-    })
-    .filter((member) => member.ref || member.title);
-  return {
-    key,
-    ungroupable: !key.startsWith("filed:"),
-    count: Math.max(Number(raw.count) || 0, members.length),
-    members,
   };
 }
 

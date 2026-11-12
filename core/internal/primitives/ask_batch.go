@@ -189,6 +189,43 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 	members []HumanAttentionBatchResponseMember,
 	responseFields ...map[string]any,
 ) (map[string]any, bool, error) {
+	return s.appendHumanAttentionBatchResponse(ctx, actorID, batchID, inboxItemID, key, hash, members, false, responseFields...)
+}
+
+// AppendHumanAttentionBatchPartialResponse answers some open members of a
+// filed batch and leaves the rest open. It commits exactly like a full batch
+// response, with two differences: the claim row is keyed by the batch id and
+// the first answered member (each member is answered once, so the key is
+// unique per submission), and the batch's derived inbox row stays for the
+// projection to rebuild from the members still open.
+func (s *Store) AppendHumanAttentionBatchPartialResponse(
+	ctx context.Context,
+	actorID string,
+	batchID string,
+	inboxItemID string,
+	key string,
+	hash string,
+	members []HumanAttentionBatchResponseMember,
+	responseFields ...map[string]any,
+) (map[string]any, bool, error) {
+	return s.appendHumanAttentionBatchResponse(ctx, actorID, batchID, inboxItemID, key, hash, members, true, responseFields...)
+}
+
+// partialBatchClaimSeparator joins a batch id and a member id in the claim key
+// of a partial submission; full submissions keep the bare batch id.
+const partialBatchClaimSeparator = "#"
+
+func (s *Store) appendHumanAttentionBatchResponse(
+	ctx context.Context,
+	actorID string,
+	batchID string,
+	inboxItemID string,
+	key string,
+	hash string,
+	members []HumanAttentionBatchResponseMember,
+	partial bool,
+	responseFields ...map[string]any,
+) (map[string]any, bool, error) {
 	if strings.TrimSpace(batchID) == "" || len(members) == 0 {
 		return nil, false, fmt.Errorf("batch id and members are required")
 	}
@@ -308,8 +345,12 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 	if err != nil {
 		return nil, false, err
 	}
+	claimID := batchID
+	if partial {
+		claimID = batchID + partialBatchClaimSeparator + members[0].SourceEventID
+	}
 	claimResult, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_batch_response_claims(batch_id,inbox_item_id,actor_id,request_key,request_hash,response_json,created_at) VALUES(?,?,?,?,?,?,?)`,
-		batchID, inboxItemID, actorID, key, hash, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+		claimID, inboxItemID, actorID, key, hash, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, false, err
 	}
@@ -333,9 +374,16 @@ func (s *Store) AppendHumanAttentionBatchResponse(
 		return nil, false, ErrHumanAttentionAlreadyResponded
 	}
 	// Drop the batch row and each member row. Filed batches share one derived
-	// id; a curation batch has one derived row per member.
+	// id; a curation batch has one derived row per member. A partial answer
+	// keeps the batch row: the projection rebuilds it from the open members.
 	drop := map[string]struct{}{strings.TrimSpace(inboxItemID): {}}
+	if partial {
+		drop = map[string]struct{}{}
+	}
 	for _, pm := range preparedMembers {
+		if partial {
+			break
+		}
 		if id := strings.TrimSpace(pm.member.InboxItemID); id != "" {
 			drop[id] = struct{}{}
 		}
@@ -403,6 +451,7 @@ func (s *Store) HumanAttentionBatchResponseRequest(ctx context.Context, inboxIte
 	if err := json.Unmarshal([]byte(raw), &response); err != nil {
 		return nil, err
 	}
+	batchID, _, _ = strings.Cut(batchID, partialBatchClaimSeparator)
 	response["batch_id"] = batchID
 	return response, nil
 }
@@ -426,4 +475,32 @@ func (s *Store) SaveHumanAttentionBatchResponseResult(ctx context.Context, batch
 		return fmt.Errorf("batch response claim missing for %s", batchID)
 	}
 	return nil
+}
+
+// AskBatchQuestionFields copies a member's display order and per-question
+// fields onto its section of a derived batch item or brief member.
+func AskBatchQuestionFields(dst, payload map[string]any) {
+	if position := AskBatchPosition(payload); position > 0 {
+		dst["position"] = position
+	}
+	if payload["multi_select"] == true {
+		dst["multi_select"] = true
+	}
+	if note := strings.TrimSpace(anyStringValue(payload["note"])); note != "" {
+		dst["note"] = note
+	}
+}
+
+// AskBatchPosition is a member's 1-based question number, 0 when the batch
+// was filed before positions existed.
+func AskBatchPosition(payload map[string]any) int {
+	switch value := payload["batch_position"].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	}
+	return 0
 }

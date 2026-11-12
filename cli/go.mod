@@ -26,4 +26,8 @@ replace agent-nexus-visualreport => ../contracts/visualreport
 
 require agent-nexus-markdownhygiene v0.0.0
 
+require agent-nexus-askbatchreply v0.0.0
+
 replace agent-nexus-markdownhygiene => ../contracts/markdownhygiene
+
+replace agent-nexus-askbatchreply => ../contracts/askbatchreply

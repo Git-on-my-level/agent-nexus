@@ -87,10 +87,17 @@ func askTokenExplained(token, text string) bool {
 	return false
 }
 func lintAskPresentation(title string, p askPresentation, options []any) (warnings []string, errors []string) {
+	return lintAskPresentationShared(title, p, options, false)
+}
+
+// lintAskPresentationShared lints one ask. sharedContext marks a question of
+// a batch that states its context once: its own situation and impact are
+// optional there, because the batch context is linted instead.
+func lintAskPresentationShared(title string, p askPresentation, options []any, sharedContext bool) (warnings []string, errors []string) {
 	warnings = []string{}
 	errors = []string{}
 	for _, f := range []struct{ name, value string }{{"situation", p.Situation}, {"impact", p.Impact}} {
-		if strings.TrimSpace(f.value) == "" {
+		if strings.TrimSpace(f.value) == "" && !sharedContext {
 			errors = append(errors, "Missing "+f.name+"; add --"+f.name+" or frontmatter in --from-file ask.md")
 		}
 	}
@@ -112,16 +119,24 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 	if len(strings.Fields(p.Situation)) > 250 {
 		warnings = append(warnings, "Situation exceeds 250 words; focus on the baseline, what changed and the key numbers")
 	}
-	if len(strings.Fields(p.Situation))+len(strings.Fields(p.Impact)) < 40 {
+	if !sharedContext && len(strings.Fields(p.Situation))+len(strings.Fields(p.Impact)) < 40 {
 		warnings = append(warnings, "Situation and impact together are under 40 words; add the baseline, what changed and why it matters")
 	}
-	fields := []struct{ name, text string }{{"title", title}, {"situation", p.Situation}, {"impact", p.Impact}}
+	fields := []askLintField{{"title", title}, {"situation", p.Situation}, {"impact", p.Impact}}
 	for i, v := range options {
-		fields = append(fields, struct{ name, text string }{fmt.Sprintf("option %d", i+1), anyString(v)})
+		fields = append(fields, askLintField{fmt.Sprintf("option %d", i+1), anyString(v)})
 	}
 	for i, alt := range p.Alternatives {
-		fields = append(fields, struct{ name, text string }{fmt.Sprintf("alternative %d consequence", i+1), alt.Consequence})
+		fields = append(fields, askLintField{fmt.Sprintf("alternative %d consequence", i+1), alt.Consequence})
 	}
+	return append(warnings, askJargonWarnings(fields)...), errors
+}
+
+type askLintField struct{ name, text string }
+
+// askJargonWarnings flags unexplained technical tokens on the decision face.
+func askJargonWarnings(fields []askLintField) []string {
+	warnings := []string{}
 	visible := ""
 	counts := map[string]int{}
 	for _, f := range fields {
@@ -140,7 +155,7 @@ func lintAskPresentation(title string, p askPresentation, options []any) (warnin
 			warnings = append(warnings, fmt.Sprintf("Unexplained jargon %q in %s; replace it with plain words or explain it in parentheses; move identifiers to details/evidence", token, f.name))
 		}
 	}
-	return warnings, errors
+	return warnings
 }
 func renderAskPreview(title, body string, p askPresentation, options []any, evidence []askEvidenceLink) string {
 	var b strings.Builder
