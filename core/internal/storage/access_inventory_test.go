@@ -42,6 +42,7 @@ func validStorageClassification(policy string) bool {
 		"configuration:series",
 		"derived:document-and-comments",
 		"identity",
+		"internal:auth-audit",
 		"internal:auth-provenance",
 		"internal:authorization",
 		"internal:canonical-accounting",
