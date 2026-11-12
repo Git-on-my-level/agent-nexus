@@ -311,6 +311,7 @@ func (a *App) runSeriesCommand(ctx context.Context, args []string, cfg config.Re
 	if err != nil {
 		return name, nil, err
 	}
+	var out map[string]any
 	if p.group == "series" && p.verb == "push" {
 		if p.adapter == "" {
 			inventory, err := a.hostCall(ctx, cfg, "GET", "/series", nil, generatedHeaders(cfg))
@@ -328,18 +329,34 @@ func (a *App) runSeriesCommand(ctx context.Context, args []string, cfg config.Re
 				return name, nil, errnorm.Usage("adapter_required", "declare an adapter for this series before pushing")
 			}
 		}
-		token, err := a.hostCall(ctx, cfg, "POST", "/adapters/"+url.PathEscape(p.adapter)+"/token", nil, generatedHeaders(cfg))
+		owner := cfg
+		token, err := a.seriesTokenForAdapter(ctx, owner, p.adapter)
 		if err != nil {
 			return name, nil, err
 		}
-		cfg.AccessToken = anyString(asMap(token["tokens"])["access_token"])
-		if cfg.AccessToken == "" {
-			return name, nil, errnorm.Usage("invalid_response", "missing scoped token")
+		cfg.AccessToken = token
+		out, err = a.hostCall(ctx, cfg, method, path, body, generatedHeaders(cfg))
+		if err != nil && seriesTokenUnauthorized(err) {
+			token, mintErr := a.refreshSeriesToken(ctx, owner, p.adapter)
+			if mintErr != nil {
+				return name, nil, mintErr
+			}
+			cfg.AccessToken = token
+			out, err = a.hostCall(ctx, cfg, method, path, body, generatedHeaders(cfg))
 		}
-	}
-	out, err := a.hostCall(ctx, cfg, method, path, body, generatedHeaders(cfg))
-	if err != nil {
-		return name, nil, err
+		if err != nil {
+			return name, nil, err
+		}
+	} else {
+		out, err = a.hostCall(ctx, cfg, method, path, body, generatedHeaders(cfg))
+		if err != nil {
+			return name, nil, err
+		}
+		if p.group == "adapters" && (p.verb == "revoke" || p.verb == "delete") {
+			if err := a.discardCachedSeriesTokensForAdapter(ctx, cfg, p.name); err != nil {
+				a.warnSeriesTokenCache(err)
+			}
+		}
 	}
 	text := ""
 	rows := asSlice(out[p.group])

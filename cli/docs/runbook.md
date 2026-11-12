@@ -669,7 +669,7 @@ Use `step rm <card> <step-id>` after updating any dependent `--after` lists. Emp
 
 ## Live dashboard series
 
-Prefer native live queries. Declare external-data adapters before pushing, and keep third-party credentials on the enrolled owner host. See `../../docs/live-series.md` and `../../adapters/series/README.md` for commands, scripts, grants and schedules.
+Prefer native live queries. Declare external-data adapters before pushing, and keep third-party credentials on the enrolled owner host. The CLI reuses a still-valid scoped series token for the same workspace, agent and adapter until shortly before expiry, then mints a fresh one; a cached token rejected as unauthorized is discarded and replaced for one retry. See `../../docs/live-series.md` and `../../adapters/series/README.md` for commands, scripts, grants and schedules.
 
 ### Optional harness task mirroring
 
