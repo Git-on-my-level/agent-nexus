@@ -50,6 +50,17 @@ def main() -> int:
         return 2
 
     repeats = args.repeats if args.mode == "model" else 1
+    meta = {
+        "mode": args.mode,
+        "model": config.model if config else "oracle",
+        "skill": bool(args.skill),
+        "max_turns": args.max_turns,
+        "repeats": repeats,
+        "started_at": started.isoformat(timespec="seconds"),
+        "cli_version": (REPO_ROOT / "VERSION").read_text().strip(),
+        "commit": _commit(),
+    }
+    baseline = json.loads(args.compare.read_text()) if args.compare else None
     rows: list[dict] = []
     skill_text = ""
     for task in tasks:
@@ -75,23 +86,13 @@ def main() -> int:
             finally:
                 ws.stop()
             rows.append(report.episode_row(task.id, repeat, len(task.oracle), passed, reason, episode))
+            # Rewrite the report after every episode so a stopped run keeps what it measured.
+            report.write(out_dir, report.summarize(rows, meta), baseline)
             mark = "pass" if passed else "FAIL"
             print(f"{mark}  {task.id:<20} commands={len(episode.commands):<3} "
                   f"failed={rows[-1]['failed_commands']:<2} {episode.stop_reason}  {reason}", flush=True)
 
-    meta = {
-        "mode": args.mode,
-        "model": config.model if config else "oracle",
-        "skill": bool(args.skill),
-        "max_turns": args.max_turns,
-        "repeats": repeats,
-        "started_at": started.isoformat(timespec="seconds"),
-        "cli_version": (REPO_ROOT / "VERSION").read_text().strip(),
-        "commit": _commit(),
-    }
     summary = report.summarize(rows, meta)
-    baseline = json.loads(args.compare.read_text()) if args.compare else None
-    report.write(out_dir, summary, baseline)
     totals = summary["totals"]
     print(f"\n{totals['passed']}/{totals['runs']} passed; {totals['failed_commands']} failed commands; "
           f"report: {out_dir / 'summary.md'}")
