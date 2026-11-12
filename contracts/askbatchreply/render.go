@@ -18,6 +18,9 @@ type RenderOptions struct {
 	// Reasons adds the recommendation's why and each alternative's consequence
 	// under its option.
 	Reasons bool
+	// OmitReplyHint leaves out the compact-reply instruction, for a channel
+	// whose replies are not read (the reader answers elsewhere).
+	OmitReplyHint bool
 }
 
 // ReplyHint is the one-line instruction that ends every rendering.
@@ -48,7 +51,9 @@ func RenderText(b Batch, o RenderOptions) string {
 	for _, q := range b.Questions {
 		parts = append(parts, questionText(q, o))
 	}
-	parts = append(parts, ReplyHint(b))
+	if !o.OmitReplyHint {
+		parts = append(parts, ReplyHint(b))
+	}
 	return strings.Join(parts, "\n\n")
 }
 
@@ -107,7 +112,7 @@ func questionText(q Question, o RenderOptions) string {
 			out.WriteString("\n      " + oneLine(option.Why))
 		}
 	}
-	if len(q.Options) == 0 {
+	if len(q.Options) == 0 && !o.OmitReplyHint {
 		fmt.Fprintf(&out, "\n   Answer as %d: your words", q.Number)
 	}
 	return out.String()
@@ -128,7 +133,9 @@ func SplitText(b Batch, o RenderOptions, limit int) []string {
 	for _, q := range b.Questions {
 		blocks = append(blocks, questionText(q, o))
 	}
-	blocks = append(blocks, ReplyHint(b))
+	if !o.OmitReplyHint {
+		blocks = append(blocks, ReplyHint(b))
+	}
 	budget := limit - label
 	if budget < 64 {
 		budget = limit
@@ -204,7 +211,11 @@ func RenderHTML(b Batch, o RenderOptions) string {
 			fmt.Fprintf(&out, "<p style=\"margin:0 0 4px;color:#444\">%s</p>\n", e(oneLine(note)))
 		}
 		if len(q.Options) == 0 {
-			fmt.Fprintf(&out, "<p style=\"margin:0\">Answer as <code>%d: your words</code></p>\n", q.Number)
+			if !o.OmitReplyHint {
+				fmt.Fprintf(&out, "<p style=\"margin:0\">Answer as <code>%d: your words</code></p>\n", q.Number)
+			} else {
+				out.WriteString("<p style=\"margin:0;color:#555\">Answer in your own words.</p>\n")
+			}
 			continue
 		}
 		out.WriteString("<ul style=\"margin:0;padding-left:20px;list-style:none\">\n")
@@ -220,7 +231,9 @@ func RenderHTML(b Batch, o RenderOptions) string {
 		}
 		out.WriteString("</ul>\n")
 	}
-	fmt.Fprintf(&out, "<p style=\"margin-top:16px\">%s</p>\n", e(ReplyHint(b)))
+	if !o.OmitReplyHint {
+		fmt.Fprintf(&out, "<p style=\"margin-top:16px\">%s</p>\n", e(ReplyHint(b)))
+	}
 	return out.String()
 }
 

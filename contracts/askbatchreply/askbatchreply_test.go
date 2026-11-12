@@ -229,6 +229,10 @@ func TestRenderTextStatesContextOnce(t *testing.T) {
 	if strings.Count(html, "We keep every log for 400 days today.") != 1 || !strings.Contains(html, "<strong>a)</strong> Yes <em>(recommended)</em>") {
 		t.Fatalf("html:\n%s", html)
 	}
+	quiet := RenderText(b, RenderOptions{OmitReplyHint: true}) + RenderHTML(b, RenderOptions{OmitReplyHint: true})
+	if strings.Contains(quiet, "Reply with one line") || strings.Contains(quiet, "4: your words") {
+		t.Fatalf("reply hint not omitted:\n%s", quiet)
+	}
 	b.Title = "<script>x</script>"
 	if strings.Contains(RenderHTML(b, RenderOptions{}), "<script>") {
 		t.Fatal("html not escaped")
