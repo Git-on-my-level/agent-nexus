@@ -66,6 +66,10 @@ var recentMigrations = []migration{
 	// no longer contributes filter-source access edges; drop the old triggers
 	// and let a bounded maintenance job remove existing edges.
 	{Version: 139, AfterApply: installAuthAuditAccessCleanup},
+	// Card revision artifacts keep every raw reference edge at write time but
+	// store only reference atoms afterwards; prose bodies no longer inflate
+	// content_refs_json. Installs triggers and a bounded backfill cursor.
+	{Version: 142, AfterApply: installCardManifestPruning},
 	// Drop indexes whose leading columns and ordering are already served by a
 	// wider index, or that no query reads. Fresh databases no longer create
 	// them; this removes them from upgraded workspaces.
