@@ -178,32 +178,18 @@ func TestPartialReplyBody(t *testing.T) {
 	}
 }
 
-func TestStripQuotedEmailReply(t *testing.T) {
+func TestParseSetsAsideTrailingProse(t *testing.T) {
 	b := mustBatch(t)
-	body := "1a 2b 3ac 4: free text 5a\r\n\r\nThanks,\r\nDana\r\n\r\nOn Tue, Nov 11, 2026 at 9:14 AM Agent Nexus <asks@example.com>\r\nwrote:\r\n> 1. Delete debug logs after 30 days?\r\n>    a) Yes (recommended)\r\n> Reply with one line, for example: 1a 2a\r\n"
-	stripped := StripQuoted(body)
-	if strings.Contains(stripped, ">") || strings.Contains(stripped, "wrote") {
-		t.Fatalf("quoted history kept:\n%s", stripped)
-	}
-	// The sign-off is not an answer: it is set aside and reported, never
-	// silently dropped and never a reason to refuse the answers above it.
-	r := Parse(b, stripped)
+	// A sign-off after a blank line is not an answer: it is set aside and
+	// reported, never silently dropped and never a reason to refuse the
+	// answers above it.
+	r := Parse(b, "1a 2b 3ac 4: free text 5a\r\n\r\nThanks,\r\nDana\r\n")
 	if !r.Complete() || len(r.Answers) != 5 || !reflect.DeepEqual(r.Ignored, []string{"Thanks,\nDana"}) {
 		t.Fatalf("answers=%+v issues=%v ignored=%q", r.Answers, r.Issues, r.Ignored)
 	}
 	// Prose before any answer is still an issue: nothing was understood.
 	if lead := Parse(b, "Hi team\n\n1a"); lead.OK() || lead.Issues[0].Fragment != "Hi" {
 		t.Fatalf("lead = %+v", lead)
-	}
-	for _, history := range []string{
-		"1a\n\n-----Original Message-----\nFrom: x\n2b",
-		"1a\n\nFrom: Agent Nexus <asks@example.com>\nSent: today\n2b",
-		"1a\n-- \nDana\n2b",
-		"1a\nOn Tue, Nov 11, 2026 at 9:14 AM Agent Nexus <asks@example.com> wrote:\n2b",
-	} {
-		if got := StripQuoted(history); got != "1a" {
-			t.Fatalf("StripQuoted(%q) = %q", history, got)
-		}
 	}
 }
 

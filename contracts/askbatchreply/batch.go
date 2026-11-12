@@ -1,8 +1,10 @@
 // Package askbatchreply renders a filed ask batch as one plain-text or HTML
 // message and parses the compact reply a human sends back ("1a 2b 3ac
 // 4: free text"). It has no dependencies and no transport knowledge, so any
-// delivery channel (chat, email, a terminal) can show a batch the same way and
-// turn a reply into the per-question answers POST /inbox/{id}/respond takes.
+// channel (chat, email, a terminal) can show a batch the same way, and a chat
+// channel that takes answers can turn a reply into the per-question answers
+// POST /inbox/{id}/respond takes. Email only shows the batch and links to
+// Decide; email replies are not read.
 package askbatchreply
 
 import (

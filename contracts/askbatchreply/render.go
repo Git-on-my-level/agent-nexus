@@ -11,7 +11,8 @@ import (
 // RenderOptions shape a rendering for one channel.
 type RenderOptions struct {
 	// ContextLimit caps the situation and impact text in runes (0: no cap). A
-	// chat message states the context briefly; email can carry all of it.
+	// chat message states the context briefly; an email (which links to
+	// Decide to answer) can carry all of it.
 	ContextLimit int
 	// Details includes the collapsed details and evidence links.
 	Details bool
@@ -168,7 +169,8 @@ func SplitText(b Batch, o RenderOptions, limit int) []string {
 }
 
 // RenderHTML renders the same layout as RenderText as a self-contained HTML
-// fragment for email bodies. Every value is escaped.
+// fragment for email bodies. Every value is escaped. Email only shows a
+// batch; pass OmitReplyHint, since answers are given in Decide or a chat.
 func RenderHTML(b Batch, o RenderOptions) string {
 	e := html.EscapeString
 	var out strings.Builder

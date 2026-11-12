@@ -111,15 +111,17 @@ only some answers (`partial: true` on `POST /inbox/{id}/respond`): those
 release to their asks' delivery modes, the rest stay open on the same item.
 `anx await --answers` hands each submission over in one wake.
 
-Chat and email transports render a batch and read replies with the shared Go
-module `contracts/askbatchreply`: `RenderText`/`RenderHTML`/`SplitText` lay out
-the batch, and `Parse` reads a compact reply such as `1a 2b 3ac 4: own words 5a`
-(letters together for a multi-select question, `<n>: text` for own words,
-`StripQuoted` drops quoted email history). Own words that start a line run to
-its end; after other answers on the same line they stop at the next answer,
-and `Cautions` names each answer read that way so the transport can say so.
-Every part that does not parse is named, so a transport can echo it back
-instead of guessing. `anx ask batch --dry-run` prints the same plain-text
+Batches are answered in the web UI (Decide) or in a chat channel that takes
+replies. Email only shows a batch and links to it in Decide; email replies are
+not read. Transports use the shared Go module `contracts/askbatchreply`:
+`RenderText`/`RenderHTML`/`SplitText` lay out the batch for chat or email
+(`OmitReplyHint` for email, which takes no reply), and `Parse` reads a chat
+reply such as `1a 2b 3ac 4: own words 5a` (letters together for a
+multi-select question, `<n>: text` for own words). Own words that start a line
+run to its end; after other answers on the same line they stop at the next
+answer, and `Cautions` names each answer read that way so the transport can
+say so. Every part that does not parse is named, so a transport can echo it
+back instead of guessing. `anx ask batch --dry-run` prints the same plain-text
 layout.
 
 ## The bridge

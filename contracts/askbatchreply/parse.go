@@ -44,7 +44,7 @@ type Result struct {
 	Issues  []Issue
 	Missing []int
 	// Ignored holds trailing paragraphs (after a blank line, once answers were
-	// read) that contain no answer item, such as an email sign-off. They are
+	// read) that contain no answer item, such as a sign-off. They are
 	// not answers; a transport may show them so nothing vanishes silently.
 	Ignored []string
 }

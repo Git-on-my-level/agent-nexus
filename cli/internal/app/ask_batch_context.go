@@ -105,7 +105,7 @@ func (c *askBatchContext) payload() map[string]any {
 	return out
 }
 
-// askBatchPreview renders the batch the way a chat or email transport shows
+// askBatchPreview renders the batch the way a chat transport shows
 // it, using the same shared renderer, so --dry-run shows the human's view.
 func askBatchPreview(entries []askBatchEntry, context *askBatchContext) string {
 	batch := askbatchreply.Batch{Title: entries[0].Title}
