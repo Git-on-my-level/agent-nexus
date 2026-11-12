@@ -1,0 +1,881 @@
+<script>
+  import { tick } from "svelte";
+  import { flip } from "svelte/animate";
+  import WorkCard from "./WorkCard.svelte";
+  import SignalBadge from "./SignalBadge.svelte";
+  import WorkSummary from "$lib/components/WorkSummary.svelte";
+  import OwnerLabel from "$lib/components/OwnerLabel.svelte";
+  import {
+    actorDirectoryLoaded,
+    actorRegistry,
+    agentDirectoryLoaded,
+    agentRegistry,
+    principalRegistry,
+  } from "$lib/actorSession";
+  import { buildOwnerDisplay } from "$lib/ownerDisplay.js";
+  import { boardDisplayTitle } from "$lib/boardUtils.js";
+  import {
+    phaseGroups,
+    isNexusOwned,
+    workKey,
+    taskDetailPath,
+    workFreshness,
+    sortWorkBoardItems,
+    sortWorkByAttention,
+    isClosedWork,
+    CLOSED_PHASES,
+  } from "$lib/work/presentation.js";
+  import { formatTimestamp, formatAbsoluteDateTime } from "$lib/formatDate";
+  import { coreClient } from "$lib/coreClient";
+  import { prefetchWork, primeWorkSummary } from "$lib/workCache.js";
+  import { isComputedClosed, workSummaryModel } from "$lib/workSummary.js";
+  import {
+    DRAG_THRESHOLD_PX,
+    columnAtPoint,
+    columnSlots,
+    flipDuration,
+    insertIndexAtY,
+  } from "$lib/workBoardDrag.js";
+  let {
+    records = [],
+    view = "table",
+    workspaceHref,
+    now = Date.now(),
+    requested = {},
+    requestedDecisions = {},
+    boardTitles = {},
+    // The records are one page of the list; a column count is then a lower
+    // bound, and says so the way the table header does.
+    truncated = false,
+    // Done and Cancelled fold away by default; `closedHref` flips the toggle.
+    showClosed = false,
+    closedHref = "",
+    onMove,
+  } = $props();
+  // Attention order: Blocked, In progress, In review, Ready, Backlog; closed
+  // work after a toggle.
+  let ordered = $derived(sortWorkByAttention(records));
+  /**
+   * Which rows the table folds away.
+   *
+   * Both halves have to agree it is over. The board files a card by its
+   * stored phase, so that is what fills a column; but a card somebody marked
+   * done whose plan is still blocked is not finished, and folding it away on
+   * the strength of the phase alone hid exactly the row the new Status column
+   * exists to surface — "Blocked · marked done", invisible.
+   */
+  function isFolded(work) {
+    return isClosedWork(work) && isComputedClosed(work);
+  }
+  let openRows = $derived(ordered.filter((work) => !isFolded(work)));
+  let closedRows = $derived(ordered.filter((work) => isFolded(work)));
+  let tableRows = $derived(showClosed ? ordered : openRows);
+  let closedLabel = $derived.by(() => {
+    const done = closedRows.filter((work) => work.phase === "done").length;
+    const cancelled = closedRows.length - done;
+    return [
+      done ? `${done} done` : "",
+      cancelled ? `${cancelled} cancelled` : "",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+  });
+  // Board is plumbing when there is no choice: one board in view, no column
+  // and no card meta for it.
+  let multipleBoards = $derived(
+    new Set(
+      records
+        .map((work) => String(work?.board_ref ?? "").trim())
+        .filter(Boolean),
+    ).size > 1,
+  );
+  // "Last checked" means "last read from the source"; a task created here has
+  // no source, so the column exists only when a source-backed task is in view.
+  let anySourced = $derived(tableRows.some((work) => !isNexusOwned(work)));
+  let columns = $derived(
+    [
+      "Initiative",
+      multipleBoards ? "Group" : "",
+      "Status",
+      "Owner",
+      anySourced ? "Last checked" : "",
+    ].filter(Boolean),
+  );
+  let groups = $derived(
+    phaseGroups(records)
+      .filter(
+        (group) =>
+          group.items.length ||
+          ["backlog", "in_progress", "blocked", "review", "done"].includes(
+            group.key,
+          ),
+      )
+      .map((group) =>
+        view === "board"
+          ? { ...group, items: sortWorkBoardItems(group.items) }
+          : group,
+      ),
+  );
+  const href = (work) => workspaceHref(taskDetailPath(work));
+  let focusedKey = $state("");
+
+  /*
+   * Opening a card should not re-ask for what is already on screen. Every row
+   * writes its own projection into the card cache, so the detail page paints
+   * the title, status and owner at once; pointing at a row reads the card
+   * ahead of the click, so by the time it arrives there is nothing to wait
+   * for. Both are display-only snapshots — see `workCache.js`.
+   */
+  $effect(() => {
+    for (const work of records) primeWorkSummary(work);
+  });
+  function prefetch(work) {
+    const id = workKey(work) || String(work?.ref ?? "");
+    if (id) void prefetchWork(id, coreClient);
+  }
+
+  /**
+   * One computed summary per row, built once per records change.
+   *
+   * Every row and card on this page reads this, and so does the Overview —
+   * which is the point: the Status column used to print the stored phase, so
+   * a card whose plan was blocked could sit in the table reading "In
+   * progress" while the dashboard called it blocked.
+   *
+   * Keyed by the row object, not by `workKey`: that is `ref || handle`, which
+   * a payload missing both makes undefined, and two such rows would then
+   * share one entry and show each other's status.
+   *
+   * `Date.now()` rather than the page's `now`, deliberately. A table of two
+   * thousand rows would otherwise rebuild every model, step digest and plan
+   * segment every thirty seconds — and nothing the row renders is clocked:
+   * row density shows no age, and the badges that are clocked take `now` as
+   * a prop and tick on their own.
+   */
+  let summaries = $derived(
+    new Map(
+      records.map((work) => [
+        work,
+        workSummaryModel(work, { now: Date.now() }),
+      ]),
+    ),
+  );
+  function summaryOf(work) {
+    return summaries.get(work) ?? workSummaryModel(work, { now: Date.now() });
+  }
+
+  function boardLabel(work) {
+    const ref = String(work?.board_ref ?? "").trim();
+    const title = boardTitles[ref] || ref.replace(/^board:/, "");
+    return boardDisplayTitle(title) || "—";
+  }
+
+  /**
+   * One owner resolver for the whole list, rebuilt when the registries
+   * change. Resolving per row rebuilt the workspace name map per row.
+   */
+  let ownerCellFor = $derived(
+    buildOwnerDisplay({
+      actors: $actorRegistry,
+      principals: $principalRegistry,
+      agents: $agentRegistry,
+      actorsLoaded: $actorDirectoryLoaded,
+      agentsLoaded: $agentDirectoryLoaded,
+    }),
+  );
+  function nextActorLabel(work) {
+    if (!work?.next_actor) return "";
+    // The same cell the Owner column uses, so one row does not call the
+    // same agent two things. A pending cell stays blank rather than
+    // painting a directory name the roster may replace. Free-text
+    // annotations keep their words once both reads have answered.
+    const cell = ownerCellFor(work.next_actor);
+    if (!cell || cell.pending) return "";
+    return cell.name;
+  }
+
+  /**
+   * The last time we read this task from its source. A task created here has
+   * no source to read, so its cell stays empty rather than repeating "created
+   * here" down the table.
+   */
+  function lastChecked(work, tick = now) {
+    // `tick` is the page's 30s clock: naming it here is what makes the
+    // relative labels recompute when it advances.
+    void tick;
+    const observed = work?.freshness?.last_observed_at;
+    if (observed) {
+      return {
+        text: formatTimestamp(observed),
+        title: formatAbsoluteDateTime(observed),
+        datetime: observed,
+        muted: false,
+      };
+    }
+    if (isNexusOwned(work)) {
+      return { text: "", title: "", datetime: "", muted: true };
+    }
+    return { text: "never", title: "", datetime: "", muted: true };
+  }
+
+  const ARROW_SKIPPED_PHASES = new Set(["blocked", "cancelled"]);
+  function orderedPhases() {
+    return groups.map((group) => group.key);
+  }
+
+  /** @type {{ work: object, key: string, pointerId: number, startX: number, startY: number, offsetX: number, offsetY: number, width: number, height: number, x: number, y: number, fromPhase: string, target: HTMLElement | null } | null} */
+  let drag = $state(null);
+  /** @type {{ phase: string, index: number } | null} */
+  let hover = $state(null);
+  let pointerMoved = $state(false);
+  // After release, keep the hole until the parent list matches it. Clearing
+  // drag first restores the origin column for a frame, then the drop lands —
+  // the whole board flashes.
+  let landing = $state(false);
+  let suppressClick = $state(false);
+  let pointerX = $state(0);
+  let pointerY = $state(0);
+
+  function slotsFor(group) {
+    if (!drag || !pointerMoved) {
+      return group.items.map((work) => ({ key: workKey(work), work }));
+    }
+    return columnSlots(group.items, drag.key, group.key, hover);
+  }
+
+  function teardownDragListeners() {
+    window.removeEventListener("pointermove", handlePointerMove, true);
+    window.removeEventListener("pointerup", handlePointerUp, true);
+    window.removeEventListener("pointercancel", handlePointerCancel, true);
+    window.removeEventListener("dragstart", handleCardDragStart, true);
+  }
+
+  function releasePointer(session) {
+    const id = session?.pointerId;
+    const target = session?.target;
+    if (target && typeof id === "number" && target.hasPointerCapture?.(id)) {
+      try {
+        target.releasePointerCapture(id);
+      } catch {
+        // Capture is already gone after pointercancel or navigation.
+      }
+    }
+  }
+
+  function clearDrag() {
+    releasePointer(drag);
+    teardownDragListeners();
+    drag = null;
+    hover = null;
+    pointerMoved = false;
+    landing = false;
+  }
+
+  function commitDrop(session, phase, index) {
+    onMove(session.work, phase, { index, pointer: true });
+  }
+
+  function slotFlipDuration(distance) {
+    if (drag && pointerMoved && !landing) return flipDuration(distance);
+    return 0;
+  }
+
+  function updateHover(x, y) {
+    if (!drag) {
+      hover = null;
+      return;
+    }
+    const columnEl = columnAtPoint(x, y);
+    if (!(columnEl instanceof HTMLElement)) {
+      hover = null;
+      return;
+    }
+    const phase = columnEl.getAttribute("data-work-phase") || "";
+    if (!phase) {
+      hover = null;
+      return;
+    }
+    hover = { phase, index: insertIndexAtY(columnEl, y, drag.key) };
+  }
+
+  /** @param {PointerEvent} event @param {object} work */
+  function handleCardPointerDown(event, work) {
+    if (event.button != null && event.button !== 0) return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("a[href]")
+    ) {
+      const cardLink = event.currentTarget.querySelector("a[href]");
+      if (event.target.closest("a[href]") !== cardLink) return;
+    }
+    const slot = event.currentTarget;
+    if (!(slot instanceof HTMLElement)) return;
+    const rect = slot.getBoundingClientRect();
+    drag = {
+      work,
+      key: workKey(work),
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      x: event.clientX,
+      y: event.clientY,
+      fromPhase: work.phase || "unknown",
+      target: slot,
+    };
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    pointerMoved = false;
+    hover = null;
+    window.addEventListener("pointermove", handlePointerMove, {
+      capture: true,
+      passive: false,
+    });
+    window.addEventListener("pointerup", handlePointerUp, true);
+    window.addEventListener("pointercancel", handlePointerCancel, true);
+    window.addEventListener("dragstart", handleCardDragStart, true);
+  }
+
+  /** @param {DragEvent} event */
+  function handleCardDragStart(event) {
+    // Links are draggable by default. If the browser starts an HTML5 drag,
+    // it fires pointercancel and our pointer session dies with no drop.
+    event.preventDefault();
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerMove(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!pointerMoved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+    if (!pointerMoved) {
+      pointerMoved = true;
+      window.getSelection?.()?.removeAllRanges?.();
+      try {
+        drag.target?.setPointerCapture(event.pointerId);
+      } catch {
+        // Capture is optional; window listeners still see bubbling pointer events.
+      }
+    }
+    event.preventDefault();
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    updateHover(event.clientX, event.clientY);
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerCancel(event) {
+    if (drag && pointerMoved) {
+      handlePointerUp(event);
+      return;
+    }
+    clearDrag();
+  }
+
+  /** @param {PointerEvent} event */
+  function handlePointerUp(event) {
+    if (drag && pointerMoved) {
+      updateHover(event.clientX, event.clientY);
+    }
+    const session = drag;
+    const target = hover;
+    const moved = pointerMoved;
+    if (!session || !moved) {
+      clearDrag();
+      return;
+    }
+    suppressClick = true;
+    window.setTimeout(() => {
+      suppressClick = false;
+    }, 0);
+    const phase = target?.phase;
+    const fromIndex = (
+      groups.find((group) => group.key === session.fromPhase)?.items || []
+    ).findIndex((item) => workKey(item) === session.key);
+    if (
+      !phase ||
+      !onMove ||
+      (phase === session.fromPhase && target.index === fromIndex)
+    ) {
+      clearDrag();
+      return;
+    }
+    // Confirm() must not sit under a frozen overlay. Nexus-owned drops are
+    // optimistic: hold the hole until records catch up, then drop the ghost.
+    if (!isNexusOwned(session.work)) {
+      clearDrag();
+      commitDrop(session, phase, target.index);
+      return;
+    }
+    releasePointer(session);
+    teardownDragListeners();
+    landing = true;
+    try {
+      commitDrop(session, phase, target.index);
+    } finally {
+      void tick().then(() => {
+        clearDrag();
+      });
+    }
+  }
+
+  /** @param {MouseEvent} event */
+  function handleCardClickCapture(event) {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleCardKey(event, work) {
+    if (event.key === "Enter") {
+      // Only act when the card container itself has focus; a focused inner
+      // link (task or Requested badge) activates natively.
+      if (event.target !== event.currentTarget) return;
+      const link = event.currentTarget.querySelector("a[href]");
+      if (link) {
+        event.preventDefault();
+        link.click();
+      }
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const current = work.phase || "unknown";
+    // Blocked and cancelled are states, not steps: an arrow walks the
+    // workflow and never files someone an obligation by accident. A card
+    // already in such a state can still step out of it.
+    const keys = orderedPhases().filter(
+      (key) => !ARROW_SKIPPED_PHASES.has(key) || key === current,
+    );
+    const index = keys.indexOf(current);
+    const nextIndex =
+      event.key === "ArrowRight"
+        ? Math.min(keys.length - 1, Math.max(0, index) + 1)
+        : Math.max(0, (index < 0 ? 0 : index) - 1);
+    const nextPhase = keys[nextIndex];
+    if (!nextPhase || nextPhase === current || !onMove) return;
+    const ref = work.ref;
+    // The card re-renders in another column; keep the keyboard on it so a
+    // second arrow press moves it again instead of dropping focus on body.
+    Promise.resolve(onMove(work, nextPhase)).then(async () => {
+      await tick();
+      // A move can open a form (evidence for Done); the field it focused
+      // keeps the keyboard, otherwise typing would land on the card.
+      const active = document.activeElement;
+      if (
+        active &&
+        active !== document.body &&
+        active.matches("input, textarea, select, [contenteditable='true']")
+      )
+        return;
+      document
+        .querySelector(`[data-work-ref="${CSS.escape(ref)}"][tabindex="0"]`)
+        ?.focus();
+    });
+  }
+</script>
+
+{#if view === "board"}
+  <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class="board-scroll flex gap-3 overflow-x-auto pb-3 {drag && pointerMoved
+      ? 'select-none'
+      : ''}"
+    role="region"
+    aria-label="Initiatives grouped by phase"
+    tabindex="0"
+  >
+    <p id="task-board-card-help" class="sr-only">
+      Drag an initiative between phases, or focus it and press the left or right
+      arrow to move it. Enter opens the initiative. Moving an initiative that
+      lives in another tracker asks for confirmation and files a request for you
+      to approve.
+    </p>
+    {#each groups as group (group.key)}
+      {@const folded =
+        !showClosed &&
+        CLOSED_PHASES.has(group.key) &&
+        !(drag && pointerMoved && hover?.phase === group.key)}
+      {@const slots = folded ? [] : slotsFor(group)}
+      <section
+        class="w-72 shrink-0 rounded-md bg-bg-soft p-2 xl:w-auto xl:min-w-[10.5rem] xl:flex-1 {hover?.phase ===
+        group.key
+          ? 'ring-1 ring-accent/40'
+          : ''}"
+        aria-label={group.label}
+        data-work-phase-column
+        data-work-phase={group.key}
+      >
+        <div class="mb-2 flex items-baseline justify-between gap-2 px-1 py-1">
+          <h2 class="ui-label mb-0 truncate">{group.label}</h2>
+          <span
+            class="shrink-0 text-micro tabular-nums text-fg-subtle"
+            title={truncated
+              ? "At least this many; not every initiative is loaded"
+              : undefined}
+            >{truncated ? "at least " : ""}{group.items.length}</span
+          >
+        </div>
+        {#if folded}
+          <!-- Closed work folds like it does in the table. The column stays a
+               drop target; dropping on it opens it. -->
+          <div class="flex min-h-[4.5rem] flex-col gap-2">
+            {#if group.items.length && closedHref}
+              <a
+                class="ui-prose-link px-2 py-2 text-center text-micro"
+                href={closedHref}
+                data-sveltekit-noscroll
+                data-sveltekit-keepfocus>Show {group.items.length}</a
+              >
+            {:else}
+              <p class="px-2 py-6 text-center text-micro text-fg-subtle">
+                Nothing here
+              </p>
+            {/if}
+          </div>
+        {:else}
+          <div class="flex min-h-[4.5rem] flex-col gap-2">
+            {#each slots as slot (slot.key)}
+              {@const work = slot.work}
+              {@const key = slot.key}
+              {@const decisionId = work ? requestedDecisions[key] : ""}
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <div
+                class="work-card-slot outline-none {focusedKey === key
+                  ? 'ring-1 ring-accent'
+                  : ''}"
+                data-work-slot
+                data-work-ref={work ? workKey(work) : undefined}
+                data-placeholder={slot.placeholder ? "" : undefined}
+                tabindex={slot.placeholder ? undefined : 0}
+                role={slot.placeholder ? "presentation" : "group"}
+                aria-hidden={slot.placeholder ? "true" : undefined}
+                aria-label={work
+                  ? work.title || "Untitled initiative"
+                  : undefined}
+                aria-keyshortcuts={slot.placeholder
+                  ? undefined
+                  : "ArrowLeft ArrowRight Enter"}
+                aria-describedby={slot.placeholder
+                  ? undefined
+                  : "task-board-card-help"}
+                animate:flip={{ duration: slotFlipDuration }}
+                style={slot.placeholder
+                  ? `height: ${drag?.height ?? 72}px`
+                  : undefined}
+                onpointerdown={slot.placeholder
+                  ? undefined
+                  : (event) => handleCardPointerDown(event, work)}
+                ondragstart={handleCardDragStart}
+                onclickcapture={handleCardClickCapture}
+                onfocus={slot.placeholder
+                  ? undefined
+                  : () => (focusedKey = key)}
+                onkeydown={slot.placeholder
+                  ? undefined
+                  : (event) => handleCardKey(event, work)}
+              >
+                {#if !slot.placeholder}
+                  <WorkCard
+                    {work}
+                    summary={summaryOf(work)}
+                    href={href(work)}
+                    {now}
+                    onprefetch={prefetch}
+                    ownerCell={ownerCellFor(work.owner)}
+                    boardTitle={multipleBoards ? boardLabel(work) : ""}
+                    requested={Boolean(requested[key] || decisionId)}
+                    requestedHref={decisionId
+                      ? workspaceHref(
+                          `/decide?item=decision:${encodeURIComponent(decisionId)}`,
+                        )
+                      : ""}
+                  />
+                {/if}
+              </div>
+            {:else}
+              <p class="px-2 py-6 text-center text-micro text-fg-subtle">
+                Nothing here
+              </p>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/each}
+  </div>
+  {#if drag && pointerMoved}
+    <div
+      class="pointer-events-none fixed left-0 top-0 z-[100] rounded-md shadow-lg ring-1 ring-line-strong"
+      data-work-drag-overlay
+      aria-hidden="true"
+      style="width: {drag.width}px; transform: translate3d({pointerX -
+        drag.offsetX}px, {pointerY - drag.offsetY}px, 0)"
+    >
+      <WorkCard
+        work={drag.work}
+        summary={summaryOf(drag.work)}
+        href={href(drag.work)}
+        {now}
+        ownerCell={ownerCellFor(drag.work.owner)}
+        boardTitle={multipleBoards ? boardLabel(drag.work) : ""}
+        requested={Boolean(requested[drag.key] || requestedDecisions[drag.key])}
+      />
+    </div>
+  {/if}
+{:else}
+  <!-- Scroll regions must be keyboard-focusable for horizontal navigation. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  {#if !tableRows.length}
+    <p class="py-8 text-center text-meta text-fg-muted">
+      Nothing open. {closedLabel ? `Closed work: ${closedLabel}.` : ""}
+    </p>
+  {:else}
+    <div
+      class="wide-scroll overflow-x-auto rounded-md border border-line"
+      role="region"
+      aria-label="Initiative table"
+      tabindex="0"
+    >
+      <!--
+      One DOM for both widths. Below 640px the same rows collapse into the
+      two-line row the Inbox uses (title, then `board · status · time`) — a
+      four-column table that scrolls sideways on a phone is a table nobody
+      reads, and a second markup for mobile is a second thing to keep true.
+    -->
+      <table class="work-table w-full border-collapse text-left text-meta">
+        <caption class="sr-only"
+          >Tracked initiatives, most in need of attention first</caption
+        >
+        <thead class="text-micro uppercase tracking-wide text-fg-subtle">
+          <tr>
+            {#each columns as heading}
+              <th
+                scope="col"
+                class="whitespace-nowrap border-b border-line px-3 py-2 font-semibold"
+                >{heading}</th
+              >
+            {/each}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line-subtle bg-panel">
+          {#each tableRows as work (workKey(work))}
+            {@const checked = lastChecked(work, now)}
+            {@const read = workFreshness(work, now)}
+            {@const summary = summaryOf(work)}
+            <tr
+              class="h-10 align-middle hover:bg-panel-hover"
+              data-work-ref={work.ref}
+            >
+              <th scope="row" class="min-w-56 max-w-96 px-3 py-1.5 font-normal">
+                <a
+                  class="block truncate font-medium text-fg hover:text-accent-text"
+                  href={href(work)}
+                  onpointerenter={() => prefetch(work)}
+                  onfocus={() => prefetch(work)}
+                  >{work.title || "Untitled initiative"}</a
+                >
+                {#if work.next_actor || work.next_action}
+                  <p class="truncate text-micro text-fg-muted">
+                    {[nextActorLabel(work), work.next_action]
+                      .filter(Boolean)
+                      .join(" — ")}
+                  </p>
+                {/if}
+              </th>
+              {#if multipleBoards}
+                <td class="max-w-40 px-3 py-1.5">
+                  <span class="block truncate text-fg-muted"
+                    >{boardLabel(work)}</span
+                  >
+                </td>
+              {/if}
+              <!--
+                The computed status, not the stored phase. Core says what
+                state the card is actually in and, when the board disagrees,
+                what it is filed as — "Blocked · marked in progress" — which
+                is the disagreement this column used to hide. Capped so one
+                verbose source status cannot push Last checked off the right
+                edge of the table for every row.
+              -->
+              <td class="work-status-cell max-w-48 px-3 py-1.5">
+                <WorkSummary {summary} density="row" title={work.title} {now} />
+              </td>
+              <!--
+                Below 640px the columns to the right are gone, so what they
+                said rides on a second line under the status: where the card
+                lives, whether its read is failing, and when it was last read.
+                A cell rather than a span inside the title, so the status line
+                comes first — and one cell, not a hidden duplicate of the
+                summary, which cost a second component tree on every row.
+              -->
+              <td class="work-meta-cell text-micro text-fg-muted">
+                {#if multipleBoards}
+                  <span class="min-w-0 truncate">{boardLabel(work)}</span>
+                {/if}
+                {#if read.key === "error"}
+                  <SignalBadge tone="warn">{read.label}</SignalBadge>
+                {/if}
+                {#if checked.text}
+                  <span class="ml-auto shrink-0 tabular-nums"
+                    >{checked.text}</span
+                  >
+                {/if}
+              </td>
+              <!--
+                One owner format for people and agents: the name, an agent
+                marked as one, and the role, host and handle in the title.
+                A name the directory has not answered for yet holds a
+                placeholder instead of printing the raw handle and taking it
+                back a moment later.
+              -->
+              <td class="max-w-40 overflow-hidden px-3 py-1.5">
+                <OwnerLabel
+                  class="max-w-full"
+                  cell={ownerCellFor(work.owner)}
+                />
+              </td>
+              {#if anySourced}
+                <td class="whitespace-nowrap px-3 py-1.5">
+                  {#if read.key === "error"}
+                    <SignalBadge tone="warn">{read.label}</SignalBadge>
+                    <span class="ml-1.5 text-fg-subtle">{checked.text}</span>
+                  {:else if checked.datetime}
+                    <time
+                      class="tabular-nums text-fg-muted"
+                      datetime={checked.datetime}
+                      title={checked.title}>{checked.text}</time
+                    >
+                  {:else if checked.text}
+                    <span class="text-fg-subtle">{checked.text}</span>
+                  {/if}
+                </td>
+              {/if}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
+  {#if closedRows.length && closedHref}
+    <!-- Closed work is one quiet line under the table, not the first rows
+         of it. -->
+    <a
+      class="-mt-1 inline-flex w-fit items-center gap-1.5 rounded-sm text-micro text-fg-muted hover:text-fg"
+      href={closedHref}
+      aria-expanded={showClosed}
+      data-sveltekit-noscroll
+      data-sveltekit-keepfocus
+      data-work-closed-toggle
+      ><svg
+        class="h-2.5 w-2.5 transition-transform {showClosed ? 'rotate-90' : ''}"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"><path d="M7 4l7 6-7 6V4z" /></svg
+      >{showClosed ? `Hide ${closedLabel}` : closedLabel}{truncated
+        ? " (and more)"
+        : ""}</a
+    >
+  {/if}
+{/if}
+
+<style>
+  /*
+   * The phone row's second line. It is a real cell so the status can sit
+   * above it; above 640px its contents have columns of their own, so it is
+   * removed from the layout and from the accessibility tree with it.
+   */
+  .work-meta-cell {
+    display: none;
+  }
+
+  @media (max-width: 639px) {
+    .work-table,
+    .work-table tbody,
+    .work-table th[scope="row"] {
+      display: block;
+    }
+
+    .work-table thead,
+    .work-table td {
+      display: none;
+    }
+
+    /*
+     * Two exceptions: a row's state follows its title, and the second line
+     * carries what the dropped columns said. Everything else is gone.
+     */
+    .work-table td.work-status-cell {
+      display: block;
+      grid-column: 1;
+      min-width: 0;
+      max-width: none;
+      padding: 2px 0 8px 12px;
+    }
+
+    .work-table td.work-meta-cell {
+      display: flex;
+      grid-column: 2;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 2px 12px 8px 0;
+    }
+
+    /* Status and its meta share the second line instead of stacking. */
+    .work-table tr {
+      display: grid;
+      grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+      column-gap: 8px;
+      height: auto;
+    }
+
+    .work-table th[scope="row"] {
+      grid-column: 1 / -1;
+      max-width: none;
+      min-width: 0;
+      padding: 8px 12px 2px;
+    }
+  }
+
+  /*
+   * The horizontal scrollbar is the only cue that columns continue off screen
+   * — on the board, and on the table between 640px and the width where all
+   * five columns fit; the 6px overlay bar the rest of the app uses is
+   * invisible here.
+   */
+  .board-scroll,
+  .wide-scroll {
+    scrollbar-width: auto;
+  }
+
+  .board-scroll::-webkit-scrollbar,
+  .wide-scroll::-webkit-scrollbar {
+    height: 10px;
+  }
+
+  .board-scroll::-webkit-scrollbar-thumb,
+  .wide-scroll::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 999px;
+  }
+
+  .board-scroll::-webkit-scrollbar-track,
+  .wide-scroll::-webkit-scrollbar-track {
+    background: var(--bg-soft);
+    border-radius: 999px;
+  }
+
+  .work-card-slot {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .board-scroll.select-none :global(.work-card-slot) {
+    cursor: grabbing;
+  }
+</style>

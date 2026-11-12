@@ -17,13 +17,13 @@ Read this after the root [AGENTS.md](../AGENTS.md). Keep this file focused on du
 
 `web-ui` is the operator control surface for Agent Nexus.
 
-It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention. The three primary destinations are Decide (every decision waiting on the reader), Watch (initiative outcomes) and Ask (the PM conversation, shown only when a PM is connected), all built from one `brief.v1` read. Initiatives, Docs, Agents, Access, Secrets and settings are one hop down. Boards and cards remain the store behind initiatives; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
+It gives operators fast, glanceable visibility into the shared workspace maintained by `anx-core` and provides explicit paths for operator intervention. The two primary destinations are Decide (every decision waiting on the reader) and Watch (initiative outcomes), both built from one `brief.v1` read. Initiatives, Docs, Agents, Access, Secrets and settings are one hop down. Boards and cards remain the store behind initiatives; threads remain inspection. It is a client of `anx-core`, not an agent runtime or orchestration layer.
 
 ## UI Responsibilities
 
 - Treat `anx-core` as the single source of truth for all durable state.
 - Optimize for operator usability: clear status, triage context, provenance visibility, and at-a-glance understanding of what needs attention.
-- Provide the main operator workflow surfaces: Decide, Watch, Ask, and one hop down Initiatives, Docs and settings. One component (`DecisionCard`) renders a decision everywhere; every computed phase, health, progress or promise element carries `data-source="computed:<brief field>"` (I1). Thread inspection stays available for backing conversations; it is not a fourth primitive.
+- Provide the main operator workflow surfaces: Decide, Watch, and one hop down Initiatives, Docs and settings. One component (`DecisionCard`) renders a decision everywhere; every computed phase, health, progress or promise element carries `data-source="computed:<brief field>"` (I1). Thread inspection stays available for backing conversations; it is not a fourth primitive.
 - Handle forward-compatible data safely: unknown fields and refs must remain visible rather than breaking the UI. `event.type` and `artifact.kind` are strict contract enums; drift there may surface as an API error instead of a rendered row.
 - Inbox items from the API use `related_refs` only (see shared `inbox_item` schema). Do not read `item.refs` on inbox rows; legacy stored rows are normalized in core before they reach clients.
 - Human-attention writes (`human_attention_requested`, `human_attention_responded`) are thread-grounded in core: event `refs` must include `thread:<thread_id>`. Prefer reflecting that in any client-side validation or examples even when the operator navigates by topic.

@@ -14,8 +14,6 @@
     replayTourSignal,
   } from "$lib/tourState";
   import { stripWorkspacePath, workspacePath } from "$lib/workspacePaths";
-  import { pmFeaturesVisible } from "$lib/pm/onboardingState.js";
-  import { pmPresence } from "$lib/pm/presence.js";
   import {
     SETUP_TOKEN_LABEL,
     SETUP_TOKEN_LIFETIME_SECONDS,
@@ -196,11 +194,6 @@
     void copyText(setupPrompt);
   }
 
-  /* The Ask step exists only while a PM is connected, like the nav item. */
-  let pmTourState = $derived(
-    $pmPresence.workspace === workspaceSlug ? $pmPresence : null,
-  );
-
   let firstName = $derived(deriveFirstName(userLabel));
 
   /** @param {string} label */
@@ -225,16 +218,13 @@
 
   const tourSteps = $derived.by(() => {
     if (!organizationSlug || !workspaceSlug) return [];
-    const withPm = pmFeaturesVisible(pmTourState);
-    const total = withPm ? 4 : 3;
+    const total = 3;
     return [
       {
         placement: "center",
         eyebrow: "60-second tour",
         title: welcomeTitle,
-        body: withPm
-          ? "Decide is where everything waiting on you lands. Watch shows how each workspace is doing, and Ask is your PM."
-          : "Decide is where everything waiting on you lands. Watch shows how each workspace is doing.",
+        body: "Decide is where everything waiting on you lands. Watch shows how each workspace is doing.",
         primaryLabel: "Take the tour →",
         skipLabel: "Maybe later",
       },
@@ -250,16 +240,6 @@
         title: "Watch shows outcomes",
         body: "What shipped, what is in flight and which workspace needs a look. Initiatives, Docs and Agents are one step away in the account menu and in search.",
       },
-      ...(withPm
-        ? [
-            {
-              selector: '[data-tour="pm"]',
-              eyebrow: `3 of ${total} · Ask`,
-              title: "Ask is the conversation",
-              body: "Ask what needs a decision, then follow the receipt. Your PM runs on your computer with your chosen agent harness.",
-            },
-          ]
-        : []),
       {
         selector: '[data-tour="access"]',
         eyebrow: `${total} of ${total} · Access`,

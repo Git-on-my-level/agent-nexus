@@ -227,14 +227,9 @@ test("initiative page shows the plan under a collapsed description", async ({
 
   /*
    * And the header is that badge plus one line. There is no Reload — the card,
-   * its plan and its chips re-read themselves off the event stream — and the
-   * PM button says what it does, so it no longer reads as a copy of the
-   * sidebar's "Ask PM" with a different destination.
+   * its plan and its chips re-read themselves off the event stream.
    */
   await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
-  await expect(
-    page.getByRole("link", { name: "Ask PM about this" }),
-  ).toHaveAttribute("href", /\/pm\?work_ref=card%3Arelease-b$/);
 
   // The plan's shape picks the view: this one branches, so it is a tree.
   await expect(page.locator("[data-plan-shape='dag']")).toBeVisible();

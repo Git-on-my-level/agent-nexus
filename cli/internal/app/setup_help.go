@@ -48,13 +48,13 @@ for host edits need the human to use Access > Hosts instead.
   anx adapters delete <name>                 delete a source and its series history
   anx series push <name> <value> [--adapter <name>]  push one point (loop tier)
 `,
-	"pm": `Install and run the workspace PM
+	"pm": `Read and propose Decide work
 
-  anx --as pm pm install [--runner <runner>] install the local PM runner (interactive wizard on a terminal)
-  anx pm status                              show PM connection and runner state
-  anx pm serve                               run the PM turn loop in the foreground
-  anx pm channels doctor                     check channel bindings
-  anx pm uninstall                           remove the local PM runner
+  anx pm context                             read visible cards, open decisions and recent activity
+  anx pm card <card-ref>                     read one visible card in full
+  anx pm propose <card-ref> --status <s> --why <reason>  propose a card change for human approval
+  anx pm decisions list|get|answer|dispatch   read and answer decisions
+  anx pm actions list|get|reconcile|acknowledge  inspect and reconcile dispatched actions
 `,
 	"bridge": `Deliver answers to this host (agent bridge)
 

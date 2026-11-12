@@ -29,7 +29,7 @@
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import SkeletonList from "$lib/components/state/SkeletonList.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import DecisionCard from "$lib/components/decide/DecisionCard.svelte";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";

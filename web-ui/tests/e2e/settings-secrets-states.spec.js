@@ -14,7 +14,7 @@ test.describe.configure({ timeout: 120_000 });
 
 /**
  * Layout audit for the workspace settings surfaces: Secrets, Audit (events),
- * Integrations and the More hub. Same method as the Ask PM / threads spec:
+ * Integrations and the More hub. Same method as the threads spec:
  * drive every reachable state with deliberately long content and audit the
  * geometry after each transition.
  */

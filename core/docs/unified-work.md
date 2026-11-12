@@ -1,7 +1,7 @@
-# Unified work and conversational PM
+# Unified work and Decide
 
 Work is an existing card, projects use topics, and source observations extend the
-same workspace SQLite. `/work` serves board/table/PM/CLI projections. External
+same workspace SQLite. `/work` serves board/table/Decide/CLI projections. External
 source identity `(authority, connection_id, native_id)` deduplicates registration.
 Local annotations and source workflow fields have separate mutation paths.
 
@@ -161,19 +161,19 @@ Example JIT target fields: `jit_state_root` (absolute 0700 directory),
 
 ### Dogfood placement
 
-`anx pm serve` and any process holding secrets in its environment must run under
+Any process holding secrets in its environment must run under
 a different uid (or on a different host) from anx-core's JIT runner. Seatbelt
 cannot block numeric `KERN_PROCARGS2` reads of same-uid process environments.
 The availability probe checks only that the runner must not run as root; it does
 not verify this deployment separation.
 
-## Conversational PM runtime
+## Decide runtime
 
-The PM service uses the same SQLite and the current workspace principal.
-Conversation histories remain actor scoped. Decision authorization rechecks
-current principals; a request cannot claim to be human in a body/header.
+The Decide service uses the same SQLite and the current workspace principal.
+Decision authorization rechecks current principals; a request cannot claim to be
+human in a body/header.
 
-PM decision targets must be live: trashed, archived and purged work all project
+Decide decision targets must be live: trashed, archived and purged work all project
 `work_missing: true`, `target_current: false`, `already_at_target: false`, and
 `can_answer: false`. The owner may still decline. Proposing against non-live work
 returns `404 not_found`; fresh approval, dispatch and reconcile return
@@ -203,93 +203,6 @@ requested outcome matches. External executor reports remain `source_reported`
 until independently verified. A changed version rejects stale approval. No external source
 write executor, deployment tool, or shell action is enabled by default.
 
-PM conversation creation, context inspection, and queued turns work without a
-model and without the wake-routing bridge. `POST /pm/conversations/{id}/messages`
-queues status `sending`. `POST /pm/turns/claim` hands the next queued turn to one
-runner with an exclusive lease; `POST /pm/turns/{id}/complete` and
-`POST /pm/turns/{id}/fail` require an active lease and its matching token.
-Turn context and proposal operations also require an active lease. An open turn
-without one returns `409 lease_required` for a missing token and
-`409 lease_mismatch` for an expired, released, or stale token. Claim again after
-release or lease expiry. Identical terminal completion/failure replays accept
-the terminal owner token without mutation; other tokens return `409 lease_mismatch`.
-Legacy tokenless bridge reply events cannot complete a turn: bridge runners must
-claim and call the authenticated completion endpoint with that lease token.
-Do not place lease tokens in durable events or public context.
-`POST /pm/turns/{id}/release` requires the selected PM actor plus the current
-`runner_id` and `lease_token`. It clears an unexpired lease and returns the turn
-to the queue as `sending`, `claimed: false`, retaining `claimed_at`. A different
-runner or wrong token returns `409 lease_mismatch`; no active lease returns
-`409 turn_not_claimed`. Runners should
-stop local execution, then release on SIGINT/SIGTERM with a bounded shutdown
-request independent of the canceled run context. An abrupt kill cannot release;
-a restart with the same runner ID recovers its existing lease and token.
-Every HTTP turn representation includes read-only `claimed`, derived from the
-current unexpired lease, plus `claimed_at` when the latest claim time is known.
-That timestamp survives completion and expiry; older records omit it. Public
-turns (including history, single-turn reads, and message replays) omit lease
-credentials. Active `lease_owner` (runner ID) is visible to the requesting actor
-and configured PM actor; only claim returns the token. Claim and heartbeat
-return the lease expiry. The configured
-PM actor may read any turn in its workspace using `pm.respond` authorization;
-the requesting actor retains conversation read authorization.
-Turn admission returns `429 busy` with `error.details.reason: conversation` and
-`turn_id` for the blocking conversation turn, or `reason: capacity` plus workspace
-`in_flight` and `limit`. Conversation serialization wins if both constraints apply.
-The reason and counts are observed inside the admission transaction.
-`ANX_PM_AGENT_ACTOR_ID` is required for turn creation and restricts claim/heartbeat/release/complete/fail to that actor;
-`make serve` sets it to the seeded Studio PM (`actor-gds-pm` / `dev.pm`).
-
-The optional existing-bridge path is separate. `ANX_PM_BRIDGE_ENABLED` defaults
-false. Enabling it requires `ANX_PM_AGENT_ACTOR_ID`, `ANX_PM_AGENT_HANDLE`, and
-`ANX_PM_RUNTIME_ENVELOPE_ENFORCED=true` only when an independently enforced
-read-only capability envelope already exists for that actor. The env flag is
-an operator attestation, not the envelope. Optionally `ANX_PM_BASE_URL`.
-Core then checks the selected principal's host relationship and host-bridge
-online state. A pre-host standalone principal still requires its existing
-bridge configuration while adoption remains supported. A prompt, directory, or
-bounded-process wrapper is not isolation.
-Missing or unready providers return unavailable, not canned text.
-GitHub/Multica/SSH source writes stay unavailable until a dedicated authorized
-executor is supplied.
-
-Native `/threads`, `/events`, `/artifacts`, and inbox routes hide PM conversation
-records from anyone who is not the conversation owner. PM designation grants
-no extra read authority. Runner context requires a claimed turn lease and uses
-the requesting owner's resource visibility. Missing identity fails closed
-(the resource looks absent).
-
-Channel ingress is webhook/interaction only: `POST /pm/ingress/telegram` and
-`POST /pm/ingress/discord`. Configure `ANX_PM_TELEGRAM_WEBHOOK_SECRET` (at least
-32 characters), `ANX_PM_TELEGRAM_BOT_ID`, `ANX_PM_DISCORD_PUBLIC_KEY`, and
-`ANX_PM_DISCORD_APPLICATION_ID` from deployment secrets. Bot tokens
-(`ANX_PM_TELEGRAM_BOT_TOKEN`, `ANX_PM_DISCORD_BOT_TOKEN`) are env-only and never
-written to the tree. Ingress does not call `setWebhook`, poll `getUpdates`, or
-open a Discord gateway. Production bot streams must not be redirected here.
-
-Test-only API bases `ANX_PM_TELEGRAM_API_BASE` and `ANX_PM_DISCORD_API_BASE`
-point outbound delivery at local fakes under `tests/channels/`. Those fakes
-speak the real Bot API / Discord REST and interaction shapes, including secret
-and Ed25519 checks, and can inject 409/429. They are never production config.
-`anx pm channels doctor` checks secret presence/shape, GET webhook
-reachability, and binding state without sending a message.
-
-A channel identity must be bound (`POST /pm/bindings` / `anx pm bindings create`)
-before it can queue a turn. Unbound identities get a bounded bind-first reply.
-Decisions awaiting the requester are offered with Telegram inline keyboards or
-Discord components; `/pm-approve` and `/pm-reject` (and Discord slash
-equivalents) record an answer against the displayed revision. A stale
-revision is rejected and a fresh card is queued. Transport receipt (message
-id) is separate from human acknowledgement. 429/409 retry with capped
-exponential backoff; unknown send outcomes stay visible and are not
-auto-retried.
-
-The PM peer package owns channel authentication, exact identity mappings,
-durable outboxes, and source-action state machines. Real channel delivery, a
-configured read-only PM actor, and integration-specific external source
-writes/read-back remain deployment and qualification requirements; fixture tests
-are not evidence of those capabilities.
-
 ## Checks and migration
 
 Migration 26 adds card-owned metadata and append-only observations, preserving
@@ -301,14 +214,14 @@ Focused tests:
 ```sh
 cd core
 go test ./internal/primitives -run TestWork
-go test ./internal/server -run 'TestWork|TestObservationRuntime|TestPMRuntime'
+go test ./internal/server -run 'TestWork|TestObservationRuntime|TestDecide'
 ```
 
 Run `make -C core check` and `make contract-check` for component/contract gates.
-Peer `internal/pm` and `internal/observation` packages must be integrated before
+Peer `internal/decide` and `internal/observation` packages must be integrated before
 building the runtime-wiring commit.
 
-### PM phase actions and identity boundaries
+### Decide phase actions and identity boundaries
 
 A `work.phase` decision carries `payload: {"phase": "ready"}` (or backlog,
 in_progress, blocked, review, done). The instruction is explanatory prose and
@@ -335,47 +248,26 @@ derived `can_answer` field for answer controls. Dispatch revalidates that the
 decision owner, answering actor and action approver agree, as well as current
 approval permission, scope, structured payload and target revision.
 
-Set `ANX_PM_AGENT_ACTOR_ID` to the selected PM identity. With an empty value, core
-warns at startup and turn creation/response operations fail closed. Claim,
-context, proposal, completion and failure operations require that configured,
-currently authorized actor. Direct proposals require a human principal; agents
-must propose through a turn addressed to a currently authorized human. An agent's
-own conversation cannot create an unanswerable self-addressed decision.
+Direct proposals require a human principal; non-human principals are rejected
+with `forbidden`. Agents support PM work by orienting, triaging, filing `anx ask`
+recommendations, and updating cards, but cannot create or approve PM decisions.
 
 New proposals reuse an awaiting decision for the same workspace, human, work_ref
 and scope only when instruction, payload, target revision and origin match.
 Changed intent atomically supersedes the earlier awaiting decision, records
-`superseded_by` and `superseded_reason`, creates the replacement, and links it
-in `turn.decision_ids`. Old turn links remain as audit history.
+`superseded_by` and `superseded_reason`, and creates the replacement.
 
 Request keys remain immutable. Reusing one with changed content or target revision
 returns 409 with `error.details.existing_decision_id`; revisions are opaque source
 identifiers and cannot be ordered. Clients can link the existing decision or use
 a new key to propose replacement intent.
 
-Conversation history and `GET /pm/turns/{turn_id}` expire open turns on read.
-The existing five-second PM maintenance tick also expires them without any runner,
-channel sender, or read. The required `deadline` is an RFC3339 timestamp. Expired
-turns become failed, lose their lease, and report: "The PM did not answer before
-the deadline. Retry, or check that a runner is attached."
-They also expose `failure_kind: "expired"`, including legacy deadline failures.
-A 409 `turn_closed` error includes `error.details.failure_kind: "expired"` and
-says "expired at <deadline>" with the RFC3339 deadline. Ordinary terminal failures
-remain distinct and do not acquire an expiry reason just because time has passed.
-
-Claim first recovers an unexpired lease for the same PM actor and `runner_id`,
-even at capacity. Recovery preserves the token, lease expiry, `claimed_at`, and
-revision. Each runner ID must identify one serial worker; concurrent workers
-must use different IDs. Other runners cannot steal an unexpired lease. After
-lease expiry, a fresh claim rotates the token until the turn deadline. No owned
-lease and no capacity or free work returns 204. Recovery, capacity counting, and
-allocation share one SQLite transaction. Unpaginated service reads
-walk all batches internally. PM decision/action/conversation pages return newest
-`created_at` first, with descending internal rowid as the tiebreaker. New actions
-record creation time at approval; legacy actions use their decision creation time.
-Work lists return newest `updated_at` first, then descending card id. Opaque
-cursors retain both ordering values, so newer inserts and changes ahead of the
-cursor appear on a fresh first page without shifting the older continuation.
+Unpaginated service reads walk all batches internally. Decision and action pages
+return newest `created_at` first, with descending internal rowid as the tiebreaker.
+New actions record creation time at approval; legacy actions use their decision
+creation time. Work lists return newest `updated_at` first, then descending card
+id. Opaque cursors retain both ordering values, so newer inserts and changes ahead
+of the cursor appear on a fresh first page without shifting the older continuation.
 Work rows also project read-only `rank` and `column_key` from board membership.
 Board-like clients sort within a phase by `board_ref` then `rank`; list and table
 consumers keep this recency order.
@@ -410,19 +302,21 @@ including after acknowledgement. Clients must use acknowledgement metadata to
 keep handled rows out of Needs you even if subsequent source status is `failed`.
 
 `make contract-gen` and `make contract-check` regenerate all consumer mirrors. UI phase drags
-and CLI PM proposals must send the structured payload; legacy prose-only pending
+and CLI proposals must send the structured payload; legacy prose-only pending
 decisions must be rejected/superseded and proposed again with that payload.
 
 ### Proposal attribution, revision fences, and context pagination
 
 New decisions persist `proposed_by` (the proposing principal actor ID) separately
-from `actor_id` (the human who can answer and dispatch). `origin_kind` is
-`human` for direct proposals, `channel` for direct proposals with a validated
-channel origin, and `pm_turn` for the selected PM principal's turn proposals.
-Turn proposals record their originating `turn_id`. Superseded records retain
-their own attribution; reusing identical intent retains the original proposal's
-turn. A different proposer or origin kind is different intent. Legacy decisions
-without recorded provenance omit these fields rather than inventing attribution.
+from `actor_id` (the human who can answer and dispatch). New direct proposals
+record `origin_kind` `human`; caller-supplied origin is not accepted. Legacy
+`pm_turn` and `channel` records remain readable as historical, read-only
+provenance, but no new turn or channel-origin proposals are created.
+Superseded records retain their own attribution; reusing identical intent
+(same approver, work, scope, instruction, payload, and target revision)
+retains the original proposal's attribution. Proposer and delivery origin are
+provenance, not part of intent. Legacy decisions without recorded provenance
+omit these fields rather than inventing attribution.
 
 When a proposal replaces an awaiting decision, the create/propose response
 includes `supersedes` (the replaced decision ID), `supersedes_proposed_by`, and
@@ -431,7 +325,7 @@ and `superseded_by_origin_kind` from its replacement; unknown legacy values are
 omitted. These fields persist on the replacement for retries and
 later reads; unknown legacy attribution is omitted. Clients should tell the
 reader whose earlier proposal was replaced, including when a human drag replaces
-a PM turn proposal.
+an earlier proposal.
 
 A human rejection records `declined`, without creating an action. `superseded`
 is reserved for proposals replaced by another decision. Reads project legacy
@@ -449,7 +343,7 @@ A canonical metadata mutation or card content revision invalidates a fallback fe
 refresh attempts, failures, and freshness bookkeeping do not change it;
 a known external revision remains the fence independently of local version changes.
 
-PM context uses canonical work cursors: send the returned `next_cursor` as
+Decide context uses canonical work cursors: send the returned `next_cursor` as
 `cursor` with the same query, and keep `limit` within 1..50. A work-specific
 context is one item and rejects cursors with 400 and "cursor is not valid for a
 work-scoped context". Malformed cursors (including oversized cursors) return 400
@@ -473,7 +367,7 @@ marker cannot establish delivery; other legacy delivery states still permit
 read-back. A sent failure can be reconciled but never changes from `failed` to
 `unknown`; inconclusive receipts remain visible with `reconciliation_conflict`.
 
-PM authorization caches only actor-to-principal IDs for at most 30 seconds,
+Decide authorization caches only actor-to-principal IDs for at most 30 seconds,
 bounded to 256 entries. Every cache hit reloads current principal authority and
 wake routing from auth storage. A revoked/mismatched principal invalidates the
 cached identity immediately on the next check, including external database
@@ -485,27 +379,16 @@ replacement ID). This also covers a
 supersession racing the answer CAS. An identical replay of a rejection remains
 idempotent. Clients can link the replacement directly from the conflict response.
 
-PM annotate proposals validate `instruction` as a nonempty JSON object using the
+Decide annotate proposals validate `instruction` as a nonempty JSON object using the
 canonical primitives annotation validator before insertion. The allowed keys are
 `project_ref`, `priority`, `next_actor`, `next_action`, `blockers`, `wake_condition`,
 `start_at`, `due_at`, `relations`, and `executions`. Invalid keys and value shapes
 return `400 invalid_request`, naming the offending keys and allowed set.
 
-Runner leases use `ANX_PM_LEASE_TTL` (default `60s`, range `1s` to `10m`). Runners
-must call `POST /pm/turns/{turn_id}/heartbeat` with `{"lease_token":"..."}` at a
-cadence strictly less than TTL/2. Heartbeat returns `200 PMHeartbeatTurn` with renewed
-`lease_expires_at`, capped by the turn deadline, without returning the token.
-Missing tokens return `409 lease_required`; expired, released, and foreign tokens
-return `409 lease_mismatch`. Closed turns return `409 turn_closed`. Lease expiry
-makes the same open turn claimable with a fresh token; it does not fail the turn
-or erase its history. The wire status stays `sending` (or `unknown` for an uncertain
-wake); `claimed` becomes false and the turn is eligible for the next claim.
-Only the turn deadline fails an unanswered turn. Complete/fail/release retain
-their existing live-lease semantics.
-
-A pending human proposal blocks changed PM proposals only for the same approver
-actor, work, and scope. Another actor's human proposal does not block the current
-actor's PM. This matches the actor boundary used for deduplication and supersession.
+The `human_proposal_pending` code is retained for compatibility with the removed
+agent-propose path; current servers reject non-human principals with `forbidden`
+before that check. Human proposals still use the same actor boundary for
+deduplication and supersession.
 
 ### Optional source connector boundary
 

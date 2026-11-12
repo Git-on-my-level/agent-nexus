@@ -23,8 +23,8 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/heartbeat"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/runtimememory"
 	"agent-nexus-core/internal/schema"
@@ -40,23 +40,16 @@ func startHostedMemoryMix(t *testing.T, w *storage.Workspace, ps *primitives.Sto
 	db := w.DB()
 	as := auth.NewStore(db)
 	seedMachinePrincipalForLockoutTest(t, context.Background(), db, "memory-pm", "memory-pm-actor", "memory.pm", "memory-pm-token")
-	rt, err := newOnboardedPMRuntime(t, db, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: "memory-pm-actor"}})
+	rt, err := newOnboardedDecideRuntime(t, db, ps, as, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	maintainer := NewProjectionMaintainer(ProjectionMaintainerConfig{PrimitiveStore: ps, Contract: contract, Mode: ProjectionModeBackground, PollInterval: 5 * time.Second, DirtyBatchSize: 50, SystemActorID: actors.SystemActorID})
-	h := NewHandler("hosted-memory", WithPrimitiveStore(ps), WithAuthStore(as), WithActorRegistry(actors.NewStore(db)), WithSchemaContract(contract), WithHealthCheck(w.Ping), WithPMRuntime(rt), WithProjectionMaintainer(maintainer), WithSeriesStore(&series.Store{DB: db, Auth: as}), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})))
+	h := NewHandler("hosted-memory", WithPrimitiveStore(ps), WithAuthStore(as), WithActorRegistry(actors.NewStore(db)), WithSchemaContract(contract), WithHealthCheck(w.Ping), WithDecideRuntime(rt), WithProjectionMaintainer(maintainer), WithSeriesStore(&series.Store{DB: db, Auth: as}), WithRunStore(commandcenter.NewStore(db, commandcenter.SQLIdentities{DB: db})))
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	launch := func(fn func(context.Context)) { wg.Add(1); go func() { defer wg.Done(); fn(ctx) }() }
-	owner := pm.Principal{WorkspaceID: "ws_main", ActorID: "memory-owner-actor", Human: true}
-	agent := pm.Principal{WorkspaceID: "ws_main", ActorID: "memory-pm-actor"}
-	conversation, err := rt.Service.CreateConversation(ctx, owner, pm.CreateConversation{RequestKey: "memory-mix", Title: "Synthetic PM memory load", WorkRef: "card:scale-card-1"})
-	if err != nil {
-		cancel()
-		wg.Wait()
-		t.Fatal(err)
-	}
+	agent := decide.Principal{WorkspaceID: "ws_main", ActorID: "memory-pm-actor"}
 	launch(maintainer.Run)
 	var retries atomic.Int64
 	retry := func(err error) {
@@ -72,7 +65,7 @@ func startHostedMemoryMix(t *testing.T, w *storage.Workspace, ps *primitives.Sto
 		m := NewAnswerWakeMaintainer(AnswerWakeMaintainerConfig{PrimitiveStore: ps, WorkspaceID: "ws_main", WorkspaceName: "synthetic", QuietWindow: DefaultAnswerWakeQuietWindow, FlushWhenNoOpenAsks: true})
 		m.Run(c)
 	})
-	var beats, wakes, turns, streams atomic.Int64
+	var beats, wakes, streams atomic.Int64
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		beats.Add(1)
@@ -116,21 +109,7 @@ func startHostedMemoryMix(t *testing.T, w *storage.Workspace, ps *primitives.Sto
 					return err
 				}
 				wakes.Add(1)
-				if _, err = rt.Service.PostMessage(c, owner, conversation.ID, pm.MessageInput{RequestKey: fmt.Sprint(i), Text: "synthetic PM turn"}); err != nil {
-					return err
-				}
-				claimed, err := rt.Service.ClaimTurn(c, agent, pm.ClaimInput{RunnerID: "synthetic-bridge"})
-				if err != nil {
-					return err
-				}
-				if _, err = rt.Service.HeartbeatTurn(c, agent, claimed.ID, pm.HeartbeatInput{LeaseToken: claimed.LeaseToken}); err != nil {
-					return err
-				}
-				if _, err = rt.Service.CompleteTurnWithLease(c, agent, claimed.ID, "synthetic answer", nil, claimed.LeaseToken); err != nil {
-					return err
-				}
-				turns.Add(1)
-				return rt.Tick(c)
+				return nil
 			}()
 			if err != nil && c.Err() == nil {
 				t.Errorf("agent/PM cycle: %v", err)
@@ -183,8 +162,8 @@ func startHostedMemoryMix(t *testing.T, w *storage.Workspace, ps *primitives.Sto
 		wg.Wait()
 		ts.Close()
 		collector.Close()
-		t.Logf("hosted mix: streams=%d signed_heartbeats=%d completed_wakes=%d completed_PM_turns=%d maintenance_retries=%d", streams.Load(), beats.Load(), wakes.Load(), turns.Load(), retries.Load())
-		if streams.Load() != 5 || beats.Load() == 0 || wakes.Load() == 0 || turns.Load() == 0 {
+		t.Logf("hosted mix: streams=%d signed_heartbeats=%d completed_wakes=%d maintenance_retries=%d", streams.Load(), beats.Load(), wakes.Load(), retries.Load())
+		if streams.Load() != 5 || beats.Load() == 0 || wakes.Load() == 0 {
 			t.Error("hosted mix did not exercise every component")
 		}
 	}

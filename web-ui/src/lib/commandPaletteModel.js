@@ -121,17 +121,9 @@ export const GO_TO_SHORTCUTS = {
  * @param {{
  *   settingsGroups?: object[],
  *   go: (href: string) => void,
- *   mod?: string,
- *   pmVisible?: boolean,
- * }} options `pmVisible` false means no PM agent is connected: Ask is left
- * out, and PM setup (a Settings item) is the way in.
+ * }} options
  */
-export function goToCommands({
-  settingsGroups = [],
-  go,
-  mod = "⌘",
-  pmVisible = true,
-}) {
+export function goToCommands({ settingsGroups = [], go }) {
   const commands = [
     {
       id: "go:decide",
@@ -152,17 +144,6 @@ export function goToCommands({
       run: () => go("/watch"),
     },
   ];
-  if (pmVisible) {
-    commands.push({
-      id: "go:pm",
-      group: "Go to",
-      label: "Ask",
-      keywords: ["pm", "chat", "ask pm"],
-      shortcut: [mod, "J"],
-      icon: "askPm",
-      run: () => go("/pm"),
-    });
-  }
   for (const group of settingsGroups) {
     for (const item of group.items ?? []) {
       const entry = {

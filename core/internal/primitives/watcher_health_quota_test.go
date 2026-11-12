@@ -22,16 +22,7 @@ func TestWatcherQuotaEnabledPlacementAndRecoveryDoNotDeadlock(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		cfg := DefaultWatcherHealthConfig()
-		if err := s.MaintainLoopHealth(bounded, now.Add(4*time.Minute), cfg); err != nil {
-			done <- err
-			return
-		}
-		if err := s.ReconcilePMHealth(bounded, true, now, cfg); err != nil {
-			done <- err
-			return
-		}
-		done <- s.ReconcilePMHealth(bounded, false, now.Add(time.Minute), cfg)
+		done <- s.MaintainLoopHealth(bounded, now.Add(4*time.Minute), DefaultWatcherHealthConfig())
 	}()
 	select {
 	case err := <-done:
@@ -43,9 +34,6 @@ func TestWatcherQuotaEnabledPlacementAndRecoveryDoNotDeadlock(t *testing.T) {
 	}
 	if got := attentionAll(t, s, ctx, "placer", "agent", "digest"); len(got) != 1 {
 		t.Fatal("quota-enabled digest missing", got)
-	}
-	if n := watcherCount(t, s, "human_attention_withdrawn"); n != 1 {
-		t.Fatal("quota-enabled recovery missing", n)
 	}
 }
 
@@ -62,8 +50,13 @@ func TestWatcherQuotaSerializesWithOrdinaryMutations(t *testing.T) {
 	go func() {
 		ready.Done()
 		<-start
-		for i := 0; i < 4; i++ {
-			if err := s.ReconcilePMHealth(bounded, true, now.Add(time.Duration(i)*time.Hour), DefaultWatcherHealthConfig()); err != nil {
+		id := watcherLoopFixture(t, s, ctx, now)
+		if _, err := s.db.ExecContext(ctx, `UPDATE cards SET assignee=? WHERE id=?`, "actor:human", id); err != nil {
+			results <- err
+			return
+		}
+		for i := 1; i <= 4; i++ {
+			if err := s.MaintainLoopHealth(bounded, now.Add(time.Duration(i)*time.Hour), DefaultWatcherHealthConfig()); err != nil {
 				results <- err
 				return
 			}
@@ -104,8 +97,11 @@ func TestWatcherQuotaSerializesWithOrdinaryMutations(t *testing.T) {
 
 func TestWatcherQuotaRejectionRollsBackAlarm(t *testing.T) {
 	s, ctx := attentionFixture(t)
+	now := time.Now().UTC()
+	id := watcherLoopFixture(t, s, ctx, now)
+	watcherReceipt(t, s, ctx, id, now, "infra_error", true)
 	s.quota = WorkspaceQuota{MaxBlobBytes: 1}
-	err := s.ReconcilePMHealth(ctx, true, time.Now().UTC(), DefaultWatcherHealthConfig())
+	err := s.MaintainLoopHealth(ctx, now.Add(2*time.Hour), DefaultWatcherHealthConfig())
 	var quota *QuotaViolation
 	if !errors.As(err, &quota) {
 		t.Fatalf("want quota rejection, got %v", err)
@@ -114,7 +110,7 @@ func TestWatcherQuotaRejectionRollsBackAlarm(t *testing.T) {
 		t.Fatal("quota rejection left a partial ask", n)
 	}
 	var n int
-	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM watcher_health WHERE alarm_key='pm'`).Scan(&n); err != nil || n != 0 {
+	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM watcher_health WHERE alarm_key=?`, "loop:"+id).Scan(&n); err != nil || n != 0 {
 		t.Fatal("quota rejection advanced alarm state", n, err)
 	}
 }

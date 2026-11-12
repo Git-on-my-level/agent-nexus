@@ -59,8 +59,8 @@ test("preserves a configured mount prefix in redirects and generated links", asy
     page.getByRole("heading", { name: "Decide", exact: true }),
   ).toBeVisible();
 
-  // Primary navigation is Decide / Watch / Ask; the rest is one hop down in
-  // the account menu, and its links must carry the mount prefix too.
+  // Primary navigation is Decide / Watch; the rest is one hop down in the
+  // account menu, and its links must carry the mount prefix too.
   await expect(
     page.locator(`a[href="${appPath("/o/local/w/local/watch")}"]`).first(),
   ).toBeVisible();

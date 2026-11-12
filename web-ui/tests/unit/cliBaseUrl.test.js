@@ -7,7 +7,7 @@ const at = (href) => ({ url: new URL(href) });
 describe("base URL for copied anx commands", () => {
   it("prefers the workspace's configured core API origin", () => {
     expect(
-      resolveCliBaseUrl(at("https://app.example.test/o/local/w/ops/pm/setup"), {
+      resolveCliBaseUrl(at("https://app.example.test/o/local/w/ops/access"), {
         organizationSlug: "local",
         workspaceSlug: "ops",
         workspace: {
@@ -24,7 +24,7 @@ describe("base URL for copied anx commands", () => {
    */
   it("falls back to the public workspace URL for a loopback request", () => {
     expect(
-      resolveCliBaseUrl(at("http://127.0.0.1:4173/o/local/w/ops/pm/setup"), {
+      resolveCliBaseUrl(at("http://127.0.0.1:4173/o/local/w/ops/access"), {
         organizationSlug: "local",
         workspaceSlug: "ops",
         workspace: {
@@ -73,18 +73,21 @@ describe("base URL for copied anx commands", () => {
       ["/o/local/w/ops_v2", "ops-v2"],
     ]) {
       expect(
-        resolveCliBaseUrl(at(`https://anx.example.test/anx${segments}/pm`), {
-          organizationSlug: "local",
-          workspaceSlug: slug,
-          workspace: { coreBaseUrl: "" },
-        }),
+        resolveCliBaseUrl(
+          at(`https://anx.example.test/anx${segments}/decide`),
+          {
+            organizationSlug: "local",
+            workspaceSlug: slug,
+            workspace: { coreBaseUrl: "" },
+          },
+        ),
       ).toBe(`https://anx.example.test/anx${segments}`);
     }
   });
 
   it("resolves the slugs from either shape of the resolved workspace", () => {
     expect(
-      resolveCliBaseUrl(at("https://anx.example.test/o/local/w/ops/pm/setup"), {
+      resolveCliBaseUrl(at("https://anx.example.test/o/local/w/ops/access"), {
         workspace: {
           organizationSlug: "local",
           slug: "ops",

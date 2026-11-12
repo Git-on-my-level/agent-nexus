@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/scopedrepo"
 	"agent-nexus-core/internal/scopemigrate"
@@ -23,7 +23,7 @@ func metadataFixture(t *testing.T, n int) (*storage.Workspace, *scopemigrate.Run
 	w, r := fixture(t, 0)
 	ctx := context.Background()
 	must(t, scopedrepo.New(w.DB()).Initialize(ctx))
-	_, err := pm.NewStore(w.DB())
+	_, err := decide.NewStore(w.DB())
 	must(t, err)
 	tx, err := w.DB().BeginTx(ctx, nil)
 	must(t, err)

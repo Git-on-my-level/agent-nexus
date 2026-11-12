@@ -301,7 +301,7 @@ describe("the vocabulary lives in one place", () => {
       "src/lib/brief.js",
       "names the four brief states (backlog, ready, in_progress, done) the server computes",
     ],
-    ["src/lib/pm/presentation.js", "owns the stored phase's names"],
+    ["src/lib/work/presentation.js", "owns the stored phase's names"],
     [
       "src/lib/refResolve.js",
       "names what an external record calls itself — merged, draft, open",
@@ -402,11 +402,11 @@ describe("card status is rendered in one component", () => {
       "lists phases as filter options and labels the move confirmations",
     ],
     [
-      "src/lib/components/pm/WorkViews.svelte",
+      "src/lib/components/work/WorkViews.svelte",
       "labels the board's phase columns, which group cards rather than state them",
     ],
     [
-      "src/lib/components/pm/DecisionPanel.svelte",
+      "src/lib/components/decide/DecisionPanel.svelte",
       "names the phase a proposal would write, and the read-back of that write",
     ],
     [

@@ -4,7 +4,6 @@
 package server
 
 import (
-	"net/http"
 	"strings"
 	"time"
 
@@ -25,8 +24,7 @@ type handlerOptions struct {
 	readVisibility                 func(string, string) bool // Request-scoped access for composed resource reads.
 	summaryFormat                  bool                      // Explicit summary=1 migration for composed card collections.
 	observationRuntime             *ObservationRuntime
-	pmRuntime                      *PMRuntime
-	pmHandler                      http.Handler
+	decideRuntime                  *DecideRuntime
 	healthCheck                    HealthCheckFunc
 	actorRegistry                  ActorRegistry
 	seriesStore                    *series.Store
@@ -149,24 +147,12 @@ func WithPasskeySessionStore(store *auth.PasskeySessionStore) HandlerOption {
 	}
 }
 
-// WithPMHandler mounts the PM package behind workspace auth, body limits,
-// rate limits, and write-access checks. The PM handler must additionally bind
-// its Principal to the same authenticated request and enforce PM permissions.
 func WithObservationRuntime(runtime *ObservationRuntime) HandlerOption {
 	return func(opts *handlerOptions) { opts.observationRuntime = runtime }
 }
 
-func WithPMRuntime(runtime *PMRuntime) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.pmRuntime = runtime
-		if runtime != nil {
-			opts.pmHandler = runtime
-		}
-	}
-}
-
-func WithPMHandler(handler http.Handler) HandlerOption {
-	return func(opts *handlerOptions) { opts.pmHandler = handler }
+func WithDecideRuntime(runtime *DecideRuntime) HandlerOption {
+	return func(opts *handlerOptions) { opts.decideRuntime = runtime }
 }
 
 func WithPrimitiveStore(primitiveStore PrimitiveStore) HandlerOption {

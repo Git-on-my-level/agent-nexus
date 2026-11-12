@@ -771,7 +771,7 @@ export const commandRegistry: CommandSpec[] = [
     "streaming": {
       "mode": "none"
     },
-    "output_envelope": "Returns `{ agent: PrincipalSelf, pm: PMState }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients.",
+    "output_envelope": "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent.",
     "error_codes": [
       "auth_required",
       "invalid_token"
@@ -11419,7 +11419,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -11460,29 +11459,12 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmActionsAcknowledge",
     "ts_method": "pmActionsAcknowledge"
@@ -11502,7 +11484,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -11527,29 +11508,12 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.acknowledge",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmActionsGet",
     "ts_method": "pmActionsGet"
@@ -11570,7 +11534,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMActionListResponse`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -11592,29 +11555,12 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmActionsList",
     "ts_method": "pmActionsList"
@@ -11635,7 +11581,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -11676,289 +11621,15 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.acknowledge",
       "pm.actions.get",
       "pm.actions.list",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmActionsReconcile",
     "ts_method": "pmActionsReconcile"
-  },
-  {
-    "command_id": "pm.bindings.create",
-    "cli_path": "pm bindings create",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/bindings",
-    "operation_id": "pmBindingsCreate",
-    "summary": "Bind an exact channel identity to a workspace principal",
-    "why": "Bind an exact channel identity to a workspace principal.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMBinding`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "optional": [
-        {
-          "name": "actor_id",
-          "type": "string"
-        },
-        {
-          "name": "can_approve",
-          "type": "boolean"
-        },
-        {
-          "name": "created_at",
-          "type": "string"
-        },
-        {
-          "name": "enabled",
-          "type": "boolean"
-        },
-        {
-          "name": "id",
-          "type": "string"
-        },
-        {
-          "name": "origin.channel_id",
-          "type": "string"
-        },
-        {
-          "name": "origin.external_user_id",
-          "type": "string"
-        },
-        {
-          "name": "origin.tenant_id",
-          "type": "string"
-        },
-        {
-          "name": "origin.thread_id",
-          "type": "string"
-        },
-        {
-          "name": "origin.transport",
-          "type": "string"
-        },
-        {
-          "name": "revision",
-          "type": "integer"
-        },
-        {
-          "name": "work_ref",
-          "type": "string"
-        },
-        {
-          "name": "workspace_id",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmBindingsCreate",
-    "ts_method": "pmBindingsCreate"
-  },
-  {
-    "command_id": "pm.bindings.list",
-    "cli_path": "pm bindings list",
-    "group": "pm",
-    "method": "GET",
-    "path": "/pm/bindings",
-    "operation_id": "pmBindingsList",
-    "summary": "List channel identity bindings in the workspace",
-    "why": "Show which exact channel identities may talk to the PM, and with what authority, without sending anything.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMBindingListResponse`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.",
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmBindingsList",
-    "ts_method": "pmBindingsList"
-  },
-  {
-    "command_id": "pm.connect",
-    "cli_path": "pm connect",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/connect",
-    "operation_id": "pmConnect",
-    "summary": "Connect a local workspace PM runner",
-    "description": "Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials. An authenticated agent whose actor differs from ANX_PM_AGENT_ACTOR_ID receives HTTP 403 pm_actor_mismatch with configured_actor_id, acting_actor_id and a hint to rebind that server setting. Unauthenticated callers and human principals receive no binding details.",
-    "why": "Register the selected PM's local connection without queueing a turn.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMPresence`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_token",
-      "forbidden",
-      "pm_actor_mismatch",
-      "conflict",
-      "invalid_request",
-      "unavailable"
-    ],
-    "concepts": [
-      "agents"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Send safe runner and host labels only. This bootstrap operation remains available before onboarding.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "host",
-          "type": "string"
-        },
-        {
-          "name": "runner",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmConnect",
-    "ts_method": "pmConnect"
   },
   {
     "command_id": "pm.context",
@@ -11968,7 +11639,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/context",
     "operation_id": "pmContext",
     "summary": "Read bounded authorized PM context",
-    "description": "Direct reads use the authenticated principal's ordinary resource visibility. PM designation grants no additional access to private cards, asks, decisions or evidence. Use a claimed turn and its lease for requester-scoped context.",
+    "description": "Direct reads use the authenticated principal's ordinary resource visibility. Acting as PM grants no additional access to private cards, asks, decisions or evidence.",
     "why": "Read bounded authorized PM context.",
     "input_mode": "none",
     "streaming": {
@@ -11976,7 +11647,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMContextResponse`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -11993,328 +11663,13 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.",
+    "agent_notes": "Direct reads use ordinary principal visibility; acting as PM grants no private access.",
     "adjacent_commands": [
       "pm card",
       "pm propose"
     ],
     "go_method": "PmContext",
     "ts_method": "pmContext"
-  },
-  {
-    "command_id": "pm.conversations.create",
-    "cli_path": "pm conversations create",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/conversations",
-    "operation_id": "pmConversationsCreate",
-    "summary": "Create a durable PM conversation",
-    "why": "Create a durable PM conversation.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMConversation`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "request_key",
-          "type": "string"
-        },
-        {
-          "name": "title",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "actor_id",
-          "type": "string"
-        },
-        {
-          "name": "context_refs",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "replay_key",
-          "type": "string"
-        },
-        {
-          "name": "work_ref",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmConversationsCreate",
-    "ts_method": "pmConversationsCreate"
-  },
-  {
-    "command_id": "pm.conversations.get",
-    "cli_path": "pm conversations get",
-    "group": "pm",
-    "method": "GET",
-    "path": "/pm/conversations/{conversation_id}",
-    "operation_id": "pmConversationsGet",
-    "summary": "Read PM conversation and turns",
-    "why": "Read PM conversation and turns.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMConversationDetailResponse`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "path_params": [
-      "conversation_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmConversationsGet",
-    "ts_method": "pmConversationsGet"
-  },
-  {
-    "command_id": "pm.conversations.list",
-    "cli_path": "pm conversations list",
-    "group": "pm",
-    "method": "GET",
-    "path": "/pm/conversations",
-    "operation_id": "pmConversationsList",
-    "summary": "List PM conversations",
-    "description": "Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.",
-    "why": "List PM conversations.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMConversationListResponse`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmConversationsList",
-    "ts_method": "pmConversationsList"
-  },
-  {
-    "command_id": "pm.conversations.messages.create",
-    "cli_path": "pm conversations messages create",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/conversations/{conversation_id}/messages",
-    "operation_id": "pmConversationsMessagesCreate",
-    "summary": "Queue a contextual PM turn",
-    "why": "Queue a contextual PM turn.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMTurn`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "request_key",
-          "type": "string"
-        },
-        {
-          "name": "text",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "actor_id",
-          "type": "string"
-        },
-        {
-          "name": "replay_key",
-          "type": "string"
-        }
-      ]
-    },
-    "path_params": [
-      "conversation_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmConversationsMessagesCreate",
-    "ts_method": "pmConversationsMessagesCreate"
   },
   {
     "command_id": "pm.decisions.answer",
@@ -12324,7 +11679,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/pm/decisions/{decision_id}/answer",
     "operation_id": "pmDecisionsAnswer",
     "summary": "Answer and authorize a scoped decision",
-    "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is \"Proposal target has changed (proposed at \u003crev\u003e, source now \u003crev|unavailable\u003e). Approval refused (\u003creason\u003e); decline it or wait for a fresh proposal.\" Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies human, channel, or pm_turn proposals and proposed_by identifies the proposing actor, so clients can direct reproposal to the board or the PM truthfully. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
+    "description": "Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is \"Proposal target has changed (proposed at \u003crev\u003e, source now \u003crev|unavailable\u003e). Approval refused (\u003creason\u003e); decline it or wait for a fresh proposal.\" Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies the recorded provenance (human, or legacy channel or pm_turn) and proposed_by identifies the proposing actor so clients can display attribution truthfully. New proposals are human-only; channel and pm_turn values appear only on legacy records. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.",
     "why": "Answer and authorize a scoped decision.",
     "input_mode": "json-body",
     "streaming": {
@@ -12332,7 +11687,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -12384,28 +11738,11 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.create",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmDecisionsAnswer",
     "ts_method": "pmDecisionsAnswer"
@@ -12426,7 +11763,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -12474,10 +11810,6 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
-          "name": "origin",
-          "type": "any"
-        },
-        {
           "name": "payload.evidence_refs",
           "type": "list\u003cstring\u003e"
         },
@@ -12512,28 +11844,11 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.dispatch",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmDecisionsCreate",
     "ts_method": "pmDecisionsCreate"
@@ -12554,7 +11869,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMAction`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -12596,28 +11910,11 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmDecisionsDispatch",
     "ts_method": "pmDecisionsDispatch"
@@ -12637,7 +11934,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecision`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -12663,28 +11959,11 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.list"
     ],
     "go_method": "PmDecisionsGet",
     "ts_method": "pmDecisionsGet"
@@ -12705,7 +11984,6 @@ export const commandRegistry: CommandSpec[] = [
     },
     "output_envelope": "Returns `PMDecisionListResponse`.",
     "error_codes": [
-      "pm_not_onboarded",
       "auth_required",
       "invalid_token",
       "invalid_request",
@@ -12728,862 +12006,14 @@ export const commandRegistry: CommandSpec[] = [
       "pm.actions.get",
       "pm.actions.list",
       "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
       "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
       "pm.decisions.answer",
       "pm.decisions.create",
       "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
+      "pm.decisions.get"
     ],
     "go_method": "PmDecisionsList",
     "ts_method": "pmDecisionsList"
-  },
-  {
-    "command_id": "pm.disconnect",
-    "cli_path": "pm disconnect",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/disconnect",
-    "operation_id": "pmDisconnect",
-    "summary": "Reset workspace PM onboarding after explicit uninstall",
-    "description": "Authenticated selected PM principal only, including when already disconnected. Ordinary silence remains offline. Reset is durable across restarts and preserves historical conversations, decisions and approvals.",
-    "why": "Stop expecting the selected PM to return after explicit uninstall.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMPresence` with state not_onboarded.",
-    "error_codes": [
-      "auth_required",
-      "invalid_token",
-      "forbidden",
-      "pm_actor_mismatch",
-      "unavailable"
-    ],
-    "concepts": [
-      "agents"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.",
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmDisconnect",
-    "ts_method": "pmDisconnect"
-  },
-  {
-    "command_id": "pm.presence",
-    "cli_path": "pm presence",
-    "group": "pm",
-    "method": "GET",
-    "path": "/pm/presence",
-    "operation_id": "pmPresence",
-    "summary": "Read recent PM connection state",
-    "why": "Check whether a PM runner is connected before requesting help.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMPresence`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_token",
-      "forbidden",
-      "unavailable"
-    ],
-    "concepts": [
-      "agents"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.",
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmPresence",
-    "ts_method": "pmPresence"
-  },
-  {
-    "command_id": "pm.turns.claim",
-    "cli_path": "pm turns claim",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/claim",
-    "operation_id": "pmTurnsClaim",
-    "summary": "Claim or recover a PM turn with an exclusive runner lease",
-    "description": "New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is \"Workspace PM capacity reached (N in flight; limit M)\". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Leases last ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Runners must POST heartbeat with the token at a cadence strictly less than TTL/2. Expired leases are reclaimable with a fresh token until the turn deadline; the same open turn becomes unclaimed and waiting again, preserving its history rather than failing. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.",
-    "why": "Claim one queued turn for the selected PM agent so two runners never answer it.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMClaimedTurn`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.",
-    "body_schema": {
-      "optional": [
-        {
-          "name": "runner_id",
-          "type": "string"
-        }
-      ]
-    },
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsClaim",
-    "ts_method": "pmTurnsClaim"
-  },
-  {
-    "command_id": "pm.turns.complete",
-    "cli_path": "pm turns complete",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/complete",
-    "operation_id": "pmTurnsComplete",
-    "summary": "Record a selected PM agent response",
-    "description": "Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.",
-    "why": "Record a selected PM agent response.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMTurn`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "turn_closed",
-      "lease_required",
-      "lease_mismatch",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "lease_token",
-          "type": "string"
-        },
-        {
-          "name": "text",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "evidence_refs",
-          "type": "list\u003cstring\u003e"
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsComplete",
-    "ts_method": "pmTurnsComplete"
-  },
-  {
-    "command_id": "pm.turns.context",
-    "cli_path": "pm turns context",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/context",
-    "operation_id": "pmTurnsContext",
-    "summary": "Read requesting principal context as selected PM agent",
-    "description": "Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
-    "why": "Read requesting principal context as selected PM agent.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMContextResponse`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "turn_closed",
-      "lease_required",
-      "lease_mismatch",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "lease_token",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "context_ref",
-          "type": "string"
-        },
-        {
-          "name": "cursor",
-          "type": "string"
-        },
-        {
-          "name": "limit",
-          "type": "integer"
-        },
-        {
-          "name": "query",
-          "type": "string"
-        },
-        {
-          "name": "view",
-          "type": "string",
-          "enum_values": [
-            "card",
-            "cards"
-          ]
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsContext",
-    "ts_method": "pmTurnsContext"
-  },
-  {
-    "command_id": "pm.turns.decisions.create",
-    "cli_path": "pm turns decisions create",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/decisions",
-    "operation_id": "pmTurnsDecisionsCreate",
-    "summary": "Record a selected PM agent proposal",
-    "description": "For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form \u003ctype\u003e:\u003chandle-or-id\u003e (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.",
-    "why": "Record a selected PM agent proposal.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMDecision`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "human_proposal_pending",
-      "turn_closed",
-      "lease_required",
-      "lease_mismatch",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "instruction",
-          "type": "string"
-        },
-        {
-          "name": "lease_token",
-          "type": "string"
-        },
-        {
-          "name": "request_key",
-          "type": "string"
-        },
-        {
-          "name": "scope",
-          "type": "string"
-        },
-        {
-          "name": "target_revision",
-          "type": "string"
-        },
-        {
-          "name": "work_ref",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "payload.evidence_refs",
-          "type": "list\u003cstring\u003e"
-        },
-        {
-          "name": "payload.note",
-          "type": "string"
-        },
-        {
-          "name": "payload.phase",
-          "type": "string",
-          "enum_values": [
-            "backlog",
-            "blocked",
-            "done",
-            "in_progress",
-            "ready",
-            "review"
-          ]
-        },
-        {
-          "name": "payload.resolution_refs",
-          "type": "list\u003cstring\u003e"
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsDecisionsCreate",
-    "ts_method": "pmTurnsDecisionsCreate"
-  },
-  {
-    "command_id": "pm.turns.fail",
-    "cli_path": "pm turns fail",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/fail",
-    "operation_id": "pmTurnsFail",
-    "summary": "Mark a claimed PM turn failed",
-    "why": "Record a selected PM agent failure reason without inventing a reply.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMTurn`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "turn_closed",
-      "lease_required",
-      "lease_mismatch",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "lease_token",
-          "type": "string"
-        },
-        {
-          "name": "reason",
-          "type": "string"
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.get",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsFail",
-    "ts_method": "pmTurnsFail"
-  },
-  {
-    "command_id": "pm.turns.get",
-    "cli_path": "pm turns get",
-    "group": "pm",
-    "method": "GET",
-    "path": "/pm/turns/{turn_id}",
-    "operation_id": "pmTurnsGet",
-    "summary": "Read a PM conversation turn",
-    "description": "The requesting actor with conversation read permission may read the turn. The configured PM actor must supply X-ANX-PM-Lease-Token with its live turn lease or the matching finishing lease for a terminal replay. Missing, invalid or expired read leases make the turn appear not found, without exposing its status. PM designation alone grants no conversation read authority. Active lease_owner is the runner ID; lease_token is returned only by claim.",
-    "why": "Read a PM conversation turn.",
-    "input_mode": "none",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMTurn`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "source_revision_changed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.",
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.heartbeat",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsGet",
-    "ts_method": "pmTurnsGet"
-  },
-  {
-    "command_id": "pm.turns.heartbeat",
-    "cli_path": "pm turns heartbeat",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/heartbeat",
-    "operation_id": "pmTurnsHeartbeat",
-    "summary": "Renew a claimed PM turn lease",
-    "description": "Selected PM actor only. Requires the current lease_token. Extends lease_expires_at to min(now + ANX_PM_LEASE_TTL, turn deadline). ANX_PM_LEASE_TTL defaults to 60s (valid range 1s to 10m); runners must renew at a cadence strictly less than TTL/2. Missing tokens return 409 lease_required; expired, released, or foreign tokens return 409 lease_mismatch. Terminal turns return 409 turn_closed. Returns PMHeartbeatTurn without exposing the token; preserves status, claimed_at, and existing history.",
-    "why": "Keep an active runner lease alive during execution.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMHeartbeatTurn`.",
-    "error_codes": [
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "lease_mismatch",
-      "lease_required",
-      "turn_closed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "lease_token",
-          "type": "string"
-        }
-      ],
-      "optional": [
-        {
-          "name": "activity",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "activity_append",
-          "type": "list\u003cany\u003e"
-        },
-        {
-          "name": "partial_response",
-          "type": "string"
-        },
-        {
-          "name": "partial_sequence",
-          "type": "integer"
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.release"
-    ],
-    "go_method": "PmTurnsHeartbeat",
-    "ts_method": "pmTurnsHeartbeat"
-  },
-  {
-    "command_id": "pm.turns.release",
-    "cli_path": "pm turns release",
-    "group": "pm",
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/release",
-    "operation_id": "pmTurnsRelease",
-    "summary": "Release a claimed PM turn back to the queue",
-    "description": "The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.",
-    "why": "Return interrupted work to the queue for another claim.",
-    "input_mode": "json-body",
-    "streaming": {
-      "mode": "none"
-    },
-    "output_envelope": "Returns `PMTurn`.",
-    "error_codes": [
-      "pm_not_onboarded",
-      "auth_required",
-      "invalid_token",
-      "invalid_request",
-      "forbidden",
-      "not_found",
-      "conflict",
-      "lease_mismatch",
-      "turn_not_claimed",
-      "turn_closed",
-      "busy",
-      "unavailable"
-    ],
-    "concepts": [
-      "cards",
-      "evidence"
-    ],
-    "stability": "beta",
-    "surface": "canonical",
-    "agent_notes": "Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.",
-    "body_schema": {
-      "required": [
-        {
-          "name": "lease_token",
-          "type": "string"
-        },
-        {
-          "name": "runner_id",
-          "type": "string"
-        }
-      ]
-    },
-    "path_params": [
-      "turn_id"
-    ],
-    "adjacent_commands": [
-      "pm.actions.acknowledge",
-      "pm.actions.get",
-      "pm.actions.list",
-      "pm.actions.reconcile",
-      "pm.bindings.create",
-      "pm.bindings.list",
-      "pm.connect",
-      "pm.context",
-      "pm.conversations.create",
-      "pm.conversations.get",
-      "pm.conversations.list",
-      "pm.conversations.messages.create",
-      "pm.decisions.answer",
-      "pm.decisions.create",
-      "pm.decisions.dispatch",
-      "pm.decisions.get",
-      "pm.decisions.list",
-      "pm.disconnect",
-      "pm.presence",
-      "pm.turns.claim",
-      "pm.turns.complete",
-      "pm.turns.context",
-      "pm.turns.decisions.create",
-      "pm.turns.fail",
-      "pm.turns.get",
-      "pm.turns.heartbeat"
-    ],
-    "go_method": "PmTurnsRelease",
-    "ts_method": "pmTurnsRelease"
   },
   {
     "command_id": "ref_edges.list",
@@ -17996,36 +16426,8 @@ export class AnxClient {
     return this.invoke("pm.actions.reconcile", pathParams, options);
   }
 
-  pmBindingsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.bindings.create", {}, options);
-  }
-
-  pmBindingsList(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.bindings.list", {}, options);
-  }
-
-  pmConnect(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.connect", {}, options);
-  }
-
   pmContext(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("pm.context", {}, options);
-  }
-
-  pmConversationsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.conversations.create", {}, options);
-  }
-
-  pmConversationsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.conversations.get", pathParams, options);
-  }
-
-  pmConversationsList(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.conversations.list", {}, options);
-  }
-
-  pmConversationsMessagesCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.conversations.messages.create", pathParams, options);
   }
 
   pmDecisionsAnswer(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
@@ -18046,46 +16448,6 @@ export class AnxClient {
 
   pmDecisionsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("pm.decisions.list", {}, options);
-  }
-
-  pmDisconnect(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.disconnect", {}, options);
-  }
-
-  pmPresence(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.presence", {}, options);
-  }
-
-  pmTurnsClaim(options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.claim", {}, options);
-  }
-
-  pmTurnsComplete(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.complete", pathParams, options);
-  }
-
-  pmTurnsContext(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.context", pathParams, options);
-  }
-
-  pmTurnsDecisionsCreate(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.decisions.create", pathParams, options);
-  }
-
-  pmTurnsFail(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.fail", pathParams, options);
-  }
-
-  pmTurnsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.get", pathParams, options);
-  }
-
-  pmTurnsHeartbeat(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.heartbeat", pathParams, options);
-  }
-
-  pmTurnsRelease(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
-    return this.invoke("pm.turns.release", pathParams, options);
   }
 
   refEdgesList(options: RequestOptions = {}): Promise<InvokeResult> {

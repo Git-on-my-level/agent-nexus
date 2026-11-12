@@ -19,7 +19,7 @@ describe("command palette model", () => {
       fuzzyScore("ts", "Secrets"),
     );
     expect(fuzzyScore("int", "Integrations")).toBeGreaterThan(
-      fuzzyScore("int", "Ask PM about this task") ?? -Infinity,
+      fuzzyScore("int", "Ask about this task") ?? -Infinity,
     );
   });
 
@@ -57,7 +57,6 @@ describe("command palette model", () => {
     const go = vi.fn();
     const commands = goToCommands({
       go,
-      mod: "Ctrl",
       settingsGroups: [
         { label: "Settings", items: [{ label: "Access", href: "/access" }] },
         { label: "Diagnostics", items: [{ label: "Audit", href: "/events" }] },
@@ -68,7 +67,6 @@ describe("command palette model", () => {
     ).toEqual([
       ["Decide", "G D"],
       ["Watch", "G W"],
-      ["Ask", "Ctrl J"],
       ["Access", ""],
       ["Audit", ""],
     ]);
@@ -76,34 +74,14 @@ describe("command palette model", () => {
     expect(go).toHaveBeenCalledWith("/events");
   });
 
-  /*
-   * A PM agent runs on the reader's own computer, so a workspace can have
-   * none. Ask is then left out; PM setup is a Settings destination.
-   */
-  it("leaves out Ask when no PM agent is connected, and reaches setup via Settings", () => {
-    const go = vi.fn();
-    const commands = goToCommands({
-      go,
-      pmVisible: false,
-      settingsGroups: settingsNavGroups,
-    });
-    const ids = commands.map((command) => command.id);
-    expect(ids).not.toContain("go:pm");
-    expect(ids).toContain("go:/pm/setup");
-    commands.find((command) => command.id === "go:/pm/setup").run();
-    expect(go).toHaveBeenCalledWith("/pm/setup");
-  });
-
   it("puts every destination one hop away", () => {
     const labels = goToCommands({
       go: vi.fn(),
-      pmVisible: true,
       settingsGroups: settingsNavGroups,
     }).map((command) => command.label);
     expect(labels).toEqual([
       "Decide",
       "Watch",
-      "Ask",
       "Initiatives",
       "Docs",
       "Agents",
@@ -112,7 +90,6 @@ describe("command palette model", () => {
       "Secrets",
       "Integrations",
       "Notifications",
-      "PM setup",
       "Audit",
       "Threads",
     ]);

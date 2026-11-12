@@ -1,11 +1,9 @@
 /**
- * Primary navigation is three destinations: Decide (every decision waiting
- * on the reader), Watch (outcomes per workspace) and Ask (the PM
- * conversation). Ask is flagged `requiresPm`: the shell hides it entirely
- * while no PM is connected, and PM setup lives one hop down under Settings.
- * Everything else (Initiatives, Docs, Agents, Archive, Access, Secrets,
- * Integrations, Audit, Threads) is secondary: it sits in the account menu in
- * the sidebar footer, in the mobile More hub and in the command palette.
+ * Primary navigation is two destinations: Decide (every decision waiting on
+ * the reader) and Watch (outcomes per workspace). Everything else
+ * (Initiatives, Docs, Agents, Archive, Access, Secrets, Integrations, Audit,
+ * Threads) is secondary: it sits in the account menu in the sidebar footer,
+ * in the mobile More hub and in the command palette.
  */
 export const navigationItems = [
   {
@@ -21,13 +19,6 @@ export const navigationItems = [
     href: "/watch",
     icon: "overview",
     hint: "Outcomes",
-  },
-  {
-    label: "Ask",
-    href: "/pm",
-    icon: "askPm",
-    hint: "Your PM",
-    requiresPm: true,
   },
 ];
 
@@ -94,12 +85,6 @@ export const settingsNavGroups = [
         icon: "bell",
         hint: "Where pushes and digests go",
       },
-      {
-        label: "PM setup",
-        href: "/pm/setup",
-        icon: "askPm",
-        hint: "Connect or manage your PM",
-      },
     ],
   },
   {
@@ -132,17 +117,6 @@ export const settingsNavItems = settingsNavGroups.flatMap(
 );
 
 const SHELL_CONTENT_RULES = [
-  {
-    // Setup is a short read, not a thread; it does not want the chat column.
-    match: /^\/pm\/setup$/,
-    mode: "standard",
-    maxWidth: "42rem",
-  },
-  {
-    match: /^\/pm(\/|$)/,
-    mode: "standard",
-    maxWidth: "56rem",
-  },
   {
     match: /^\/(decide|watch|initiatives|integrations)(\/|$)/,
     mode: "fluid",

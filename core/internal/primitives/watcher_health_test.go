@@ -126,43 +126,6 @@ func TestWatcherHumanOwnedLoopDecideOpensRecoveryAsk(t *testing.T) {
 		t.Fatal("decide ask left a card placement", got)
 	}
 }
-func TestWatcherPMCoalescesRetriesRepeatsAndRecovery(t *testing.T) {
-	s, ctx := attentionFixture(t)
-	now := time.Now().UTC()
-	cfg := DefaultWatcherHealthConfig()
-	step := func(unhealthy bool, at time.Time) {
-		t.Helper()
-		if err := s.ReconcilePMHealth(ctx, unhealthy, at, cfg); err != nil {
-			t.Fatal(err)
-		}
-	}
-	step(true, now)
-	step(true, now)
-	if n := watcherCount(t, s, "human_attention_requested"); n != 1 {
-		t.Fatal(n)
-	}
-	step(true, now.Add(time.Hour))
-	step(true, now.Add(2*time.Hour))
-	if n := watcherCount(t, s, "human_attention_requested"); n != 1 {
-		t.Fatal("duplicate open ask", n)
-	}
-	if n := watcherCount(t, s, "message_posted"); n != 2 {
-		t.Fatal("repeat backoff", n)
-	}
-	step(true, now.Add(3*time.Hour))
-	if n := watcherCount(t, s, "message_posted"); n != 3 {
-		t.Fatal("missing repeat", n)
-	}
-	step(false, now.Add(4*time.Hour))
-	step(false, now.Add(4*time.Hour))
-	if n := watcherCount(t, s, "human_attention_withdrawn"); n != 1 {
-		t.Fatal("withdrawal", n)
-	}
-	step(true, now.Add(5*time.Hour))
-	if n := watcherCount(t, s, "human_attention_requested"); n != 2 {
-		t.Fatal("new episode", n)
-	}
-}
 func TestWatcherStopRuleAsksOnceAndClearsOnReceipt(t *testing.T) {
 	for _, timer := range []bool{false, true} {
 		t.Run(fmt.Sprint(timer), func(t *testing.T) {
@@ -192,12 +155,12 @@ func TestWatcherStopRuleAsksOnceAndClearsOnReceipt(t *testing.T) {
 func TestWatcherAlarmWritesRollbackTogether(t *testing.T) {
 	s, ctx := attentionFixture(t)
 	now := time.Now().UTC()
-	cfg := DefaultWatcherHealthConfig()
+	watcherLoopFixture(t, s, ctx, now)
 	_, err := s.db.ExecContext(ctx, `CREATE TRIGGER fail_health_reminder BEFORE INSERT ON events WHEN NEW.type='message_posted' BEGIN SELECT RAISE(ABORT,'injected'); END`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.ReconcilePMHealth(ctx, true, now, cfg); err == nil {
+	if err = s.MaintainLoopHealth(ctx, now.Add(2*time.Hour), DefaultWatcherHealthConfig()); err == nil {
 		t.Fatal("expected failure")
 	}
 	if n := watcherCount(t, s, "human_attention_requested"); n != 0 {
@@ -206,7 +169,7 @@ func TestWatcherAlarmWritesRollbackTogether(t *testing.T) {
 	if _, err = s.db.ExecContext(ctx, `DROP TRIGGER fail_health_reminder`); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.ReconcilePMHealth(ctx, true, now, cfg); err != nil {
+	if err = s.MaintainLoopHealth(ctx, now.Add(2*time.Hour), DefaultWatcherHealthConfig()); err != nil {
 		t.Fatal(err)
 	}
 	if n := watcherCount(t, s, "human_attention_requested"); n != 1 {
@@ -233,27 +196,28 @@ func TestWatcherStopRuleValidation(t *testing.T) {
 	}
 }
 
-func TestWatcherClosedPMAskReraisesOnlyWhenDue(t *testing.T) {
+func TestWatcherClosedAskReraisesOnlyWhenDue(t *testing.T) {
 	s, ctx := attentionFixture(t)
 	now := time.Now().UTC()
+	id := watcherLoopFixture(t, s, ctx, now)
 	cfg := DefaultWatcherHealthConfig()
-	if err := s.ReconcilePMHealth(ctx, true, now, cfg); err != nil {
+	if err := s.MaintainLoopHealth(ctx, now.Add(2*time.Hour), cfg); err != nil {
 		t.Fatal(err)
 	}
 	var ask string
-	if err := s.db.QueryRowContext(ctx, `SELECT ask_id FROM watcher_health WHERE alarm_key='pm'`).Scan(&ask); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT ask_id FROM watcher_health WHERE alarm_key=?`, "loop:"+id).Scan(&ask); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AppendHumanAttentionWithdrawal(ctx, "system", ask, map[string]any{"payload": map[string]any{"reason": "Human follow-through recorded"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ReconcilePMHealth(ctx, true, now.Add(time.Minute), cfg); err != nil {
+	if err := s.MaintainLoopHealth(ctx, now.Add(2*time.Hour+time.Minute), cfg); err != nil {
 		t.Fatal(err)
 	}
 	if n := watcherCount(t, s, "human_attention_requested"); n != 1 {
 		t.Fatal("immediate duplicate", n)
 	}
-	if err := s.ReconcilePMHealth(ctx, true, now.Add(time.Hour), cfg); err != nil {
+	if err := s.MaintainLoopHealth(ctx, now.Add(3*time.Hour), cfg); err != nil {
 		t.Fatal(err)
 	}
 	if n := watcherCount(t, s, "human_attention_requested"); n != 2 {

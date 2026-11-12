@@ -146,14 +146,14 @@ func TestLongRunningPMRequestRenewsExpiredDerivedToken(t *testing.T) {
 		case "/auth/token":
 			grants.Add(1)
 			refreshGrant(w)
-		case "/pm/turns/claim":
+		case "/pm/decisions":
 			claims.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer new-token" {
-				t.Errorf("PM claim token = %q", got)
+				t.Errorf("PM decision token = %q", got)
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			fmt.Fprint(w, `{}`)
+			fmt.Fprint(w, `{"items":[]}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -179,7 +179,7 @@ func TestLongRunningPMRequestRenewsExpiredDerivedToken(t *testing.T) {
 		AccessTokenExpiresAt: time.Now().Add(-time.Minute).Format(time.RFC3339Nano),
 		Sources:              map[string]string{"base_url": "env:ANX_BASE_URL"},
 	}
-	if _, err := a.invokeRawJSON(context.Background(), cfg, "pm turns claim", "POST", "/pm/turns/claim", map[string]any{"runner_id": "pm"}); err != nil {
+	if _, err := a.invokeRawJSON(context.Background(), cfg, "pm decisions list", "GET", "/pm/decisions", nil); err != nil {
 		t.Fatal(err)
 	}
 	if grants.Load() != 1 || claims.Load() != 1 {

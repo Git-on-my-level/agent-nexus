@@ -94,8 +94,7 @@ async function reachLastStep() {
   await fireEvent.click(
     screen.getByRole("button", { name: "Take the tour →" }),
   );
-  // The step count depends on whether a PM is connected: press Next until
-  // the last step stops offering it.
+  // Press Next until the last step stops offering it.
   for (let i = 0; i < 6; i += 1) {
     const next = screen.queryByRole("button", { name: "Next" });
     if (!next) break;

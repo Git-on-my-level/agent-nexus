@@ -240,7 +240,6 @@
       data-agents-empty
     >
       <SetupPrompt
-        kind="machine"
         {cliBaseUrl}
         {cliInstallCommand}
         {workspaceLabel}

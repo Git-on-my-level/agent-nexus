@@ -11,7 +11,7 @@ import {
   taskMoveError,
   taskMoveRequest,
 } from "../../src/lib/taskMoveWork.js";
-import { workKey } from "../../src/lib/pm/presentation.js";
+import { workKey } from "../../src/lib/work/presentation.js";
 import {
   currentOrganizationSlug,
   currentWorkspaceSlug,
@@ -102,7 +102,7 @@ it("keeps a version-1 work.create card and a drag anchor on the same move", asyn
   });
 });
 
-it("asks the PM for a card Nexus does not own", async () => {
+it("files a request for a card Nexus does not own", async () => {
   const work = watchWork({ authority: "github", version: 4 });
   work.source.revision = "abc";
   work.decision_revision = "abc";

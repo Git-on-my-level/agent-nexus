@@ -186,13 +186,12 @@ workspace-owned router remains embedded in `anx-core`.
 - Host setup and migration: [host bridge guide](cli/docs/host-bridge.md)
 - Isolated fixtures: `make bridge-test`
 - Workspace-router runtime notes: `core/README.md`
-- Independent PM provider protocol wrapper: `adapters/pm/README.md`
 
 Live dashboard data and declared push adapters: [guide](docs/live-series.md).
 
 Recurring work: [cadence, goals, receipts and loop reports](docs/recurring-work.md).
 
-Watcher failures: [PM and loop health alarms](docs/watcher-health.md).
+Watcher failures: [loop health alarms](docs/watcher-health.md).
 
 Work tree: [stored parents, path aliases, Unsorted and explicit moves](docs/grouping-work.md).
 

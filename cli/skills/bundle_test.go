@@ -74,7 +74,7 @@ func TestSkillAuthorityBoundaries(t *testing.T) {
 			t.Errorf("participant lacks %q", term)
 		}
 	}
-	for _, term := range []string{"explicitly designated", "ordinary existing agent", "independent goal driver", "Designation grants no new permissions", "last successful read", "excluded paths", "human decision gates", "Load anx-participant alongside", "CEO by default", "never mirror a tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "next_actor"} {
+	for _, term := range []string{"ordinary agent", "no built-in Ask PM", "no `anx pm serve` runner", "no turn lease", "The skill grants no extra authority", "last successful read", "excluded paths", "Load anx-participant alongside", "The human is CEO", "never mirror a tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "next_actor"} {
 		if !strings.Contains(pm.Content, term) {
 			t.Errorf("PM lacks %q", term)
 		}

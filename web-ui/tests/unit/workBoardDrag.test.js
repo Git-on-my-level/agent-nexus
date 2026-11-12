@@ -2,8 +2,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
 
-import WorkViews from "../../src/lib/components/pm/WorkViews.svelte";
-import { sortWorkBoardItems, workKey } from "../../src/lib/pm/presentation.js";
+import WorkViews from "../../src/lib/components/work/WorkViews.svelte";
+import {
+  sortWorkBoardItems,
+  workKey,
+} from "../../src/lib/work/presentation.js";
 import {
   DRAG_PLACEHOLDER_KEY,
   beforeCardRefForInsert,

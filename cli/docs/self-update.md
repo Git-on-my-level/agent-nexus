@@ -31,8 +31,7 @@ when it carries `--as`/`ANX_AS`, agentctl caller evidence, or a recognized harne
 marker; ordinary scripts are not inferred to be agents. Known CI provider markers
 always exclude the invocation. Recognized harness markers take precedence over
 generic `CI=1` (for example, Cursor agent shells set both); `--as`/`ANX_AS` alone
-does not override generic CI. PM turns qualify when they carry one of those agent
-signals. The worker has a
+does not override generic CI. The worker has a
 two-minute deadline and the foreground command never waits for release networking,
 verification, replacement, or skill synchronization. A per-install atomic daily
 claim prevents simultaneous commands and separate workspace config directories

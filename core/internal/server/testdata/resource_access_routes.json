@@ -946,45 +946,8 @@
   },
   {
     "method": "GET",
-    "path": "/pm/bindings",
-    "policy": "collection"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/bindings",
-    "policy": "independent",
-    "reason": "Channel-to-actor binding contains no canonical resource refs; PM tests enforce actor and channel authorization."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/connect",
-    "policy": "independent",
-    "reason": "Authenticated selected PM or verified host-derived reserved pm agent connects with bounded display labels only; no resource data."
-  },
-  {
-    "method": "GET",
     "path": "/pm/context",
     "policy": "collection"
-  },
-  {
-    "method": "GET",
-    "path": "/pm/conversations",
-    "policy": "collection"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/conversations",
-    "policy": "reference-write"
-  },
-  {
-    "method": "GET",
-    "path": "/pm/conversations/{conversation_id}",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/conversations/{conversation_id}/messages",
-    "policy": "record"
   },
   {
     "method": "GET",
@@ -1009,70 +972,6 @@
   {
     "method": "POST",
     "path": "/pm/decisions/{decision_id}/dispatch",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/disconnect",
-    "policy": "independent",
-    "reason": "Selected authenticated PM alone can reset onboarding and terminate unfinished PM turns. Returns connection state only; unrelated principals cannot reset or observe turn data."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/ingress/discord",
-    "policy": "independent",
-    "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/ingress/telegram",
-    "policy": "independent",
-    "reason": "Externally signed channel ingress; signature/transport authorization precedes any workspace operation (PM ingress tests)."
-  },
-  {
-    "method": "GET",
-    "path": "/pm/presence",
-    "policy": "independent",
-    "reason": "Workspace-scoped connection timestamps contain no resource data; PM permission and actor binding are checked before the exact-key read."
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/claim",
-    "policy": "reference-write"
-  },
-  {
-    "method": "GET",
-    "path": "/pm/turns/{turn_id}",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/complete",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/context",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/decisions",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/fail",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/heartbeat",
-    "policy": "record"
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/release",
     "policy": "record"
   },
   {

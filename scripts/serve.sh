@@ -187,14 +187,6 @@ export ANX_BOOTSTRAP_TOKEN
 ANX_DEV_REGISTER_LINKED_ACTORS="${ANX_DEV_REGISTER_LINKED_ACTORS:-1}"
 export ANX_DEV_REGISTER_LINKED_ACTORS
 
-# Runner path: selected PM actor is a normal agent. Do not enable the wake
-# bridge (`ANX_PM_BRIDGE_ENABLED`) for `anx pm serve`.
-if [[ "${DEV_SEED_SCENARIO}" == "default" || "${DEV_SEED_SCENARIO}" == "game-dev-studio" ]]; then
-	export ANX_PM_AGENT_ACTOR_ID="${ANX_PM_AGENT_ACTOR_ID:-actor-gds-pm}"
-	export ANX_PM_AGENT_HANDLE="${ANX_PM_AGENT_HANDLE:-pm.dev-host}"
-	export ANX_PM_TURN_TIMEOUT="${ANX_PM_TURN_TIMEOUT:-10m}"
-fi
-
 # Dogfood observation: builtin GitHub + JIT transform against a public repo.
 if [ -z "${ANX_OBSERVATION_CONFIG:-}" ] && [ -f "${REPO_ROOT}/core/dev/observation.serve.json" ]; then
 	export ANX_OBSERVATION_CONFIG="${REPO_ROOT}/core/dev/observation.serve.json"

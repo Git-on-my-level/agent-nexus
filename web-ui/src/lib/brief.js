@@ -244,7 +244,7 @@ function normalizeDecision(raw) {
     ),
     priority: text(raw.priority).toLowerCase(),
     subject: refTitle(raw.subject),
-    // A PM proposal answers through /pm/decisions, which needs its revision.
+    // A decision proposal answers through /pm/decisions, which needs its revision.
     pmDecision: raw.pm_decision?.id
       ? {
           id: text(raw.pm_decision.id),

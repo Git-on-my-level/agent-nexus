@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
 )
@@ -27,7 +27,7 @@ func TestPMReadBatchKeepsFreshAuthorityAndEpochPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newOnboardedPMRuntime(t, db, store, auth.NewStore(db), PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, db, store, auth.NewStore(db), DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,14 +36,14 @@ func TestPMReadBatchKeepsFreshAuthorityAndEpochPrivacy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d := pm.Decision{ID: fmt.Sprintf("batch-%d", i), WorkspaceID: "ws_main", ActorID: reader.ActorID, WorkRef: anyString(work["ref"]), Status: pm.AwaitingAnswer, TargetRevision: "1.1", CreatedAt: time.Now()}
+		d := decide.Decision{ID: fmt.Sprintf("batch-%d", i), WorkspaceID: "ws_main", ActorID: reader.ActorID, WorkRef: anyString(work["ref"]), Status: decide.AwaitingAnswer, TargetRevision: "1.1", CreatedAt: time.Now()}
 		body, _ := json.Marshal(d)
 		if _, err = env.workspace.DB().Exec(`INSERT INTO pm_records VALUES('decision',?,'ws_main',?,'',1,?)`, d.ID, reader.ActorID, body); err != nil {
 			t.Fatal(err)
 		}
 	}
 	scope := primitives.WithRequestAccessScope(ctx, primitives.AccessScope{ActorID: reader.ActorID})
-	p := pm.Principal{WorkspaceID: "ws_main", ActorID: reader.ActorID, Human: true}
+	p := decide.Principal{WorkspaceID: "ws_main", ActorID: reader.ActorID, Human: true}
 	counter.Reset()
 	ds, _, partial, err := runtime.Service.OverviewDecisions(scope, p)
 	if err != nil || len(ds) != 100 || !partial || counter.Count() > 20 {
@@ -122,7 +122,7 @@ func TestPMReadBatchKeepsFreshAuthorityAndEpochPrivacy(t *testing.T) {
 	if _, err = env.workspace.DB().Exec(`UPDATE agents SET revoked_at='now' WHERE id=?`, reader.AgentID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, err = runtime.Service.OverviewDecisions(scope, p); !errors.Is(err, pm.ErrForbidden) {
+	if _, _, _, err = runtime.Service.OverviewDecisions(scope, p); !errors.Is(err, decide.ErrForbidden) {
 		t.Fatalf("revocation ignored: %v", err)
 	}
 }

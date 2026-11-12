@@ -1,25 +1,14 @@
 # Watcher health alarms
 
-Core watches registered PMs and recurring work even when their runner has died.
-It runs no model and starts no external execution. Alarms use existing attention
-placements and human asks; nothing automatically retires, resumes or reassigns a
-loop. The initiative [foundation](architecture/foundation.md) and existing
-receipt/promise health rules remain unchanged.
+Core watches recurring work even when its runner has died. It runs no model and
+starts no external execution. Alarms use existing attention placements and human
+asks; nothing automatically retires, resumes or reassigns a loop. The initiative
+[foundation](architecture/foundation.md) and existing receipt/promise health
+rules remain unchanged.
 
-A registered PM opens one workspace-human Decide ask after its presence has been
-offline for one hour beyond the 90-second connected window. Brief deploy gaps do
-not alert. An unanswered turn reaching its deadline also opens that same ask,
-even while idle claims remain healthy. Presence recovery clears the offline
-condition; a later successful turn clears a missed deadline. An explicit PM
-disconnect clears the monitoring expectation. Reconnecting starts a new
-expectation and does not resurrect deadline failures from before that connection.
-Core selects the first active human from the same bounded workspace cohort used
-for loop fallback. The ask targets that human's Decide view, on a health thread
-owned by that human (`pm_actor_id`); unrelated principals cannot read it. If the
-recipient is revoked, a new human-owned thread and ask replace the old ask.
-If no active human exists, publication waits until one is available; the next
-maintenance tick can then raise the still-unhealthy PM alarm.
-Private turn text, references and turn-owner identities never enter the alarm.
+The built-in PM presence and turn-deadline alarms were removed in 2026-11 with
+the Ask PM product. Any ordinary agent can support project PM work with the `anx-pm` skill (`pm.propose` and `pm.approve` remain human-only); there
+is no runner presence to monitor.
 
 For a loop, Core retains `failing`, `overdue` and `stalled` precedence. After two
 continuous unhealthy cadences it places the card in its responsible actor's
@@ -52,7 +41,7 @@ is needed. A historical prose rule requires its producer to report a trip or an
 operator to configure the timer; installing this change does not invent a trip.
 
 Each episode commits its state, request keys, placement and ask in one SQLite
-transaction. Ask, reminder, recovery and PM thread identities are random; public
+transaction. Ask, reminder and recovery thread identities are random; public
 event IDs cannot preclaim them. Durable episode state provides idempotency, so
 retries do not duplicate them. Repeats refresh the same placement
 and append an automatic `message_posted` event with `payload.source=watcher_health`
@@ -71,11 +60,10 @@ monitoring remains a deployment concern.
 ## Configuration
 
 All alarms ship enabled. Deployment environment settings tune alarm delivery,
-without altering `plan_health`, presence expiry or authored promises:
+without altering `plan_health` or authored promises:
 
 | Variable                            | Default | Meaning                           |
 | ----------------------------------- | ------- | --------------------------------- |
-| `ANX_PM_OFFLINE_ALARM_AFTER`        | `1h`    | Grace after presence goes offline |
 | `ANX_LOOP_HEALTH_DIGEST_CADENCES`   | `2`     | Unhealthy intervals before digest |
 | `ANX_LOOP_HEALTH_DECIDE_CADENCES`   | `4`     | Unhealthy intervals before Decide |
 | `ANX_WATCHER_AGENT_ACTIVITY_WITHIN` | `1h`    | Agent activity freshness          |

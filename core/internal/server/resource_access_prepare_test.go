@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 )
@@ -31,7 +31,7 @@ func TestResourceAccessLargeDenialPrepareAndPMRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := seedMachinePrincipalForLockoutTest(t, ctx, db, "prepare-pm", "prepare-pm-actor", "prepare-pm", "prepare-pm-token")
-	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+	rt, err := newOnboardedDecideRuntime(t, db, store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}

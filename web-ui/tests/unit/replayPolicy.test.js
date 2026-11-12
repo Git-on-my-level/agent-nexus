@@ -54,11 +54,6 @@ it("a deliberate new request replaces transport keys without changing content or
   expect(requestIntent(fresh)).toEqual(requestIntent(request));
   expect(fresh.body.content.request_key).toBe("authored data");
   expect(request.message.request_key).toBe("message");
-  const legacy = { message: { request_key: "legacy", text: "unchanged" } };
-  expect(freshRequest(legacy, "pm.chat.send").message.replay_key).toEqual(
-    expect.any(String),
-  );
-  expect(legacy.message.replay_key).toBeUndefined();
 });
 
 it("renewing an expired inbox batch keeps confirmed member keys and frozen remaining bases", () => {

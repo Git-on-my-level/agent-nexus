@@ -287,13 +287,6 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	threadID := anyString(stored["thread_id"])
 	notifyProjectionMaintainer(opts)
-	if opts.pmRuntime != nil {
-		if store, ok := opts.primitiveStore.(*primitives.Store); ok {
-			if err := opts.pmRuntime.SyncBridgeReply(r.Context(), store, stored); err != nil {
-				log.Printf("pm bridge reply sync failed (event=%s): %v", anyString(stored["id"]), err)
-			}
-		}
-	}
 	if (strings.TrimSpace(anyString(stored["type"])) == humanAttentionRequestedEventType || strings.TrimSpace(anyString(stored["type"])) == humanAttentionWithdrawnEventType) && opts.projectionMaintainer != nil {
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
 			log.Printf("best-effort human inbox projection refresh failed (thread=%s): %v", threadID, err)

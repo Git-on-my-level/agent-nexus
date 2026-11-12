@@ -137,33 +137,16 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta concept` (command): Get commands grouped by concept
 - `initiative promote` (command): <card> --reason text: Deprecated: use anx work move <card> --root --reason text.
 - `initiative retire` (command): <card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
-- `pm connect` (command): Register a local PM connection with bounded runner and host labels.
-- `pm context` (command): Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
-- `pm disconnect` (command): Reset workspace PM onboarding after explicit uninstall.
-- `pm presence` (command): Read recent PM connection state.
+- `pm context` (command): Read Decide context: visible cards, open decisions and recent activity.
 - `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
 - `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
 - `pm actions list` (command): Report durable action and receipt statuses with principal-bound pagination.
 - `pm actions reconcile` (command): Request authoritative read-back of an action receipt; does not resend the action.
-- `pm bindings create` (command): Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
-- `pm bindings list` (command): List channel identity bindings for this workspace; an operator check, never a send.
-- `pm conversations create` (command): Create a durable conversation using request_key, title and optional work_ref.
-- `pm conversations get` (command): Read a conversation and its durable turns.
-- `pm conversations list` (command): List durable PM conversations with principal-bound pagination.
-- `pm conversations message` (command): Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
 - `pm decisions answer` (command): Answer with revision, approve and text; the server requires an authorized human principal.
-- `pm decisions create` (command): Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
+- `pm decisions create` (command): Propose an instruction bound to work, scope and target_revision; never approves it.
 - `pm decisions dispatch` (command): Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
 - `pm decisions get` (command): Read an instruction, authorization scope, revision and answer status.
 - `pm decisions list` (command): List durable decisions with principal-bound pagination.
-- `pm turns claim` (command): Claim the next queued turn with an exclusive runner lease. 204 means none.
-- `pm turns complete` (command): Selected PM agent records response text and evidence_refs; does not complete work.
-- `pm turns context` (command): Read context as the requesting actor; only the selected PM agent may call this.
-- `pm turns fail` (command): Mark a claimed turn failed with a reason; does not complete work.
-- `pm turns get` (command): Read a PM conversation turn.
-- `pm turns heartbeat` (command): Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
-- `pm turns propose` (command): Selected PM agent proposes an instruction for the requesting actor, never approval.
-- `pm turns release` (command): Lease owner returns a claimed turn to the queue.
 - `report render` (command): Materialize authorized report panels; --panels id,id selects individual panels.
 - `sessions get` (command): Read your own registered provider session and bounded activity; does not expose conversation history.
 - `sessions register` (command): Register or refresh a private provider session with a monotonic sequence; never creates an agent credential or assigns work.
@@ -324,13 +307,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `plan step add` (local-helper): Edit a linked initiative step with a card concurrency token.
 - `plan step update` (local-helper): Edit a linked initiative step with a card concurrency token.
 - `plan step rm` (local-helper): Edit a linked initiative step with a card concurrency token.
-- `pm curate` (local-helper): Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
-- `pm serve` (local-helper): Claim queued PM turns and run them through agentctl with the anx CLI as tools.
-- `pm ask` (local-helper): Create a PM conversation and post one human question.
-- `pm channels doctor` (local-helper): Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
-- `pm install` (local-helper): Install or update the PM service on this computer.
-- `pm status` (local-helper): Read the local PM service and last accepted claim.
-- `pm uninstall` (local-helper): Remove the local PM service and reset workspace onboarding.
 - `report templates` (local-helper): List live report templates and their purpose.
 - `report init` (local-helper): Generate a report template wired to live workspace queries.
 - `report preview` (local-helper): Render a report to PNG and summarize each panel's source and freshness.
@@ -455,7 +431,7 @@ events
 
 inbox
 - Use when: A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).
-- Not for: Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
+- Not for: Agent wake/attention; agents use `anx notifications`. Decide decisions (`anx pm decisions create`) are proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).
 - Examples: asks, reviews, escalations
 - Read next: anx ask ; anx review ; anx escalate
 
@@ -544,7 +520,7 @@ Runs and output
 - Optional networkless sandbox transport: preview `anx sync enable <directory> --card-id card:<slug> --dry-run`; enabling registers an independent files job on the recommended host bridge. Mount only `.anx/outbox` writable with no token/config/network access. UUID files submit notes and optional next promises; never completion/status. Check receipts and `anx sync status <directory>`. Mirror is read-only: compare stale_after with your clock. Preserve uncertain originals and keys; see `anx help sync`.
 - Prefer fresh context from durable task evidence. Use previous sessions only as supported provenance/recovery clues for unfinished or unreflected work; do not assume a session can be resumed.
 - Prefer native live dashboard queries, then declared host-local pushed series; pasted numbers need an as-of timestamp. Declare an adapter before pushing (`anx adapters declare --body-file adapter.json`).
-- If designated as PM, remain an ordinary agent: summarize and propose with provenance, ask the user about consequential unresolved ambiguity, and preserve human approval gates. Designation grants no source-write or private-history authority.
+- If designated as PM, remain an ordinary agent: summarize with provenance, file `anx ask` recommendations, ask the user about consequential unresolved ambiguity, and preserve human approval gates. `pm.propose` and `pm.approve` are human-only; designation grants no extra authority, including no source-write or private-history authority.
 - Text output is compact. Use `--json` for scripts; follow `next_actions` rather than guessing refs.
 - Use `anx help <command>` for flags and `anx debug meta doc agent-guide` for this guide.
 ```
@@ -1208,13 +1184,13 @@ Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <ans
 Read and operate durable PM conversations, decisions and action receipts
 
 ```text
-Install and run the workspace PM
+Read and propose Decide work
 
-  anx --as pm pm install [--runner <runner>] install the local PM runner (interactive wizard on a terminal)
-  anx pm status                              show PM connection and runner state
-  anx pm serve                               run the PM turn loop in the foreground
-  anx pm channels doctor                     check channel bindings
-  anx pm uninstall                           remove the local PM runner
+  anx pm context                             read visible cards, open decisions and recent activity
+  anx pm card <card-ref>                     read one visible card in full
+  anx pm propose <card-ref> --status <s> --why <reason>  propose a card change for human approval
+  anx pm decisions list|get|answer|dispatch   read and answer decisions
+  anx pm actions list|get|reconcile|acknowledge  inspect and reconcile dispatched actions
 
 Local Help: pm
 
@@ -1224,31 +1200,14 @@ Work is an existing card; projects are topics. Scope and identity come from the 
   anx pm actions get           Read authorization, attempts and receipt; source_reported is not verified.
   anx pm actions list          Report durable action and receipt statuses with principal-bound pagination.
   anx pm actions reconcile     Request authoritative read-back of an action receipt; does not resend the action.
-  anx pm bindings create       Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
-  anx pm bindings list         List channel identity bindings for this workspace; an operator check, never a send.
   anx pm card                  Read any visible card in full under the requesting reader.
-  anx pm connect               Register a local PM connection with bounded runner and host labels.
-  anx pm context               Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
-  anx pm conversations create  Create a durable conversation using request_key, title and optional work_ref.
-  anx pm conversations get     Read a conversation and its durable turns.
-  anx pm conversations list    List durable PM conversations with principal-bound pagination.
-  anx pm conversations message Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
+  anx pm context               Read Decide context: visible cards, open decisions and recent activity.
   anx pm decisions answer      Answer with revision, approve and text; the server requires an authorized human principal.
-  anx pm decisions create      Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
+  anx pm decisions create      Propose an instruction bound to work, scope and target_revision; never approves it.
   anx pm decisions dispatch    Explicitly dispatch authorized intent; inspect action receipt for actual outcome.
   anx pm decisions get         Read an instruction, authorization scope, revision and answer status.
   anx pm decisions list        List durable decisions with principal-bound pagination.
-  anx pm disconnect            Reset workspace PM onboarding after explicit uninstall.
-  anx pm presence              Read recent PM connection state.
   anx pm propose               Propose a card status or note for human approval in Inbox.
-  anx pm turns claim           Claim the next queued turn with an exclusive runner lease. 204 means none.
-  anx pm turns complete        Selected PM agent records response text and evidence_refs; does not complete work.
-  anx pm turns context         Read context as the requesting actor; only the selected PM agent may call this.
-  anx pm turns fail            Mark a claimed turn failed with a reason; does not complete work.
-  anx pm turns get             Read a PM conversation turn.
-  anx pm turns heartbeat       Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
-  anx pm turns propose         Selected PM agent proposes an instruction for the requesting actor, never approval.
-  anx pm turns release         Lease owner returns a claimed turn to the queue.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -4339,121 +4298,20 @@ Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not re
 Use --json for one machine-readable envelope.
 ```
 
-## `pm connect`
-
-Register a local PM connection with bounded runner and host labels.
-
-```text
-Generated Help: pm connect
-
-- Command ID: `pm.connect`
-- CLI path: `pm connect`
-- HTTP: `POST /pm/connect`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Register the selected PM's local connection without queueing a turn.
-- Output: Returns `PMPresence`.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `conflict`, `invalid_request`, `unavailable`
-- Concepts: `agents`
-- Agent notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - body `host` (string)
-  - body `runner` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Register a local PM connection with bounded runner and host labels.
-
-Usage: anx pm connect --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
 ## `pm context`
 
-Read PM context. Inside a claimed turn use no flags; legacy filters apply only outside turns.
+Read Decide context: visible cards, open decisions and recent activity.
 
 ```text
 Usage: anx pm context
 
-Inside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.
+Open a card with `anx pm card <card-ref>`. `anx pm propose` is human-only; agents file recommendations with `anx ask`.
 
 Adjacent commands: `pm card`, `pm propose`
 
-Outside a claimed turn
 Legacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.
 
 Use `--json` for one machine-readable envelope.
-```
-
-## `pm disconnect`
-
-Reset workspace PM onboarding after explicit uninstall.
-
-```text
-Generated Help: pm disconnect
-
-- Command ID: `pm.disconnect`
-- CLI path: `pm disconnect`
-- HTTP: `POST /pm/disconnect`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Stop expecting the selected PM to return after explicit uninstall.
-- Output: Returns `PMPresence` with state not_onboarded.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `pm_actor_mismatch`, `unavailable`
-- Concepts: `agents`
-- Agent notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Reset workspace PM onboarding after explicit uninstall.
-
-Usage: anx pm disconnect
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm presence`
-
-Read recent PM connection state.
-
-```text
-Generated Help: pm presence
-
-- Command ID: `pm.presence`
-- CLI path: `pm presence`
-- HTTP: `GET /pm/presence`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Check whether a PM runner is connected before requesting help.
-- Output: Returns `PMPresence`.
-- Error codes: `auth_required`, `invalid_token`, `forbidden`, `unavailable`
-- Concepts: `agents`
-- Agent notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Read recent PM connection state.
-
-Usage: anx pm presence
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
 ```
 
 ## `pm actions acknowledge`
@@ -4471,10 +4329,10 @@ Generated Help: pm actions acknowledge
 - Input mode: `json-body`
 - Why: Acknowledge a failed, unresolvable, or undeliverable action.
 - Output: Returns `PMAction`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4512,10 +4370,10 @@ Generated Help: pm actions get
 - Input mode: `none`
 - Why: Read an action and its receipts.
 - Output: Returns `PMAction`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4547,10 +4405,10 @@ Generated Help: pm actions list
 - Input mode: `none`
 - Why: List action receipts and attempts.
 - Output: Returns `PMActionListResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4580,10 +4438,10 @@ Generated Help: pm actions reconcile
 - Input mode: `json-body`
 - Why: Read back an action outcome without resending.
 - Output: Returns `PMAction`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4606,245 +4464,6 @@ Use --json for one machine-readable envelope.
 Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
-## `pm bindings create`
-
-Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
-
-```text
-Generated Help: pm bindings create
-
-- Command ID: `pm.bindings.create`
-- CLI path: `pm bindings create`
-- HTTP: `POST /pm/bindings`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Bind an exact channel identity to a workspace principal.
-- Output: Returns `PMBinding`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Optional:
-  - body `actor_id` (string)
-  - body `can_approve` (boolean)
-  - body `created_at` (string)
-  - body `enabled` (boolean)
-  - body `id` (string)
-  - body `origin.channel_id` (string)
-  - body `origin.external_user_id` (string)
-  - body `origin.tenant_id` (string)
-  - body `origin.thread_id` (string)
-  - body `origin.transport` (string)
-  - body `revision` (integer)
-  - body `work_ref` (string)
-  - body `workspace_id` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Bind an exact channel identity (transport, tenant, channel, user) to a workspace principal; humans only.
-
-Usage: anx pm bindings create --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-
-Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
-```
-
-## `pm bindings list`
-
-List channel identity bindings for this workspace; an operator check, never a send.
-
-```text
-Generated Help: pm bindings list
-
-- Command ID: `pm.bindings.list`
-- CLI path: `pm bindings list`
-- HTTP: `GET /pm/bindings`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
-- Output: Returns `PMBindingListResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-List channel identity bindings for this workspace; an operator check, never a send.
-
-Usage: anx pm bindings list
-  --limit <value>
-  --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-
-Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
-```
-
-## `pm conversations create`
-
-Create a durable conversation using request_key, title and optional work_ref.
-
-```text
-Generated Help: pm conversations create
-
-- Command ID: `pm.conversations.create`
-- CLI path: `pm conversations create`
-- HTTP: `POST /pm/conversations`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Create a durable PM conversation.
-- Output: Returns `PMConversation`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - body `request_key` (string)
-  - body `title` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `context_refs` (list<string>)
-  - body `replay_key` (string)
-  - body `work_ref` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Create a durable conversation using request_key, title and optional work_ref.
-
-Usage: anx pm conversations create --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations get`
-
-Read a conversation and its durable turns.
-
-```text
-Generated Help: pm conversations get
-
-- Command ID: `pm.conversations.get`
-- CLI path: `pm conversations get`
-- HTTP: `GET /pm/conversations/{conversation_id}`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Read PM conversation and turns.
-- Output: Returns `PMConversationDetailResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `conversation_id`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Read a conversation and its durable turns.
-
-Usage: anx pm conversations get <ref> (or --conversation-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations list`
-
-List durable PM conversations with principal-bound pagination.
-
-```text
-Generated Help: pm conversations list
-
-- Command ID: `pm.conversations.list`
-- CLI path: `pm conversations list`
-- HTTP: `GET /pm/conversations`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: List PM conversations.
-- Output: Returns `PMConversationListResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-List durable PM conversations with principal-bound pagination.
-
-Usage: anx pm conversations list
-  --limit <value>
-  --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm conversations message`
-
-Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
-
-```text
-Generated Help: pm conversations message
-
-- Command ID: `pm.conversations.messages.create`
-- CLI path: `pm conversations message`
-- HTTP: `POST /pm/conversations/{conversation_id}/messages`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Queue a contextual PM turn.
-- Output: Returns `PMTurn`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `conversation_id`
-  - body `request_key` (string)
-  - body `text` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `replay_key` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Queue a PM message using request_key and text; an accepted turn is not a completed outcome.
-
-Usage: anx pm conversations message <ref> (or --conversation-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
 ## `pm decisions answer`
 
 Answer with revision, approve and text; the server requires an authorized human principal.
@@ -4860,10 +4479,10 @@ Generated Help: pm decisions answer
 - Input mode: `json-body`
 - Why: Answer and authorize a scoped decision.
 - Output: Returns `PMDecision`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4892,7 +4511,7 @@ Human authorization: servers that gate this action on a signed-in browser sessio
 
 ## `pm decisions create`
 
-Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
+Propose an instruction bound to work, scope and target_revision; never approves it.
 
 ```text
 Generated Help: pm decisions create
@@ -4905,10 +4524,10 @@ Generated Help: pm decisions create
 - Input mode: `json-body`
 - Why: Propose a scoped PM decision.
 - Output: Returns `PMDecision`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4919,7 +4538,6 @@ Inputs:
   - body `work_ref` (string)
   Optional:
   - body `actor_id` (string)
-  - body `origin` (any)
   - body `payload.evidence_refs` (list<string>)
   - body `payload.note` (string)
   - body `payload.phase` (string)
@@ -4929,7 +4547,7 @@ Inputs:
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
-Human proposes an instruction bound to work, scope and target_revision; never approves it. Agents use pm turns propose within a claimed PM turn.
+Propose an instruction bound to work, scope and target_revision; never approves it.
 
 Usage: anx pm decisions create --from-file <path|->
 
@@ -4957,10 +4575,10 @@ Generated Help: pm decisions dispatch
 - Input mode: `json-body`
 - Why: Hand off an authorized source action.
 - Output: Returns `PMAction`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions get`, `pm decisions list`
 
 Inputs:
   Required:
@@ -4998,10 +4616,10 @@ Generated Help: pm decisions get
 - Input mode: `none`
 - Why: Read a PM decision.
 - Output: Returns `PMDecision`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions list`
 
 Inputs:
   Required:
@@ -5033,10 +4651,10 @@ Generated Help: pm decisions list
 - Input mode: `none`
 - Why: List durable PM decisions.
 - Output: Returns `PMDecisionListResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
+- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm context`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5045,338 +4663,6 @@ List durable decisions with principal-bound pagination.
 Usage: anx pm decisions list
   --limit <value>
   --cursor <value>
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns claim`
-
-Claim the next queued turn with an exclusive runner lease. 204 means none.
-
-```text
-Generated Help: pm turns claim
-
-- Command ID: `pm.turns.claim`
-- CLI path: `pm turns claim`
-- HTTP: `POST /pm/turns/claim`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Claim one queued turn for the selected PM agent so two runners never answer it.
-- Output: Returns `PMClaimedTurn`.
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval. Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Optional:
-  - body `runner_id` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Claim the next queued turn with an exclusive runner lease. 204 means none.
-
-Usage: anx pm turns claim [--from-file <path|->] [--runner-id <id>]
-  --runner-id <id> (defaults to the authenticated actor id; claims are idempotent for the same runner_id)
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns complete`
-
-Selected PM agent records response text and evidence_refs; does not complete work.
-
-```text
-Generated Help: pm turns complete
-
-- Command ID: `pm.turns.complete`
-- CLI path: `pm turns complete`
-- HTTP: `POST /pm/turns/{turn_id}/complete`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Record a selected PM agent response.
-- Output: Returns `PMTurn`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `lease_token` (string)
-  - body `text` (string)
-  Optional:
-  - body `evidence_refs` (list<string>)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Selected PM agent records response text and evidence_refs; does not complete work.
-
-Usage: anx pm turns complete <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns context`
-
-Read context as the requesting actor; only the selected PM agent may call this.
-
-```text
-Generated Help: pm turns context
-
-- Command ID: `pm.turns.context`
-- CLI path: `pm turns context`
-- HTTP: `POST /pm/turns/{turn_id}/context`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Read requesting principal context as selected PM agent.
-- Output: Returns `PMContextResponse`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `lease_token` (string)
-  Optional:
-  - body `context_ref` (string)
-  - body `cursor` (string)
-  - body `limit` (integer)
-  - body `query` (string)
-  - body `view` (string)
-  Enum values: view: card, cards
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Read context as the requesting actor; only the selected PM agent may call this.
-
-Usage: anx pm turns context <ref> (or --turn-id <ref>) [--lease-token <token>]
-  --query <value>
-  --limit <value>
-  --cursor <value>
-  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns fail`
-
-Mark a claimed turn failed with a reason; does not complete work.
-
-```text
-Generated Help: pm turns fail
-
-- Command ID: `pm.turns.fail`
-- CLI path: `pm turns fail`
-- HTTP: `POST /pm/turns/{turn_id}/fail`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Record a selected PM agent failure reason without inventing a reply.
-- Output: Returns `PMTurn`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `lease_token` (string)
-  - body `reason` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Mark a claimed turn failed with a reason; does not complete work.
-
-Usage: anx pm turns fail <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns get`
-
-Read a PM conversation turn.
-
-```text
-Generated Help: pm turns get
-
-- Command ID: `pm.turns.get`
-- CLI path: `pm turns get`
-- HTTP: `GET /pm/turns/{turn_id}`
-- Side effect class: `read_only`
-- Stability: `beta`
-- Input mode: `none`
-- Why: Read a PM conversation turn.
-- Output: Returns `PMTurn`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `source_revision_changed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Read a PM conversation turn.
-
-Usage: anx pm turns get <ref> (or --turn-id <ref>)
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns heartbeat`
-
-Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
-
-```text
-Generated Help: pm turns heartbeat
-
-- Command ID: `pm.turns.heartbeat`
-- CLI path: `pm turns heartbeat`
-- HTTP: `POST /pm/turns/{turn_id}/heartbeat`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Keep an active runner lease alive during execution.
-- Output: Returns `PMHeartbeatTurn`.
-- Error codes: `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `lease_required`, `turn_closed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `lease_token` (string)
-  Optional:
-  - body `activity` (list<any>)
-  - body `activity_append` (list<any>)
-  - body `partial_response` (string)
-  - body `partial_sequence` (integer)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Lease owner renews a claimed turn's lease; renew at less than half the lease TTL.
-
-Usage: anx pm turns heartbeat <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns propose`
-
-Selected PM agent proposes an instruction for the requesting actor, never approval.
-
-```text
-Generated Help: pm turns propose
-
-- Command ID: `pm.turns.decisions.create`
-- CLI path: `pm turns propose`
-- HTTP: `POST /pm/turns/{turn_id}/decisions`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Record a selected PM agent proposal.
-- Output: Returns `PMDecision`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `human_proposal_pending`, `turn_closed`, `lease_required`, `lease_mismatch`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`, `pm turns release`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `instruction` (string)
-  - body `lease_token` (string)
-  - body `request_key` (string)
-  - body `scope` (string)
-  - body `target_revision` (string)
-  - body `work_ref` (string)
-  Optional:
-  - body `payload.evidence_refs` (list<string>)
-  - body `payload.note` (string)
-  - body `payload.phase` (string)
-  - body `payload.resolution_refs` (list<string>)
-  Enum values: payload.phase: backlog, blocked, done, in_progress, ready, review
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Selected PM agent proposes an instruction for the requesting actor, never approval.
-
-Usage: anx pm turns propose <ref> (or --turn-id <ref>) --from-file <path|-> [--lease-token <token>]
-  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
-
-Use --json for one machine-readable envelope.
-```
-
-## `pm turns release`
-
-Lease owner returns a claimed turn to the queue.
-
-```text
-Generated Help: pm turns release
-
-- Command ID: `pm.turns.release`
-- CLI path: `pm turns release`
-- HTTP: `POST /pm/turns/{turn_id}/release`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Return interrupted work to the queue for another claim.
-- Output: Returns `PMTurn`.
-- Error codes: `pm_not_onboarded`, `auth_required`, `invalid_token`, `invalid_request`, `forbidden`, `not_found`, `conflict`, `lease_mismatch`, `turn_not_claimed`, `turn_closed`, `busy`, `unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
-- Adjacent commands: `pm actions acknowledge`, `pm actions get`, `pm actions list`, `pm actions reconcile`, `pm bindings create`, `pm bindings list`, `pm connect`, `pm context`, `pm conversations create`, `pm conversations get`, `pm conversations list`, `pm conversations message`, `pm decisions answer`, `pm decisions create`, `pm decisions dispatch`, `pm decisions get`, `pm decisions list`, `pm disconnect`, `pm presence`, `pm turns claim`, `pm turns complete`, `pm turns context`, `pm turns propose`, `pm turns fail`, `pm turns get`, `pm turns heartbeat`
-
-Inputs:
-  Required:
-  - path `turn_id`
-  - body `lease_token` (string)
-  - body `runner_id` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-Lease owner returns a claimed turn to the queue.
-
-Usage: anx pm turns release <ref> (or --turn-id <ref>) --from-file <path|->
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 PM lists accept --limit 1..200 and opaque --cursor; preserve next_cursor and has_more. Cursors are bound to the current workspace, principal and record kind. Context limits are 1..50. An answered decision is not proof of delivery or execution; inspect pm actions get. Agent keys cannot inherit human approval authority.
 
@@ -11414,198 +10700,6 @@ Writes read the latest plan and use its concurrency token. Conflicts require rea
 Removing a depended-on step is rejected; update dependencies first.
 ```
 
-## `pm curate`
-
-Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
-
-```text
-Local Help: pm curate
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Review curation candidates with PM judgment and propose withdraw, merge or batch cleanups.
-- Composition: Local runner. Reads GET /curation/candidates, asks the configured PM harness once which candidates deserve a proposal, then posts only those through POST /curation/proposals. With agent credentials the PM applies chosen cleanups and records a receipt. Other principals file quiet suggestions and report skipped application; suggestions never ask or notify a human. With --formula no model runs: POST /curation/run applies the deterministic pass.
-- JSON body: `candidates`, `proposals[]` (`status`, `action`, `targets`, `event_id`), `skipped`, `apply_skipped`
-- Examples:
-  - `anx pm curate --dry-run`
-  - `anx pm curate --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve' --max 5`
-  - `anx pm curate --formula --push-metrics`
-
-Flags:
-  --runner <argv>              Harness argv, resolved like `pm serve --runner` (agentctl run unless {prompt_file} is present). Required unless --formula or --dry-run.
-  --formula                    No model: POST /curation/run and print the result.
-  --dry-run                    Fetch and print candidates; post nothing and run no harness.
-  --max <n>                    Maximum proposals to post (default 5, cap 20).
-  --push-metrics               After the pass, read /curation/metrics and push each non-null value to the anx.health.* series. Needs an adapter declaring those series; otherwise a hint is printed and the pass still succeeds.
-  --work-dir <dir>             Directory for the prompt file (default .tmp/pm-runner).
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx pm curate ... ; anx --json pm curate ... ; anx pm curate ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm serve`
-
-Claim queued PM turns and run them through agentctl with the anx CLI as tools.
-
-```text
-Local Help: pm serve
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Claim queued PM turns and run them through agentctl with the anx CLI as tools.
-- Composition: Local runner. Claims one leased turn, writes a small prompt file, launches the configured harness through agentctl, then completes or fails the turn. Does not call a model in-process.
-- JSON body: `turn_id`, `execution_id`, `status`, `provider`, `model`
-- Examples:
-  - `anx pm serve --runner 'omp -p --mode json --model zai/glm-5.3 --auto-approve'`
-  - `anx pm serve --runner 'hermes chat --query-file {prompt_file} -Q'`
-
-Flags:
-  --runner <argv>              Harness argv. Without {prompt}, this is passed to `agentctl run --`. With {prompt_file} (or legacy {prompt}), argv is executed directly after substituting the prompt file path. Evidence refs come from a trailing ---evidence--- block or a JSON evidence_refs array on the reply object (the same object assistant text is read from), never from prose or nested tool output. Topic and document refs are verified like card/work/artifact/event/decision. Replies over the turn's max_output_bytes (default 64000, core's turn-text ceiling) are stored with a visible truncation marker.
-  --work-dir <dir>             Directory for prompt files and the runner id (default .tmp/pm-runner). Must be the agentctl working root when agentctl is used.
-  --poll-interval <duration>   Sleep between empty claims and after a released turn (default 2s).
-  --max-concurrent <n>         In-process cap on turns this runner executes at once (default 1). Each worker claims with a distinct runner id (<id>-<slot>). Core also bounds workspace sending turns.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx pm serve ... ; anx --json pm serve ... ; anx pm serve ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm ask`
-
-Create a PM conversation and post one human question.
-
-```text
-Local Help: pm ask
-
-- Kind: `local helper`
-- Side effect class: `remote_coordination_write`
-- Summary: Create a PM conversation and post one human question.
-- Composition: Local helper over `pm conversations create` and `pm conversations message`. A queued turn is not an assistant reply; run `anx pm serve` for that.
-- JSON body: `conversation`, `turn`
-- Examples:
-  - `anx pm ask "What needs my decision?"`
-  - `anx pm ask --wait "What needs my decision?"`
-
-Flags:
-  --wait                       Poll until the turn has a response, fails, or the deadline passes.
-  --work-ref <ref>             Optional work/card ref to attach to the conversation.
-  --title <text>               Conversation title (defaults to a prefix of the question).
-  --request-key <key>          Stable request key for create+message replay.
-  --conversation-id <id>       Post into an existing conversation instead of creating one.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx pm ask ... ; anx --json pm ask ... ; anx pm ask ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm channels doctor`
-
-Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
-
-```text
-Local Help: pm channels doctor
-
-- Kind: `local helper`
-- Side effect class: `read_only`
-- Summary: Check PM channel secrets, webhook reachability, and binding state without sending a chat message.
-- Composition: Local diagnostic. Reads env, probes webhook URLs with GET, and lists bindings. Does not send Telegram or Discord messages.
-- JSON body: `checks`, `ok`
-- Examples:
-  - `anx pm channels doctor`
-  - `anx pm channels doctor --telegram-webhook-url "${ANX_TELEGRAM_WEBHOOK_URL:?set the intended URL to probe}" --discord-webhook-url "${ANX_DISCORD_WEBHOOK_URL:?set the intended URL to probe}"`
-
-Flags:
-  --telegram-webhook-url <url> Telegram ingress URL to probe with GET (fake or core). Does not POST an update.
-  --discord-webhook-url <url>  Discord interactions URL to probe with GET (fake or core). Does not POST an interaction.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx pm channels doctor ... ; anx --json pm channels doctor ... ; anx pm channels doctor ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm install`
-
-Install or update the PM service on this computer.
-
-```text
-Local Help: pm install
-
-- Kind: `local helper`
-- Side effect class: `local_operational_write`
-- Summary: Install or update the PM service on this computer.
-- Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
-- Examples:
-  - `anx --as pm pm install`
-
-Flags:
-  --wait                       Wait for an accepted connection after install.
-  --wait-timeout <duration>    Bound the connection wait (default 90s, maximum 5m).
-  --runner <argv>              Runner command; saved locally for subsequent installs. Use {prompt_file} for a private prompt file, or omit a placeholder to use agentctl's file transport.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx --as pm pm install ... ; anx --as pm --json pm install ... ; anx --as pm pm install ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm status`
-
-Read the local PM service and last accepted claim.
-
-```text
-Local Help: pm status
-
-- Kind: `local helper`
-- Side effect class: `read_only`
-- Summary: Read the local PM service and last accepted claim.
-- Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
-- Examples:
-  - `anx --as pm pm status`
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx --as pm pm status ... ; anx --as pm --json pm status ... ; anx --as pm pm status ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `pm uninstall`
-
-Remove the local PM service and reset workspace onboarding.
-
-```text
-Local Help: pm uninstall
-
-- Kind: `local helper`
-- Side effect class: `local_operational_write`
-- Summary: Remove the local PM service and reset workspace onboarding.
-- Composition: Per-user launchd on macOS or systemd --user on Linux. Uses the selected workspace and profile; stores no credentials in the service definition.
-- JSON body: installed, running, workspace, agent, service, logs, last_claim_at, last_connect_failure
-- Examples:
-  - `anx --as pm pm uninstall`
-
-Flags:
-  --keep-registration          Keep workspace onboarding when moving the PM to another computer.
-
-
-Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx --as pm pm uninstall ... ; anx --as pm --json pm uninstall ... ; anx --as pm pm uninstall ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
 ## `report templates`
 
 List live report templates and their purpose.
@@ -11817,7 +10911,7 @@ Read any visible card in full under the requesting reader.
 
 ```text
 Usage: anx pm card <card-ref>
-Read any visible card in full inside a claimed PM turn.
+Read any visible card in full under the requesting reader.
 ```
 
 ## `pm propose`
@@ -11826,7 +10920,7 @@ Propose a card status or note for human approval in Inbox.
 
 ```text
 Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]
-Proposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.
+Proposes for human approval in Inbox. done requires evidence. Identity comes from the authenticated principal.
 ```
 
 ## `work cadence`

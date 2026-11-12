@@ -190,7 +190,6 @@
     .shell-account-row,
     .shell-account-menu-action,
     .shell-search-trigger,
-    .shell-ask-pm,
     .workspace-switcher-trigger,
     .workspace-switcher-option,
     .shell-bottom-nav-item,
@@ -546,7 +545,6 @@
   .shell-sidebar--collapsed .shell-nav-link,
   .shell-sidebar--collapsed .shell-settings-link,
   .shell-sidebar--collapsed .shell-search-trigger,
-  .shell-sidebar--collapsed .shell-ask-pm,
   .shell-sidebar--collapsed .shell-account-link,
   .shell-sidebar--collapsed .shell-account-row,
   .shell-sidebar--collapsed .workspace-switcher-trigger {
@@ -756,8 +754,8 @@
   }
 
   /*
-   * One sidebar row primitive. The nav links, the settings links, Search,
-   * Ask PM and the account row are the same row: 32px tall, 6px/8px padding,
+   * One sidebar row primitive. The nav links, the settings links, Search
+   * and the account row are the same row: 32px tall, 6px/8px padding,
    * 8px gap, 13/18 at weight 500, 16px icon at 0.7 opacity. They used to
    * differ by a pixel or two in every one of those dimensions — different
    * paddings, a negative margin, flex-start alignment, 15px icons — which is
@@ -766,7 +764,6 @@
   .shell-nav-link,
   .shell-settings-link,
   .shell-search-trigger,
-  .shell-ask-pm,
   .shell-account-link,
   .shell-account-row,
   .shell-account-menu-action {
@@ -797,7 +794,6 @@
   .shell-nav-icon,
   .shell-settings-icon,
   .shell-search-trigger-icon,
-  .shell-ask-pm-icon,
   .shell-account-icon {
     width: 16px;
     height: 16px;
@@ -852,61 +848,6 @@
 
   .shell-search-trigger {
     border-color: var(--line);
-  }
-
-  /*
-   * Ask PM is the one accent action in the sidebar. It used to borrow
-   * `.shell-search-trigger`, so the product's primary verb rendered as a
-   * second search box.
-   */
-  .shell-ask-pm {
-    margin-top: 12px;
-    background: var(--accent-soft);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
-
-  .shell-ask-pm:hover {
-    background: rgba(34, 211, 238, 0.2);
-    color: var(--accent-text);
-  }
-
-  .shell-ask-pm .shell-ask-pm-icon {
-    opacity: 1;
-  }
-
-  /*
-   * No PM is onboarded yet, so this is an invitation, not the primary verb.
-   * It keeps the slot (one entry point, always in the same place) and drops
-   * the accent: a workspace without a PM should read as unfinished, not as
-   * being nagged.
-   */
-  .shell-ask-pm--setup {
-    background: transparent;
-    border-color: var(--line);
-    border-style: dashed;
-    color: var(--fg-muted);
-    font-weight: 500;
-  }
-
-  .shell-ask-pm--setup:hover {
-    background: var(--panel-hover);
-    color: var(--fg);
-  }
-
-  .shell-ask-pm--setup .shell-ask-pm-icon {
-    opacity: 0.7;
-  }
-
-  /*
-   * Core has not said whether this workspace has a PM. The row keeps its
-   * space so the sidebar does not jump when the answer lands, and says
-   * nothing: either label would be a guess.
-   */
-  .shell-ask-pm--pending {
-    background: transparent;
-    border-color: transparent;
-    pointer-events: none;
   }
 
   .shell-search-kbd {
@@ -2228,11 +2169,6 @@
     color: var(--fg);
   }
 
-  /* Ask PM is the one accent action on the bar, not a fifth grey tab. */
-  .shell-bottom-nav-item--accent {
-    color: var(--accent-text);
-  }
-
   .shell-bottom-nav-glyph {
     display: inline-flex;
     align-items: center;
@@ -2240,10 +2176,6 @@
     width: 2rem;
     height: 1.5rem;
     border-radius: var(--radius-full);
-  }
-
-  .shell-bottom-nav-item--accent .shell-bottom-nav-glyph {
-    background: var(--accent-soft);
   }
 
   @media (min-width: 640px) {

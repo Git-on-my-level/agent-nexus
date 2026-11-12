@@ -23,8 +23,6 @@ import {
   uploadedAttachments,
 } from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
-import { isPmNotOnboardedRefusal, PM_STATES } from "$lib/pm/onboardingState.js";
-import { publishPmPresence } from "$lib/pm/presence.js";
 import { mutationFailure } from "$lib/mutationStatus.js";
 import {
   MAX_DASHBOARD_PINS,
@@ -418,24 +416,6 @@ async function send(entry, lease = null) {
   }
   if (entry.operation === "events.create")
     return client.createEvent(entry.request);
-  if (entry.operation === "pm.chat.send") {
-    let id = entry.receipt?.conversationId || entry.request.conversation_id;
-    if (!id) {
-      const conversation = await client.createPmConversation(
-        entry.request.creation,
-      );
-      if (!conversation.id)
-        throw new Error("Conversation receipt is incomplete.");
-      id = conversation.id;
-      entry.receipt = { ...entry.receipt, conversationId: id };
-      await persist(entry, lease);
-    }
-    if (!active(entry))
-      throw new Error("The submitting identity is no longer active.");
-    const turn = await client.sendPmMessage(id, entry.request.message);
-    if (!turn.id) throw new Error("Message receipt is incomplete.");
-    return { conversationId: id, turn };
-  }
   if (entry.operation === "pm.decision.answer") {
     const decision =
       entry.receipt?.decision ||
@@ -800,45 +780,6 @@ export async function enqueueAttachment({ file, refs, target, href }) {
   }
 }
 
-export function enqueuePmMessage({
-  conversationId = "",
-  text,
-  workRef = "",
-  contextRefs = [],
-  key = randomUUID(),
-  ...options
-}) {
-  const actor_id = JSON.parse(get(localWorkScope))[3];
-  return enqueueLocalMutation({
-    ...options,
-    key,
-    operation: "pm.chat.send",
-    request: {
-      conversation_id: conversationId,
-      ...(!conversationId
-        ? {
-            creation: {
-              request_key: randomUUID(),
-              replay_key: randomUUID(),
-              actor_id,
-              title: text.slice(0, 100),
-              ...(workRef ? { work_ref: workRef } : {}),
-              ...(contextRefs.length ? { context_refs: contextRefs } : {}),
-            },
-          }
-        : {}),
-      // Opt in only when building a new intent. Recovery sends saved request
-      // bodies verbatim, including legacy entries without receipt keys.
-      message: {
-        request_key: key,
-        replay_key: randomUUID(),
-        actor_id,
-        text,
-      },
-    },
-  });
-}
-
 export function enqueuePmDecisionAnswer({
   decisionId,
   revision,
@@ -1187,14 +1128,6 @@ async function attempt(entry) {
     if (latest?.value?.state === "superseded") {
       volatile.delete(entry.key);
       return;
-    }
-    if (
-      entry.operation === "pm.decisions.create" &&
-      isPmNotOnboardedRefusal(error)
-    ) {
-      publishPmPresence(JSON.parse(entry.scope)[1], PM_STATES.NOT_ONBOARDED);
-      error.publicMessage =
-        "This workspace has no PM to carry out this source move. Set up your PM, then retry. Your destination and evidence are saved.";
     }
     entry.failure = mutationFailure(
       error,

@@ -10,8 +10,8 @@
     {
       "role": "pm",
       "name": "anx-pm",
-      "version": "anx.pm.v7",
-      "content_sha256": "sha256:d4367fdd71522cf0777090d4d31ee54bc618ac74208123625401105c5771531b"
+      "version": "anx.pm.v8",
+      "content_sha256": "sha256:8513ac1e894d712d900083a18f33e2e7ea8dddde7d4567c4c154bcf5251c6384"
     }
   ]
 }

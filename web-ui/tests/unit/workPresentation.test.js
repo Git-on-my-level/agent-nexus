@@ -1,0 +1,411 @@
+import { describe, expect, it } from "vitest";
+import {
+  freshness,
+  safeSourceHref,
+  receiptSignal,
+  phaseGroups,
+  filterWork,
+  decisionTitle,
+  decisionPayload,
+  cardIdFromWork,
+  sortWorkBoardItems,
+} from "../../src/lib/work/presentation.js";
+
+describe("work evidence presentation", () => {
+  const now = Date.parse("2026-09-01T12:00:00Z");
+  it("does not call a recent check progress or invent freshness without a policy", () => {
+    expect(freshness({ observedAt: "2026-09-01T11:59:00Z" }, now).key).toBe(
+      "unknown",
+    );
+    expect(freshness({ staleAfter: "2026-09-01T13:00:00Z" }, now).key).toBe(
+      "unknown",
+    );
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T11:59:00Z",
+          staleAfter: "2026-09-01T13:00:00Z",
+        },
+        now,
+      ).key,
+    ).toBe("fresh");
+  });
+  it("keeps failure and stale last-good evidence visible", () => {
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T11:00:00Z",
+        },
+        now,
+      ).key,
+    ).toBe("stale");
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T13:00:00Z",
+          error: "Access denied",
+        },
+        now,
+      ),
+    ).toMatchObject({
+      key: "error",
+      label: "Can't reach source · last good read kept",
+    });
+    // The label names the source when we know which one we could not reach.
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T13:00:00Z",
+          error: "Access denied",
+          sourceName: "GitHub",
+        },
+        now,
+      ),
+    ).toMatchObject({
+      key: "error",
+      label: "Can't reach GitHub · last good read kept",
+      kept: true,
+    });
+    // Once the window has passed the failure is the reader's problem.
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T10:00:00Z",
+          staleAfter: "2026-09-01T11:00:00Z",
+          error: "Access denied",
+        },
+        now,
+      ),
+    ).toMatchObject({ key: "error", kept: false });
+  });
+  it("shows malformed dates and future-clock observations as unknown", () => {
+    expect(
+      freshness({ observedAt: "invalid", staleAfter: "invalid" }, now).key,
+    ).toBe("unknown");
+    expect(
+      freshness(
+        {
+          observedAt: "2026-09-01T13:00:00Z",
+          staleAfter: "2026-09-01T14:00:00Z",
+        },
+        now,
+      ).key,
+    ).toBe("unknown");
+  });
+  it("only offers absolute http(s) source links", () => {
+    for (const value of [
+      "javascript:alert(1)",
+      "data:text/html,test",
+      "/work",
+      "file:///tmp/a",
+      "https://user:secret@example.test/",
+    ])
+      expect(safeSourceHref(value)).toBe("");
+    expect(safeSourceHref("https://example.test/issues/1")).toBe(
+      "https://example.test/issues/1",
+    );
+  });
+  it("shows four primary receipt states and folds the rest", () => {
+    expect(receiptSignal("awaiting_answer")).toMatchObject({
+      label: "Needs you",
+      primary: true,
+      verified: false,
+    });
+    expect(receiptSignal("delivered")).toMatchObject({
+      label: "Delivered",
+      primary: true,
+      verified: false,
+    });
+    expect(receiptSignal("verified")).toMatchObject({
+      label: "Done",
+      primary: true,
+      verified: true,
+    });
+    expect(receiptSignal("failed")).toMatchObject({
+      label: "Failed",
+      primary: true,
+      verified: false,
+    });
+    expect(receiptSignal("acknowledged").verified).toBe(false);
+    expect(receiptSignal("acknowledged").verified).toBe(false);
+    expect(receiptSignal("pending_delivery").primary).toBe(false);
+    expect(receiptSignal("new_remote_state")).toMatchObject({
+      label: "new_remote_state",
+      verified: false,
+      primary: false,
+    });
+  });
+  it("board and table retain the same records and unfamiliar phases", () => {
+    const records = [
+      { id: "a", phase: "active", title: "One" },
+      { id: "b", phase: "vendor_pause", title: "Two" },
+      { id: "c", title: "Three" },
+    ];
+    const filtered = filterWork(records, { q: "" });
+    expect(
+      phaseGroups(filtered)
+        .flatMap((group) => group.items)
+        .map((item) => item.id)
+        .sort(),
+    ).toEqual(["a", "b", "c"]);
+    expect(
+      phaseGroups(filtered).some((group) => group.key === "vendor_pause"),
+    ).toBe(true);
+    expect(filterWork(records, { q: "two" }).map((item) => item.id)).toEqual([
+      "b",
+    ]);
+  });
+  it("identifies work by public ref, not storage id", () => {
+    expect(
+      cardIdFromWork({ id: "uuid-1", ref: "card:release", handle: "release" }),
+    ).toBe("card:release");
+    expect(cardIdFromWork({ handle: "release" })).toBe("release");
+    expect(cardIdFromWork({ id: "uuid-1" })).toBe("");
+  });
+  it("sorts board columns by board then rank", () => {
+    expect(
+      sortWorkBoardItems([
+        { ref: "card:b", board_ref: "board:z", rank: "1" },
+        { ref: "card:a", board_ref: "board:a", rank: "2" },
+        { ref: "card:c", board_ref: "board:a", rank: "1" },
+      ]).map((item) => item.ref),
+    ).toEqual(["card:c", "card:a", "card:b"]);
+  });
+  it("never titles a decision with a JSON blob", () => {
+    expect(
+      decisionTitle({
+        instruction: '{"next_action":"Ship the release","scope":"repo"}',
+      }),
+    ).toBe("Ship the release");
+    expect(decisionTitle({ instruction: '{"title":"Cut 2.1","x":1}' })).toBe(
+      "Cut 2.1",
+    );
+    expect(
+      decisionTitle({ instruction: '{"work_ref_only":true}' }, "Release"),
+    ).toBe("Release");
+    expect(decisionTitle({ instruction: "[1,2]" }, "Release")).toBe("Release");
+    expect(decisionTitle({ instruction: "not json { still plain" })).toBe(
+      "Not json { still plain",
+    );
+    expect(decisionTitle({}, "Release")).toBe("Release");
+    expect(decisionTitle({})).toBe("Decision");
+  });
+  it("titles a note with the field it sets", () => {
+    expect(
+      decisionTitle({
+        scope: "work.annotate",
+        instruction: '{"priority":"high"}',
+      }),
+    ).toBe("Priority: high");
+    expect(
+      decisionTitle({
+        scope: "work.annotate",
+        instruction: '{"next_action":"Ship the release"}',
+      }),
+    ).toBe("Next action: Ship the release");
+    // Phase proposals keep the summary-key title.
+    expect(
+      decisionTitle({
+        scope: "work.phase",
+        instruction: '{"summary":"Move to review","phase":"review"}',
+      }),
+    ).toBe("Move to review");
+  });
+  it("exposes structured instructions as payloads, plain text stays a title", () => {
+    expect(decisionPayload({ instruction: '{"a":1}' })).toBe('{\n  "a": 1\n}');
+    expect(decisionPayload({ instruction: "plain text" })).toBe("");
+    expect(decisionPayload({})).toBe("");
+  });
+});
+
+describe("structured decisions read as sentences", () => {
+  it("lists labelled fields and leads with the next action", async () => {
+    const { decisionFields, decisionSummary } =
+      await import("$lib/work/presentation.js");
+    const item = {
+      instruction: JSON.stringify({
+        next_action: "A/B the alert ducking curve",
+        next_actor: "audio lead",
+        blockers: ["booth booked", "VO absent"],
+      }),
+      scope: "work.annotate",
+    };
+    expect(decisionFields(item)).toEqual([
+      { label: "Next action", value: "A/B the alert ducking curve" },
+      { label: "Next actor", value: "audio lead" },
+      { label: "Blockers", value: "booth booked; VO absent" },
+    ]);
+    expect(decisionSummary(item, "Balance hub ambience")).toEqual({
+      title: "Balance hub ambience",
+      ask: "Sets next action to “A/B the alert ducking curve”",
+    });
+  });
+});
+
+describe("phase-change decisions lead with the phase", () => {
+  it("names the target phase before the source so truncated rows stay distinct", async () => {
+    const { decisionSummary } = await import("$lib/work/presentation.js");
+    const item = {
+      scope: "work.phase",
+      instruction: "request status change at Nexus to Blocked",
+      payload: { phase: "blocked" },
+    };
+    expect(decisionSummary(item, "Tune core combat loop")).toEqual({
+      title: "Tune core combat loop",
+      ask: "Move to Blocked at Nexus",
+    });
+    expect(
+      decisionSummary({ ...item, instruction: "move it" }, "Tune").ask,
+    ).toBe("Move to Blocked");
+  });
+});
+
+describe("instants in core's messages read as times, not ISO strings", () => {
+  it("replaces RFC 3339 instants and leaves other text alone", async () => {
+    const { humanizeInstants } = await import("$lib/work/presentation.js");
+    const soon = new Date(Date.now() + 4.5 * 60_000).toISOString();
+    expect(humanizeInstants(`rate limited; next attempt at ${soon}`)).toBe(
+      "rate limited; next attempt in 4 min",
+    );
+    const ago = new Date(Date.now() - 3.5 * 60_000).toISOString();
+    expect(humanizeInstants(`last read ${ago}`)).toBe("last read 3 min ago");
+    expect(humanizeInstants("no dates here")).toBe("no dates here");
+    expect(humanizeInstants(undefined)).toBe("");
+  });
+});
+
+describe("read errors are explained in the reader's words", () => {
+  it("maps known codes to a sentence and falls back to the message", async () => {
+    const { readErrorExplanation } = await import("$lib/work/presentation.js");
+    expect(
+      readErrorExplanation({
+        code: "policy_denied",
+        message: "Generated reader has no active version",
+      }),
+    ).toMatch(/no approved version yet/);
+    expect(readErrorExplanation({ code: "weird_code" })).toBe("weird code");
+    expect(
+      readErrorExplanation({ code: "other", message: "GitHub said 502" }),
+    ).toBe("GitHub said 502");
+    expect(readErrorExplanation("")).toBe("");
+  });
+});
+
+describe("freshness names the cause of a failed read", () => {
+  it("blames the reader, not the source, for local causes", async () => {
+    const { freshness } = await import("$lib/work/presentation.js");
+    expect(
+      freshness({ error: { code: "policy_denied" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Reader not ready" });
+    expect(
+      freshness({ error: { code: "rate_limited" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Rate limited" });
+    expect(
+      freshness({ error: { code: "unavailable" }, sourceName: "GitHub" }),
+    ).toMatchObject({ key: "error", label: "Can't reach GitHub" });
+  });
+});
+
+describe("target revision follows core's decision_revision rule", () => {
+  it("prefers the published field, then the external source revision, then version", async () => {
+    const { workTargetRevision } = await import("$lib/work/presentation.js");
+    expect(workTargetRevision({ decision_revision: "abc", version: 9 })).toBe(
+      "abc",
+    );
+    expect(
+      workTargetRevision({
+        source: { authority: "github", revision: "sha1" },
+        version: 4,
+      }),
+    ).toBe("sha1");
+    expect(
+      workTargetRevision({
+        source: { authority: "github" },
+        freshness: { source_revision: "x" },
+        version: 6,
+      }),
+    ).toBe("6");
+  });
+});
+
+describe("task table noise pass", () => {
+  it("orders by attention and keeps the incoming order within a phase", async () => {
+    const { sortWorkByAttention } = await import("$lib/work/presentation.js");
+    const rows = [
+      { ref: "card:done", phase: "done" },
+      { ref: "card:backlog", phase: "backlog" },
+      { ref: "card:progress-a", phase: "in_progress" },
+      { ref: "card:odd", phase: "vendor_waiting" },
+      { ref: "card:blocked", phase: "blocked" },
+      { ref: "card:cancelled", phase: "cancelled" },
+      { ref: "card:progress-b", phase: "in_progress" },
+      { ref: "card:review", phase: "review" },
+      { ref: "card:ready", phase: "ready" },
+    ];
+    expect(sortWorkByAttention(rows).map((row) => row.ref)).toEqual([
+      "card:blocked",
+      "card:progress-a",
+      "card:progress-b",
+      "card:review",
+      "card:ready",
+      "card:backlog",
+      "card:odd",
+      "card:done",
+      "card:cancelled",
+    ]);
+  });
+
+  it("folds tasks that mirror one source item into the one whose reader works", async () => {
+    const { dedupeWorkBySource } = await import("$lib/work/presentation.js");
+    const failing = {
+      ref: "card:208-jit",
+      source: {
+        authority: "github",
+        connection_id: "github-jit",
+        native_id: "org/repo#208",
+      },
+      freshness: { last_observed_at: "2026-09-01T12:00:00Z" },
+      refresh: { last_error: { code: "policy_denied" } },
+    };
+    const working = {
+      ref: "card:208",
+      source: {
+        authority: "github",
+        connection_id: "github-main",
+        native_id: "org/repo#208",
+      },
+      freshness: { last_observed_at: "2026-09-01T11:00:00Z" },
+    };
+    const native = { ref: "card:native", source: { authority: "nexus" } };
+    const other = {
+      ref: "card:209",
+      source: { authority: "github", native_id: "org/repo#209" },
+    };
+    const { records, folded } = dedupeWorkBySource([
+      failing,
+      native,
+      working,
+      other,
+    ]);
+    expect(records.map((row) => row.ref)).toEqual([
+      "card:native",
+      "card:208",
+      "card:209",
+    ]);
+    expect(folded["card:208"].map((row) => row.ref)).toEqual(["card:208-jit"]);
+  });
+
+  it("names a connection for a person and keeps the id out of the label", async () => {
+    const { connectionName } = await import("$lib/work/presentation.js");
+    expect(
+      connectionName({ authority: "github", connection_id: "github-main" }),
+    ).toBe("GitHub · main");
+    expect(
+      connectionName({ authority: "multica", connection_id: "studio_team" }),
+    ).toBe("Multica · studio team");
+    expect(connectionName({ authority: "github" })).toBe("GitHub");
+  });
+});

@@ -21,7 +21,7 @@ import {
   sourceLabel,
   workFreshness,
   workKey,
-} from "./pm/presentation.js";
+} from "./work/presentation.js";
 import { workSummaryModel } from "./workSummary.js";
 
 export const INBOX_MAILBOXES = [

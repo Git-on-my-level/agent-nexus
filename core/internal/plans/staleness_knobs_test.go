@@ -27,9 +27,6 @@ func TestStalenessKnobs(t *testing.T) {
 	// SignalStaleness measures agent process liveness, not initiative health.
 	exempt := map[string]bool{
 		"commandcenter.SignalStaleness": true,
-		// Registered PM connection liveness controls alarm delivery only. This
-		// exact source location cannot exempt a new promise/initiative knob.
-		"env ANX_PM_OFFLINE_ALARM_AFTER (core/internal/server/watcher_health_clock.go)": true,
 	}
 	root := filepath.Join("..", "..", "..")
 	found := map[string]bool{}

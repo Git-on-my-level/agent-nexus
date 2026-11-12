@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CLI_INSTALL_COMMAND,
   buildMachinePrompt,
-  buildPmPrompt,
   formatCountdown,
   formatPromptExpiry,
   isLoopbackBaseUrl,
@@ -13,21 +12,6 @@ import {
   setupPromptBlockedReason,
   shellQuote,
 } from "../../src/lib/setup/setupPrompt.js";
-import {
-  pmStatusCommand,
-  pmUninstallCommand,
-} from "../../src/lib/pm/onboardingState.js";
-import { PM_RUNNERS, pmRunnerFor } from "../../src/lib/setup/pmRunners.js";
-
-const KNOWN_HARNESS_NAMES = [
-  "claude",
-  "codex",
-  "hermes",
-  "cursor",
-  "omp",
-  "pi",
-  "openclaw",
-];
 
 const BASE = {
   workspaceLabel: "Acme Ops",
@@ -204,197 +188,26 @@ describe("machine prompt", () => {
   });
 });
 
-describe("PM prompt", () => {
-  const prompt = buildPmPrompt({ ...BASE, runnerKey: "claude" });
-
-  it("is one-shot: it enrols the machine when it is not enrolled", () => {
-    expect(prompt).toContain("--json doctor");
-    expect(prompt).toContain("host enroll --token-stdin");
-    // The enrol step comes before the install step, not instead of it.
-    expect(prompt.indexOf("host enroll")).toBeLessThan(
-      prompt.indexOf("pm install"),
-    );
-  });
-
-  it("never tells the agent to stop and ask for enrollment", () => {
-    expect(prompt).not.toContain("Access → Hosts");
-    expect(prompt.toLowerCase()).not.toContain("stop and tell me — i have to");
-  });
-
-  it("leaves the token unspent when the machine is already enrolled", () => {
-    expect(prompt).toContain("host_enrollment");
-    expect(prompt).toContain("already");
-    expect(prompt).toContain("the token unspent");
-  });
-
-  it("bakes the chosen runner in so no wizard is reached", () => {
-    expect(prompt).toContain("pm install --runner ");
-    expect(prompt).toContain("--wait");
-    expect(prompt).toContain("Claude Code");
-    expect(prompt).toContain(shellQuote(pmRunnerFor("claude").argv));
-  });
-
-  it("switches the runner with the picker", () => {
-    const hermes = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
-    expect(hermes).toContain(shellQuote(pmRunnerFor("hermes").argv));
-    expect(hermes).toContain("Hermes");
-  });
-
-  it("falls back to a usable runner for an unknown key", () => {
-    const unknown = buildPmPrompt({ ...BASE, runnerKey: "nope" });
-    expect(
-      PM_RUNNERS.some((runner) => unknown.includes(shellQuote(runner.argv))),
-    ).toBe(true);
-  });
-
-  it("verifies the PM with a real call", () => {
-    expect(prompt).toContain("--json pm status");
-  });
-
-  it("keeps the dedicated PM identity independent of the selected runner", () => {
-    expect(prompt).toContain("--as 'pm' pm install --runner ");
-    expect(prompt).toContain("--as 'pm' --json auth whoami");
-    expect(prompt).toContain("--as 'pm' --json doctor");
-    const doctors = prompt
-      .split("\n")
-      .filter((line) => line.includes("--json doctor"));
-    expect(doctors).toHaveLength(2);
-    expect(doctors.every((line) => line.includes("--as 'pm'"))).toBe(true);
-    expect(prompt).toContain(shellQuote(pmRunnerFor("claude").argv));
-    expect(prompt).toContain("the PM's Agent Nexus identity is `pm`");
-  });
-
-  it("keeps machine identity caller-owned and PM identity fixed to pm", () => {
-    const machine = buildMachinePrompt(BASE);
-    const machineCommands = machine
-      .split("\n")
-      .filter((line) => line.trimStart().startsWith("anx "));
-    expect(machineCommands.filter((line) => line.includes("--as"))).toEqual([]);
-    for (const runner of PM_RUNNERS) {
-      expect(machine).not.toContain(runner.label);
-      expect(machine).not.toContain(runner.key);
-    }
-
-    for (const runner of PM_RUNNERS) {
-      const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
-      expect(new Set(pm.match(/--as\s+'([^']+)'/g))).toEqual(
-        new Set(["--as 'pm'"]),
-      );
-      expect(pm).not.toContain(`--as '${runner.key}'`);
-      for (const otherRunner of PM_RUNNERS) {
-        if (otherRunner.key !== runner.key) {
-          expect(pm).not.toContain(otherRunner.label);
-        }
-      }
-      expect(pm).toContain(runner.label);
-      expect(pm).toContain(shellQuote(runner.argv));
-    }
-  });
-
-  it("never hard-codes an agent identity in the machine or PM prompt", () => {
-    const fixedIdentity = new RegExp(
-      `(?:--as\\s+['"]?|ANX_AS=)(?:${PM_RUNNERS.map((runner) => runner.key).join("|")})\\b`,
-      "i",
-    );
-    const machine = buildMachinePrompt(BASE);
-    expect(machine).not.toMatch(fixedIdentity);
-    for (const name of KNOWN_HARNESS_NAMES) {
-      expect(machine).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
-    }
-
-    for (const runner of PM_RUNNERS) {
-      const pm = buildPmPrompt({ ...BASE, runnerKey: runner.key });
-      const asNames = [...pm.matchAll(/--as\s+['"]?([^\s'"]+)/g)].map(
-        (match) => match[1],
-      );
-      expect(asNames.length).toBeGreaterThan(0);
-      expect(new Set(asNames.filter((name) => name !== "<name>`"))).toEqual(
-        new Set(["pm"]),
-      );
-      for (const name of KNOWN_HARNESS_NAMES.filter(
-        (candidate) => candidate !== runner.key,
-      )) {
-        expect(pm).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
-      }
-      expect(pm).not.toMatch(
-        new RegExp(
-          `ANX_AS=(?:${PM_RUNNERS.filter((other) => other.key !== runner.key)
-            .map((other) => other.key)
-            .join("|")})\\b`,
-          "i",
-        ),
-      );
-    }
-  });
-
-  it("never tells an agent to ignore a failed doctor check", () => {
-    for (const value of [prompt, buildPmPrompt(BASE)]) {
-      expect(value).toContain(
-        "`identity_resolution` must pass before continuing",
-      );
-      expect(value).toContain(
-        "Do not dismiss another failed check as expected",
-      );
-      expect(value).not.toContain("ignore them here");
-      expect(value).not.toContain(
-        "other red checks in that output are expected",
-      );
-    }
-  });
-
-  it("identifies the caller-owned identity before machine verification", () => {
-    const machine = buildMachinePrompt(BASE);
-    expect(machine).toMatch(
-      /lowercase\s+name of the agent tool you are running in/,
-    );
-    expect(machine).toMatch(
-      /a new name becomes a\s+new persona on its first\s+call/,
-    );
-    expect(
-      machine.indexOf("lowercase name of the agent tool you are running in"),
-    ).toBeLessThan(machine.indexOf("auth whoami"));
-  });
-
-  it("keeps timeout and manage-page commands on the installed pm profile", () => {
-    const pm = buildPmPrompt({ ...BASE, runnerKey: "hermes" });
-    const options = { cliBaseUrl: BASE.cliBaseUrl };
-    expect(pm).toContain("--as 'pm' pm install --runner 'hermes");
-    expect(pm).toContain("--as 'pm' pm status");
-    expect(pm).toContain("--as 'pm' --json pm status");
-    expect(pmStatusCommand(options)).toContain("--as 'pm' pm status");
-    expect(pmUninstallCommand(options)).toContain("--as 'pm' pm uninstall");
-    expect(pmStatusCommand(options)).not.toContain("--as 'hermes'");
-    expect(pmUninstallCommand(options)).not.toContain("--as 'hermes'");
-    expect(pm).not.toContain("--as 'hermes' pm status");
-    expect(pm).not.toContain("--as 'hermes' pm uninstall");
-  });
-});
-
 describe("prompts carry this deployment's base URL", () => {
   /** Verbs that reach the workspace API, and so cannot use a default origin. */
-  const REMOTE = ["host", "auth", "pm"];
+  const REMOTE = ["host", "auth"];
 
-  it.each([
-    ["machine", buildMachinePrompt(BASE)],
-    ["pm", buildPmPrompt(BASE)],
-  ])(
-    "%s prompt points every remote call at this workspace",
-    (_kind, prompt) => {
-      const remoteCalls = prompt
-        .split("\n")
-        // Command lines are indented; prose that names a command backticks it.
-        .filter((line) => line.startsWith("     ") && !line.includes("`"))
-        .filter((line) =>
-          REMOTE.some(
-            (verb) => line.includes(`anx `) && line.includes(` ${verb} `),
-          ),
-        );
-      expect(remoteCalls.length).toBeGreaterThan(0);
-      for (const line of remoteCalls) {
-        expect(line).toContain(`--base-url '${BASE.cliBaseUrl}'`);
-      }
-    },
-  );
+  it("points every remote call at this workspace", () => {
+    const prompt = buildMachinePrompt(BASE);
+    const remoteCalls = prompt
+      .split("\n")
+      // Command lines are indented; prose that names a command backticks it.
+      .filter((line) => line.startsWith("     ") && !line.includes("`"))
+      .filter((line) =>
+        REMOTE.some(
+          (verb) => line.includes(`anx `) && line.includes(` ${verb} `),
+        ),
+      );
+    expect(remoteCalls.length).toBeGreaterThan(0);
+    for (const line of remoteCalls) {
+      expect(line).toContain(`--base-url '${BASE.cliBaseUrl}'`);
+    }
+  });
 
   it("drops the flag only when the deployment has no base URL", () => {
     const prompt = buildMachinePrompt({ ...BASE, cliBaseUrl: "" });

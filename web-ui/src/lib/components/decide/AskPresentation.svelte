@@ -1,5 +1,5 @@
 <script>
-  import { safeSourceHref } from "$lib/pm/presentation.js";
+  import { safeSourceHref } from "$lib/work/presentation.js";
   import MarkdownRenderer from "$lib/components/MarkdownRenderer.svelte";
   let {
     decision,

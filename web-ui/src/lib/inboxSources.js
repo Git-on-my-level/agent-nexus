@@ -1,5 +1,4 @@
 import { createInboxSourceClient } from "$lib/coreClient";
-import { isPmNotOnboardedRefusal } from "$lib/pm/onboardingState.js";
 import { isReadAccessDenied } from "$lib/reliableRead.js";
 
 /**
@@ -142,35 +141,18 @@ export async function loadInboxSources({
     () => controller.abort(new Error("Inbox loading timed out")),
     deadlineMs,
   );
-  const emptyFeed = () => ({ items: [], has_more: false, archived_refs: [] });
-  /*
-   * A workspace with no PM onboarded refuses these routes outright. That is
-   * an answer — there is nothing there — not a fault the reader can act on,
-   * and reporting it as an error would make the Inbox look broken for a
-   * feature the workspace simply does not have. Any other failure, including
-   * a PM bridge that is merely down, keeps its error.
-   */
-  const withoutPm = (load) =>
-    load().catch((reason) => {
-      if (isPmNotOnboardedRefusal(reason)) return emptyFeed();
-      throw reason;
-    });
   const feeds = [
     () =>
-      withoutPm(() =>
-        pages(
-          0,
-          (cursor) => client.listPmDecisions({ limit: 50, cursor }),
-          "items",
-        ),
+      pages(
+        0,
+        (cursor) => client.listPmDecisions({ limit: 50, cursor }),
+        "items",
       ),
     () =>
-      withoutPm(() =>
-        pages(
-          1,
-          (cursor) => client.listPmActions({ limit: 50, cursor }),
-          "items",
-        ),
+      pages(
+        1,
+        (cursor) => client.listPmActions({ limit: 50, cursor }),
+        "items",
       ),
     () =>
       pages(

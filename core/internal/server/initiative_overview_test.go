@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/plans"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/testsql"
 )
@@ -150,18 +150,18 @@ func TestOverviewDigestDecisionsRespectCurrentWorkVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := newOnboardedPMRuntime(t, env.workspace.DB(), store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, env.workspace.DB(), store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
-	_, err = runtime.Service.ProposeDecision(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.DecisionInput{RequestKey: "digest", WorkRef: anyString(w["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
+	_, err = runtime.Service.ProposeDecision(ctx, decide.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, decide.DecisionInput{RequestKey: "digest", WorkRef: anyString(w["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest("GET", "/overview/changes", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: "human"})
-	opts := handlerOptions{primitiveStore: store, pmRuntime: runtime}
+	opts := handlerOptions{primitiveStore: store, decideRuntime: runtime}
 	attachResourceAccessScope(req, opts)
 	d := primitives.OverviewChanges{Since: &since, Items: []primitives.OverviewChange{}}
 	if err = appendOverviewDecisions(req, opts, &d, time.Now().UTC()); err != nil || len(d.Items) != 1 {
@@ -188,14 +188,14 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 	db, counter := testsql.Open("file:" + env.workspace.Layout().DatabasePath)
 	t.Cleanup(func() { db.Close() })
 	store := primitives.NewTestStore(db, env.workspace.Layout().ArtifactContentDir)
-	runtime, err := newOnboardedPMRuntime(t, db, store, auth.NewStore(db), PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, db, store, auth.NewStore(db), DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	since := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
 	req := httptest.NewRequest("GET", "/overview/changes", nil)
 	cacheAuthenticatedPrincipal(req, &auth.Principal{ActorID: owner.ActorID, AgentID: owner.AgentID, PrincipalKind: "human"})
-	opts := handlerOptions{primitiveStore: store, pmRuntime: runtime}
+	opts := handlerOptions{primitiveStore: store, decideRuntime: runtime}
 	attachResourceAccessScope(req, opts)
 	for i := 1; i <= 200; i++ {
 		w, err := store.CreateWork(ctx, owner.ActorID, "", map[string]any{"title": fmt.Sprintf("Initiative %d", i)})
@@ -206,7 +206,7 @@ func TestOverviewDigestDistinctDecisionRefsQueryBudget(t *testing.T) {
 		if err = store.SetCardPlan(ctx, owner.ActorID, anyString(w["id"]), anyString(w["updated_at"]), p); err != nil {
 			t.Fatal(err)
 		}
-		_, err = runtime.Service.ProposeDecision(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: anyString(w["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
+		_, err = runtime.Service.ProposeDecision(ctx, decide.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, decide.DecisionInput{RequestKey: fmt.Sprint(i), WorkRef: anyString(w["ref"]), Instruction: `{"next_action":"private instruction"}`, Scope: "work.annotate", TargetRevision: "1.1"})
 		if err != nil {
 			t.Fatal(err)
 		}

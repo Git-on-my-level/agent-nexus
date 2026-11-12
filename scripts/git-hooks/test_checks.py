@@ -129,12 +129,12 @@ class RepoTest(unittest.TestCase):
         self.write("core/go.mod",
                    "module fake\n\ngo 1.21\n\nrequire local/test-channels v0.0.0\n\n"
                    "replace local/test-channels => ../tests/channels\n")
-        self.write("core/internal/pm/pm.go", "package pm\n\nvar PM int\n")
-        self.write("core/internal/pm/channels_e2e_test.go",
-                   "package pm\n\nimport (\n\t\"testing\"\n\n\tchannels \"local/test-channels\"\n)\n\n"
+        self.write("core/internal/example/example.go", "package example\n\nvar Example int\n")
+        self.write("core/internal/example/channels_e2e_test.go",
+                   "package example\n\nimport (\n\t\"testing\"\n\n\tchannels \"local/test-channels\"\n)\n\n"
                    "func TestChannels(t *testing.T) { channels.Telegram() }\n")
         self.write("core/internal/server/server.go",
-                   "package server\n\nimport \"fake/internal/pm\"\n\nvar _ = pm.PM\n")
+                   "package server\n\nimport \"fake/internal/example\"\n\nvar _ = example.Example\n")
         self.write("tests/channels/go.mod", "module local/test-channels\n\ngo 1.21\n")
         self.write("tests/channels/telegram.go", "package channels\n\nfunc Telegram() {}\n")
         self.write("tests/channels/fake_test.go",
@@ -162,7 +162,7 @@ class RepoTest(unittest.TestCase):
         # packages that import it (test imports included) run, then their
         # dependents -- never the whole dependent module, never nothing.
         self.assertEqual(checks.go_affected("core", {"tests/channels/telegram.go"}),
-                         (["./internal/pm"], ["./internal/server"]))
+                         (["./internal/example"], ["./internal/server"]))
         # The changed module's own suite runs in its own directory.
         self.assertEqual(checks.go_affected("tests/channels", {"tests/channels/telegram.go"}),
                          (["./."], []))
@@ -173,7 +173,7 @@ class RepoTest(unittest.TestCase):
         with patch.object(checks, "run") as run, patch.object(checks, "start", start):
             checks.fast_tests({"tests/channels/telegram.go"}, "abc123")
         runs = [(call.args, call.kwargs.get("cwd")) for call in run.call_args_list]
-        self.assertIn((("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/pm"), self.root / "core"), runs)
+        self.assertIn((("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/example"), self.root / "core"), runs)
         self.assertIn((("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./."), self.root / "tests" / "channels"), runs)
         self.assertEqual(started.argv, ("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./internal/server"))
 
