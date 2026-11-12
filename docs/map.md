@@ -62,6 +62,7 @@ Where things live. Generated; never hand-edited.
 | core/cmd/anx-core                          | 9     | anx-core runs the Agent Nexus core service                                                                                                                                                                                                                            |
 | core/cmd/anx-idle-fixture                  | 1     | anx-idle-fixture creates or settles marked synthetic data only.                                                                                                                                                                                                       |
 | core/cmd/anx-observe                       | 1     | anx-observe is an operator-owned, read-only source/JIT diagnostic runner.                                                                                                                                                                                             |
+| core/cmd/anx-sqlite-compact                | 2     | anx-sqlite-compact writes a verified, compacted copy of a stopped workspace database.                                                                                                                                                                                 |
 | core/cmd/contract-gen                      | 3     | contract-gen regenerates the OpenAPI-derived contract artifacts                                                                                                                                                                                                       |
 | core/cmd/route-inventory                   | 1     | route-inventory combines the HTTP contract and intentional exception registry with the actual router's access classifiers.                                                                                                                                            |
 | core/cmd/scopedrepo-gen                    | 1     | scopedrepo-gen copies reviewed SQL templates into Go constants.                                                                                                                                                                                                       |
@@ -108,7 +109,7 @@ Where things live. Generated; never hand-edited.
 | core/internal/sidecar                      | 2     | Package sidecar hosts privileged in-process services inside anx-core                                                                                                                                                                                                  |
 | core/internal/sqliteutil                   | 2     | Package sqliteutil opens the bounded maintenance transactions used by background rebuild programs                                                                                                                                                                     |
 | core/internal/sqltext                      | 1     | Package sqltext provides deterministic projection keys shared by SQL and Go.                                                                                                                                                                                          |
-| core/internal/storage                      | 100   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
+| core/internal/storage                      | 105   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
 | core/internal/testsql                      | 1     | Package testsql instruments real SQLite reads in integration tests.                                                                                                                                                                                                   |
 | core/internal/testutil/perfguard           | 4     | Package perfguard contains synthetic data and SQL instrumentation for scale integration tests.                                                                                                                                                                        |
 | core/internal/textdiff                     | 1     | Package textdiff renders bounded line diffs.                                                                                                                                                                                                                          |
@@ -132,7 +133,7 @@ Where things live. Generated; never hand-edited.
 | tools/anx-http-record/internal/recorder    | 2     | Package recorder writes the JSONL exchange log                                                                                                                                                                                                                        |
 | tools/anx-http-record/internal/replay      | 2     | Package replay sends a compiled run against a target core and resolves the runtime ID bindings the run produced.                                                                                                                                                      |
 
-1 of 99 packages are undocumented.
+1 of 100 packages are undocumented.
 
 ## web-ui areas
 
@@ -209,7 +210,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 2838  | web-ui/src/lib/devWorkspaceFixtures.js                                             |
 | 2432  | core/cmd/contract-gen/main.go                                                      |
 | 2300  | core/internal/server/handler.go                                                    |
-| 2255  | web-ui/scripts/qa-visual.mjs                                                       |
+| 2253  | web-ui/scripts/qa-visual.mjs                                                       |
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |
 | 1946  | cli/dogfood/pi/run.mjs                                                             |
 | 1893  | web-ui/scripts/seed-core-from-mock.mjs                                             |

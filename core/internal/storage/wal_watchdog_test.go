@@ -18,6 +18,11 @@ var sqliteMaintenanceEnv = []string{
 	"ANX_SQLITE_WAL_PINNED_RUNS",
 	"ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT",
 	"ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES",
+	"ANX_SQLITE_INCREMENTAL_VACUUM",
+	"ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES",
+	"ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT",
+	"ANX_SQLITE_INCREMENTAL_VACUUM_PAGES",
+	"ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT",
 }
 
 func clearSQLiteMaintenanceEnv(t *testing.T) {
@@ -58,6 +63,21 @@ func TestSQLiteMaintenanceConfigDefaults(t *testing.T) {
 	if config.journalSizeLimit != 64*1024*1024 {
 		t.Fatalf("journal size limit = %d", config.journalSizeLimit)
 	}
+	if !config.incrementalVacuum.enabled {
+		t.Fatal("incremental vacuum should be enabled by default")
+	}
+	if config.incrementalVacuum.minFreelistBytes != 64*1024*1024 {
+		t.Fatalf("incremental min freelist bytes = %d", config.incrementalVacuum.minFreelistBytes)
+	}
+	if config.incrementalVacuum.minFreelistPercent != 10 {
+		t.Fatalf("incremental min freelist percent = %d", config.incrementalVacuum.minFreelistPercent)
+	}
+	if config.incrementalVacuum.pages != 2048 {
+		t.Fatalf("incremental pages = %d", config.incrementalVacuum.pages)
+	}
+	if config.incrementalVacuum.busyTimeout != 250*time.Millisecond {
+		t.Fatalf("incremental busy timeout = %v", config.incrementalVacuum.busyTimeout)
+	}
 }
 
 func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
@@ -68,6 +88,11 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 	t.Setenv("ANX_SQLITE_WAL_PINNED_RUNS", "7")
 	t.Setenv("ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT", "75ms")
 	t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "5678")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM", "true")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES", "123456")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", "25")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", "512")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", "50ms")
 	config, err := loadSQLiteMaintenanceConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +104,13 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 		config.truncateBusyTimeout != 75*time.Millisecond || config.journalSizeLimit != 5678 {
 		t.Fatalf("unexpected config: %#v", config)
 	}
+	if !config.incrementalVacuum.enabled ||
+		config.incrementalVacuum.minFreelistBytes != 123456 ||
+		config.incrementalVacuum.minFreelistPercent != 25 ||
+		config.incrementalVacuum.pages != 512 ||
+		config.incrementalVacuum.busyTimeout != 50*time.Millisecond {
+		t.Fatalf("unexpected incremental vacuum config: %#v", config.incrementalVacuum)
+	}
 }
 
 func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
@@ -87,6 +119,8 @@ func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
 		t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
 		t.Setenv("ANX_SQLITE_WAL_WATCHDOG_INTERVAL", "not-a-duration")
 		t.Setenv("ANX_SQLITE_WAL_WARN_BYTES", "not-a-number")
+		t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM", "not-a-bool")
+		t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", "not-a-number")
 		t.Setenv("ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", "5678")
 		config, err := loadSQLiteMaintenanceConfig()
 		if err != nil {
@@ -113,6 +147,28 @@ func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
 	})
 }
 
+func TestSQLiteMaintenanceConfigDisabledIncrementalVacuumSkipsTuning(t *testing.T) {
+	clearSQLiteMaintenanceEnv(t)
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM", "false")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES", "not-a-number")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", "not-a-number")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", "not-a-number")
+	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", "not-a-duration")
+	config, err := loadSQLiteMaintenanceConfig()
+	if err != nil {
+		t.Fatalf("disabled incremental vacuum rejected tuning values: %v", err)
+	}
+	if config.incrementalVacuum.enabled {
+		t.Fatal("incremental vacuum should be disabled")
+	}
+	if config.incrementalVacuum.minFreelistBytes != defaultIncrementalVacuumMinFreelistBytes ||
+		config.incrementalVacuum.minFreelistPercent != defaultIncrementalVacuumMinFreelistPercent ||
+		config.incrementalVacuum.pages != defaultIncrementalVacuumPages ||
+		config.incrementalVacuum.busyTimeout != defaultIncrementalVacuumBusyTimeout {
+		t.Fatalf("disabled incremental vacuum parsed tuning values: %#v", config.incrementalVacuum)
+	}
+}
+
 func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -134,6 +190,19 @@ func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {
 		{name: "ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", value: "0"},
 		{name: "ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", value: "-1"},
 		{name: "ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES", value: "nope"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM", value: "not-a-bool"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES", value: "0"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES", value: "-1"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES", value: "nope"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", value: "-1"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", value: "101"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", value: "nope"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "0"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "-1"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", value: "nope"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "0s"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "-1ms"},
+		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "nope"},
 	} {
 		t.Run(tc.name+"="+tc.value, func(t *testing.T) {
 			clearSQLiteMaintenanceEnv(t)
@@ -217,6 +286,78 @@ func (f *fakeWALExecutor) TruncateCheckpoint(context.Context) (walCheckpointResu
 func (f *fakeWALExecutor) Close(context.Context) error {
 	f.closed = true
 	return nil
+}
+
+type fakeIncrementalVacuumExecutor struct {
+	result incrementalVacuumResult
+	err    error
+	calls  int
+	closed bool
+}
+
+func (f *fakeIncrementalVacuumExecutor) Reclaim(context.Context, incrementalVacuumConfig) (incrementalVacuumResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeIncrementalVacuumExecutor) Close(context.Context) error {
+	f.closed = true
+	return nil
+}
+
+func TestWALWatchdogIncrementalVacuumRunsAndStops(t *testing.T) {
+	config := sqliteMaintenanceConfig{
+		enabled:             true,
+		interval:            10 * time.Millisecond,
+		warnBytes:           defaultWALWarnBytes,
+		pinnedRuns:          defaultWALPinnedRuns,
+		truncateBusyTimeout: defaultWALTruncateBusyTimeout,
+		incrementalVacuum: incrementalVacuumConfig{
+			enabled:            true,
+			minFreelistBytes:   1,
+			minFreelistPercent: 0,
+			pages:              2048,
+			busyTimeout:        250 * time.Millisecond,
+		},
+	}
+	fake := &fakeIncrementalVacuumExecutor{
+		result: incrementalVacuumResult{
+			reclaimed: 12,
+			stats:     incrementalVacuumStats{freelistCount: 100, pageCount: 1000},
+		},
+	}
+	var logs []string
+	watchdog := &walWatchdog{
+		config:  config,
+		statWAL: func() (int64, error) { return 0, nil },
+		openExecutor: func(context.Context) (walCheckpointExecutor, error) {
+			return &fakeWALExecutor{}, nil
+		},
+		openVacuum: func(context.Context) (incrementalVacuumExecutor, error) {
+			return fake, nil
+		},
+		logf: func(format string, args ...any) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		},
+	}
+	watchdog.tick(context.Background())
+	if fake.calls != 1 || !fake.closed {
+		t.Fatalf("incremental vacuum calls=%d closed=%v", fake.calls, fake.closed)
+	}
+	if len(logs) != 1 || !strings.Contains(logs[0], "pages_reclaimed=12") {
+		t.Fatalf("missing reclaim log: %v", logs)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	watchdog.done = make(chan struct{})
+	go watchdog.run(ctx)
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	select {
+	case <-watchdog.done:
+	case <-time.After(time.Second):
+		t.Fatal("watchdog did not stop after cancellation")
+	}
 }
 
 func TestWALWatchdogStateMachine(t *testing.T) {

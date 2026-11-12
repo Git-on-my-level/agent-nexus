@@ -68,6 +68,14 @@ INTO`, compares all table contents and PM cursor IDs, checks integrity and
    publish the copy, and its locks end on exit; the operator's stopped-service
    boundary must remain in force.
 
+   The output is built with `auto_vacuum=INCREMENTAL` and `page_size=4096`, so
+   later deletes can be reclaimed online by the workspace watchdog. The helper
+   also refuses to start unless the destination filesystem has at least the
+   source's live-page bytes plus a 2 GiB reserve; raise it with
+   `--reserve-bytes` on a constrained host. For generic (non compact-access)
+   workspaces, use `anx-sqlite-compact` and the
+   [per-workspace compaction procedure](sqlite-compaction.md).
+
 5. Still stopped, preserve the original outside the active volume. Require a
    successful `PRAGMA wal_checkpoint(TRUNCATE)` with no busy readers/writers,
    then close the SQLite connection and confirm the WAL is absent or empty.
