@@ -2,6 +2,7 @@ package series
 
 import (
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 	"agent-nexus-core/internal/testutil/perfguard"
 	"context"
@@ -294,7 +295,7 @@ func TestGrantScopeRevocationAndAudit(t *testing.T) {
 	if _, err := s.Auth.IssueSeriesToken(ctx, "collector", owner); !errors.Is(err, auth.ErrSeriesForbidden) {
 		t.Fatalf("revoked grant minted: %v", err)
 	}
-	events, _, err := s.Auth.ListAuditEvents(ctx, auth.AuthAuditListFilter{})
+	events, _, err := s.Auth.ListAuditEvents(resourceaccess.WithAuthAdmin(ctx, true), auth.AuthAuditListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

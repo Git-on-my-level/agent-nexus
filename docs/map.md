@@ -209,7 +209,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 2838  | web-ui/src/lib/devWorkspaceFixtures.js                                             |
 | 2432  | core/cmd/contract-gen/main.go                                                      |
 | 2300  | core/internal/server/handler.go                                                    |
-| 2255  | web-ui/scripts/qa-visual.mjs                                                       |
+| 2253  | web-ui/scripts/qa-visual.mjs                                                       |
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |
 | 1946  | cli/dogfood/pi/run.mjs                                                             |
 | 1893  | web-ui/scripts/seed-core-from-mock.mjs                                             |
@@ -242,9 +242,9 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |
 | 926   | cli/internal/app/skills_sync.go                                                    |
 | 926   | web-ui/scripts/qa-capture.mjs                                                      |
+| 919   | core/cmd/anx-core/main.go                                                          |
 | 909   | cli/internal/app/host_bridge_install.go                                            |
 | 908   | core/internal/primitives/watch_trends.go                                           |
-| 902   | core/cmd/anx-core/main.go                                                          |
 | 892   | mcp/executor/executor.go                                                           |
 | 891   | cli/internal/errnorm/enrich.go                                                     |
 | 887   | web-ui/src/lib/visualReports.js                                                    |

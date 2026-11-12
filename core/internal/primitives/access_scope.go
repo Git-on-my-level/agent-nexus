@@ -21,6 +21,7 @@ type accessScopeKey struct{}
 
 func WithAccessScope(ctx context.Context, scope AccessScope) context.Context {
 	ctx = context.WithValue(ctx, accessScopeKey{}, scope)
+	ctx = resourceaccess.WithAuthAdmin(ctx, scope.AuthAdmin)
 	// Rebinding either principal or selected PM starts a new policy boundary.
 	ctx = context.WithValue(ctx, denialRequestKey{}, struct{}{})
 	ctx = context.WithValue(ctx, publicRefCacheKey{}, struct{}{})
