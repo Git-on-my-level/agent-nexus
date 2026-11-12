@@ -72,6 +72,11 @@ rollback. Default activation awaits the documented retention decision.
 | Consecutive qualifying runs before one pinned WARN                                                                                                                                | n/a                             | `ANX_SQLITE_WAL_PINNED_RUNS`              | `3`                                                                        |
 | Connection-local busy timeout for conditional TRUNCATE                                                                                                                            | n/a                             | `ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT`    | `250ms`                                                                    |
 | Per-connection SQLite `journal_size_limit`                                                                                                                                        | n/a                             | `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`     | `67108864` (64 MiB)                                                        |
+| Enable bounded online incremental vacuum                                                                                                                                          | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM`           | `true`                                                                     |
+| Minimum freelist bytes before incremental vacuum                                                                                                                                  | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES` | `67108864` (64 MiB)                                               |
+| Minimum freelist share of page count before incremental vacuum                                                                                                                    | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT` | `10`                                                              |
+| Pages reclaimed per incremental-vacuum tick                                                                                                                                       | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_PAGES`     | `2048` (8 MiB at 4 KiB pages; maximum `65536`)                             |
+| Connection-local busy timeout for incremental vacuum                                                                                                                              | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT` | `250ms`                                                                 |
 
 ### SQLite WAL watchdog
 
@@ -97,6 +102,31 @@ tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES` still applies to every connection
 through the DSN and is still validated while the watchdog is disabled. An
 invalid journal-limit value stops workspace initialization rather than
 silently changing the policy.
+
+### SQLite incremental vacuum
+
+The same watchdog tick can reclaim free pages online, but only on databases
+built with `auto_vacuum=INCREMENTAL` (the offline compaction helper produces
+that format). On an `auto_vacuum=NONE` database it is a no-op. When
+`freelist_count * page_size` is at least the absolute threshold **and**
+`freelist_count` is at least the configured percentage of `page_count`, the
+worker runs `PRAGMA incremental_vacuum(N)` with a short connection-local busy
+timeout. It reclaims at most `N` pages per tick, so writers are not held for a
+long transaction. A busy tick logs a maintenance failure and is retried on the
+next interval; it does not hold writers or retain partial work.
+
+`ANX_SQLITE_INCREMENTAL_VACUUM=false` disables the worker and ignores its
+tuning values. It runs on the WAL watchdog tick, so
+`ANX_SQLITE_WAL_WATCHDOG=false` also disables it and ignores these values. The
+thresholds and page budget are
+`ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES` (default 64 MiB),
+`ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT` (default 10),
+`ANX_SQLITE_INCREMENTAL_VACUUM_PAGES` (default 2048, maximum 65536) and
+`ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT` (default 250 ms). Reclaimed pages
+are logged as `stage=incremental_vacuum pages_reclaimed=...`. This online path
+does not replace the offline compaction needed to convert an existing
+`auto_vacuum=NONE` file; see
+[per-workspace SQLite compaction](../../deploy/sqlite-compaction.md).
 
 ### Browser links (`ANX_WEB_BASE_URL`)
 

@@ -15,10 +15,12 @@ WORKDIR /src/core
 ENV CGO_ENABLED=0
 RUN go build -trimpath -ldflags="-s -w" -o /anx-core ./cmd/anx-core
 RUN go build -trimpath -ldflags="-s -w" -o /anx-access-reclaim ./cmd/anx-access-reclaim
+RUN go build -trimpath -ldflags="-s -w" -o /anx-sqlite-compact ./cmd/anx-sqlite-compact
 
 FROM gcr.io/distroless/static-debian12
 COPY --from=builder /anx-core /usr/local/bin/anx-core
 COPY --from=builder /anx-access-reclaim /usr/local/bin/anx-access-reclaim
+COPY --from=builder /anx-sqlite-compact /usr/local/bin/anx-sqlite-compact
 COPY --from=builder /src/contracts/anx-schema.yaml /etc/anx/anx-schema.yaml
 COPY --from=builder /src/contracts/gen/meta/commands.json /etc/anx/meta/commands.json
 ENV ANX_SCHEMA_PATH=/etc/anx/anx-schema.yaml
