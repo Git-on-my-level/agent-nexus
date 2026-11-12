@@ -69,7 +69,7 @@ evidence, privacy, human-decision, and source-authority invariants still apply.
 | Nexus hosted layer | Isolated workspace lifecycle, proxy/auth transport and account controls | A second tracker database or operator-managed PM execution |
 | `agentctl` (optional) | Harness discovery, local identity/capability evidence, run IDs, supported native-session correlation and runtime/skill delivery | Nexus project authority or compulsory dependency |
 | Native harness / other provider | Conversation identity, history access, execution, its permissions and costs | Universal resume/history access or cross-host reachability |
-| Designated PM | Context reconciliation, useful overviews, proposals, authorized coordination | Human approval authority or a global private-history exception |
+| Designated PM | Context reconciliation, useful overviews, `anx ask` recommendations, authorized coordination | Human approval authority, `pm.propose`/`pm.approve` (human-only), or a global private-history exception |
 
 Providers describe evidence with a versioned contract. An execution identifier,
 an agent name, and a native session identifier must never be substituted for one

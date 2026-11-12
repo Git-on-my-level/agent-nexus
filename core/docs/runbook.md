@@ -221,9 +221,16 @@ Archive location and handling:
   it off-host to the operations archive location before relying on the
   migration as the only copy.
 - Verify the canary archive by decrypting it with the operations identity and
-  checking that the manifest and table parts are readable. A resumed migration
-  re-verifies the recorded size, SHA-256, and age header before deleting
-  anything; a damaged or missing archive aborts startup.
+  checking that the manifest and table parts are readable. On resume, behavior
+  depends on whether product rows remain:
+  - With no product rows (`productRows == 0`), the recorded receipt is only a
+    record of the completed archive. The migration re-verifies its size,
+    SHA-256, and age header before deleting anything; a damaged or missing
+    archive aborts startup.
+  - With product rows present (`productRows > 0`), a receipt only proves that
+    some earlier archive was written, not that it covers the rows present now.
+    The migration ignores a damaged or stale receipt, writes and verifies a new
+    archive of the current rows, replaces the receipt, and then proceeds.
 
 Rollback:
 

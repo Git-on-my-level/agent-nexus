@@ -232,6 +232,15 @@ func TestRemoveBuiltinPMWithdrawsEveryOpenWatcherAsk(t *testing.T) {
 		}
 		seenHandles[handle] = id
 	}
+	for id := range handles {
+		var edges int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ref_edges WHERE source_type='event' AND source_id=? AND edge_type='ref'`, id).Scan(&edges); err != nil {
+			t.Fatal(err)
+		}
+		if edges == 0 {
+			t.Fatalf("withdrawal event %s has no ref_edges", id)
+		}
+	}
 
 	for _, askID := range []string{"ask-pm-a", "ask-pm-b"} {
 		var resolutionEvent string
@@ -679,6 +688,112 @@ func TestRemoveBuiltinPMRejectsResolutionEventConflict(t *testing.T) {
 	if resolutions != 0 {
 		t.Fatal("resolution conflict wrote a resolution for the PM ask")
 	}
+}
+
+func TestRemoveBuiltinPMResumesMatchingWithdrawalWithoutResolution(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := ws.DB()
+	seedLegacyPMWorkspace(t, db)
+	eventID := "pm-archive-138-withdraw-ask-pm"
+	if _, err := db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json,created_at) VALUES(?,'human_attention_withdrawn','2026-01-01T00:00:00Z','system','thread-pm-health','["event:ask-pm"]',?,CURRENT_TIMESTAMP)`,
+		eventID, `{"payload":{"request_event_id":"ask-pm"}}`); err != nil {
+		t.Fatal(err)
+	}
+	resetPMArchiveMigration(t, db)
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatalf("matching withdrawal without resolution should resume: %v", err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	assertMigrationApplied(t, db, 138)
+	var resolutions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM human_attention_request_resolutions WHERE request_event_id='ask-pm' AND resolution_event_id=? AND resolution_type='withdrawn'`, eventID).Scan(&resolutions); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions != 1 {
+		t.Fatalf("matching withdrawal was not resolved: %d", resolutions)
+	}
+	if got := openAskCount(t, db, "Restore the workspace PM?"); got != 0 {
+		t.Fatalf("PM ask still open after resume: %d", got)
+	}
+	var withdrawals int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE id=?`, eventID).Scan(&withdrawals); err != nil {
+		t.Fatal(err)
+	}
+	if withdrawals != 1 {
+		t.Fatalf("resume duplicated the withdrawal event: %d", withdrawals)
+	}
+}
+
+func TestRemoveBuiltinPMFailsClosedOnDamagedReceiptWithoutProductRows(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedLegacyPMWorkspace(t, ws.DB())
+	resetPMArchiveMigration(t, ws.DB())
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archivePath string
+	if err = ws.DB().QueryRow(`SELECT archive_path FROM pm_archive_receipts`).Scan(&archivePath); err != nil {
+		t.Fatal(err)
+	}
+	// Product tables are gone after the first run, so this resume has no
+	// product rows and must verify the recorded receipt before proceeding.
+	if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version=138`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(archivePath, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := storage.InitializeWorkspace(ctx, root); err == nil {
+		t.Fatal("expected damaged receipt without product rows to abort the migration")
+	}
+	db := openWorkspaceDB(t, root)
+	defer db.Close()
+	assertMigrationAbsent(t, db, 138)
 }
 
 func reseedPMProductData(t *testing.T, db *sql.DB) {

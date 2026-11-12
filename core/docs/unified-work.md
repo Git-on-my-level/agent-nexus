@@ -308,13 +308,14 @@ decisions must be rejected/superseded and proposed again with that payload.
 ### Proposal attribution, revision fences, and context pagination
 
 New decisions persist `proposed_by` (the proposing principal actor ID) separately
-from `actor_id` (the human who can answer and dispatch). `origin_kind` is
-`human` for direct proposals and `channel` for direct proposals with a validated
-channel origin. Legacy `pm_turn` records remain readable but no new turn
-proposals are created. Superseded records retain their own attribution; reusing
-identical intent retains the original proposal's attribution. A different
-proposer or origin kind is different intent. Legacy decisions without recorded
-provenance omit these fields rather than inventing attribution.
+from `actor_id` (the human who can answer and dispatch). New direct proposals
+record `origin_kind` `human`; caller-supplied origin is not accepted. Legacy
+`pm_turn` and `channel` records remain readable as historical, read-only
+provenance, but no new turn or channel-origin proposals are created.
+Superseded records retain their own attribution; reusing identical intent
+retains the original proposal's attribution. A different proposer or legacy
+origin kind is different intent. Legacy decisions without recorded provenance
+omit these fields rather than inventing attribution.
 
 When a proposal replaces an awaiting decision, the create/propose response
 includes `supersedes` (the replaced decision ID), `supersedes_proposed_by`, and
