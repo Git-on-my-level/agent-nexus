@@ -128,6 +128,7 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 	if err != nil {
 		return fmt.Errorf("allocate card artifact handle: %w", err)
 	}
+	manifest := resourceaccess.ContentReferenceAtomsJSON(string(revision.EncodedContent), "structured")
 	if _, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO artifacts(id, handle, kind, thread_id, created_at, created_by, content_type, content_hash, refs_json, metadata_json, content_refs_json)
@@ -140,7 +141,7 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		revision.ContentHash,
 		revision.RefsJSON,
 		revision.MetadataJSON,
-		resourceaccess.ContentReferenceAtomsJSON(string(revision.EncodedContent), "structured"),
+		manifest,
 	); err != nil {
 		if isUniqueViolation(err) {
 			return ErrConflict
@@ -179,6 +180,16 @@ func (s *Store) insertCardRevisionTx(ctx context.Context, tx *accessTx, actorID,
 		record.Payload,
 	); err != nil {
 		return fmt.Errorf("insert card revision: %w", err)
+	}
+	// The complete manifest above created every raw access edge. Now that the
+	// revision row exists, store only its reference atoms; the installed
+	// trigger recognizes this exact prune and leaves those edges untouched.
+	if pruned := resourceaccess.WithoutProse(string(manifest)); pruned != string(manifest) {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE artifacts SET content_refs_json=? WHERE id=? AND content_hash=? AND content_refs_json=?`,
+			pruned, revision.ArtifactID, revision.ContentHash, string(manifest)); err != nil {
+			return fmt.Errorf("prune card artifact manifest: %w", err)
+		}
 	}
 	if err := replaceRefEdges(ctx, tx, "card_revision", revision.RevisionID, typedRefEdgeTargets(refEdgeTypeRef, revisionRefs)); err != nil {
 		return err

@@ -78,6 +78,15 @@ document and every revision, but each target is stored once per document rather
 than once per revision. Triggers redirect those edge inserts; an artifact shared by
 several documents or backing a card revision keeps its own edges. A bounded maintenance cursor moves
 legacy per-revision edges after startup; never drop superseded revision targets.
+Migration 142 keeps a card revision artifact's complete raw reference edges but
+stores only its reference atoms in `artifacts.content_refs_json`; the prose body
+used to contribute the whole string plus a `$anx-ref-text$` candidate. The
+artifact update trigger recognizes exactly that prune on a card-revision
+artifact whose content hash still matches and skips the edge rebuild; every
+other update rebuilds normally. A bounded `resource_access_card_manifest_job`
+cursor prunes legacy manifests by artifact id, verifies the authoritative
+revision content first, and leaves a manifest untouched when another writer
+changed it. No decision and no revision content byte changes.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.

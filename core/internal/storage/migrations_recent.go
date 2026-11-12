@@ -62,4 +62,8 @@ var recentMigrations = []migration{
 	// pm_records. Archive configuration is required whenever product data
 	// exists; the migration fails closed rather than dropping without a copy.
 	{Version: 138, AfterApply: migrateRemoveBuiltinPM},
+	// Card revision artifacts keep every raw reference edge at write time but
+	// store only reference atoms afterwards; prose bodies no longer inflate
+	// content_refs_json. Installs triggers and a bounded backfill cursor.
+	{Version: 142, AfterApply: installCardManifestPruning},
 }

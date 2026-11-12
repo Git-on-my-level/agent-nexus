@@ -116,6 +116,33 @@ func installResourceAccessSourceEdges(ctx context.Context, tx *sql.Tx, sources [
 	return installResourceAccessSourceEdgesBatched(ctx, tx, sources, 0)
 }
 
+// accessSourceInsert builds the edge-insert body shared by a source table's
+// triggers and its backfill. Keeping it in one place lets the artifact
+// manifest trigger use the same column classification as the install path.
+func accessSourceInsert(source resourceaccess.OwnershipSource, columns []string) func(prefix, from string) string {
+	return func(prefix, from string) string {
+		var parts []string
+		for _, column := range columns {
+			value := prefix + column
+			// Imported inbox parents can use handles/aliases. Preserve the
+			// typed spelling checked by the former per-item HTTP guard.
+			if source.Table == "derived_inbox_items" {
+				kind := map[string]string{"thread_id": "thread", "source_card_id": "card", "source_event_id": "event"}[column]
+				if kind != "" {
+					// Keep raw atoms too: legacy scalar IDs can themselves be
+					// encoded JSON or contain references to another kind.
+					parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, false)+`) j WHERE j.value<>''`)
+					value = "('" + kind + ":'||" + value + ")"
+				}
+			}
+			parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, strings.HasSuffix(column, "_json"))+`) j WHERE j.value<>''`)
+		}
+		// An outer UPSERT can override a trigger's legacy OR IGNORE policy.
+		// An explicit conflict target remains safe for duplicate JSON atoms.
+		return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) ` + strings.Join(parts, ` UNION `) + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
+	}
+}
+
 // Existing main migrations retain their historical backfill. Feature upgrades
 // register only changed sources and hydrate a bounded keyset page at a time.
 func installResourceAccessSourceEdgesBatched(ctx context.Context, tx *sql.Tx, sources []resourceaccess.OwnershipSource, batchSize int) error {
@@ -141,27 +168,7 @@ func installResourceAccessSourceEdgesBatched(ctx context.Context, tx *sql.Tx, so
 		if len(columns) == 0 {
 			continue
 		}
-		insert := func(prefix, from string) string {
-			var parts []string
-			for _, column := range columns {
-				value := prefix + column
-				// Imported inbox parents can use handles/aliases. Preserve the
-				// typed spelling checked by the former per-item HTTP guard.
-				if source.Table == "derived_inbox_items" {
-					kind := map[string]string{"thread_id": "thread", "source_card_id": "card", "source_event_id": "event"}[column]
-					if kind != "" {
-						// Keep raw atoms too: legacy scalar IDs can themselves be
-						// encoded JSON or contain references to another kind.
-						parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, false)+`) j WHERE j.value<>''`)
-						value = "('" + kind + ":'||" + value + ")"
-					}
-				}
-				parts = append(parts, `SELECT '`+source.Kind+`',`+prefix+source.ID+`,j.value FROM `+from+`json_each(`+resourceaccess.ReferenceSQLAtoms(value, strings.HasSuffix(column, "_json"))+`) j WHERE j.value<>''`)
-			}
-			// An outer UPSERT can override a trigger's legacy OR IGNORE policy.
-			// An explicit conflict target remains safe for duplicate JSON atoms.
-			return `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) ` + strings.Join(parts, ` UNION `) + ` ON CONFLICT(source_kind,source_id,target_ref) DO NOTHING;`
-		}
+		insert := accessSourceInsert(source, columns)
 		clear := `DELETE FROM resource_access_edges WHERE source_kind='` + source.Kind + `' AND source_id=OLD.` + source.ID + `;`
 		backfill := []string{insert("r.", source.Table+" r, ")}
 		if batchSize > 0 {
@@ -216,9 +223,28 @@ func installResourceAccessSourceEdgesBatched(ctx context.Context, tx *sql.Tx, so
 			`DROP TRIGGER IF EXISTS access_` + source.Table + `_delete`,
 		}
 		statements = append(statements, backfill...)
+		updateTrigger := `CREATE TRIGGER IF NOT EXISTS access_` + source.Table + `_update AFTER UPDATE OF ` + strings.Join(append([]string{source.ID}, columns...), ",") + ` ON ` + source.Table + ` BEGIN ` + clear + insert("NEW.", "") + ` END`
+		if source.Table == "artifacts" {
+			// Card revision manifests are written complete once (raw edges) and
+			// then pruned to their reference atoms. Recognize exactly that
+			// transform so the pruned manifest keeps the complete raw edge set.
+			// The prune rule needs the revision content hash (migration 130);
+			// earlier migration fixtures keep the generic trigger.
+			hasCards, err := sqliteTableHasColumn(ctx, tx, "card_revisions", "content_hash")
+			if err != nil {
+				return err
+			}
+			hasDocuments, err := sqliteTableExists(ctx, tx, "document_revisions")
+			if err != nil {
+				return err
+			}
+			if hasCards {
+				updateTrigger = artifactManifestUpdateTriggerSQL(clear, insert("NEW.", ""), hasCards, hasDocuments)
+			}
+		}
 		statements = append(statements,
 			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_insert AFTER INSERT ON `+source.Table+` BEGIN `+insert("NEW.", "")+` END`,
-			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_update AFTER UPDATE OF `+strings.Join(append([]string{source.ID}, columns...), ",")+` ON `+source.Table+` BEGIN `+clear+insert("NEW.", "")+` END`,
+			updateTrigger,
 			`CREATE TRIGGER IF NOT EXISTS access_`+source.Table+`_delete AFTER DELETE ON `+source.Table+` BEGIN `+clear+` END`,
 		)
 		for _, statement := range statements {
