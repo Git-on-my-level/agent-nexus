@@ -256,8 +256,8 @@ func handleRespondInboxBatch(
 
 	// A partial answer must not ref the batch item: that ref closes the whole
 	// item in the projection. Each answer still closes its own ask by its
-	// request_event_ref and its own single-ask inbox ref. Unknown refs are rejected below, so equal counts
-	// mean every open ask is answered.
+	// request_event_ref and its own single-ask inbox ref. Unknown refs are
+	// rejected below, so equal counts mean every open ask is answered.
 	closesBatch := uniform || len(req.Answers) == len(sections)
 	var hygiene markdownHygieneCollector
 	anyNotify := false
