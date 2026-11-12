@@ -92,6 +92,7 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	sharedThread := ""
 	sharedKind := ""
+	sharedRecipient := ""
 	members := make([]map[string]any, 0, len(body.Asks))
 	for index, rawEvent := range body.Asks {
 		event, ok := validatedAskBatchMember(w, r, opts, actorID, rawEvent, index)
@@ -103,6 +104,14 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 			sharedThread = threadID
 		} else if threadID != sharedThread {
 			writeError(w, http.StatusBadRequest, "invalid_request", "every ask in a batch must share one thread_id")
+			return
+		}
+		// One recipient (or none) for the whole batch: the batch item is one
+		// inbox row, and its audience gate is that row's recipient.
+		if recipient := askBatchRecipientKey(event["payload"].(map[string]any)); index == 0 {
+			sharedRecipient = recipient
+		} else if recipient != sharedRecipient {
+			writeError(w, http.StatusBadRequest, "invalid_request", "every ask in a batch must be addressed to the same recipient_actor_id (or none)")
 			return
 		}
 		kind := canonicalHumanAttentionKind(anyString(event["payload"].(map[string]any)["kind"]))

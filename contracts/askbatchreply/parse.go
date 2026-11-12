@@ -14,6 +14,13 @@ type Answer struct {
 	Number  int
 	Choices []int
 	Text    string
+	// Fragment is the answer as typed, such as "3ac" or "4: own words".
+	Fragment string
+	// AfterTextOf names the question whose own words came just before this
+	// answer on the same line, when that text was cut short to read this one.
+	// A transport should say so: the reader may have meant it as part of
+	// those words.
+	AfterTextOf int
 }
 
 // Issue names one part of a reply that could not be read, exactly as typed.
@@ -54,6 +61,9 @@ type parser struct {
 	answered map[int]bool
 	answers  []Answer
 	issues   []Issue
+	// tailOf is the question whose free text was cut short earlier on the
+	// line being parsed; every answer read after it records it.
+	tailOf int
 }
 
 // Parse reads a compact reply against a batch.
@@ -63,8 +73,11 @@ type parser struct {
 //
 //	<n><letters>   choose option(s): 1a, 3ac (letters together only when the
 //	               question allows several), 2B; "1 a", "1.a" and "1) a" work too
-//	<n>: <text>    answer in your own words; the text runs to the end of the
-//	               line, or until a later item such as "5a" or "6:" starts.
+//	<n>: <text>    answer in your own words. When this starts its line, the
+//	               text runs to the end of the line. After other items on the
+//	               same line ("1a 4: own words 5a") it runs until a later item
+//	               such as "5a" or "6:" starts; each answer read that way is
+//	               marked (Answer.AfterTextOf) so the reader can be told.
 //	               Following lines that do not start an item continue it.
 //
 // Every part that does not parse is reported as an Issue naming it, so a
@@ -126,6 +139,8 @@ func isLetter(r byte) bool { return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 
 // text answer that ran to the end of the line, or -1.
 func (p *parser) parseLine(s string) int {
 	textAtEnd := -1
+	p.tailOf = 0
+	first := true
 	i := 0
 	for i < len(s) {
 		for i < len(s) && isSeparator(s[i]) {
@@ -136,6 +151,8 @@ func (p *parser) parseLine(s string) int {
 		}
 		textAtEnd = -1
 		start := i
+		leading := first
+		first = false
 		if !isDigit(s[i]) {
 			end := nextSeparator(s, i)
 			p.issue(s[start:end], 0, "not an answer; write <question><letter> such as "+example(p.batch)+", or <question>: your own words")
@@ -149,10 +166,16 @@ func (p *parser) parseLine(s string) int {
 		number, _ := strconv.Atoi(s[i:j])
 		k := skipSpaces(s, j)
 		if k < len(s) && s[k] == ':' {
-			end := p.freeTextEnd(s, k+1, number)
+			end := len(s)
+			if !leading {
+				end = p.freeTextEnd(s, k+1, number)
+			}
 			text := strings.TrimSpace(s[k+1 : end])
 			if index := p.addText(strings.TrimSpace(s[start:end]), number, text); index >= 0 && end == len(s) {
 				textAtEnd = index
+			}
+			if end < len(s) {
+				p.tailOf = number
 			}
 			i = end
 			continue
@@ -290,7 +313,7 @@ func (p *parser) addText(fragment string, number int, text string) int {
 		return -1
 	}
 	p.answered[number] = true
-	p.answers = append(p.answers, Answer{Number: number, Text: text})
+	p.answers = append(p.answers, Answer{Number: number, Text: text, Fragment: fragment, AfterTextOf: p.tailOf})
 	return len(p.answers) - 1
 }
 
@@ -305,7 +328,7 @@ func (p *parser) addChoices(fragment string, number int, letters string) {
 		return
 	}
 	p.answered[number] = true
-	p.answers = append(p.answers, Answer{Number: number, Choices: choices})
+	p.answers = append(p.answers, Answer{Number: number, Choices: choices, Fragment: fragment, AfterTextOf: p.tailOf})
 }
 
 func choicesFor(q Question, letters string) ([]int, string) {
@@ -389,19 +412,41 @@ func Summary(b Batch, r Result) string {
 		}
 		fmt.Fprintf(&out, "Still open: %s\n", strings.Join(parts, ", "))
 	}
+	for _, caution := range Cautions(r) {
+		out.WriteString("Check: " + caution + "\n")
+	}
 	for _, paragraph := range r.Ignored {
 		fmt.Fprintf(&out, "Not read as an answer: %s\n", clip(oneLine(paragraph), 80))
 	}
 	return strings.TrimRight(out.String(), "\n")
 }
 
-// Problems names every part of the reply that did not parse, one per line.
+// Problems names every part of the reply that did not parse, one per line,
+// followed by any answer read out of the middle of someone's own words, which
+// is often why the rest of that line did not parse.
 func Problems(r Result) string {
 	lines := make([]string, 0, len(r.Issues))
 	for _, issue := range r.Issues {
 		lines = append(lines, "- "+issue.String())
 	}
+	for _, caution := range Cautions(r) {
+		lines = append(lines, "- "+caution)
+	}
 	return strings.Join(lines, "\n")
+}
+
+// Cautions explains, in plain words, each answer that was read from the tail
+// of another question's own words on the same line.
+func Cautions(r Result) []string {
+	var out []string
+	for _, answer := range r.Answers {
+		if answer.AfterTextOf == 0 {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%q came after your own words for question %d, so it was read as an answer to question %d and question %d's answer stops before it. If it belongs to question %d's answer, put that answer on its own line.",
+			answer.Fragment, answer.AfterTextOf, answer.Number, answer.AfterTextOf, answer.AfterTextOf))
+	}
+	return out
 }
 
 func oneLine(s string) string {

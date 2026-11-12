@@ -215,6 +215,11 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 	if delivery := strings.TrimSpace(anyString(payload["delivery"])); delivery != "" {
 		data["delivery"] = delivery
 	}
+	// An addressed ask is visible and answerable only by its recipient; the
+	// inbox read, respond and list paths enforce this field on the item.
+	if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+		data["recipient_actor_id"] = recipient
+	}
 
 	proposals, err := NormalizeHumanAttentionResponseProposals(payload["response_proposals"])
 	if err != nil {
@@ -297,6 +302,9 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 		}
 		askpresentation.Copy(section, payload)
 		askBatchQuestionFields(section, payload)
+		if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+			section["recipient_actor_id"] = recipient
+		}
 		if body := strings.TrimSpace(anyString(payload["body"])); body != "" {
 			section["body"] = body
 		}
@@ -388,6 +396,11 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 	}
 	if sharedContext != nil {
 		data["batch"].(map[string]any)["context"] = sharedContext
+	}
+	// The caller splits batches whose members name different recipients, so
+	// one recipient (or none) addresses every member and gates the item.
+	if recipient := askBatchRecipient(ordered); recipient != "" {
+		data["recipient_actor_id"] = recipient
 	}
 	askpresentation.Copy(data, leadPayload)
 	if delivery := strings.TrimSpace(anyString(leadPayload["delivery"])); delivery != "" {

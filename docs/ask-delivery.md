@@ -115,9 +115,12 @@ Chat and email transports render a batch and read replies with the shared Go
 module `contracts/askbatchreply`: `RenderText`/`RenderHTML`/`SplitText` lay out
 the batch, and `Parse` reads a compact reply such as `1a 2b 3ac 4: own words 5a`
 (letters together for a multi-select question, `<n>: text` for own words,
-`StripQuoted` drops quoted email history). Every part that does not parse is
-named, so a transport can echo it back instead of guessing. `anx ask batch
---dry-run` prints the same plain-text layout.
+`StripQuoted` drops quoted email history). Own words that start a line run to
+its end; after other answers on the same line they stop at the next answer,
+and `Cautions` names each answer read that way so the transport can say so.
+Every part that does not parse is named, so a transport can echo it back
+instead of guessing. `anx ask batch --dry-run` prints the same plain-text
+layout.
 
 ## The bridge
 

@@ -85,9 +85,9 @@ func TestParseAcceptanceReply(t *testing.T) {
 		{Number: 2, Choices: []int{1}},
 		{Number: 3, Choices: []int{0, 2}},
 		{Number: 4, Text: "free text"},
-		{Number: 5, Choices: []int{0}},
+		{Number: 5, Choices: []int{0}, AfterTextOf: 4},
 	}
-	if !reflect.DeepEqual(r.Answers, want) {
+	if !reflect.DeepEqual(unfragmented(r.Answers), want) {
 		t.Fatalf("answers = %+v", r.Answers)
 	}
 	body := RespondBody(b, r, "k1")
@@ -143,7 +143,7 @@ func TestParseVariants(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := Parse(b, tc.reply)
-			if len(r.Issues) != 0 || !reflect.DeepEqual(r.Answers, tc.want) || !reflect.DeepEqual(r.Missing, tc.missing) {
+			if len(r.Issues) != 0 || !reflect.DeepEqual(unfragmented(r.Answers), tc.want) || !reflect.DeepEqual(r.Missing, tc.missing) {
 				t.Fatalf("answers=%+v issues=%v missing=%v", r.Answers, r.Issues, r.Missing)
 			}
 		})
@@ -180,7 +180,7 @@ func TestPartialReplyBody(t *testing.T) {
 
 func TestStripQuotedEmailReply(t *testing.T) {
 	b := mustBatch(t)
-	body := "1a 2b 3ac\r\n4: free text 5a\r\n\r\nThanks,\r\nDana\r\n\r\nOn Tue, Nov 11, 2026 at 9:14 AM Agent Nexus <asks@example.com>\r\nwrote:\r\n> 1. Delete debug logs after 30 days?\r\n>    a) Yes (recommended)\r\n> Reply with one line, for example: 1a 2a\r\n"
+	body := "1a 2b 3ac 4: free text 5a\r\n\r\nThanks,\r\nDana\r\n\r\nOn Tue, Nov 11, 2026 at 9:14 AM Agent Nexus <asks@example.com>\r\nwrote:\r\n> 1. Delete debug logs after 30 days?\r\n>    a) Yes (recommended)\r\n> Reply with one line, for example: 1a 2a\r\n"
 	stripped := StripQuoted(body)
 	if strings.Contains(stripped, ">") || strings.Contains(stripped, "wrote") {
 		t.Fatalf("quoted history kept:\n%s", stripped)
@@ -267,5 +267,48 @@ func TestSplitTextKeepsBatchIdentityAndLimit(t *testing.T) {
 	}
 	if single := SplitText(mustBatch(t), RenderOptions{}, 4000); len(single) != 1 || strings.Contains(single[0], "part 1") {
 		t.Fatalf("short batch split: %v", single)
+	}
+}
+
+func unfragmented(answers []Answer) []Answer {
+	out := append([]Answer(nil), answers...)
+	for i := range out {
+		out[i].Fragment = ""
+	}
+	return out
+}
+
+// Review (oss#538): an answer read out of the tail of someone's own words is
+// never silent. Words that start their own line keep everything after them.
+func TestFreeTextTailIsNamed(t *testing.T) {
+	b := mustBatch(t)
+	// On their own line the reviewer's two inputs are each one answer.
+	for _, own := range []string{"4: the retention period is label 5a", "4: keep it until step 2b is done"} {
+		r := Parse(b, own)
+		if !r.OK() || len(r.Answers) != 1 || r.Answers[0].Text != own[3:] || len(Cautions(r)) != 0 {
+			t.Fatalf("%q => %+v issues=%v", own, r.Answers, r.Issues)
+		}
+	}
+	// After another answer on the same line, the tail is read as an answer
+	// and the summary says so, naming what was read and how to avoid it.
+	r := Parse(b, "1a 4: the retention period is label 5a")
+	if !r.OK() || len(r.Answers) != 3 || r.Answers[2].Number != 5 || r.Answers[2].AfterTextOf != 4 || r.Answers[1].Text != "the retention period is label" {
+		t.Fatalf("tail answers = %+v", r.Answers)
+	}
+	summary := Summary(b, r)
+	if !strings.Contains(summary, `Check: "5a" came after your own words for question 4, so it was read as an answer to question 5`) || !strings.Contains(summary, "put that answer on its own line") {
+		t.Fatalf("summary does not name the tail answer:\n%s", summary)
+	}
+	// The second input is refused (the words after "2b" are not answers);
+	// the problems now say why the line broke there.
+	r = Parse(b, "1a 4: keep it until step 2b is done")
+	if r.OK() {
+		t.Fatalf("expected refusal: %+v", r)
+	}
+	problems := Problems(r)
+	for _, want := range []string{`"is": not an answer`, `"2b" came after your own words for question 4, so it was read as an answer to question 2`} {
+		if !strings.Contains(problems, want) {
+			t.Fatalf("missing %q in:\n%s", want, problems)
+		}
 	}
 }

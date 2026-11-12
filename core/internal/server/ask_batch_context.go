@@ -152,3 +152,36 @@ func askBatchQuestionFields(dst, payload map[string]any) {
 }
 
 func askBatchPosition(payload map[string]any) int { return primitives.AskBatchPosition(payload) }
+
+// askBatchRecipientKey compares recipients the way principals are matched:
+// with or without the actor: prefix.
+func askBatchRecipientKey(payload map[string]any) string {
+	return strings.TrimPrefix(strings.TrimSpace(anyString(payload["recipient_actor_id"])), "actor:")
+}
+
+// askBatchRecipientsDiffer reports members addressed to different people (or
+// some addressed and some not). Such a batch cannot be one inbox row.
+func askBatchRecipientsDiffer(members []map[string]any) bool {
+	first := ""
+	for index, member := range members {
+		payload, _ := member["payload"].(map[string]any)
+		key := askBatchRecipientKey(payload)
+		if index == 0 {
+			first = key
+		} else if key != first {
+			return true
+		}
+	}
+	return false
+}
+
+// askBatchRecipient is the recipient every member names, as stored.
+func askBatchRecipient(members []map[string]any) string {
+	for _, member := range members {
+		payload, _ := member["payload"].(map[string]any)
+		if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+			return recipient
+		}
+	}
+	return ""
+}

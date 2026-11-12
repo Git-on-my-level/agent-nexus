@@ -3,7 +3,6 @@ package primitives
 import (
 	"agent-nexus-core/internal/askpresentation"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"time"
@@ -577,7 +576,7 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 			groups[key] = append(groups[key], i)
 		}
 	}
-	anchors, err := b.filedBatchAnchors(groups)
+	anchors, mixed, err := b.filedBatchAnchors(groups)
 	if err != nil {
 		return nil, err
 	}
@@ -585,7 +584,7 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 	for i, id := range ids {
 		key := keys[id]
 		group := groups[key]
-		if key == "" || len(group) < 2 {
+		if key == "" || len(group) < 2 || mixed[key] {
 			out = append(out, items[i])
 			continue
 		}
@@ -598,37 +597,6 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 			items[i]["inbox_item_id"] = respondID
 		}
 		out = append(out, items[i])
-	}
-	return out, nil
-}
-
-// filedBatchAnchors reads the oldest member of each filed batch that this
-// page collapses, skipping a member whose thread row is missing. The inbox
-// projection is per thread and writes nothing when GetThread misses, so that
-// member is not an answerable anchor. One indexed seek per batch
-// (idx_brief_asks_batch, LIMIT 1), at most one per decision on the page,
-// then the event and thread primary keys. No INDEXED BY on threads: a scoped
-// read shadows that relation. The row is the anchor even when it is
-// withdrawn or outside the page; the query returns only its id and kind.
-func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]briefDecisionMeta, error) {
-	out := map[string]briefDecisionMeta{}
-	for key, group := range groups {
-		batchID := strings.TrimPrefix(key, "filed:")
-		if batchID == key || batchID == "" || len(group) < 2 {
-			continue
-		}
-		var askID, kind, created string
-		err := b.s.db.QueryRowContext(b.ctx, `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		at, _ := time.Parse(time.RFC3339Nano, created)
-		out[batchID] = briefDecisionMeta{
-			askID: askID, inboxKind: briefInboxKind(kind), batchID: batchID, created: at,
-		}
 	}
 	return out, nil
 }

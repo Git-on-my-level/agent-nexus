@@ -13868,7 +13868,10 @@ components:
         backing thread. Each ask must pass the same validation as POST /events; the server
         assigns the shared batch id and rejects client-supplied batch ids. Asks are numbered in
         array order (payload.batch_position, server-assigned). A member payload may set
-        multi_select (the human may pick several proposals) and a short note.
+        multi_select (the human may pick several proposals) and a short note. Every ask must
+        name the same recipient_actor_id, or none: the batch item is one inbox row and its
+        recipient gates it like a single addressed ask. A batch stored with members addressed
+        to different people is listed as each member's own addressed item instead.
       properties:
         context: {$ref: '#/components/schemas/AskBatchContext'}
         actor_id: { type: string }
@@ -13907,6 +13910,7 @@ components:
       description: Per-question fields of a filed batch member, in batch items and brief batch members.
       properties:
         position: {type: integer, minimum: 1, maximum: 10, description: 1-based question number in filing order. Absent on batches filed before ordering existed.}
+        recipient_actor_id: {type: string, description: The member's addressee. Every member of one batch item names the same one; the item carries it too.}
         multi_select: {type: boolean, description: The human may choose several proposals; the answer text joins them.}
         note: {type: string, maxLength: 4000}
 

@@ -97,13 +97,17 @@ func (c contextBatchEnv) fileFive(t *testing.T) []string {
 	return ids
 }
 
-func (c contextBatchEnv) batchItem(t *testing.T) (primitives.DerivedInboxItem, bool) {
+func (c contextBatchEnv) batchItem(t *testing.T, reader ...string) (primitives.DerivedInboxItem, bool) {
 	t.Helper()
 	ctx := context.Background()
 	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: c.env.primitiveStore}, c.threadID, time.Now().UTC(), c.agent.ActorID); err != nil {
 		t.Fatalf("refresh projection: %v", err)
 	}
-	items, err := c.env.primitiveStore.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: c.threadID})
+	filter := primitives.DerivedInboxListFilter{ThreadID: c.threadID}
+	if len(reader) > 0 {
+		filter.RecipientActorID = reader[0]
+	}
+	items, err := c.env.primitiveStore.ListDerivedInboxItems(ctx, filter)
 	if err != nil || len(items) > 1 {
 		t.Fatalf("expected at most one batch item, got %d (%v)", len(items), err)
 	}
@@ -330,4 +334,122 @@ func anyIntValue(v any) int {
 		return int(n)
 	}
 	return 0
+}
+
+// Review (oss#538): a batch keeps per-ask recipient visibility. One shared
+// recipient gates the batch item like a single addressed ask; asks addressed
+// to different people cannot be filed together, and such a batch from before
+// the rule splits into each member's own addressed item.
+func TestAskBatchRecipientVisibility(t *testing.T) {
+	c := newContextBatchEnv(t, "ctxrecip")
+	ctx := context.Background()
+	other := seedHumanPrincipalForLockoutTest(t, ctx, c.env.workspace.DB(), "ctxrecip-other", "ctxrecip-other-actor", "ctxrecip-other", "ctxrecip-other-token")
+	to := func(n int, recipient string) map[string]any {
+		return c.question(n, map[string]any{"recipient_actor_id": recipient})
+	}
+	file := func(asks ...map[string]any) (int, map[string]any) {
+		return hostHTTP(t, http.MethodPost, c.env.server.URL+"/asks/batch", c.agent.AccessToken, map[string]any{"context": sharedBatchContext, "asks": asks})
+	}
+	if status, body := file(to(1, c.human.ActorID), to(2, other.ActorID)); status != http.StatusBadRequest || !strings.Contains(fmt.Sprint(body), "same recipient_actor_id") {
+		t.Fatalf("mixed recipients filed: %d %#v", status, body)
+	}
+	if status, _ := file(to(1, c.human.ActorID), c.question(2, nil)); status != http.StatusBadRequest {
+		t.Fatalf("addressed plus unaddressed filed: %d", status)
+	}
+	if status, body := file(to(1, c.human.ActorID), to(2, "actor:"+c.human.ActorID)); status != http.StatusCreated {
+		t.Fatalf("one recipient batch: %d %#v", status, body)
+	}
+	if _, visible := c.batchItem(t); visible {
+		t.Fatal("an addressed batch listed for no reader")
+	}
+	item, ok := c.batchItem(t, c.human.ActorID)
+	if !ok || item.Data["recipient_actor_id"] != c.human.ActorID {
+		t.Fatalf("batch item lost its recipient: %#v", item.Data["recipient_actor_id"])
+	}
+	inboxPath := c.env.server.URL + "/inbox/" + url.PathEscape(item.ID)
+	listed := func(token string) int {
+		_, page := hostHTTP(t, http.MethodGet, c.env.server.URL+"/inbox?limit=100", token, nil)
+		n := 0
+		for _, raw := range asSliceOf(page["items"]) {
+			if row, _ := raw.(map[string]any); row != nil && row["batch"] != nil {
+				n++
+			}
+		}
+		return n
+	}
+	if status, _ := hostHTTP(t, http.MethodGet, inboxPath, other.AccessToken, nil); status != http.StatusNotFound {
+		t.Fatalf("another human read the addressed batch: %d", status)
+	}
+	if listed(other.AccessToken) != 0 || listed(c.human.AccessToken) != 1 {
+		t.Fatalf("inbox list must show the batch only to its recipient")
+	}
+	sections := sectionsOf(item)
+	answers := []map[string]any{batchAnswer(sections[0], "Yes"), batchAnswer(sections[1], "No")}
+	if status, _ := hostHTTP(t, http.MethodPost, inboxPath+"/respond", other.AccessToken, map[string]any{"answers": answers}); status != http.StatusNotFound {
+		t.Fatalf("another human answered the addressed batch: %d", status)
+	}
+	if _, brief := hostHTTP(t, http.MethodGet, c.env.server.URL+"/brief", other.AccessToken, nil); strings.Contains(fmt.Sprint(brief["decisions"]), "Policy question") {
+		t.Fatal("the brief showed an addressed batch to someone else")
+	}
+	if status, body := hostHTTP(t, http.MethodPost, inboxPath+"/respond", c.human.AccessToken, map[string]any{"answers": answers}); status != http.StatusCreated {
+		t.Fatalf("recipient answer: %d %#v", status, body)
+	}
+
+	// A batch filed before the rule, with two recipients, is never one item.
+	store := c.env.primitiveStore.(*primitives.Store)
+	if _, _, err := store.AppendTaskAttentionEventBatch(ctx, c.agent.ActorID, "", "", []map[string]any{to(3, c.human.ActorID), to(4, other.ActorID)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := refreshDerivedTopicProjection(ctx, handlerOptions{primitiveStore: c.env.primitiveStore}, c.threadID, time.Now().UTC(), c.agent.ActorID); err != nil {
+		t.Fatal(err)
+	}
+	var items []primitives.DerivedInboxItem
+	for _, reader := range []string{c.human.ActorID, other.ActorID} {
+		mine, err := store.ListDerivedInboxItems(ctx, primitives.DerivedInboxListFilter{ThreadID: c.threadID, RecipientActorID: reader})
+		if err != nil || len(mine) != 1 || mine[0].Data["recipient_actor_id"] != reader {
+			t.Fatalf("legacy mixed batch: %s sees %d items (%v)", reader, len(mine), err)
+		}
+		items = append(items, mine...)
+	}
+	for _, split := range items {
+		if split.Data["batch"] != nil || split.Data["recipient_actor_id"] == "" || split.Data["recipient_actor_id"] == nil {
+			t.Fatalf("split item = %#v", split.Data)
+		}
+	}
+	if listed(other.AccessToken) != 0 {
+		t.Fatal("a split member must not reach anyone as a batch")
+	}
+	_, mine := hostHTTP(t, http.MethodGet, c.env.server.URL+"/brief", other.AccessToken, nil)
+	for _, raw := range asSliceOf(mine["decisions"]) {
+		d, _ := raw.(map[string]any)
+		if d["batch"] != nil || d["title"] == "Policy question 3?" {
+			t.Fatalf("other's brief shows someone else's ask or a collapsed mixed batch: %#v", d)
+		}
+	}
+}
+
+func asSliceOf(v any) []any { s, _ := v.([]any); return s }
+
+// Review (oss#538): the projection kept a single ask's recipient only on the
+// no-projection fallback, so another human could read and answer it.
+func TestAddressedSingleAskStaysWithItsRecipient(t *testing.T) {
+	c := newContextBatchEnv(t, "ctxsingle")
+	other := seedHumanPrincipalForLockoutTest(t, context.Background(), c.env.workspace.DB(), "ctxsingle-other", "ctxsingle-other-actor", "ctxsingle-other", "ctxsingle-other-token")
+	if status, body := hostHTTP(t, http.MethodPost, c.env.server.URL+"/events", c.agent.AccessToken, map[string]any{"event": c.question(1, map[string]any{"recipient_actor_id": c.human.ActorID})}); status != http.StatusCreated {
+		t.Fatalf("file: %d %#v", status, body)
+	}
+	item, ok := c.batchItem(t, c.human.ActorID)
+	if !ok || item.Data["recipient_actor_id"] != c.human.ActorID {
+		t.Fatalf("single ask lost its recipient: %#v", item.Data)
+	}
+	path := c.env.server.URL + "/inbox/" + url.PathEscape(item.ID)
+	if status, _ := hostHTTP(t, http.MethodGet, path, other.AccessToken, nil); status != http.StatusNotFound {
+		t.Fatalf("another human read the addressed ask: %d", status)
+	}
+	if status, _ := hostHTTP(t, http.MethodPost, path+"/respond", other.AccessToken, map[string]any{"response_text": "No", "outcome": "answered", "notify_mode": "none"}); status != http.StatusNotFound {
+		t.Fatalf("another human answered the addressed ask: %d", status)
+	}
+	if status, body := hostHTTP(t, http.MethodPost, path+"/respond", c.human.AccessToken, map[string]any{"response_text": "Yes", "outcome": "answered", "notify_mode": "none"}); status != http.StatusCreated {
+		t.Fatalf("recipient answer: %d %#v", status, body)
+	}
 }

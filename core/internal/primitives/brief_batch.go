@@ -5,8 +5,10 @@
 package primitives
 
 import (
+	"database/sql"
 	"sort"
 	"strings"
+	"time"
 
 	"agent-nexus-core/internal/askpresentation"
 )
@@ -87,4 +89,45 @@ func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]an
 		}
 	}
 	return member
+}
+
+// filedBatchAnchors reads the oldest member of each filed batch that this
+// page collapses, skipping a member whose thread row is missing. The inbox
+// projection is per thread and writes nothing when GetThread misses, so that
+// member is not an answerable anchor. One indexed seek per batch
+// (idx_brief_asks_batch, LIMIT 1), at most one per decision on the page,
+// then the event and thread primary keys. No INDEXED BY on threads: a scoped
+// read shadows that relation. The row is the anchor even when it is
+// withdrawn or outside the page; the query returns only its id and kind.
+func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]briefDecisionMeta, map[string]bool, error) {
+	out := map[string]briefDecisionMeta{}
+	// A filed batch whose members name different recipients (filed before
+	// batches required one) is not collapsed: the inbox projection splits it
+	// into each member's own item, and each member's own respond id answers it.
+	// One more indexed read per batch on the page.
+	mixed := map[string]bool{}
+	for key, group := range groups {
+		batchID := strings.TrimPrefix(key, "filed:")
+		if batchID == key || batchID == "" || len(group) < 2 {
+			continue
+		}
+		var askID, kind, created string
+		err := b.s.db.QueryRowContext(b.ctx, `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		var recipients int
+		if err := b.s.db.QueryRowContext(b.ctx, `SELECT COUNT(DISTINCT CASE WHEN a.recipient LIKE 'actor:%' THEN substr(a.recipient,7) ELSE a.recipient END) FROM brief_asks a INDEXED BY idx_brief_asks_batch WHERE a.batch_id=? AND a.batch_id<>''`, batchID).Scan(&recipients); err != nil {
+			return nil, nil, err
+		}
+		mixed[key] = recipients > 1
+		at, _ := time.Parse(time.RFC3339Nano, created)
+		out[batchID] = briefDecisionMeta{
+			askID: askID, inboxKind: briefInboxKind(kind), batchID: batchID, created: at,
+		}
+	}
+	return out, mixed, nil
 }
