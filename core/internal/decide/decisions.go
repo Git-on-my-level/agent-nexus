@@ -20,9 +20,19 @@ func (s *Service) ProposeDecision(ctx context.Context, p Principal, in DecisionI
 	}
 	return s.proposeDecision(ctx, p, in)
 }
+func rejectCallerOrigin(in DecisionInput) error {
+	if in.Origin != nil {
+		return fmt.Errorf("%w: origin is not accepted; channel origin delivery was removed with the built-in PM product", ErrInvalid)
+	}
+	return nil
+}
+
 func (s *Service) proposeDecision(ctx context.Context, p Principal, in DecisionInput) (Decision, error) {
 	if in.ReplayKey != "" || (in.ActorID != "" && in.ActorID != p.ActorID) {
 		return Decision{}, ErrInvalid
+	}
+	if err := rejectCallerOrigin(in); err != nil {
+		return Decision{}, err
 	}
 	if err := s.authorize(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err

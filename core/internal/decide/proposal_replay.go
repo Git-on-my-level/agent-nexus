@@ -98,6 +98,9 @@ func (s *Service) proposeDecisionWithReplay(ctx context.Context, p Principal, in
 	if in.ActorID != "" && in.ActorID != p.ActorID {
 		return Decision{}, ErrForbidden
 	}
+	if err := rejectCallerOrigin(in); err != nil {
+		return Decision{}, err
+	}
 	if err := s.authorizePermission(ctx, p, "pm.propose", in.WorkRef); err != nil {
 		return Decision{}, err
 	}
@@ -113,9 +116,6 @@ func (s *Service) proposeDecisionWithReplay(ctx context.Context, p Principal, in
 				return Decision{}, err
 			}
 		}
-	}
-	if in.Origin != nil {
-		return Decision{}, ErrForbidden
 	}
 	if prior, found, err := s.store.readProposalReplay(ctx, r); err != nil || found {
 		return prior, err

@@ -307,20 +307,19 @@ their best-effort event behavior.
 
 Decide phase proposals now support opt-in original receipts with `replay_key`, alongside
 existing immutable-intent `request_key` deduplication. The new mode commits the
-proposal, superseding writes, newly-created origin delivery and original HTTP
-status/body together. Exact retries reauthorize the human, work and evidence and
-validate an explicit origin binding before returning the stored receipt. Already
-committed receipts recover after restart; new proposals still require current
-authorization. Optional `actor_id` binds recovery to the original submitting actor.
-Legacy callers omit `replay_key` and continue receiving the current decision,
-status 200 and `replayed`/terminal-state metadata. First-time adoption of an
-existing legacy intent freezes that call's 200 reuse result; it does not rewrite
-the canonical decision or requeue historical origin deliveries.
+proposal, superseding writes and original HTTP status/body together. Exact retries
+reauthorize the human, work and evidence before returning the stored receipt.
+Already committed receipts recover after restart; new proposals still require
+current authorization. Optional `actor_id` binds recovery to the original
+submitting actor. Legacy callers omit `replay_key` and continue receiving the
+current decision, status 200 and `replayed`/terminal-state metadata. First-time
+adoption of an existing legacy intent freezes that call's 200 reuse result; it
+does not rewrite the canonical decision.
 
 The public mode uses a scoped Decide write transaction and existing proposal
 savepoints; it adds no primitive writes or quota lock. Authentication, work,
 delivery-path and evidence projections are preflight reads. The receipt builder
-is pure under the writer, and the durable origin binding is checked again there.
+is pure under the writer, and the durable actor binding is checked again there.
 Preflight anticipates legacy deduplication; a different canonical identity/source
 winning under the lock fails closed with conflict, preserving the input. The
 no-policy `DB.ExecContext` fast path now honors a bound write transaction across
@@ -761,7 +760,7 @@ are regenerated from the canonical OpenAPI contract.
 | `PUT /cards/{id}/plan`                                        | Graph, timestamps, work version, event and original response commit together; concurrent quota-enabled/single-connection replay, original projection, rollback and revocation tests                                                                   | Keyed core API covered; CLI helpers currently send unkeyed requests, and the UI has no plan editor. Future composers still need durable drafts/outbox                                                          |
 | `PATCH /cards/{id}`                                           | Card metadata, event, assignment wake packet/queue and original receipt commit together; quota-enabled single-connection concurrency, rollback at four writes, changed-body and revoked-access tests                                                  | Command-palette assignment covered; card lifecycle remains open; revision replay covered below                                                                                                                 |
 | `POST /cards/{id}/move`                                       | Placement, completion evidence, work/board tokens, lifecycle events and original keyed receipt commit together; quota-enabled single-connection concurrent replay, original receipt, injected rollback and revoked ownership tests                    | Core keyed replay and board/palette/completion draft/outbox recovery covered                                                                                                                                   |
-| `POST /pm/decisions`                                          | Optional replay_key atomically commits human proposal/superseding/new origin delivery and original status/body; exact concurrent/restart/disconnect recovery and revoked access tests. Legacy request-key replay retains current-state semantics      | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                                                                               |
+| `POST /pm/decisions`                                          | Optional replay_key atomically commits human proposal/superseding and original status/body; exact concurrent/restart recovery and revoked access tests. Legacy request-key replay retains current-state semantics      | Core receipt mode and source-owned move actor/key/revision/destination/evidence recovery covered                                                                                                               |
 | `POST /cards/{id}/revisions`                                  | Original actor/body/base/canonical target bound to atomic revision/artifact/ownership/head/board/dirty/ledger/receipt commit; first-use ledger and promotion/receipt failures tested with quotas and one connection                                   | Core keyed replay covered; no current UI content editor, future direct sends guarded                                                                                                                           |
 | `POST /docs/{id}/{archive,unarchive,trash,restore}`           | Actor/action/body/base/canonical-target bound original receipt; scoped nested lifecycle/event/dirty writes, quota-enabled single-connection concurrent replay, rollback and revoked access tests                                                      | Current detail/list/bulk lifecycle UI covered; unused legacy adapters removed; purge remains an API audit                                                                                                      |
 | `POST /events/{id}/{archive,unarchive,trash,restore}`         | Atomic original receipt and bounded scoped reply cascade; actor/action/target/body/lifecycle base bound; rollback, concurrent replay and revoked access checks                                                                                        | Timeline and Messages single/bulk actions covered; restore has a replay-safe adapter but no current UI entrypoint                                                                                              |

@@ -11759,10 +11759,6 @@ export const commandRegistry = [
                     "type": "string"
                 },
                 {
-                    "name": "origin",
-                    "type": "any"
-                },
-                {
                     "name": "payload.evidence_refs",
                     "type": "list\u003cstring\u003e"
                 },

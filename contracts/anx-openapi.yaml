@@ -10814,7 +10814,7 @@ components:
           items:
             type: string
     PMDecisionCreateRequest:
-      description: Direct creation requires a human; agents propose on a human's behalf through the ordinary approval flow. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
+      description: Direct creation requires a human; agents propose on a human's behalf through the ordinary approval flow. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer, preserving original authorship without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human proposals for the same approver, work, and scope. Caller-supplied origin is not accepted; channel origin delivery was removed with the built-in PM product.
       type: object
       additionalProperties: false
       properties:
@@ -10824,11 +10824,7 @@ components:
         replay_key:
           type: string
           maxLength: 256
-          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes, origin delivery and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization, including after PM disconnection. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
-        origin:
-          allOf:
-            - $ref: '#/components/schemas/PMOrigin'
-          description: Optional existing enabled channel binding owned by the authenticated actor; another actor's origin is rejected.
+          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
         request_key:
           type: string
         work_ref:
