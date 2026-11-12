@@ -656,7 +656,7 @@ func main() {
 		p, err := authStore.PrincipalForActor(ctx, actor)
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
 	})
-	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router", "watcher_health")
+	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "auth_audit_access", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router", "watcher_health")
 	go loopstats.Run(maintenanceCtx, os.Stderr)
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
@@ -679,6 +679,23 @@ func main() {
 		})
 	}()
 	defer func() { maintenanceCancel(); <-documentHistoryDone }()
+	authAuditDone := make(chan struct{})
+	go func() {
+		defer close(authAuditDone)
+		// Deleting audit filter edges advances the authorization epoch, which
+		// would restart compact access certification; let a resumed run finish.
+		if compactWait != nil {
+			select {
+			case <-compactWait:
+			case <-maintenanceCtx.Done():
+				return
+			}
+		}
+		workspace.RunAuthAuditAccessMaintenance(maintenanceCtx, func(err error) {
+			fmt.Fprintf(os.Stderr, "auth audit access maintenance: retrying bounded batch: %v\n", err)
+		})
+	}()
+	defer func() { maintenanceCancel(); <-authAuditDone }()
 	go server.RunCurationFormulaLoop(maintenanceCtx, primitiveStore, func(err error) { fmt.Fprintf(os.Stderr, "curation formula pass: %v\n", err) })
 
 	replayGCDone := make(chan struct{})

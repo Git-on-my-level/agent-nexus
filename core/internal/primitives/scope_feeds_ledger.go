@@ -64,7 +64,6 @@ func ScopeInboxMutationLedger() []ScopeInboxMutationSource {
 		{"host_enrollments", "legacy profile visibility", false},
 		{"host_enrollment_tokens", "legacy profile visibility", false},
 		{"auth_invites", "legacy profile visibility", false},
-		{"auth_audit_events", "legacy profile visibility", false},
 		{"secrets", "legacy profile visibility", false},
 		{"series_adapters", "legacy profile visibility", false},
 		{"series_definitions", "legacy profile visibility", false},

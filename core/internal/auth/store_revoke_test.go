@@ -51,7 +51,7 @@ func TestRevokeAgentIsIdempotentAndAudited(t *testing.T) {
 		t.Fatalf("expected idempotent revoke result, got %#v", second)
 	}
 
-	events, _, err := store.ListAuditEvents(ctx, AuthAuditListFilter{})
+	events, _, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{})
 	if err != nil {
 		t.Fatalf("list audit events: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestRevokeAgentRequiresExplicitHumanLockoutReason(t *testing.T) {
 		t.Fatalf("unexpected forced revoke result: %#v", result)
 	}
 
-	events, _, err := store.ListAuditEvents(ctx, AuthAuditListFilter{})
+	events, _, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{})
 	if err != nil {
 		t.Fatalf("list audit events: %v", err)
 	}

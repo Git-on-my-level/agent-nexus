@@ -81,6 +81,13 @@ legacy per-revision edges after startup; never drop superseded revision targets.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.
+Migration 139 makes auth audit rows auth-admin-only at the repository read, not
+only in the HTTP handler. `auth_audit_events` is no longer a filter source, so
+audit metadata contributes no per-row `filter/auth_audit_events` edges and no
+inbox invalidation. The migration only drops the old filter triggers and
+installs a durable cursor; a bounded maintenance job deletes existing edges in
+chunks, cascading through the exact/compact/admission indexes. Audit rows and
+payloads are retained unchanged, and non-admin or scoped readers fail closed.
 
 All canonical, PM and command-center database access must use
 `internal/resourceaccess` handles with the request context. Scoped SELECTs use

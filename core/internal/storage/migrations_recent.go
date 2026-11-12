@@ -62,4 +62,8 @@ var recentMigrations = []migration{
 	// pm_records. Archive configuration is required whenever product data
 	// exists; the migration fails closed rather than dropping without a copy.
 	{Version: 138, AfterApply: migrateRemoveBuiltinPM},
+	// Auth audit rows are auth-admin-only at the repository read. Their metadata
+	// no longer contributes filter-source access edges; drop the old triggers
+	// and let a bounded maintenance job remove existing edges.
+	{Version: 139, AfterApply: installAuthAuditAccessCleanup},
 }

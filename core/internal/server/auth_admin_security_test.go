@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/resourceaccess"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 )
@@ -141,6 +142,30 @@ func TestAuthAdminCannotMintHumanCredentials(t *testing.T) {
 	after, err := env.authStore.CountActiveHumanPrincipals(ctx)
 	if err != nil || after != before {
 		t.Fatalf("human principal growth: %d -> %d (%v)", before, after, err)
+	}
+}
+
+func TestAuthAuditReadsRequireAuthAdminAtRepositoryAndHTTP(t *testing.T) {
+	t.Parallel()
+	env, human, agent, bearer := securityEnv(t)
+	ctx := context.Background()
+	if _, err := env.authStore.SetAuthAdmin(ctx, agent.AgentID, false, human); err != nil {
+		t.Fatal(err)
+	}
+	nonAdmin, err := env.authStore.AuthenticateAccessToken(ctx, bearer)
+	if err != nil || nonAdmin.AuthAdmin {
+		t.Fatalf("non-admin principal snapshot: %#v %v", nonAdmin, err)
+	}
+	status, p := hostHTTP(t, "GET", env.server.URL+"/auth/audit", bearer, nil)
+	hostStatus(t, status, 403, p)
+	if p["error"].(map[string]any)["code"] != "auth_admin_required" {
+		t.Fatal(p)
+	}
+	if _, _, err := env.authStore.ListAuditEvents(ctx, auth.AuthAuditListFilter{}); !errors.Is(err, auth.ErrAuthAdminRequired) {
+		t.Fatalf("non-admin repository read: %v", err)
+	}
+	if _, _, err := env.authStore.ListAuditEvents(resourceaccess.WithAuthAdmin(ctx, true), auth.AuthAuditListFilter{}); err != nil {
+		t.Fatalf("admin repository read: %v", err)
 	}
 }
 

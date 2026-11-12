@@ -60,7 +60,6 @@ var FilterSources = map[string][]string{
 	"host_enrollments":       {"adoptions_json", "discovered_adapters_json", "hostname", "os_user"},
 	"host_enrollment_tokens": {"label"},
 	"auth_invites":           {"note"},
-	"auth_audit_events":      {"metadata_json"},
 	"secrets":                {"name", "description"},
 	"series_adapters":        {"description"},
 	"series_definitions":     {"unit"},

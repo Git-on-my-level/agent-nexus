@@ -182,6 +182,12 @@ func (s *Store) ListAuditEvents(ctx context.Context, filter AuthAuditListFilter)
 	if s == nil || s.db == nil {
 		return nil, "", fmt.Errorf("auth store database is not initialized")
 	}
+	// Audit rows are auth-admin-only. Enforce the same principal predicate as
+	// the HTTP handler at the repository boundary so scoped or derived readers
+	// cannot bypass it. A missing marker is non-admin and fails closed.
+	if !resourceaccess.IsAuthAdmin(ctx) {
+		return nil, "", ErrAuthAdminRequired
+	}
 
 	keysetCursor, err := decodeAuthAuditCursor(strings.TrimSpace(filter.Cursor))
 	if err != nil {

@@ -83,6 +83,10 @@ func handleListAuthAudit(w http.ResponseWriter, r *http.Request, opts handlerOpt
 			writeError(w, http.StatusBadRequest, "invalid_request", "cursor is invalid")
 			return
 		}
+		if errors.Is(err, auth.ErrAuthAdminRequired) {
+			writeError(w, http.StatusForbidden, "auth_admin_required", "auth administration requires a human or auth-admin principal")
+			return
+		}
 		writeInternalError(w, r, err, "failed to list auth audit events")
 		return
 	}

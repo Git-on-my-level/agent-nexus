@@ -3,11 +3,17 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
+	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/storage"
 )
+
+func authAdminContext(ctx context.Context) context.Context {
+	return resourceaccess.WithAuthAdmin(ctx, true)
+}
 
 func TestListAuditEventsOrdersSameSecondByFixedWidthSortKey(t *testing.T) {
 	t.Parallel()
@@ -29,7 +35,7 @@ func TestListAuditEventsOrdersSameSecondByFixedWidthSortKey(t *testing.T) {
 		OccurredAt: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
 	})
 
-	events, nextCursor, err := store.ListAuditEvents(ctx, AuthAuditListFilter{})
+	events, nextCursor, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{})
 	if err != nil {
 		t.Fatalf("list audit events: %v", err)
 	}
@@ -67,7 +73,7 @@ func TestListAuditEventsUsesKeysetCursorAcrossNewerInsert(t *testing.T) {
 		OccurredAt: time.Date(2026, 3, 20, 10, 0, 1, 0, time.UTC),
 	})
 
-	firstPage, nextCursor, err := store.ListAuditEvents(ctx, AuthAuditListFilter{Limit: ptrInt(1)})
+	firstPage, nextCursor, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{Limit: ptrInt(1)})
 	if err != nil {
 		t.Fatalf("list first audit page: %v", err)
 	}
@@ -86,7 +92,7 @@ func TestListAuditEventsUsesKeysetCursorAcrossNewerInsert(t *testing.T) {
 		OccurredAt: time.Date(2026, 3, 20, 10, 0, 2, 0, time.UTC),
 	})
 
-	secondPage, finalCursor, err := store.ListAuditEvents(ctx, AuthAuditListFilter{
+	secondPage, finalCursor, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{
 		Limit:  ptrInt(1),
 		Cursor: nextCursor,
 	})
@@ -104,6 +110,34 @@ func TestListAuditEventsUsesKeysetCursorAcrossNewerInsert(t *testing.T) {
 	}
 	if finalCursor != "" {
 		t.Fatalf("expected pagination to finish after second page, got %q", finalCursor)
+	}
+}
+
+func TestListAuditEventsRequiresAuthAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	workspace, err := storage.InitializeWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("initialize workspace: %v", err)
+	}
+	defer workspace.Close()
+
+	store := NewStore(workspace.DB())
+	recordAuthAuditEventForTest(t, ctx, store, AuthAuditEventInput{
+		EventType:  AuthAuditEventInviteCreated,
+		OccurredAt: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC),
+	})
+
+	if _, _, err := store.ListAuditEvents(ctx, AuthAuditListFilter{}); !errors.Is(err, ErrAuthAdminRequired) {
+		t.Fatalf("non-admin repository read: %v", err)
+	}
+	events, _, err := store.ListAuditEvents(authAdminContext(ctx), AuthAuditListFilter{})
+	if err != nil {
+		t.Fatalf("admin repository read: %v", err)
+	}
+	if len(events) != 1 || events[0].EventType != AuthAuditEventInviteCreated {
+		t.Fatalf("admin read changed rows: %#v", events)
 	}
 }
 

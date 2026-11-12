@@ -288,6 +288,7 @@ development mode. See the canonical OpenAPI for request/response envelopes.
 - `POST /auth/invites` is human-only. Human credential creation validates a human invite issuer inside its transaction, so historical agent-issued invites cannot mint human identities. Agent bearers cannot authorize human credential ceremonies.
 - `POST /auth/admins/{principal_id}/grant` and `/revoke`: human-only; target is an active agent ID or exact username. Returns `{ admin }`. Changes are audited and idempotent. Humans cannot be targets.
 - `GET /auth/principals` summaries include `auth_admin` (the explicit metadata flag).
+- `GET /auth/audit` is auth-admin only. The repository read enforces the same principal predicate as the HTTP handler, so scoped or derived readers cannot list audit rows even if they bypass the route check.
 - Host administration accepts humans or explicitly granted auth-admin agents for pending list/approve/deny, token create/list/revoke, and `DELETE /hosts/{host_id}`. Self-host revocation by an agent returns `403 host_self_revoke`, with canonical ID and slug both protected. `PATCH /hosts/{host_id}` retains human bearer or signed host proof authorization.
 - Token creation accepts either `expires_at` or `expires_in_seconds` (600–86400), with `label`. Core measures relative expiry itself. Only the create response includes `token`; lists and audit records never do.
 
