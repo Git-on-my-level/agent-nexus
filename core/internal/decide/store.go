@@ -232,9 +232,8 @@ func (s *Store) answer(ctx context.Context, d Decision, a *Action, expected int,
 }
 
 // proposeDecision serializes proposal deduplication in SQLite, including across
-// Service instances. Only identical intent is reused; changed intent may
-// supersede an awaiting decision, but non-human proposals cannot displace
-// pending human intent. All checks and replacement writes are atomic.
+// Service instances. Only identical intent is reused; changed human intent may
+// supersede an awaiting decision. All checks and replacement writes are atomic.
 func (s *Store) proposeDecision(ctx context.Context, d Decision) (Decision, bool, error) {
 	tx, err := s.database().BeginTx(ctx, nil)
 	if err != nil {

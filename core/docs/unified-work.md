@@ -248,9 +248,9 @@ derived `can_answer` field for answer controls. Dispatch revalidates that the
 decision owner, answering actor and action approver agree, as well as current
 approval permission, scope, structured payload and target revision.
 
-Direct proposals require a human principal; agents propose a decision addressed
-to a currently authorized human. An agent cannot create an unanswerable
-self-addressed decision.
+Direct proposals require a human principal; non-human principals are rejected
+with `forbidden`. Agents support PM work by orienting, triaging, filing `anx ask`
+recommendations, and updating cards, but cannot create or approve PM decisions.
 
 New proposals reuse an awaiting decision for the same workspace, human, work_ref
 and scope only when instruction, payload, target revision and origin match.
@@ -383,9 +383,9 @@ canonical primitives annotation validator before insertion. The allowed keys are
 `start_at`, `due_at`, `relations`, and `executions`. Invalid keys and value shapes
 return `400 invalid_request`, naming the offending keys and allowed set.
 
-A pending human proposal blocks changed non-human proposals only for the same
-approver actor, work, and scope. Another actor's human proposal does not block
-the current actor's proposals. This matches the actor boundary used for
+The `human_proposal_pending` code is retained for compatibility with the removed
+agent-propose path; current servers reject non-human principals with `forbidden`
+before that check. Human proposals still use the same actor boundary for
 deduplication and supersession.
 
 ### Optional source connector boundary

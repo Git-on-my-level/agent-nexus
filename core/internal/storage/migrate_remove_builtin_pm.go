@@ -94,7 +94,12 @@ func migrateRemoveBuiltinPM(ctx context.Context, tx *sql.Tx) error {
 	}
 
 	switch {
-	case productRows > 0 && receipt == nil:
+	case productRows > 0:
+		// A receipt only proves that some earlier archive was written. It does
+		// not prove that archive covers the rows present now: a completed
+		// migration can be followed by reseeded product rows and a rewound
+		// ledger. Always archive the current rows before deleting them, and
+		// replace any stale receipt instead of trusting it.
 		recipients, err := backupage.ParseRecipients(os.Getenv("ANX_BACKUP_AGE_RECIPIENTS"), os.Getenv("ANX_VAULT_REC_RECIPIENT"))
 		if err != nil {
 			return fmt.Errorf("PM archive recipients are not configured: %w", err)
@@ -107,6 +112,8 @@ func migrateRemoveBuiltinPM(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	case receipt != nil:
+		// No product rows remain, so the existing receipt is only a record of
+		// the completed archive. Verify it and fail closed if it is damaged.
 		if err := pmArchiveVerify(receipt.ArchivePath, receipt.SizeBytes, receipt.SHA256); err != nil {
 			return fmt.Errorf("PM archive receipt verification failed: %w", err)
 		}
@@ -122,7 +129,8 @@ func migrateRemoveBuiltinPM(ctx context.Context, tx *sql.Tx) error {
 }
 
 func recordPMArchiveReceipt(ctx context.Context, tx *sql.Tx, receipt *pmArchiveReceipt) error {
-	if _, err := tx.ExecContext(ctx, `INSERT INTO `+pmArchiveReceiptsTable+`(workspace_id,archive_path,sha256,size_bytes,recipients_fingerprint,schema_version,created_at) VALUES(?,?,?,?,?,?,?)`,
+	if _, err := tx.ExecContext(ctx, `INSERT INTO `+pmArchiveReceiptsTable+`(workspace_id,archive_path,sha256,size_bytes,recipients_fingerprint,schema_version,created_at) VALUES(?,?,?,?,?,?,?)
+		ON CONFLICT(workspace_id) DO UPDATE SET archive_path=excluded.archive_path,sha256=excluded.sha256,size_bytes=excluded.size_bytes,recipients_fingerprint=excluded.recipients_fingerprint,schema_version=excluded.schema_version,created_at=excluded.created_at`,
 		receipt.WorkspaceID, receipt.ArchivePath, receipt.SHA256, receipt.SizeBytes, receipt.RecipientsFingerprint, receipt.SchemaVersion, receipt.CreatedAt); err != nil {
 		return fmt.Errorf("record PM archive receipt: %w", err)
 	}
@@ -323,6 +331,18 @@ func writePMArchive(ctx context.Context, tx *sql.Tx, databasePath, workspaceID s
 
 	utc := time.Now().UTC().Format("20060102T150405Z")
 	finalPath := filepath.Join(root, "state.pm-archive-138-"+utc+".tar.zst.age")
+	// Never clobber an archive from an earlier attempt. A resumed migration
+	// writes a fresh archive of the current rows and must keep the old one.
+	for suffix := 2; ; suffix++ {
+		_, statErr := os.Stat(finalPath)
+		if errors.Is(statErr, os.ErrNotExist) {
+			break
+		}
+		if statErr != nil {
+			return nil, fmt.Errorf("check PM archive path: %w", statErr)
+		}
+		finalPath = filepath.Join(root, fmt.Sprintf("state.pm-archive-138-%s-%d.tar.zst.age", utc, suffix))
+	}
 	tempFile, err := os.CreateTemp(root, ".state.pm-archive-138-*.tmp")
 	if err != nil {
 		return nil, fmt.Errorf("create PM archive temporary file: %w", err)
@@ -667,22 +687,73 @@ func withdrawPMWatcherAsks(ctx context.Context, tx *sql.Tx) error {
 			eventID, handle, "human_attention_withdrawn", now, "system", ask.thread, string(refsJSON), string(payloadJSON)); err != nil {
 			return fmt.Errorf("write PM watcher withdrawal: %w", err)
 		}
+		// INSERT OR IGNORE can silently keep a same-id event that belongs to a
+		// different request. Confirm the exact matching tuple before treating
+		// the withdrawal as written.
 		var withdrawn int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE id=? AND type='human_attention_withdrawn'`, eventID).Scan(&withdrawn); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE id=? AND type='human_attention_withdrawn' AND json_extract(payload_json,'$.payload.request_event_id')=?`, eventID, ask.id).Scan(&withdrawn); err != nil {
 			return fmt.Errorf("confirm PM watcher withdrawal: %w", err)
 		}
 		if withdrawn != 1 {
-			return fmt.Errorf("PM watcher withdrawal event %s was not written", eventID)
+			return fmt.Errorf("PM watcher withdrawal event %s does not match request %s", eventID, ask.id)
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES(?,?,'withdrawn','system',?)`,
 			ask.id, eventID, now); err != nil {
 			return fmt.Errorf("resolve PM watcher ask: %w", err)
+		}
+		// A uniqueness conflict on resolution_event_id can leave the ask
+		// unresolved even though the insert was ignored. Read the exact tuple
+		// back before closing the ask or clearing its projections.
+		var resolved int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM human_attention_request_resolutions WHERE request_event_id=? AND resolution_event_id=? AND resolution_type='withdrawn'`, ask.id, eventID).Scan(&resolved); err != nil {
+			return fmt.Errorf("confirm PM watcher resolution: %w", err)
+		}
+		if resolved != 1 {
+			return fmt.Errorf("PM watcher ask %s was not resolved by %s", ask.id, eventID)
 		}
 		if exists, err := sqliteTableExists(ctx, tx, "ask_subjects"); err != nil {
 			return err
 		} else if exists {
 			if _, err := tx.ExecContext(ctx, `UPDATE ask_subjects SET open=0 WHERE ask_id=?`, ask.id); err != nil {
 				return err
+			}
+		}
+		// Resolution claims alone do not refresh materialized inbox rows. Mirror
+		// the curation withdrawal cleanup: remove the exact source row and
+		// invalidate the thread's topic projection in the same transaction.
+		if exists, err := sqliteTableExists(ctx, tx, "derived_inbox_items"); err != nil {
+			return err
+		} else if exists {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE source_event_id=?`, ask.id); err != nil {
+				return fmt.Errorf("clear PM watcher inbox row: %w", err)
+			}
+		}
+		if ask.thread != "" {
+			if exists, err := sqliteTableExists(ctx, tx, "derived_topic_dirty_queue"); err != nil {
+				return err
+			} else if exists {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO derived_topic_dirty_queue(thread_id,dirty_at) VALUES(?,?)
+					ON CONFLICT(thread_id) DO UPDATE SET dirty_at=MIN(derived_topic_dirty_queue.dirty_at,excluded.dirty_at)`, ask.thread, now); err != nil {
+					return fmt.Errorf("queue PM watcher topic refresh: %w", err)
+				}
+			}
+			if exists, err := sqliteTableExists(ctx, tx, "topic_projection_refresh_status"); err != nil {
+				return err
+			} else if exists {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO topic_projection_refresh_status(thread_id,desired_generation,materialized_generation,queued_at,updated_at) VALUES(?,1,0,?,?)
+					ON CONFLICT(thread_id) DO UPDATE SET desired_generation=topic_projection_refresh_status.desired_generation+1,
+					queued_at=CASE WHEN topic_projection_refresh_status.queued_at IS NULL OR topic_projection_refresh_status.queued_at>excluded.queued_at THEN excluded.queued_at ELSE topic_projection_refresh_status.queued_at END,updated_at=excluded.updated_at`, ask.thread, now, now); err != nil {
+					return fmt.Errorf("bump PM watcher topic refresh status: %w", err)
+				}
+			}
+		}
+		if exists, err := sqliteTableExists(ctx, tx, "ref_edges"); err != nil {
+			return err
+		} else if exists {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO ref_edges(id,source_type,source_id,target_type,target_id,edge_type,created_at)
+				SELECT 'pm-archive-138-withdraw-edge:'||e.id||':'||r.key,'event',e.id,substr(r.value,1,instr(r.value,':')-1),substr(r.value,instr(r.value,':')+1),'ref',e.ts
+				FROM events e,json_each(e.refs_json) r WHERE e.id=? AND instr(r.value,':')>1`, eventID); err != nil {
+				return fmt.Errorf("record PM watcher withdrawal refs: %w", err)
 			}
 		}
 	}

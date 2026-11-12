@@ -328,7 +328,94 @@ func TestRemoveBuiltinPMFailsClosedWithInvalidRecipients(t *testing.T) {
 	assertLegacyPMDataIntact(t, db)
 }
 
-func TestRemoveBuiltinPMRejectsDamagedReceiptArchiveOnResume(t *testing.T) {
+func TestRemoveBuiltinPMDoesNotDeleteCurrentRowsUnderStaleIntactReceipt(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedLegacyPMWorkspace(t, ws.DB())
+	resetPMArchiveMigration(t, ws.DB())
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oldPath string
+	if err = ws.DB().QueryRow(`SELECT archive_path FROM pm_archive_receipts`).Scan(&oldPath); err != nil {
+		t.Fatal(err)
+	}
+	oldArchive, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put current product rows back, including a distinctive row that the old
+	// archive cannot contain, and rewind only the ledger. The intact receipt is
+	// stale: it does not cover the rows the migration is about to delete.
+	reseedPMProductData(t, ws.DB())
+	if _, err = ws.DB().Exec(`INSERT OR REPLACE INTO pm_records VALUES('turn','turn-current-2','ws_main','pm-agent','',1,'{"status":"delivered","marker":"distinctive-current-row"}')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version=138`); err != nil {
+		t.Fatal(err)
+	}
+	if err = ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatalf("stale intact receipt should be replaced, not trusted: %v", err)
+	}
+	defer ws.Close()
+	assertMigrationApplied(t, ws.DB(), 138)
+
+	var newPath string
+	if err = ws.DB().QueryRow(`SELECT archive_path FROM pm_archive_receipts`).Scan(&newPath); err != nil {
+		t.Fatal(err)
+	}
+	if newPath == oldPath {
+		t.Fatal("stale receipt was reused instead of replaced")
+	}
+	unchanged, err := os.ReadFile(oldPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(oldArchive, unchanged) {
+		t.Fatal("old archive was modified while writing the replacement")
+	}
+	ciphertext, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext := decryptArchive(t, ciphertext, rec)
+	if !bytes.Contains(plaintext, []byte("distinctive-current-row")) {
+		t.Fatal("replacement archive does not cover the current product rows")
+	}
+	var productCount int
+	if err = ws.DB().QueryRow(`SELECT COUNT(*) FROM pm_records WHERE kind IN ('turn','conversation','binding','delivery','delivery_retry')`).Scan(&productCount); err != nil {
+		t.Fatal(err)
+	}
+	if productCount != 0 {
+		t.Fatalf("expected product kinds removed after replacement archive, got %d", productCount)
+	}
+}
+
+func TestRemoveBuiltinPMReplacesDamagedStaleReceiptWithNewArchive(t *testing.T) {
 	cases := []struct {
 		name   string
 		damage func(t *testing.T, path string)
@@ -396,14 +483,201 @@ func TestRemoveBuiltinPMRejectsDamagedReceiptArchiveOnResume(t *testing.T) {
 			}
 			tc.damage(t, archivePath)
 
-			if _, err := storage.InitializeWorkspace(ctx, root); err == nil {
-				t.Fatal("expected damaged receipt archive to abort the migration")
+			// The damaged receipt describes an old archive. Current rows exist,
+			// so the migration must write and verify a fresh archive instead of
+			// trusting the stale receipt.
+			ws, err = storage.InitializeWorkspace(ctx, root)
+			if err != nil {
+				t.Fatalf("damaged stale receipt should be replaced: %v", err)
 			}
-			db := openWorkspaceDB(t, root)
-			defer db.Close()
-			assertLegacyPMDataIntact(t, db)
-			assertMigrationAbsent(t, db, 138)
+			defer ws.Close()
+			assertMigrationApplied(t, ws.DB(), 138)
+			var newPath string
+			if err = ws.DB().QueryRow(`SELECT archive_path FROM pm_archive_receipts`).Scan(&newPath); err != nil {
+				t.Fatal(err)
+			}
+			if newPath == archivePath {
+				t.Fatal("damaged stale receipt was reused instead of replaced")
+			}
+			ciphertext, err := os.ReadFile(newPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plaintext := decryptArchive(t, ciphertext, rec)
+			if !bytes.Contains(plaintext, []byte(`"turn"`)) {
+				t.Fatal("replacement archive does not contain current product rows")
+			}
 		})
+	}
+}
+
+func TestRemoveBuiltinPMClearsMaterializedInboxForWithdrawnAsks(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := ws.DB()
+	seedLegacyPMWorkspace(t, db)
+	for _, row := range []struct{ id, thread, source, body string }{
+		{"inbox-pm", "thread-pm-health", "ask-pm", `{"kind":"ask","body":"PM watcher","subject_ref":"decide","related_refs":["event:ask-pm"]}`},
+		{"inbox-other", "thread-keep", "ask-other", `{"kind":"ask","body":"Other watcher","subject_ref":"card:other","related_refs":["event:ask-other"]}`},
+	} {
+		if _, err := db.Exec(`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json,source_event_id) VALUES(?,?,'ask','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',?,?)`, row.id, row.thread, row.body, row.source); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO topic_projection_refresh_status(thread_id,desired_generation,materialized_generation,updated_at) VALUES('thread-pm-health',1,1,'2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	resetPMArchiveMigration(t, db)
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	ws, err = storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	db = ws.DB()
+	assertMigrationApplied(t, db, 138)
+
+	var pmInbox, otherInbox int
+	if err = db.QueryRow(`SELECT COUNT(*) FROM derived_inbox_items WHERE id='inbox-pm'`).Scan(&pmInbox); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRow(`SELECT COUNT(*) FROM derived_inbox_items WHERE id='inbox-other'`).Scan(&otherInbox); err != nil {
+		t.Fatal(err)
+	}
+	if pmInbox != 0 {
+		t.Fatal("withdrawn PM ask still has a materialized inbox row")
+	}
+	if otherInbox != 1 {
+		t.Fatal("unrelated inbox row was removed")
+	}
+	var dirty int
+	if err = db.QueryRow(`SELECT COUNT(*) FROM derived_topic_dirty_queue WHERE thread_id='thread-pm-health'`).Scan(&dirty); err != nil {
+		t.Fatal(err)
+	}
+	if dirty != 1 {
+		t.Fatal("PM ask thread was not queued for topic projection refresh")
+	}
+	var desired, materialized int
+	if err = db.QueryRow(`SELECT desired_generation,materialized_generation FROM topic_projection_refresh_status WHERE thread_id='thread-pm-health'`).Scan(&desired, &materialized); err != nil {
+		t.Fatal(err)
+	}
+	if desired <= materialized {
+		t.Fatalf("PM ask thread refresh was not bumped: desired=%d materialized=%d", desired, materialized)
+	}
+	if got := openAskCount(t, db, "Other watcher"); got != 1 {
+		t.Fatalf("unrelated ask changed: %d", got)
+	}
+}
+
+func TestRemoveBuiltinPMRejectsWithdrawalEventForDifferentRequest(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := ws.DB()
+	seedLegacyPMWorkspace(t, db)
+	eventID := "pm-archive-138-withdraw-ask-pm"
+	if _, err := db.Exec(`INSERT INTO events(id,type,ts,actor_id,thread_id,refs_json,payload_json,created_at) VALUES(?,'human_attention_withdrawn','2026-01-01T00:00:00Z','system','thread-pm-health','[]',?,CURRENT_TIMESTAMP)`,
+		eventID, `{"payload":{"request_event_id":"some-other-ask"}}`); err != nil {
+		t.Fatal(err)
+	}
+	resetPMArchiveMigration(t, db)
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	if _, err := storage.InitializeWorkspace(ctx, root); err == nil {
+		t.Fatal("expected mismatched withdrawal event to abort the migration")
+	}
+	db = openWorkspaceDB(t, root)
+	defer db.Close()
+	assertLegacyPMDataIntact(t, db)
+	assertMigrationAbsent(t, db, 138)
+	if got := openAskCount(t, db, "Restore the workspace PM?"); got != 1 {
+		t.Fatalf("mismatched withdrawal closed the PM ask: %d", got)
+	}
+	var resolutions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM human_attention_request_resolutions WHERE request_event_id='ask-pm'`).Scan(&resolutions); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions != 0 {
+		t.Fatal("mismatched withdrawal wrote a resolution")
+	}
+}
+
+func TestRemoveBuiltinPMRejectsResolutionEventConflict(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := storage.InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := ws.DB()
+	seedLegacyPMWorkspace(t, db)
+	eventID := "pm-archive-138-withdraw-ask-pm"
+	if _, err := db.Exec(`INSERT INTO human_attention_request_resolutions(request_event_id,resolution_event_id,resolution_type,actor_id,created_at) VALUES('some-other-request',?,'withdrawn','system','2026-01-01T00:00:00Z')`, eventID); err != nil {
+		t.Fatal(err)
+	}
+	resetPMArchiveMigration(t, db)
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANX_BACKUP_AGE_RECIPIENTS", ops.Recipient().String())
+	t.Setenv("ANX_VAULT_REC_RECIPIENT", rec.Recipient().String())
+
+	if _, err := storage.InitializeWorkspace(ctx, root); err == nil {
+		t.Fatal("expected resolution event conflict to abort the migration")
+	}
+	db = openWorkspaceDB(t, root)
+	defer db.Close()
+	assertLegacyPMDataIntact(t, db)
+	assertMigrationAbsent(t, db, 138)
+	if got := openAskCount(t, db, "Restore the workspace PM?"); got != 1 {
+		t.Fatalf("resolution conflict closed the PM ask: %d", got)
+	}
+	var resolutions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM human_attention_request_resolutions WHERE request_event_id='ask-pm'`).Scan(&resolutions); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions != 0 {
+		t.Fatal("resolution conflict wrote a resolution for the PM ask")
 	}
 }
 

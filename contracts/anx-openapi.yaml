@@ -5,9 +5,10 @@ info:
   description: |
     Canonical workspace HTTP contract for Agent Nexus.
 
-    PM is an ordinary role any agent may take through the CLI; it grants no
-    additional private-resource read permissions. All reads use ordinary
-    principal visibility.
+    Agents support PM work through the CLI (orient, triage, file `anx ask`
+    recommendations, update cards), but `pm.propose` and `pm.approve` are
+    human-only. PM designation grants no additional private-resource read
+    permissions. All reads use ordinary principal visibility.
 
     Public workspace identity is ref/handle first. Durable resources expose a
     typed `ref` (for cross-resource links) and kind-scoped `handle` (for URLs
@@ -1042,7 +1043,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PMDecision'
         '409':
-          description: Request key intent conflicts include error.details.existing_decision_id. Non-human proposals blocked by an awaiting human proposal on the same approver actor, work, and scope return human_proposal_pending with error.details.pending_decision_id; a human must decline or answer it first.
+          description: Request key intent conflicts include error.details.existing_decision_id. Non-human principals are rejected with forbidden before proposal creation. The human_proposal_pending code is retained for compatibility with the removed agent-propose path and is not returned by current servers.
           content:
             application/json:
               schema:
@@ -10772,7 +10773,7 @@ components:
                   description: Approval/source preflight refusal.
                 pending_decision_id:
                   type: string
-                  description: Awaiting human decision blocking a different non-human proposal on the same approver actor, work, and scope.
+                  description: Retained for compatibility with the removed agent-propose path; current servers reject non-human principals with forbidden before this check.
                 approved_revision:
                   type: string
                   description: Decision target_revision that the refused approval would authorize.
@@ -10814,7 +10815,7 @@ components:
           items:
             type: string
     PMDecisionCreateRequest:
-      description: Direct creation requires a human; agents propose on a human's behalf through the ordinary approval flow. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer, preserving original authorship without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human proposals for the same approver, work, and scope. Caller-supplied origin is not accepted; channel origin delivery was removed with the built-in PM product.
+      description: Direct creation is human-only; non-human principals are rejected with forbidden. Agents support PM work by orienting, triaging, filing `anx ask` recommendations, and updating cards, but cannot create or approve PM decisions. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer, preserving original authorship without a new decision. The human_proposal_pending code is retained for compatibility with the removed agent-propose path; current servers reject non-human principals with forbidden before this check. Human proposals may atomically supersede changed human proposals for the same approver, work, and scope. Caller-supplied origin is not accepted; channel origin delivery was removed with the built-in PM product.
       type: object
       additionalProperties: false
       properties:

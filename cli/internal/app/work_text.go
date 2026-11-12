@@ -31,7 +31,7 @@ func workHelpText(topic string) (string, bool) {
 		if len(adjacent) == 0 {
 			adjacent = []string{"pm card", "pm propose"}
 		}
-		return fmt.Sprintf("Usage: anx pm context\n\nInside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.\n\nAdjacent commands: `%s`\n\nOutside a claimed turn\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
+		return fmt.Sprintf("Usage: anx pm context\n\nOpen a card with `anx pm card <card-ref>`. `anx pm propose` is human-only; agents file recommendations with `anx ask`.\n\nAdjacent commands: `%s`\n\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
 	}
 
 	if isInternalWorkCommand(topic) {

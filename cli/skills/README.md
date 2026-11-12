@@ -89,8 +89,10 @@ A reviewed agentctl config bundle may select this repository as its Skill Hub:
 ```
 
 Use `cli/skills/pm.json` only for hosts on which the user wants the PM
-instructions available. Any agent can act as PM with the skill; installing it
-grants no extra authority and does not make the agent the workspace PM.
+instructions available. Agents can support PM work with the skill (orient,
+triage, file `anx ask` recommendations, update cards); `pm.propose` and
+`pm.approve` remain human-only, and installing the skill grants no extra
+authority or approval rights.
 
 The placeholder above is deliberately not an executable configuration. Wait
 until the selected ANX revision contains these packs. Pin a reviewed commit

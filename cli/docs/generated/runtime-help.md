@@ -4305,11 +4305,10 @@ Read Decide context: visible cards, open decisions and recent activity.
 ```text
 Usage: anx pm context
 
-Inside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.
+Open a card with `anx pm card <card-ref>`. `anx pm propose` is human-only; agents file recommendations with `anx ask`.
 
 Adjacent commands: `pm card`, `pm propose`
 
-Outside a claimed turn
 Legacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.
 
 Use `--json` for one machine-readable envelope.

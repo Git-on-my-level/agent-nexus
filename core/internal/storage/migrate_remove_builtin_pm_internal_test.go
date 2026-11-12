@@ -124,6 +124,21 @@ func TestRemoveBuiltinPMFaultsLeaveProductData(t *testing.T) {
 			pmArchiveVerify = func(string, int64, string) error { return errors.New("injected verify failure") }
 			t.Cleanup(func() { pmArchiveVerify = old })
 		}},
+		{"damaged-new-archive", func(t *testing.T) {
+			old := pmArchiveVerify
+			pmArchiveVerify = func(path string, size int64, digest string) error {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				data[len(data)/2] ^= 0xff
+				if err := os.WriteFile(path, data, 0o600); err != nil {
+					return err
+				}
+				return old(path, size, digest)
+			}
+			t.Cleanup(func() { pmArchiveVerify = old })
+		}},
 		{"rename", func(t *testing.T) {
 			old := pmArchiveRename
 			pmArchiveRename = func(string, string) error { return errors.New("injected rename failure") }

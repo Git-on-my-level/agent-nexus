@@ -578,8 +578,10 @@ anx pm actions reconcile <action-id>
 
 An instruction body contains `request_key`, `work_ref`, `instruction`, `scope` and
 `target_revision`. An answer body contains the current decision `revision`,
-`approve` and `text`. Agent keys may propose, but cannot inherit human approval
-permissions; core enforces the current principal and scope. A successful answer
+`approve` and `text`. `pm.propose` and `pm.approve` are human-only; non-human
+principals are rejected with `forbidden`, and core enforces the current principal
+and scope. Agents support PM work by orienting, triaging, filing `anx ask`
+recommendations, and updating cards. A successful answer
 records intent, not delivery. `pm actions get` reports the actual action attempts
 and receipt, including `source_reported`, `unknown` and
 `receipt.independently_verified`. `reconcile` requests read-back, never a resend.

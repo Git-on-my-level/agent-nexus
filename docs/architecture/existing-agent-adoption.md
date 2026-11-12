@@ -116,7 +116,7 @@ deploys the matching artifacts. It is one stage of this plan.
 | Participation views | Task-scoped activity and bounded agent-detail coverage, privacy filtering, stale/unavailable states, and evidence context | Browser qualification on the final integrated revision; agent-detail counts remain partial task participation coverage, not a global session census |
 | Skills | Canonical participant/PM guidance, version/hash metadata, scoped configure/status/verify, drift-preserving owned refresh, and release pack contents | Real native-harness loading and activation; automatic enrollment-to-harness setup and live user configuration remain unverified |
 | Optional runtime provider | Versioned agentctl identity evidence and schema-v1 skill packs; explicit generic path remains available | Capabilities are evidence with limits; native resume/history and external contact must be verified separately for each provider |
-| Existing PM | Decide queue and human decision/action fences are retained; the `anx-pm` skill lets any ordinary agent act as PM | Live skill loading and activation in each harness remain unverified |
+| Existing PM | Decide queue and human decision/action fences are retained; the `anx-pm` skill lets any ordinary agent support PM work (orient, triage, file `anx ask` recommendations, update cards) while `pm.propose` and `pm.approve` stay human-only | Live skill loading and activation in each harness remain unverified |
 | Project/source adoption | Native and externally authoritative tasks remain compatible with explicit participation | Consent-scoped local discovery, automatic unambiguous association, actual source-tool canaries, coverage/freshness reporting, and rich reconciled project overviews |
 | Rollout | Review, CI, release archives/checksums, and exact-image deployment prerequisites | Operator cloud deployment, serving-image verification, and live dogfooding; no cloud rollout is implied by publication |
 
@@ -156,8 +156,10 @@ of them or evidence that the later product experience is complete.
 
 ### 2. PM skill and maintained participant skills
 
-- [ ] Any ordinary participant can act as PM with the `anx-pm` skill; the skill
-      grants no extra authority and exposes no unrelated private conversations.
+- [ ] Any ordinary participant can support PM work with the `anx-pm` skill
+      (orient, triage, file `anx ask` recommendations, update cards) while
+      `pm.propose` and `pm.approve` stay human-only; the skill grants no extra
+      authority and exposes no unrelated private conversations.
 - [ ] Ship lean participant and richer PM skills. Installation/configuration
       reports version and evidence of activation separately; refresh owned skill
       content safely while preserving user edits and unsupported harness status.

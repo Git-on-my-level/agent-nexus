@@ -1113,8 +1113,8 @@ conversational_pm:
     - Human acknowledgement handles failed or unresolvable unknown actions without modifying receipt history; it is not proof of delivery.
     - Identical awaiting intent (same approver, work, scope, instruction, payload and target revision) reuses the existing decision regardless of proposer or origin; changed intent supersedes it atomically with superseded_by and superseded_reason.
     - Reusing a request key with a changed target revision conflicts with existing_decision_id in error details; source revisions are opaque and cannot be ordered.
-    - Direct proposals require a human; agents propose on a human's behalf through the ordinary approval flow. Human channel proposals retain origin_kind human and store channel identity in origin.
-    - A different non-human proposal is blocked by an awaiting human-origin decision only on the same approver actor, work, and scope in the workspace.
+    - Direct proposals are human-only; non-human principals are rejected with forbidden. Agents support PM work through orient, triage, `anx ask` recommendations, and card updates, not by creating proposals. Human channel proposals retain origin_kind human and store channel identity in origin.
+    - The human_proposal_pending code is retained for compatibility with the removed agent-propose path; current servers reject non-human principals with forbidden before this check.
     - Action deliverable reflects configured executors; unavailable dispatch records no attempt and leaves the action unchanged.
     - Pending actions and failed actions with no sent attempt have nothing to reconcile and return invalid_request.
     - Failed action status never regresses to unknown during read-back.
