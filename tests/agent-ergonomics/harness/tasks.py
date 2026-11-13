@@ -41,10 +41,15 @@ class CheckContext:
     def work(self, ref: str) -> dict:
         return self.read(["work", "get", ref]).get("work") or {}
 
+    def timeline_events(self, ref: str) -> list[dict]:
+        """Structured events on a card's thread, newest first."""
+        handle = ref.split(":", 1)[-1]
+        events = self.read(["debug", "threads", "timeline", handle]).get("events") or []
+        return [event for event in events if isinstance(event, dict)]
+
     def timeline_text(self, ref: str) -> str:
         """Everything posted on a card's thread, lowercased: notes, block reasons, evidence, asks."""
-        handle = ref.split(":", 1)[-1]
-        return json.dumps(self.read(["debug", "threads", "timeline", handle])).lower()
+        return json.dumps(self.timeline_events(ref)).lower()
 
     def tree_nodes(self) -> list[dict]:
         nodes: list[dict] = []
@@ -110,16 +115,31 @@ def _ask(ctx: CheckContext) -> tuple[bool, str]:
     return False, "the human inbox has no new ask about refunded invoices"
 
 
+def _payload(event: dict) -> dict:
+    payload = event.get("payload")
+    return payload if isinstance(payload, dict) else {}
+
+
 def _collect_answer(ctx: CheckContext) -> tuple[bool, str]:
     said = "iso" in ctx.final_answer.lower()
-    recorded = ctx.timeline_text(S.SERIALIZER).count("iso 8601") >= 2  # the ask itself is the first
-    return said and recorded, f"answer reports the decision: {said}; decision noted on the card: {recorded}"
+    decision = S.ANSWERED_ASK_DECISION.lower()
+    recorded = any(
+        event.get("type") == "message_posted"
+        and _payload(event).get("decided_by")
+        and decision in str(_payload(event).get("text") or "").lower()
+        for event in ctx.timeline_events(S.SERIALIZER)
+    )
+    return said and recorded, f"answer reports the decision: {said}; decision recorded as a note: {recorded}"
 
 
 def _block(ctx: CheckContext) -> tuple[bool, str]:
     phase = ctx.work(S.MACROS).get("phase")
-    why = "legal" in ctx.timeline_text(S.MACROS) or "legal" in json.dumps(ctx.work(S.MACROS)).lower()
-    return phase == "blocked" and why, f"phase={phase}; reason recorded: {why}"
+    why = any(
+        event.get("type") == "message_posted"
+        and "legal" in str(_payload(event).get("text") or "").lower()
+        for event in ctx.timeline_events(S.MACROS)
+    )
+    return phase == "blocked" and why, f"phase={phase}; block reason recorded as a note: {why}"
 
 
 def _plan(ctx: CheckContext) -> tuple[bool, str]:

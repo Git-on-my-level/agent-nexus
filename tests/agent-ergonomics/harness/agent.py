@@ -22,6 +22,8 @@ MAX_TOOL_OUTPUT_CHARS = 12_000
 # Flags the harness sets itself, and commands that change the machine rather
 # than the workspace. The agent is told so instead of being allowed to run them.
 RESERVED_FLAGS = ("--base-url", "--as", "--config-dir", "--workspace")
+_RESERVED_NAMES = frozenset(flag.lstrip("-") for flag in RESERVED_FLAGS)
+_GLOBAL_VALUE_FLAGS = frozenset({"base-url", "workspace", "as", "config-dir", "timeout"})
 MACHINE_COMMANDS = {"update", "bridge", "install", "skills", "host", "integrations", "import"}
 
 SYSTEM_PROMPT = """You are an AI agent on a team that coordinates its work in a shared workspace.
@@ -185,11 +187,30 @@ def _dispatch(ws: Workspace, agent: str, call: dict) -> tuple[str, Command | Non
 
 def _denial(args: list[str]) -> str:
     for arg in args:
-        if arg.split("=", 1)[0] in RESERVED_FLAGS:
-            return f"{arg.split('=', 1)[0]} is already set for you in this environment; leave it out."
-    command = next((arg for arg in args if not arg.startswith("-")), "")
+        if not arg.startswith("-"):
+            continue
+        name = arg.lstrip("-").split("=", 1)[0]
+        if name in _RESERVED_NAMES:
+            return f"--{name} is already set for you in this environment; leave it out."
+    command = _command_of(args)
     if command in MACHINE_COMMANDS:
         return f"`anx {command}` changes this machine and is not available in this environment."
+    return ""
+
+
+def _command_of(args: list[str]) -> str:
+    """The command token after global flags, accepting one or two dashes."""
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--":
+            return args[index + 1] if index + 1 < len(args) else ""
+        if not arg.startswith("-") or arg == "-":
+            return arg
+        name, separator, _ = arg.lstrip("-").partition("=")
+        index += 1
+        if not separator and name in _GLOBAL_VALUE_FLAGS:
+            index += 1
     return ""
 
 

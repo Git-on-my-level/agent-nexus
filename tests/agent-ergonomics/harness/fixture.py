@@ -68,13 +68,15 @@ class Workspace:
         workspace_root = self.run_dir / "workspace"
         workspace_root.mkdir(parents=True, exist_ok=True)
         (workspace_root / ".anx-dev-insecure-auth").touch()
-        env = dict(os.environ)
-        env.update(
-            ANX_BOOTSTRAP_TOKEN=BOOTSTRAP_TOKEN,
-            ANX_ALLOW_PASSKEY_DEV_BYPASS="1",
-            ANX_HOSTED_DEV_MODE="1",
-            ANX_ENABLE_DEV_ACTOR_MODE="1",
-        )
+        env = {
+            "HOME": str(self.home),
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TZ": "UTC",
+            "ANX_BOOTSTRAP_TOKEN": BOOTSTRAP_TOKEN,
+            "ANX_ALLOW_PASSKEY_DEV_BYPASS": "1",
+            "ANX_HOSTED_DEV_MODE": "1",
+            "ANX_ENABLE_DEV_ACTOR_MODE": "1",
+        }
         log = open(self.run_dir / "core.log", "wb")
         self.supervisor = subprocess.Popen(
             [
