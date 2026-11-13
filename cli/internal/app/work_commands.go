@@ -423,14 +423,6 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		headers, _ := data["headers"].(map[string][]string)
 		result.Text = formatBodyWithHeaders(status, headers, result.Text)
 	}
-	if parsed.name == "work context" && !cfg.JSON && !cfg.Verbose && !cfg.Headers {
-		out := result.Text
-		if !strings.HasSuffix(out, "\n") {
-			out += "\n"
-		}
-		a.writeOutput(a.Stdout, out)
-		result.RawWritten = true
-	}
 	return result, parsed.name, nil
 }
 

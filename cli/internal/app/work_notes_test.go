@@ -131,6 +131,41 @@ func TestWorkNotesFailureIsVisibleAndDoesNotHideTheWorkRead(t *testing.T) {
 	}
 }
 
+func TestWorkNotesMissingEndpointIsOmittedNotAnError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/work/card:launch":
+			io.WriteString(w, `{"work":{"ref":"card:launch","title":"Tracked","phase":"review","thread_id":"thread_launch"}}`)
+		case "/work/card:launch/observations":
+			io.WriteString(w, `{"observations":[]}`)
+		case "/work/card:launch/refresh":
+			io.WriteString(w, `{"refresh":{"state":"idle"}}`)
+		default:
+			// An older server without the notes/timeline route.
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	for _, args := range [][]string{
+		{"work", "get", "card:launch"},
+		{"context", "card:launch"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			payload := assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--json", "--base-url", server.URL}, args...)))
+			body := asMap(payload["result"])
+			if _, ok := body["notes"]; ok {
+				t.Fatalf("unsupported notes endpoint should omit notes, got %v", body["notes"])
+			}
+			text := runCLIForTest(t, t.TempDir(), nil, nil, append([]string{"--base-url", server.URL}, args...))
+			if strings.Contains(text, "notes: error:") {
+				t.Fatalf("unsupported notes endpoint should not surface an error:\n%s", text)
+			}
+		})
+	}
+}
+
 func TestFormatNotesSectionLimitsDefaultText(t *testing.T) {
 	items := make([]any, 0, 7)
 	for i := 1; i <= 7; i++ {

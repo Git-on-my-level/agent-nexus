@@ -52,6 +52,10 @@ type Envelope struct {
 	// renders it once as an `open url=<url>` line instead of result facts for
 	// web_url and the API-base-derived result.url, which is not for humans.
 	OpenURL string `json:"-"`
+	// Text is an optional pre-rendered text projection. When set, text mode
+	// prints it instead of projecting Result, while still appending OpenURL,
+	// warnings and next actions. JSON mode ignores it.
+	Text string `json:"-"`
 }
 
 func (e *Envelope) Init() {
@@ -105,22 +109,26 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 		project(&lines, "detail", envelope.Error.Details)
 	} else {
 		lines = append(lines, "ok command="+quote(envelope.Command))
-		result := envelope.Result
-		if envelope.OpenURL != "" {
-			result = withoutWebURL(result)
-		}
-		if !detailed && isPlanCommand(envelope.Command) {
-			projectPlan(&lines, result)
-		} else if !detailed && envelope.Command == "note" {
-			projectNote(&lines, result)
-		} else if !detailed && (envelope.Command == "cards create" || envelope.Command == "work create") {
-			projectCardCreate(&lines, result)
-		} else if envelope.Command == "cards list" {
-			projectCardsList(&lines, result)
-		} else if !detailed && hasNotesSection(result) {
-			projectResultWithCappedNotes(&lines, result)
+		if envelope.Text != "" {
+			lines = append(lines, strings.Split(strings.TrimRight(envelope.Text, "\n"), "\n")...)
 		} else {
-			project(&lines, "result", result)
+			result := envelope.Result
+			if envelope.OpenURL != "" {
+				result = withoutWebURL(result)
+			}
+			if !detailed && isPlanCommand(envelope.Command) {
+				projectPlan(&lines, result)
+			} else if !detailed && envelope.Command == "note" {
+				projectNote(&lines, result)
+			} else if !detailed && (envelope.Command == "cards create" || envelope.Command == "work create") {
+				projectCardCreate(&lines, result)
+			} else if envelope.Command == "cards list" {
+				projectCardsList(&lines, result)
+			} else if !detailed && hasNotesSection(result) {
+				projectResultWithCappedNotes(&lines, result)
+			} else {
+				project(&lines, "result", result)
+			}
 		}
 		if envelope.OpenURL != "" {
 			lines = append(lines, "open url="+quote(envelope.OpenURL))

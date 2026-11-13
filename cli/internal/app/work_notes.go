@@ -19,7 +19,11 @@ func (a *App) attachCardNotes(ctx context.Context, cfg config.Resolved, fallback
 		return
 	}
 	cardRef, threadID := notesTargetFromBody(body, fallbackID)
-	body["notes"] = a.loadCardNotes(ctx, cfg, cardRef, threadID)
+	// Notes are supplementary. A server without the notes route (or without
+	// the card/thread it needs) omits them instead of failing the read.
+	if notes := a.loadCardNotes(ctx, cfg, cardRef, threadID); notes != nil {
+		body["notes"] = notes
+	}
 }
 
 func notesTargetFromBody(body map[string]any, fallbackID string) (cardRef, threadID string) {
@@ -47,6 +51,9 @@ func (a *App) loadCardNotes(ctx context.Context, cfg config.Resolved, cardRef, t
 	if threadID == "" && cardRef != "" {
 		card, err := a.fetchCardBody(ctx, cfg, cardRef)
 		if err != nil {
+			if isRemoteNotFound(err) {
+				return nil
+			}
 			return notesErrorResult(err, followUp)
 		}
 		target, err := cardMessageTarget(card, cardRef)
@@ -68,6 +75,9 @@ func (a *App) loadCardNotes(ctx context.Context, cfg config.Resolved, cardRef, t
 		"--max-events", strconv.Itoa(notesJSONLimit),
 	}, cfg)
 	if err != nil {
+		if isRemoteNotFound(err) {
+			return nil
+		}
 		return notesErrorResult(err, followUp)
 	}
 	events := asSlice(commandResultBody(result)["events"])
