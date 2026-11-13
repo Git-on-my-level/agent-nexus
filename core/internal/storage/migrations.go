@@ -48,7 +48,6 @@ var migrations = append([]migration{
 				trashed_by TEXT,
 				trash_reason TEXT
 			);`,
-			`CREATE INDEX IF NOT EXISTS idx_events_thread_ts ON events (thread_id, ts);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_archived_at ON events (archived_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_trashed_at ON events (trashed_at);`,
 			`CREATE INDEX IF NOT EXISTS idx_events_thread_archived ON events (thread_id, archived_at);`,
@@ -415,9 +414,7 @@ var migrations = append([]migration{
 				invite_id TEXT,
 				metadata_json TEXT NOT NULL DEFAULT '{}'
 			);`,
-			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_occurred_at ON auth_audit_events (occurred_at DESC, id DESC);`,
 			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_event_type ON auth_audit_events (event_type, occurred_at DESC, id DESC);`,
-			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_invite_id ON auth_audit_events (invite_id, occurred_at DESC, id DESC);`,
 			`CREATE INDEX IF NOT EXISTS idx_auth_audit_events_sort_key ON auth_audit_events (occurred_at_sort_key DESC, id DESC);`,
 
 			`CREATE TABLE IF NOT EXISTS blob_usage_ledger (
@@ -965,13 +962,6 @@ var migrations = append([]migration{
 	}},
 	{Version: 53, Statements: []string{
 		`CREATE TABLE overview_visits (principal_id TEXT PRIMARY KEY, visited_at TEXT NOT NULL, snapshot_json TEXT NOT NULL);`,
-	}, AfterApply: func(ctx context.Context, tx *sql.Tx) error {
-		exists, err := sqliteTableExists(ctx, tx, "events")
-		if err != nil || !exists {
-			return err
-		}
-		_, err = tx.ExecContext(ctx, `CREATE INDEX idx_events_overview_answers ON events(type,ts,id)`)
-		return err
 	}},
 	{Version: 54, Statements: []string{
 		`CREATE TABLE access_requests (

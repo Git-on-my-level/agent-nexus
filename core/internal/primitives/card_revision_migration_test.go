@@ -86,9 +86,11 @@ func rewindToLegacyCardRevisions(t *testing.T, ctx context.Context, db *sql.DB, 
 			if err := staged.Promote(); err != nil {
 				t.Fatal(err)
 			}
+			// Pre-142 wrote the complete manifest; restore it so migration 130
+			// sees the same inputs it always did before C2 pruned new writes.
 			if _, err := db.ExecContext(ctx, `UPDATE artifacts
-				SET metadata_json = json_set(metadata_json, '$.title', ?, '$.summary', ?, '$.definition_of_done', json(?))
-				WHERE id = ?`, fields.Title, fields.Summary, string(fields.DefinitionOfDone), r.artifactID); err != nil {
+				SET metadata_json = json_set(metadata_json, '$.title', ?, '$.summary', ?, '$.definition_of_done', json(?)), content_refs_json = ?
+				WHERE id = ?`, fields.Title, fields.Summary, string(fields.DefinitionOfDone), string(resourceaccess.ContentReferenceAtomsJSON(string(content), "structured")), r.artifactID); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -100,6 +102,9 @@ func rewindToLegacyCardRevisions(t *testing.T, ctx context.Context, db *sql.DB, 
 		`DROP INDEX idx_card_revisions_card_content_hash`,
 		`DROP INDEX idx_card_revisions_card_snapshots`,
 		`DROP INDEX idx_card_revisions_content_pending`,
+		// Migration 142's artifact trigger names the content hash column this
+		// rewind removes; drop it and replay both migrations after the rewind.
+		`DROP TRIGGER IF EXISTS access_artifacts_update`,
 		`ALTER TABLE card_revisions DROP COLUMN content_payload`,
 		`ALTER TABLE card_revisions DROP COLUMN summary_bytes`,
 		`ALTER TABLE card_revisions DROP COLUMN content_bytes`,
@@ -107,7 +112,7 @@ func rewindToLegacyCardRevisions(t *testing.T, ctx context.Context, db *sql.DB, 
 		`ALTER TABLE card_revisions DROP COLUMN content_base_revision_id`,
 		`ALTER TABLE card_revisions DROP COLUMN content_codec`,
 		`ALTER TABLE card_revisions DROP COLUMN content_encoding`,
-		`DELETE FROM schema_migrations WHERE version = 130`,
+		`DELETE FROM schema_migrations WHERE version IN (130,142)`,
 	} {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			t.Fatalf("%s: %v", stmt, err)

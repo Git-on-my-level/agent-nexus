@@ -268,6 +268,29 @@ Rollback:
   the migrated database: the product rows and tables are gone, and the old
   binary cannot reconstruct them from the archive.
 
+## Migration 142: card revision manifests without prose bodies
+
+Migration 142 installs an artifact-update trigger whose `WHEN` clause calls the
+Go scalar `anx_resource_without_prose`, and starts a bounded backfill that
+rewrites legacy card revision manifests to their reference-only form. Revision
+content bytes, raw access edges and authorization decisions are unchanged.
+
+Prerequisites:
+
+- Take a fresh per-workspace backup before upgrading. The trigger is part of
+  the migrated schema, not a runtime-only optimization.
+
+Rollback:
+
+- Restore the pre-142 workspace backup. Do not start v0.13.65 or older against
+  a 142+ database: those binaries do not register
+  `anx_resource_without_prose`, so every `UPDATE` of `artifacts` fails with
+  "no such function" (card revision writes, artifact lifecycle, document
+  history probes and the NULL-manifest backfill). The failure is loud and
+  non-destructive, but there is no in-place downgrade.
+- Migrations 139 (v0.13.65), 142 and 147 are forward-only. A rollback to an
+  older release requires restoring the backup taken before the first of them.
+
 ## Local development run
 
 ```bash
