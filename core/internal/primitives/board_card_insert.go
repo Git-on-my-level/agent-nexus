@@ -342,7 +342,7 @@ func (s *Store) execBoardCardInsert(ctx context.Context, tx *accessTx, boardRow 
 		provenanceJSON,
 		// New work waits in the Unsorted tray until it names a parent; only the
 		// initiatives board (kept for layout) still creates top-level work.
-		boardRow.Role != "initiatives",
+		boardRow.Role != "initiatives" || lacksInitiativeAuthority(ctx),
 	); err != nil {
 		if isUniqueViolation(err) {
 			return boardRow, boardCardRow{}, ErrConflict

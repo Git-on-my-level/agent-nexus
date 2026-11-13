@@ -31,6 +31,13 @@
   import StateError from "$lib/components/state/StateError.svelte";
   import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import DecisionCard from "$lib/components/decide/DecisionCard.svelte";
+  import StakesBadges from "$lib/components/decide/StakesBadges.svelte";
+  import StandingRulings from "$lib/components/decide/StandingRulings.svelte";
+  import { sentBackItemIds } from "$lib/standingRulings.js";
+  import {
+    mutationConfirmations,
+    mutationOutbox,
+  } from "$lib/mutationOutbox.js";
   import InboxUndoToast from "$lib/components/inbox/InboxUndoToast.svelte";
   import KeyboardShortcutsDialog from "$lib/components/KeyboardShortcutsDialog.svelte";
 
@@ -94,6 +101,7 @@
       ...($inboxUnsentResponses ?? [])
         .filter((entry) => entry.state !== "attention")
         .map((entry) => entry.itemId),
+      ...sentBackItemIds($mutationOutbox, $mutationConfirmations),
     ]),
   );
   /*
@@ -568,6 +576,7 @@
                       >blocks {decision.blocksCount}</SignalBadge
                     >
                   {/if}
+                  <StakesBadges stakes={decision.stakes} class="shrink-0" />
                 </span>
                 <span
                   class="flex min-w-0 items-center gap-2 text-micro text-fg-muted"
@@ -686,6 +695,7 @@
       </section>
     </div>
   {/if}
+  <StandingRulings href={href("/decide")} />
 </WorkspacePageShell>
 
 <InboxUndoToast {onUndo} />

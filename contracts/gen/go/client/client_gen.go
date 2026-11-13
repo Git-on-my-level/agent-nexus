@@ -2782,6 +2782,52 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"report.preview"},
 	},
 	{
+		CommandID:  "rulings.applied",
+		CLIPath:    "rulings applied",
+		Group:      "rulings",
+		Method:     "POST",
+		Path:       "/rulings/{ruling_id}/applied",
+		PathParams: []string{"ruling_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"rulings.create", "rulings.list", "rulings.revoke"},
+	},
+	{
+		CommandID: "rulings.create",
+		CLIPath:   "rulings create",
+		Group:     "rulings",
+		Method:    "POST",
+		Path:      "/rulings",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"rulings.applied", "rulings.list", "rulings.revoke"},
+	},
+	{
+		CommandID: "rulings.list",
+		CLIPath:   "rulings list",
+		Group:     "rulings",
+		Method:    "GET",
+		Path:      "/rulings",
+		InputMode: "none",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "read"},
+		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.revoke"},
+	},
+	{
+		CommandID:  "rulings.revoke",
+		CLIPath:    "rulings revoke",
+		Group:      "rulings",
+		Method:     "POST",
+		Path:       "/rulings/{ruling_id}/revoke",
+		PathParams: []string{"ruling_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list"},
+	},
+	{
 		CommandID:  "runs.get",
 		CLIPath:    "runs get",
 		Group:      "runs",
@@ -4409,6 +4455,22 @@ func (c *Client) ReportPreview(ctx context.Context, opts RequestOptions) (*http.
 
 func (c *Client) ReportRender(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "report.render", pathParams, opts)
+}
+
+func (c *Client) RulingsApplied(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.applied", pathParams, opts)
+}
+
+func (c *Client) RulingsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.create", nil, opts)
+}
+
+func (c *Client) RulingsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.list", nil, opts)
+}
+
+func (c *Client) RulingsRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.revoke", pathParams, opts)
 }
 
 func (c *Client) RunsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

@@ -42,7 +42,11 @@
         "Hold a week"
       ],
       "blocks_count": 2,
-      "age_seconds": 172800
+      "age_seconds": 172800,
+      "stakes": {
+        "irreversible": true,
+        "cost": "$1,200 of rig time"
+      }
     },
     {
       "ref": "inbox:ask-93",
@@ -218,6 +222,54 @@
         "workstreams": [],
         "children": [],
         "has_more": false
+      },
+      "measure": {
+        "label": "Battery life per charge",
+        "direction": "up",
+        "target": 48,
+        "unit": "h",
+        "baseline": 36,
+        "series_ref": "series:battery.life_hours",
+        "latest": 41.5,
+        "latest_at": "2026-10-14T08:00:00Z",
+        "previous": 39.2,
+        "previous_at": "2026-10-07T08:00:00Z",
+        "on_target": false,
+        "age_seconds": 90000,
+        "points": [
+          {
+            "at": "2026-10-06T08:00:00Z",
+            "value": 39.0
+          },
+          {
+            "at": "2026-10-07T08:00:00Z",
+            "value": 39.2
+          },
+          {
+            "at": "2026-10-08T08:00:00Z",
+            "value": 39.9
+          },
+          {
+            "at": "2026-10-09T08:00:00Z",
+            "value": 40.1
+          },
+          {
+            "at": "2026-10-10T08:00:00Z",
+            "value": 40.4
+          },
+          {
+            "at": "2026-10-12T08:00:00Z",
+            "value": 40.8
+          },
+          {
+            "at": "2026-10-13T08:00:00Z",
+            "value": 41.1
+          },
+          {
+            "at": "2026-10-14T08:00:00Z",
+            "value": 41.5
+          }
+        ]
       }
     },
     {
@@ -256,6 +308,21 @@
         "workstreams": [],
         "children": [],
         "has_more": false
+      },
+      "measure": {
+        "label": "Hosts enrolled",
+        "direction": "up",
+        "target": 7,
+        "unit": null,
+        "baseline": null,
+        "series_ref": null,
+        "latest": null,
+        "latest_at": null,
+        "previous": null,
+        "previous_at": null,
+        "on_target": null,
+        "points": [],
+        "age_seconds": null
       }
     },
     {
@@ -365,6 +432,54 @@
         "workstreams": [],
         "children": [],
         "has_more": false
+      },
+      "measure": {
+        "label": "Pairing success",
+        "direction": "up",
+        "target": 95,
+        "unit": "%",
+        "baseline": 80,
+        "series_ref": "series:ble.pairing_success",
+        "latest": 90.5,
+        "latest_at": "2026-10-14T08:00:00Z",
+        "previous": 82.5,
+        "previous_at": "2026-10-07T08:00:00Z",
+        "on_target": false,
+        "points": [
+          {
+            "at": "2026-10-06T08:00:00Z",
+            "value": 81.0
+          },
+          {
+            "at": "2026-10-07T08:00:00Z",
+            "value": 82.5
+          },
+          {
+            "at": "2026-10-08T08:00:00Z",
+            "value": 84.0
+          },
+          {
+            "at": "2026-10-09T08:00:00Z",
+            "value": 85.5
+          },
+          {
+            "at": "2026-10-10T08:00:00Z",
+            "value": 86.0
+          },
+          {
+            "at": "2026-10-12T08:00:00Z",
+            "value": 87.5
+          },
+          {
+            "at": "2026-10-13T08:00:00Z",
+            "value": 88.0
+          },
+          {
+            "at": "2026-10-14T08:00:00Z",
+            "value": 90.5
+          }
+        ],
+        "age_seconds": 90000
       }
     },
     {
@@ -557,5 +672,31 @@
       }
     ],
     "truncated": false
-  }
+  },
+  "fyi": [
+    {
+      "ref": "event:fyi-7",
+      "title": "Nightly backlog digest: 3 cards past promise",
+      "text": "3 of 41 open cards passed their promise overnight; their owners were asked to renew or close them.",
+      "author": {
+        "id": "agent:guard",
+        "display": "guard on host-2",
+        "kind": "agent"
+      },
+      "at": "2026-10-15T03:00:00Z",
+      "subject": {
+        "ref": "card:observability",
+        "title": "Observability"
+      },
+      "repeats": 4
+    }
+  ],
+  "returned_to_you": [],
+  "upkeep": {
+    "open_suggestions": 3,
+    "truncated": false,
+    "oldest_waiting_seconds": 777600,
+    "untended": true
+  },
+  "open_asks": []
 }

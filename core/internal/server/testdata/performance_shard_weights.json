@@ -526,5 +526,9 @@
   {
     "key": "GET /work/where",
     "milliseconds": 1000
+  },
+  {
+    "key": "GET /rulings",
+    "milliseconds": 4000
   }
 ]

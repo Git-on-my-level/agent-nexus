@@ -38,7 +38,11 @@
     lineText,
     sectionTone,
   } from "$lib/watchList.js";
+  import { demotePromiseParts } from "$lib/briefOutcome.js";
+  import FyiList from "./FyiList.svelte";
   import InitiativeChanges from "./InitiativeChanges.svelte";
+  import MeasureLine from "./MeasureLine.svelte";
+  import UpkeepNotice from "./UpkeepNotice.svelte";
   import InitiativeDetails from "./InitiativeDetails.svelte";
 
   let {
@@ -59,6 +63,10 @@
     changes = { items: [], truncated: false },
     /** Snippet for what this list leaves out (cards with no initiative). */
     hidden = null,
+    /** `brief.fyi`: what agents told the reader, wanting no answer. */
+    fyi = [],
+    /** `brief.upkeep`; null from a core that omits it. */
+    upkeep = null,
   } = $props();
 
   const opened = new SvelteSet();
@@ -109,7 +117,9 @@
 
 {#snippet rowView(row)}
   {@const isRowOpen = isOpen(row)}
-  {@const parts = statusParts(row, now)}
+  {@const parts = row.measure
+    ? demotePromiseParts(statusParts(row, now))
+    : statusParts(row, now)}
   {@const status = rowStatus(row, now)}
   {@const bar = rowProgress(row)}
   {@const kids = isRowOpen ? kidRows(row.rollup, now) : null}
@@ -138,6 +148,7 @@
           data-watch-title
           data-collection-toggle>{row.title}</button
         >
+        {#if row.measure}<MeasureLine measure={row.measure} />{/if}
         <span
           class="mt-0.5 block truncate text-meta text-fg-muted"
           title={lineText(parts)}
@@ -323,6 +334,7 @@
 {/snippet}
 
 <div class="rollup" data-rollup-list>
+  <UpkeepNotice {upkeep} />
   <div class="layout">
     {#if notice}
       <p
@@ -385,6 +397,7 @@
         </section>
       {/if}
       {@render hidden?.()}
+      <FyiList items={fyi} {now} {hrefFor} />
     </div>
 
     <div class="side">

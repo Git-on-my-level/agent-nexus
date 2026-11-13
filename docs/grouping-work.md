@@ -29,6 +29,9 @@ Creating without `--under` or `--initiative` succeeds in **Unsorted**, with
 `needs_home=true` and a warning. It never accidentally becomes an initiative.
 Run labels do not supply an implicit parent to `work create`. For an explicit
 independent outcome, use `anx work create --title "Billing reliability" --initiative`.
+A person sets top-level goals: an agent adds `--requested-by <human>` when one
+asked, and otherwise its card waits in Unsorted
+(see [outcomes and decisions](outcomes-and-decisions.md)).
 
 ## Move and address work
 

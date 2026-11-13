@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 256,
+  "route_count": 260,
   "routes": [
     {
       "method": "GET",
@@ -950,6 +950,26 @@
     {
       "method": "POST",
       "path": "/reports/preview",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/rulings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/{ruling_id}/applied",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/{ruling_id}/revoke",
       "access_class": "workspace_business_surface"
     },
     {

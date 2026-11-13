@@ -75,7 +75,9 @@ def main() -> int:
                 if args.skill and not skill_text:
                     skill_text = _skill_text(ws, run_dir)
                 if config is None:
-                    episode = run_oracle(ws, EVAL_AGENT, task.oracle, task.oracle_answer)
+                    # An oracle may name seeded ids as {key}; an agent has to find them.
+                    oracle = [[arg.format(**seeded) if "{" in arg else arg for arg in command] for command in task.oracle]
+                    episode = run_oracle(ws, EVAL_AGENT, oracle, task.oracle_answer)
                 else:
                     episode = run_model(ws, EVAL_AGENT, config, task.prompt, skill_text, args.max_turns,
                                         run_dir / "transcript.jsonl")

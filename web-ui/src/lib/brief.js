@@ -17,6 +17,12 @@ import {
 } from "../../../contracts/gen/ts/dist/enums.js";
 import { normalizeLoop } from "$lib/loops.js";
 import { normalizeBatch } from "$lib/decideBatch.js";
+import {
+  normalizeFyi,
+  normalizeMeasure,
+  normalizeStakes,
+  normalizeUpkeep,
+} from "$lib/briefOutcome.js";
 
 /** Computed initiative states, in attention order. */
 export const WATCH_STATES = [
@@ -46,79 +52,7 @@ export const DECISION_KIND_LABELS = {
   pm_proposal: "PM proposal",
 };
 
-/**
- * Brief fields a screen may bind phase, health, progress or promise to.
- * `data-source="computed:<field>"` must name one of these (I1).
- */
-export const BRIEF_COMPUTED_FIELDS = new Set([
-  "curation_suggestions",
-  "daily_digest",
-  "daily_digest.ref",
-  "daily_digest.title",
-  "daily_digest.reason",
-  "ungrouped.created_by",
-  "ungrouped.next_actions",
-  "initiatives.loop",
-  "decisions.decide_by",
-  "decisions.overdue_for",
-  "decisions.blocks",
-  "decisions.priority",
-  "initiatives.parent_ref",
-  "initiatives.rollup",
-  "initiatives.outcome",
-  "initiatives.proposed",
-  "initiatives.rollup.earliest_promise_at",
-  "initiatives.rollup.children.owner",
-  "initiatives.rollup.children.done_at",
-  "initiatives.rollup.children.short_code",
-  "initiatives.rollup.workstreams.rollup",
-  "initiatives.rollup.workstreams.rollup.total",
-  "initiatives.rollup.workstreams.rollup.by_state",
-  "initiatives.rollup.workstreams.rollup.earliest_promise_at",
-  "initiatives.rollup.workstreams.rollup.past_promise",
-  "initiatives.rollup.workstreams.owner",
-  "initiatives.rollup.workstreams.short_code",
-  "initiatives.rollup.workstreams.done_at",
-  "initiatives.rollup.workstreams.rollup.needing_viewer",
-  "initiatives.rollup.workstreams.rollup.has_more",
-  "initiatives.rollup.workstreams.rollup.children",
-  "initiatives.rollup.workstreams.rollup.children.done_at",
-  "initiatives.rollup.workstreams.rollup.children.short_code",
-  "initiatives.rollup.children.rollup",
-  "loops.outcome",
-  "loops.proposed",
-  "initiatives.rollup.total",
-  "initiatives.rollup.by_state",
-  "initiatives.rollup.past_promise",
-  "initiatives.rollup.needing_viewer",
-  "initiatives.rollup.workstreams",
-  "initiatives.rollup.children",
-  "initiatives.rollup.has_more",
-  "loops",
-  "loops.loop",
-  "loops.state",
-  "loops.placement",
-  "loops.promise",
-  "loops.parent_ref",
-  "loops.rollup",
-  "initiative_budget",
-  "over_target",
-  "initiative_changes",
-  "next_actions",
-  "initiatives.state",
-  "initiatives.placement",
-  "initiatives.promise",
-  "initiatives.past_promise_for",
-  "initiatives.promise_moves",
-  "initiatives.last_evidence_at",
-  "initiatives.progress",
-  "initiatives.blocked_count",
-  "initiatives.waiting_on_you_count",
-  "initiatives.series",
-  "initiatives.metric_flat",
-  "initiatives.loop",
-  "generated_at",
-]);
+export { BRIEF_COMPUTED_FIELDS } from "./briefFields.js";
 
 /** p0 (or critical/urgent) sorts first; an unknown priority sorts last. */
 function priorityRank(value) {
@@ -244,6 +178,7 @@ function normalizeDecision(raw) {
       Array.isArray(raw.blocks) ? raw.blocks.length : 0,
     ),
     priority: text(raw.priority).toLowerCase(),
+    stakes: normalizeStakes(raw.stakes),
     subject: refTitle(raw.subject),
     // A decision proposal answers through /pm/decisions, which needs its revision.
     pmDecision: raw.pm_decision?.id
@@ -481,6 +416,7 @@ function normalizeInitiative(raw) {
     note,
     series: Array.isArray(raw.series) ? raw.series : [],
     metricFlat: raw.metric_flat ?? null,
+    measure: normalizeMeasure(raw.measure),
     loop: normalizeLoop(raw.loop),
     possiblyMoot: raw.possibly_moot?.flagged
       ? { reason: text(raw.possibly_moot.reason) }
@@ -534,6 +470,8 @@ export function normalizeBrief(raw) {
       .map(normalizeInitiative)
       .filter(Boolean)
       .map((row) => ({ ...row, section: "loops" })),
+    fyi: normalizeFyi(brief?.fyi),
+    upkeep: normalizeUpkeep(brief?.upkeep),
     initiativeBudget: normalizeBudget(brief?.initiative_budget),
     overTarget: normalizeOverTarget(brief?.over_target),
     initiativeChanges: normalizeInitiativeChanges(brief?.initiative_changes),

@@ -17,7 +17,7 @@ func TestNaiveAgentLeavesAReadableWorkspace(t *testing.T) {
 	h.enrollHost(t, "worker")
 	h.registerHumanPasskey(t, "operator", "Eval Operator", h.createHumanInviteToken(t))
 	board := h.runCLIExpectOK(t, "worker", map[string]any{"board": map[string]any{"title": "Eval", "document_refs": []any{}, "pinned_refs": []any{}, "provenance": map[string]any{"sources": []any{"inferred"}}}}, "boards", "create")
-	created := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Eval outcome", "initiative": true}, "work", "create", "--from-file", "-")
+	created := h.runCLIExpectOK(t, "worker", map[string]any{"board_ref": mustStringPath(t, board.Payload, "result.board.ref"), "title": "Eval outcome", "initiative": true, "requested_by": "Operator"}, "work", "create", "--from-file", "-")
 	ref := mustStringPath(t, created.Payload, "result.work.ref")
 	h.runCLIExpectOK(t, "worker", nil, "work", "start", ref)
 

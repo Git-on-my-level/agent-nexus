@@ -9,23 +9,27 @@ The trigger phrase is an exact substring of the warning message. The
 participant skill must not contain any trigger phrase (I6); this table is the
 machine-readable source for that check.
 
-| id                          | command     | trigger phrase                   | suggests                                                                                                                                                     |
-| --------------------------- | ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ask_no_deadline             | ask         | `no --by or --blocks`            | Add `--by <when>` (when the human should decide) and/or `--blocks <ref>` for the work this decision blocks.                                                  |
-| ask_overtaken_subject       | ask         | `since the subject last moved`   | The subject card is flagged possibly moot; if the decision is overtaken, `anx ask withdraw <ask-id> --reason overtaken`.                                     |
-| ask_auto_created_card       | ask         | `No --subject-ref`               | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available. |
-| work_near_duplicate         | work create | `matches an open initiative`     | Inspect the matching initiative with `anx where <card>` and name it with `work create --under <card>`.                                                       |
-| work_over_target            | work create | `open initiatives (target 15)`   | Prefer existing work or create under a named initiative.                                                                                                     |
-| note_card_not_started       | note        | `note posted, but`               | The card has not started and someone else owns it: they start it, or take it over with `anx work start <card>`.                                              |
-| note_start_failed           | note        | `could not`                      | The note was saved but the card did not start; run `anx work start <card>`.                                                                                  |
-| run_attribution_skipped     | any write   | `without run attribution`        | The write was saved unattributed. Write with the `--as` of the agent that started the agentctl run, or unset `AGENTCTL_EXECUTION_ID` for another identity.   |
-| note_no_next                | note        | `no --next`                      | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                          |
-| note_promise_kept           | note        | `promise kept:`                  | Nothing to do when the promise still stands. Change it with `--next`; say it is fulfilled with `--met`.                                                      |
-| ask_already_open            | ask         | `is already open`                | Wait with `anx await <ask-id>`; revise the copy with `anx ask revise`.                                                                                       |
-| ask_already_answered        | ask         | `is already answered`            | Use the returned answer. Pass `--again` only if the facts changed.                                                                                           |
-| ask_prior_ruling            | ask         | `has a recorded ruling`          | Read the ruling; withdraw the ask if it already settles this.                                                                                                |
-| note_moved_without_evidence | note        | `promise moved without evidence` | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`.                                                       |
-| note_beyond_horizon         | note        | `beyond the 2-day horizon`       | Promise a nearer checkpoint, for example `--next 2d "<checkpoint>"`.                                                                                         |
+| id                           | command     | trigger phrase                              | suggests                                                                                                                                                                        |
+| ---------------------------- | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ask_no_deadline              | ask         | `no --by or --blocks`                       | Add `--by <when>` (when the human should decide) and/or `--blocks <ref>` for the work this decision blocks.                                                                     |
+| ask_overtaken_subject        | ask         | `since the subject last moved`              | The subject card is flagged possibly moot; if the decision is overtaken, `anx ask withdraw <ask-id> --reason overtaken`.                                                        |
+| ask_auto_created_card        | ask         | `No --subject-ref`                          | Pass `--subject-ref card:<slug>` so the ask stays on an initiative. The warning lists up to three open initiatives when a cheap work-list page is available.                    |
+| work_near_duplicate          | work create | `matches an open initiative`                | Inspect the matching initiative with `anx where <card>` and name it with `work create --under <card>`.                                                                          |
+| work_over_target             | work create | `open initiatives (target 15)`              | Prefer existing work or create under a named initiative.                                                                                                                        |
+| note_card_not_started        | note        | `note posted, but`                          | The card has not started and someone else owns it: they start it, or take it over with `anx work start <card>`.                                                                 |
+| note_start_failed            | note        | `could not`                                 | The note was saved but the card did not start; run `anx work start <card>`.                                                                                                     |
+| run_attribution_skipped      | any write   | `without run attribution`                   | The write was saved unattributed. Write with the `--as` of the agent that started the agentctl run, or unset `AGENTCTL_EXECUTION_ID` for another identity.                      |
+| note_no_next                 | note        | `no --next`                                 | Renew the card's promise: `anx note <card> --next <when> "<what>"`.                                                                                                             |
+| note_promise_kept            | note        | `promise kept:`                             | Nothing to do when the promise still stands. Change it with `--next`; say it is fulfilled with `--met`.                                                                         |
+| ask_already_open             | ask         | `is already open`                           | Wait with `anx await <ask-id>`; revise the copy with `anx ask revise`.                                                                                                          |
+| ask_already_answered         | ask         | `is already answered`                       | Use the returned answer. Pass `--again` only if the facts changed.                                                                                                              |
+| ask_prior_ruling             | ask         | `has a recorded ruling`                     | Read the ruling; withdraw the ask if it already settles this.                                                                                                                   |
+| note_moved_without_evidence  | note        | `promise moved without evidence`            | Attach evidence so the move resets the clock: `anx note <card> --evidence <url-or-ref> --next <when>`.                                                                          |
+| note_beyond_horizon          | note        | `beyond the 2-day horizon`                  | Promise a nearer checkpoint, for example `--next 2d "<checkpoint>"`.                                                                                                            |
+| ask_covered_by_ruling        | ask         | `a standing ruling already answers this`    | Nothing was filed. Act on the returned answer and cite the ruling ref; pass `--again` only if the facts changed.                                                                |
+| ask_similar_ruling           | ask         | `a standing ruling may already answer this` | Read the named rulings. If one covers the question, act on it and withdraw the ask.                                                                                             |
+| ask_not_a_decision           | ask         | `as not a decision`                         | The content was stored as an fyi on the card. Use `anx tell <card> "<headline>"` for it next time.                                                                              |
+| work_create_goal_needs_human | work create | `a human sets top-level goals`              | The card was created in Unsorted. Group it under a goal with `anx mv <card> --under <goal>`, or if a human asked, `anx mv <card> --root --reason <why> --requested-by <human>`. |
 
 `<when>` everywhere is the `review_by` grammar: a UTC date (`YYYY-MM-DD`), an
 RFC3339 timestamp, or a positive `s`/`m`/`h`/`d` duration. A malformed value is
@@ -63,6 +67,19 @@ How each warning is computed, and what it costs:
   caller's newest earlier `next` on the card resolves to a different time. One
   `GET /events` of the newest 50 card-thread notes, then the same local author check.
 - `note_beyond_horizon`: `--next` resolves more than 2 days out. No request.
+
+- `ask_covered_by_ruling`, `ask_not_a_decision`: core decides both when the
+  ask is filed (two index seeks on the standing-rulings key). When the ask
+  has no subject card yet, the CLI first makes one `GET /brief` and one
+  `GET /rulings` (at most 200 rows), so a card is not created for an ask that
+  is never filed.
+- `ask_similar_ruling`: one `GET /rulings` per filed ask; token Jaccard or
+  normalized Levenshtein >= 0.5 against the questions of live answer rulings,
+  at most three named. Whether one covers the new question is the asker's
+  judgment, so this never blocks the write.
+- `work_create_goal_needs_human`: core created the card in Unsorted because an
+  agent asked for a top-level goal without naming the human who requested it.
+  No extra request.
 
 `needs_home`: creation entered Unsorted. Use `anx where <card>` to inspect suggestions,
 then `anx work move <card> --under <parent>` to confirm a home.

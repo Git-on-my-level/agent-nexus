@@ -29,7 +29,7 @@ func TestAskSubjectBoardPrivateDefaultAndReplacement(t *testing.T) {
 	}
 	publish := func() string {
 		t.Helper()
-		ask, err := s.AppendTaskAttentionEvent(scope, "writer", map[string]any{"type": "human_attention_requested", "thread_id": topic.Topic["thread_id"], "refs": []string{anyStringValue(topic.Topic["ref"])}, "payload": map[string]any{"subject_ref": topic.Topic["ref"], "title": "Legacy topic question", "requester_actor_id": "writer"}})
+		ask, err := s.AppendTaskAttentionEvent(scope, "writer", map[string]any{"type": "human_attention_requested", "thread_id": topic.Topic["thread_id"], "refs": []string{anyStringValue(topic.Topic["ref"])}, "payload": map[string]any{"subject_ref": topic.Topic["ref"], "title": "Legacy topic question", "requester_actor_id": "writer", "again": true}})
 		if err != nil {
 			t.Fatal(err)
 		}

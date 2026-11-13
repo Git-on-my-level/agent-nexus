@@ -207,8 +207,11 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO access_requests(id,principal_id,actor_id,username,grant_name,reason,created_at,request_event_id,inbox_item_id) VALUES('matrix-private-access',?,?,?,'auth-admin','Confidential access reason','now',?,'matrix-access-inbox')`, agent.AgentID, agent.ActorID, "matrix.agent", event["id"]); err != nil {
 		t.Fatal(err)
 	}
-	replacements := strings.NewReplacer("{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
-	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "Confidential"}
+	if _, err = db.ExecContext(ctx, `INSERT INTO standing_rulings(id,title_key,requester,kind,question,answer,source_ask_id,created_by,created_at) VALUES('matrix-private-ruling','confidential ruling','','answer','Confidential ruling question','Confidential ruling answer',?,?,?)`, askID, stranger.ActorID, now.Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	replacements := strings.NewReplacer("{ruling_id}", "matrix-private-ruling", "{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "matrix-private-ruling", "Confidential"}
 	snapshot := func() string {
 		var v string
 		if err := db.QueryRowContext(ctx, `SELECT json_object('cards',(SELECT json_group_array(json_object('id',id,'updated_at',updated_at,'due_at',due_at,'summary',summary)) FROM cards),'events',(SELECT COUNT(*) FROM events),'wakeups',(SELECT COUNT(*) FROM agent_wakeups))`).Scan(&v); err != nil {
@@ -442,6 +445,10 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"actor_id": actor, "event": map[string]any{"type": "message_posted", "thread_id": thread, "refs": refs, "payload": map[string]any{"text": "attempt"}}}
 	case "/asks/{ask_id}/retire":
 		return map[string]any{"request_key": "private-retirement", "reason": "stale", "evidence": refs}
+	case "/rulings":
+		return map[string]any{"ask_ref": "event:" + event, "kind": "not_a_decision"}
+	case "/rulings/{ruling_id}/revoke", "/rulings/{ruling_id}/applied":
+		return map[string]any{}
 	case "/asks/{ask_id}/revise":
 		return map[string]any{"if_revision": 0, "request_key": "private-revision", "presentation": map[string]any{"title": "Attempt?", "details": "card:" + card}}
 	case "/asks/batch":

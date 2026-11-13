@@ -122,8 +122,9 @@ func TestWorkBlockAskBodyAndOverride(t *testing.T) {
 					fmt.Fprint(w, `{}`)
 				case r.Method == http.MethodGet && r.URL.Path == "/events":
 					fmt.Fprint(w, `{"events":[]}`)
-				case r.Method == http.MethodGet && r.URL.Path == "/brief":
-					// Best-effort ask_no_deadline count; a failed read is tolerated.
+				case r.Method == http.MethodGet && (r.URL.Path == "/brief" || r.URL.Path == "/rulings"):
+					// Best-effort ask_no_deadline count and standing-ruling
+					// lookup; a failed read is tolerated.
 					http.NotFound(w, r)
 				default:
 					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)

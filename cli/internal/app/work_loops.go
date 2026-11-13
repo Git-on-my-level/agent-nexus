@@ -16,7 +16,7 @@ import (
 )
 
 func isLoopWork(name string) bool {
-	return name == "work cadence" || name == "work goal" || name == "work receipt"
+	return name == "work cadence" || name == "work goal" || name == "work measure" || name == "work receipt"
 }
 
 var receiptMetric = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,119}$`)
@@ -43,6 +43,8 @@ func loopWorkValueFlags(name string) []string {
 		return []string{"every", "budget", "stop-rule"}
 	case "work goal":
 		return []string{"metric", "direction", "target", "baseline", "unit", "label", "series"}
+	case "work measure":
+		return []string{"label", "direction", "target", "baseline", "unit", "series"}
 	case "work receipt":
 		return []string{"run-id", "outcome", "summary", "candidate", "decision", "score-before", "score-after", "started-at"}
 	}
@@ -55,7 +57,7 @@ func parseLoopWork(name string, args []string) (string, map[string]any, error) {
 	var id trackedString
 	values := map[string]*trackedString{}
 	keys := loopWorkValueFlags(name)
-	if name == "work cadence" || name == "work goal" {
+	if name == "work cadence" || name == "work goal" || name == "work measure" {
 		fs.Var(&clear, "clear", "Clear annotation")
 	}
 	for _, k := range keys {
@@ -171,6 +173,12 @@ func parseLoopWork(name string, args []string) (string, map[string]any, error) {
 			m["series_ref"] = ref
 		}
 		body["goal"] = m
+	case "work measure":
+		m, problem := measureBody(values, number)
+		if problem != "" {
+			return bad(problem)
+		}
+		body["measure"] = m
 	case "work receipt":
 		runID, summary, outcome := values["run-id"].value, values["summary"].value, values["outcome"].value
 		if runID == "" || len([]rune(runID)) > 200 {

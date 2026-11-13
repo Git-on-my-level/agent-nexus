@@ -180,6 +180,12 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 		"ask_overtaken_subject":       "merged since the subject last moved",
 		"ask_auto_created_card":       "No --subject-ref: created card:x on board:tasks",
 	}
+	ruling := map[string]any{"ref": "ruling:r1", "question": "Rerun the diagnostic?", "answer": "Yes"}
+	covered, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "card:x", "ask")
+	told, _ := askRedirectResult(map[string]any{"redirected": "tell", "ruling": ruling}, "card:x", "ask")
+	for _, w := range append(append(append(covered.Warnings, told.Warnings...), similarRulingWarning([]map[string]any{ruling})...), goalNeedsHumanWarning("card:x")) {
+		messages[w.Code] = w.Message
+	}
 	for _, w := range workCreateWarningsFor("Fix flaky BLE test", func() []map[string]any {
 		rows := []map[string]any{{"ref": "card:ble", "title": "Fix flaky BLE tests"}}
 		for i := 0; i < 16; i++ {

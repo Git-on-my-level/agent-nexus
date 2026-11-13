@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-var keys = []string{"situation", "impact", "recommendation", "alternatives", "if_no_answer", "details", "evidence", "presentation_revision", "presentation_rewrite"}
+var keys = []string{"situation", "impact", "recommendation", "alternatives", "if_no_answer", "details", "evidence", "stakes", "presentation_revision", "presentation_rewrite"}
 
 // Copy projects only presentation fields from an already-authorized event.
 func Copy(dst, src map[string]any) {
@@ -60,6 +60,28 @@ func Validate(payload map[string]any) error {
 			}
 			if err := text(obj["consequence"], fmt.Sprintf("alternatives[%d].consequence", i), 4000, true); err != nil {
 				return err
+			}
+		}
+	}
+	if v, ok := payload["stakes"]; ok && v != nil {
+		// Stakes let a reader size a decision before opening it: whether it can
+		// be undone and what it costs. Both are the asker's claim, shown as such.
+		obj, ok := v.(map[string]any)
+		if !ok {
+			return fmt.Errorf("stakes must be an object with irreversible and cost")
+		}
+		for key, value := range obj {
+			switch key {
+			case "irreversible":
+				if _, ok := value.(bool); !ok {
+					return fmt.Errorf("stakes.irreversible must be a boolean")
+				}
+			case "cost":
+				if err := text(value, "stakes.cost", 80, true); err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("unknown stakes field %s", key)
 			}
 		}
 	}

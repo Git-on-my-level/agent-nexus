@@ -20,6 +20,8 @@ var machineCommandIdentityByPath = map[string]machineCommandIdentity{
 	"context":             {Command: "context", CommandID: "context"},
 	"note":                {Command: "note", CommandID: "note"},
 	"feedback":            {Command: "feedback", CommandID: "feedback"},
+	"tell":                {Command: "tell", CommandID: "tell"},
+	"rulings list":        {Command: "rulings list", CommandID: "rulings.list"},
 	"done":                {Command: "done", CommandID: "done"},
 	"api":                 {Command: "api", CommandID: "api"},
 	"await":               {Command: "await", CommandID: "events.stream"},

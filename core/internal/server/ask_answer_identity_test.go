@@ -27,7 +27,7 @@ func TestDecideAnswerOriginalAskIdentity(t *testing.T) {
 	thread := anyString(work["thread_id"])
 	file := func() map[string]any {
 		t.Helper()
-		ask, err := store.AppendTaskAttentionEvent(ctx, agent.ActorID, map[string]any{"type": humanAttentionRequestedEventType, "thread_id": thread, "refs": []string{"thread:" + thread, anyString(work["ref"])}, "summary": "Proceed?", "payload": map[string]any{"kind": "ask", "title": "Proceed?", "subject_ref": work["ref"], "requester_actor_id": agent.ActorID, "response_proposals": []string{"Proceed", "Wait"}, "delivery": "none"}})
+		ask, err := store.AppendTaskAttentionEvent(ctx, agent.ActorID, map[string]any{"type": humanAttentionRequestedEventType, "thread_id": thread, "refs": []string{"thread:" + thread, anyString(work["ref"])}, "summary": "Proceed?", "payload": map[string]any{"again": true, "kind": "ask", "title": "Proceed?", "subject_ref": work["ref"], "requester_actor_id": agent.ActorID, "response_proposals": []string{"Proceed", "Wait"}, "delivery": "none"}})
 		if err != nil {
 			t.Fatal(err)
 		}

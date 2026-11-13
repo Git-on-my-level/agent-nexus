@@ -1,6 +1,10 @@
 <script>
   import AskPresentation from "./AskPresentation.svelte";
   import DecisionBatch from "./DecisionBatch.svelte";
+  import DecisionStanding from "./DecisionStanding.svelte";
+  import StakesBadges from "./StakesBadges.svelte";
+  import { editable, outcomeFor, reducedMotion } from "$lib/decideCard.js";
+  import * as standing from "$lib/standingRulings.js";
   let showOriginal = $state(false);
   const shownDecision = $derived(
     showOriginal && decision.presentationRewrite?.original
@@ -141,16 +145,12 @@
   let confirming = $state("");
   let pmSent = $state(false);
   let saveError = $state("");
+  /** "Always answer this way": the answer becomes a ruling once it is sent. */
+  let always = $state(false);
+  standing.watchStandingAnswers();
 
   /** A filed batch answered question by question (DecisionBatch). */
   let filedBatch = $derived(decision.batch?.questions === true);
-
-  function outcomeFor(proposal) {
-    if (!structured) return "answered";
-    return /^(deny|reject|decline|refuse)/i.test(proposal)
-      ? "rejected"
-      : "approved";
-  }
 
   function send(text, outcome = "answered") {
     const body = String(text ?? "").trim();
@@ -164,6 +164,7 @@
       decision.requestedBy?.kind === "agent" ? "original" : "none";
     const who =
       notifyMode === "original" ? decision.requestedBy?.display || "" : "";
+    standing.intend(itemId, always && !binding, decision, body);
     queueInboxResponse({
       itemId,
       item: { id: itemId, kind: decision.kind, title: decision.title },
@@ -202,7 +203,7 @@
       }
       return;
     }
-    const outcome = outcomeFor(proposal);
+    const outcome = outcomeFor(structured, proposal);
     if (structured && outcome === "approved" && confirming !== proposal) {
       confirming = proposal;
       return;
@@ -250,12 +251,6 @@
       !confirming &&
       !(pmAnswer && (pmSent || pmQueued)),
   );
-
-  function reducedMotion() {
-    // No matchMedia (a test DOM) also sends at once.
-    if (typeof window === "undefined" || !window.matchMedia) return true;
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
 
   function commit(index) {
     if (!canChoose || flashing !== -1) return;
@@ -413,14 +408,6 @@
     }
   }
 
-  function editable(target) {
-    return (
-      target instanceof HTMLElement &&
-      (target.isContentEditable ||
-        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
-    );
-  }
-
   function onKeydown(event) {
     if (
       event.key === "c" &&
@@ -486,6 +473,7 @@
           ></SignalBadge
         >
       {/if}
+      <StakesBadges stakes={decision.stakes} />
     </p>
     <h3
       class="{rich
@@ -852,6 +840,17 @@
         }}>{stack ? "Reply" : "Reply…"}</button
       >
     {/if}
+    <DecisionStanding
+      {decision}
+      {itemId}
+      bind:always
+      disabled={answered ||
+        Boolean(binding) ||
+        Boolean(confirming) ||
+        elsewhere}
+      href={href(`/decide/${encodeURIComponent(itemId)}`)}
+      {onAnswered}
+    />
     <button
       type="button"
       class="ml-auto inline-flex items-center text-micro text-fg-muted hover:text-fg max-lg:min-h-11 max-lg:px-1"

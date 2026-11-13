@@ -44,6 +44,16 @@ Useful flags:
 
 `ANX_EVAL_EXTRA_BODY` takes a JSON object merged into every model request, for provider settings such as a reasoning level.
 
+## Dogfood with a full agent
+
+`run.py` gives a model one tool. To let a coding agent with a shell use the CLI the way it would in real work, start the same seeded workspace and leave it running:
+
+```sh
+python3 tests/agent-ergonomics/sandbox.py --dir /tmp/anx-sandbox
+```
+
+The directory gets an `anx` wrapper pinned to the sandbox workspace and the `eval` identity, a `human` wrapper that calls the workspace as the person who runs it, and the two bundled skills. Point any agent at that directory, give it tasks in plain words, and ask what got in its way. `touch /tmp/anx-sandbox/STOP` stops core. Nothing outside the directory is reachable through the wrappers.
+
 ## Reading the report
 
 Each run writes `summary.md`, `results.json` and one `transcript.jsonl` per episode under `.tmp/agent-ergonomics/<timestamp>/`.

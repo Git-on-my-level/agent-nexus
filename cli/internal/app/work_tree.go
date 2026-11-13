@@ -15,6 +15,7 @@ import (
 // as identity, and advisory home suggestions never trigger a mutation.
 type workTreeCommand struct {
 	name, ref, under, reason, after, requestKey string
+	requestedBy                                 string
 	root, unsorted, includeDone                 bool
 	depth                                       int
 }
@@ -44,6 +45,7 @@ func parseWorkTreeCommand(args []string) (workTreeCommand, error) {
 		fs.BoolVar(&p.root, "root", false, "Move to top level")
 		fs.BoolVar(&p.unsorted, "unsorted", false, "Move to Unsorted")
 		fs.StringVar(&p.reason, "reason", "", "Audit reason (required for root or moving an initiative under a parent)")
+		fs.StringVar(&p.requestedBy, "requested-by", "", "The human who asked for this top-level goal (with --root)")
 		fs.StringVar(&p.after, "after", "", "Preceding sibling plan step id")
 		fs.StringVar(&p.requestKey, "request-key", "", "Retain the same key and body until confirmed")
 	case "tree", "work tree", "work ls":
@@ -169,6 +171,9 @@ func (a *App) runWorkTreeCommand(ctx context.Context, args []string, cfg config.
 		}
 		if p.unsorted {
 			object["unsorted"] = true
+		}
+		if requestedBy := strings.TrimSpace(p.requestedBy); requestedBy != "" {
+			object["requested_by"] = requestedBy
 		}
 		if p.reason != "" {
 			object["reason"] = p.reason
@@ -309,7 +314,7 @@ func formatWorkWhere(body map[string]any) string {
 func workTreeHelp(topic string) (string, bool) {
 	switch topic {
 	case "mv", "work move":
-		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.", true
+		return "Usage: anx " + topic + " <ref|path> (--under <ref|path> | --root --requested-by <human> | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]\nMove the stored parent without changing plan steps. A human sets top-level goals: with --root an agent names the human who asked in --requested-by, and is refused without one (propose the goal with anx ask instead). --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.", true
 	case "tree", "work tree":
 		return "Usage: anx " + topic + " [ref|path] [--depth <1..3>] [--include-done]\nRead initiatives and Unsorted or one subtree; default depth 2. Children are in creation order. Truncation is explicit; read a subtree for more detail. Use --json for one envelope.", true
 	case "work ls":
@@ -325,7 +330,7 @@ func init() {
 		path, summary, shape string
 		flags                []localHelperFlag
 	}{
-		{"mv", "Move a card in the stored work tree.", "`work`", []localHelperFlag{{Name: "--under <ref|path>", Description: "Stored parent."}, {Name: "--root", Description: "Move to top level; requires reason."}, {Name: "--unsorted", Description: "Move to Unsorted."}, {Name: "--reason <text>", Description: "Audit reason, at most 2000 characters."}, {Name: "--after <step-id>", Description: "Sibling plan step id."}, {Name: "--request-key <key>", Description: "Retain the same key and body until confirmed."}}},
+		{"mv", "Move a card in the stored work tree.", "`work`", []localHelperFlag{{Name: "--under <ref|path>", Description: "Stored parent."}, {Name: "--root", Description: "Move to top level; requires reason, and --requested-by from an agent."}, {Name: "--requested-by <human>", Description: "The human who asked for this top-level goal."}, {Name: "--unsorted", Description: "Move to Unsorted."}, {Name: "--reason <text>", Description: "Audit reason, at most 2000 characters."}, {Name: "--after <step-id>", Description: "Sibling plan step id."}, {Name: "--request-key <key>", Description: "Retain the same key and body until confirmed."}}},
 		{"tree", "Read the stored work tree.", "`initiatives`, `unsorted`, or `node`; `truncated`", []localHelperFlag{{Name: "--depth <n>", Description: "Expansion depth 1..3; default 2."}, {Name: "--include-done", Description: "Include completed cards."}}},
 		{"work ls", "List immediate children of a ref or path.", "`children`, `has_more`, `truncated`", []localHelperFlag{{Name: "--include-done", Description: "Include completed cards."}}},
 	} {

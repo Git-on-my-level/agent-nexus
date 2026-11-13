@@ -47,6 +47,11 @@ func (a *App) finishCardCreate(ctx context.Context, cfg config.Resolved, result 
 	if item == nil {
 		item = asMap(body["card"])
 	}
+	if anyString(body["redirected"]) == "unsorted" {
+		ref := firstNonEmpty(anyString(item["ref"]), "<card>")
+		result.Warnings = append(result.Warnings, goalNeedsHumanWarning(ref))
+		result.NextActions = append(result.NextActions, action("Group it under an existing goal", "anx", "mv", ref, "--under", "<goal>"))
+	}
 	if cards := asSlice(body["cards"]); len(cards) > 0 {
 		if hint.Parent != "" {
 			body["run_parent_default"] = map[string]any{"parent_ref": hint.Parent, "label": hint.Label, "message": hint.Message()}
@@ -94,4 +99,11 @@ func (a *App) cardCreateWarnings(ctx context.Context, cfg config.Resolved, body 
 	warningCtx, cancel := context.WithTimeout(ctx, runcontext.LookupTimeout)
 	defer cancel()
 	return a.workCreateWarnings(warningCtx, cfg, title, exclude)
+}
+
+// goalNeedsHumanWarning tells an agent why its top-level create landed in
+// Unsorted and what to do next.
+func goalNeedsHumanWarning(ref string) output.Warning {
+	return output.Warning{Code: "work_create_goal_needs_human", Message: "a human sets top-level goals, so this card was created in Unsorted; group it under an existing goal, or if a human asked for it, promote it and name them",
+		Details: map[string]any{"suggest": []string{"anx", "mv", ref, "--root", "--reason", "<why>", "--requested-by", "<human>"}}}
 }

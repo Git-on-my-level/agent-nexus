@@ -71,7 +71,7 @@ func handleAskRetirement(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		case errors.Is(err, primitives.ErrNotFound), errors.Is(err, primitives.ErrForbidden):
 			writeError(w, 404, "not_found", "ask not found")
 		case errors.Is(err, auth.ErrAuthAdminRequired):
-			writeError(w, 403, "forbidden", "only the requester, a human member or an auth-admin agent may retire an ask")
+			writeError(w, 403, "forbidden", "only a workspace member may retire an ask")
 		case errors.Is(err, primitives.ErrInvalidWorkRequest), errors.Is(err, primitives.ErrInvalidBoardRequest):
 			writeError(w, 400, "invalid_request", err.Error())
 		case errors.Is(err, primitives.ErrConflict), errors.Is(err, primitives.ErrHumanAttentionAlreadyResponded):

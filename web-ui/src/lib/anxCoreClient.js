@@ -7,6 +7,7 @@ import { isInboxResponseOutcome } from "./askDelivery.js";
 import { getExpectedCommandRegistryDigest } from "./commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
 import { appPath } from "./workspacePaths.js";
+import { rulingCommands } from "./anxCoreClientRulings.js";
 
 const commandRegistryByID = new Map(
   commandRegistry.map((command) => [command.command_id, command]),
@@ -327,8 +328,7 @@ const adapterCommandTable = [
   [
     "renderReport",
     "report.render",
-    // `filters` carries `summary=1`, which opts the native card panels into
-    // the computed summary the UI renders.
+    // `filters` carries `summary=1`: native card panels get the UI's summary.
     (documentId, filters) =>
       pq(pathParams({ document_id: documentId }), filters),
   ],
@@ -484,6 +484,7 @@ const adapterCommandTable = [
     "pm.actions.acknowledge",
     (id, payload = {}) => pb(pathParams({ action_id: id }), payload),
   ],
+  ...rulingCommands(q, b, pb, pathParams),
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],
   ["createActor", "actors.create", (payload) => ({ options: b(payload) })],
@@ -494,8 +495,7 @@ const adapterCommandTable = [
   [
     "getAgent",
     "agents.get",
-    // `filters` carries `summary=1`: without it the route scans every card
-    // the agent is assigned and computes no summary.
+    // `filters` carries `summary=1`; without it the route computes no summary.
     (agentId, filters) => pq(pathParams({ agent_id: agentId }), filters),
   ],
   ["listRuns", "runs.list", (filters) => ({ options: q(filters) })],

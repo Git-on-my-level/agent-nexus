@@ -13,7 +13,7 @@ import (
 func TestWorkTreeAgentLoopAgainstCore(t *testing.T) {
 	h := newLiveCoreHarness(t)
 	h.enrollHost(t, "worker")
-	root := h.runCLIExpectOK(t, "worker", nil, "work", "create", "--title", "Webhook delivery", "--handle", "webhooks", "--initiative")
+	root := h.runCLIExpectOK(t, "worker", nil, "work", "create", "--title", "Webhook delivery", "--handle", "webhooks", "--initiative", "--requested-by", "Operator")
 	rootRef := mustStringPath(t, root.Payload, "result.work.ref")
 	child := h.runCLIExpectOK(t, "worker", nil, "work", "create", "--title", "Retry policy", "--handle", "retry-policy", "--under", rootRef)
 	if got := mustStringPath(t, child.Payload, "result.work.parent_ref"); got != rootRef {
@@ -52,7 +52,12 @@ func TestWorkTreeAgentLoopAgainstCore(t *testing.T) {
 	if refused.ExitCode == 0 {
 		t.Fatalf("promotion without a reason succeeded: %s", refused.Stdout)
 	}
-	h.runCLIExpectOK(t, "worker", nil, "mv", looseRef, "--root", "--reason", "Separate reliability outcome")
+	// A human sets top-level goals: an agent is refused until it names who asked.
+	unrequested := h.runCLI(t, "worker", nil, "mv", looseRef, "--root", "--reason", "Separate reliability outcome")
+	if unrequested.ExitCode == 0 || !strings.Contains(unrequested.Stdout+unrequested.Stderr, "human_request_required") {
+		t.Fatalf("an agent's unrequested promotion should be refused: %s %s", unrequested.Stdout, unrequested.Stderr)
+	}
+	h.runCLIExpectOK(t, "worker", nil, "mv", looseRef, "--root", "--reason", "Separate reliability outcome", "--requested-by", "Operator")
 	orient := h.runCLIExpectOK(t, "worker", nil, "orient")
 	if !strings.Contains(orient.Stdout, "Webhook retries flaky") || !strings.Contains(orient.Stdout, "Webhook delivery") {
 		t.Fatalf("orient should list both initiatives: %s", orient.Stdout)

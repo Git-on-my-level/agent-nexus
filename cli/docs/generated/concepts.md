@@ -394,7 +394,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `30`
+- Commands: `34`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -425,6 +425,10 @@ Generated from `contracts/anx-openapi.yaml`.
   - `inbox.summary`
   - `notifications.settings.get`
   - `notifications.settings.set`
+  - `rulings.applied`
+  - `rulings.create`
+  - `rulings.list`
+  - `rulings.revoke`
   - `watch.trends`
 
 ## `inspection`
@@ -516,11 +520,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `read`
 
-- Commands: `3`
+- Commands: `4`
 - Command IDs:
   - `asks.presentation.get`
   - `plan.show`
   - `refs.resolve`
+  - `rulings.list`
 
 ## `readiness`
 
@@ -613,7 +618,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `68`
+- Commands: `71`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.subscribe`
@@ -674,6 +679,9 @@ Generated from `contracts/anx-openapi.yaml`.
   - `lease.release`
   - `lease.renew`
   - `plan.set`
+  - `rulings.applied`
+  - `rulings.create`
+  - `rulings.revoke`
   - `secrets.create`
   - `secrets.delete`
   - `secrets.update`

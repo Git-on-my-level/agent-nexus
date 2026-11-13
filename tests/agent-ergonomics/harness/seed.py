@@ -23,6 +23,9 @@ MACROS = "card:draft-the-macro-library"
 ANSWERED_ASK_TITLE = "Which date format should the export use?"
 ANSWERED_ASK_DECISION = "Use ISO 8601 dates"
 OPEN_ASK_TITLE = "Should the macro library cover refund requests?"
+RULED_ASK_TITLE = "May I rerun the export diagnostic?"
+RULED_ASK_ANSWER = "Yes, rerun it whenever you need to"
+OPERATOR = "Eval operator"
 
 
 def _must(ws: Workspace, agent: str, args: list[str]) -> dict:
@@ -34,10 +37,12 @@ def _must(ws: Workspace, agent: str, args: list[str]) -> dict:
 
 def seed(ws: Workspace) -> dict:
     """Create the starting workspace. Returns ids the checks need."""
-    _must(ws, TEAMMATE, ["work", "create", "--title", "Ship the billing export", "--initiative"])
+    _must(ws, TEAMMATE, ["work", "create", "--title", "Ship the billing export", "--initiative",
+                         "--requested-by", OPERATOR])
     _must(ws, TEAMMATE, ["work", "create", "--title", "Write the CSV serializer", "--under", BILLING])
     _must(ws, TEAMMATE, ["work", "create", "--title", "Add the download button", "--under", BILLING])
-    _must(ws, TEAMMATE, ["work", "create", "--title", "Cut support response time", "--initiative"])
+    _must(ws, TEAMMATE, ["work", "create", "--title", "Cut support response time", "--initiative",
+                         "--requested-by", OPERATOR])
     _must(ws, TEAMMATE, ["work", "create", "--title", "Draft the macro library", "--under", SUPPORT])
     _must(ws, TEAMMATE, ["note", SERIALIZER, "Started on the serializer; rows and header are done",
                          "--next", "2d", "first draft with totals"])
@@ -57,8 +62,24 @@ def seed(ws: Workspace) -> dict:
     answered_id = answered["result"]["ask_id"]
     _human_answer(ws, ANSWERED_ASK_TITLE, ANSWERED_ASK_DECISION)
 
+    # A teammate's question the human answered and made a standing ruling, so
+    # the same question never has to reach them again.
+    ruled = _must(ws, TEAMMATE, [
+        "ask", RULED_ASK_TITLE,
+        "--situation", "The export diagnostic reads invoice counts only and changes nothing. It takes about a "
+                       "minute and the serializer work needs it after every change to the row format.",
+        "--impact", "Each rerun currently waits for a person to approve it, which holds the serializer work "
+                    "for hours while costing nothing to run.",
+        "--recommend", RULED_ASK_ANSWER,
+        "--why", "The diagnostic is read-only and cheap, so asking each time only adds delay.",
+        "--alternative", "Ask before every rerun=Keeps a person in the loop but stalls the work each time",
+        "--subject-ref", SERIALIZER,
+    ])
+    _human_answer(ws, RULED_ASK_TITLE, RULED_ASK_ANSWER)
+    ws.http("POST", "/rulings", {"ask_ref": ruled["result"]["ask_id"], "kind": "answer", "answer": RULED_ASK_ANSWER})
+
     # A teammate's question that is still open, so the inbox is not empty.
-    _must(ws, TEAMMATE, [
+    open_ask = _must(ws, TEAMMATE, [
         "ask", OPEN_ASK_TITLE,
         "--situation", "The support macro library will hold the canned replies agents send most often. Refund "
                        "requests are about a fifth of tickets, and each one currently gets a hand-written reply.",
@@ -69,7 +90,7 @@ def seed(ws: Workspace) -> dict:
         "--alternative", "Leave refunds out=Ships sooner but the slowest ticket type stays slow",
         "--subject-ref", MACROS,
     ])
-    return {"answered_ask_id": answered_id}
+    return {"answered_ask_id": answered_id, "open_ask_id": open_ask["result"]["ask_id"]}
 
 
 def _human_answer(ws: Workspace, title: str, text: str) -> None:

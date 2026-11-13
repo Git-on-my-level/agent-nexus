@@ -681,5 +681,20 @@
     "method": "PUT",
     "path": "/work/{card_ref}/checkpoint",
     "reason": "Bounded latest checkpoint replacement; single-card independent CAS, no appended history."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings",
+    "reason": "Human-only transactional write: one ask primary-key read through the scoped events relation, one indexed revoke of the superseded ruling for the same key, one insert."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/revoke",
+    "reason": "Human-only write: one ruling primary-key read joined to its scoped source ask, one primary-key update."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/applied",
+    "reason": "One ruling primary-key read joined to its scoped source ask, one primary-key counter update."
   }
 ]

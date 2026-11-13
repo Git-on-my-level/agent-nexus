@@ -122,7 +122,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {
 			"preview":   {kind: preflightFlagBool},
 			"situation": {kind: preflightFlagString}, "impact": {kind: preflightFlagString}, "why": {kind: preflightFlagString}, "if-no-answer": {kind: preflightFlagString}, "details": {kind: preflightFlagString}, "alternative": {kind: preflightFlagString},
-			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "again": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
+			"template": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "again": {kind: preflightFlagBool}, "irreversible": {kind: preflightFlagBool}, "cost": {kind: preflightFlagString}, "reason": {kind: preflightFlagString}, "supersedes": {kind: preflightFlagString}, "evidence": {kind: preflightFlagString}, "on-answer": {kind: preflightFlagString}, "webhook": {kind: preflightFlagString}, "delivery": {kind: preflightFlagString},
 			"recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString},
 			"top-level": {kind: preflightFlagBool}, "under": {kind: preflightFlagString},
 			"from-file": {kind: preflightFlagString}, "subject-ref": {kind: preflightFlagString},
@@ -155,7 +155,7 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 			addLayer(map[string]map[string]preflightFlagSpec{strings.Join(strings.Fields(topic.Path), " "): flags})
 		}
 	}
-	for _, name := range []string{"work receipt", "work cadence", "work goal"} {
+	for _, name := range []string{"work receipt", "work cadence", "work goal", "work measure"} {
 		flags := map[string]preflightFlagSpec{"card-id": {kind: preflightFlagString}}
 		for _, key := range loopWorkValueFlags(name) {
 			flags[key] = preflightFlagSpec{kind: preflightFlagString}

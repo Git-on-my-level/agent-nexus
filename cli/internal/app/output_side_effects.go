@@ -14,7 +14,7 @@ func commandSideEffectClass(command string) string {
 	if command == "ask presentation" {
 		return "read_only"
 	}
-	if command == "work briefing" {
+	if command == "work briefing" || command == "rulings list" {
 		return "read_only"
 	}
 	if command == "work checkpoint" {
@@ -145,7 +145,7 @@ func commandSideEffectClass(command string) string {
 	if parts[0] == "orient" || parts[0] == "context" {
 		return "read_only"
 	}
-	if parts[0] == "note" || parts[0] == "done" || parts[0] == "feedback" {
+	if parts[0] == "note" || parts[0] == "done" || parts[0] == "feedback" || parts[0] == "tell" {
 		return "remote_coordination_write"
 	}
 	if command == "auth access-requests request" || command == "auth access-requests approve" || command == "auth access-requests deny" {

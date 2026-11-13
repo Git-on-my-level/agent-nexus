@@ -15,13 +15,10 @@ merge and related-ask batch candidates. The two writers were:
 - Agents call `POST /curation/proposals` (`anx curation propose`, exposed to
   callers as `anx_curation_propose`). `mcp/catalog/catalog.go` derives that tool
   name from command ID `curation.propose`; `mcp/executor/executor.go` executes
-  its registered method/path, so it is the same POST handler. The concrete
-  agent caller in this repo is
-  `cli/internal/app/pm_curate.go`: `anx pm curate` reads candidates, invokes an
-  explicitly configured local PM harness, and posts its selected candidates.
-  `--formula` calls the deterministic run endpoint without a model. The OSS
-  repo does not define a schedule for this local command or the hosted tool
-  adapter; this investigation did not read hosted schedules or production data.
+  its registered method/path, so it is the same POST handler. Any agent may
+  apply or dismiss a suggestion; `anx orient` shows each agent the ones about
+  its own work and `anx orient --upkeep` lists all of them. See
+  [outcomes and decisions](outcomes-and-decisions.md) for who tends them.
 
 Both called `fileCurationProposal`, which built a `human_attention_requested`
 event with `kind: ask`, `response_proposals` and `payload.curation`.
@@ -52,10 +49,9 @@ same key. Successful receipts record who acted, why, targets, result and undo.
 Dismissal also records a receipt. After unfold or ungroup makes an accepted
 key a candidate again, filing starts a fresh quiet generation with a new event
 and receipt. Open keys still dedupe, and dismissed keys stay suppressed.
-The local `pm curate` caller applies its chosen cleanups with agent credentials.
 The proposal response advertises `can_apply`; human callers retain their quiet
-filings, report skipped application and finish the pass successfully. Formula
-passes only suggest. The strict `event_group` enum includes `curation`.
+filings. Formula passes only suggest, and each pass dismisses a batch
+suggestion that a larger open one covers. The strict `event_group` enum includes `curation`.
 
 - Merge uses `FoldWork`, preserving the normal transferred refs, plan context
   and reachability of original asks. Undo is `anx work unfold`.

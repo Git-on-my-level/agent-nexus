@@ -235,6 +235,24 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
 	if err != nil {
+		var duplicate *primitives.DuplicateAskError
+		if errors.As(err, &duplicate) {
+			// Redirect, never reject: the caller gets the ask it already has open.
+			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), duplicate.AskID)
+			if loadErr == nil {
+				writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"event": existing, "deduplicated": true}))
+				return
+			}
+			err = loadErr
+		}
+		var covered *primitives.RulingAppliedError
+		if errors.As(err, &covered) {
+			// Without a request key the event id keys the replay, so a client
+			// that only fixes the id still gets one use and one fyi.
+			replayKey := firstNonEmptyString(strings.TrimSpace(req.RequestKey), "ruled:"+firstNonEmptyString(req.Event["id"]))
+			writeRulingApplied(w, r, opts, actorID, replayKey, req.Event, req, covered.Ruling)
+			return
+		}
 		if writeEventAppendContentionError(w, r, err) {
 			return
 		}
@@ -261,6 +279,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			eventID := firstNonEmptyString(req.Event["id"])
 			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
 			if loadErr == nil {
+				if typeValue == humanAttentionRequestedEventType {
+					// A retry also retries closing the ask this one replaced.
+					withdrawSupersededAsk(r.Context(), opts, actorID, existing)
+				}
 				response := map[string]any{"event": existing}
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(response))
 				if writeIdempotencyError(w, replayErr) {
@@ -286,6 +308,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	threadID := anyString(stored["thread_id"])
+	if typeValue == humanAttentionRequestedEventType {
+		withdrawSupersededAsk(r.Context(), opts, actorID, stored)
+	}
 	notifyProjectionMaintainer(opts)
 	if (strings.TrimSpace(anyString(stored["type"])) == humanAttentionRequestedEventType || strings.TrimSpace(anyString(stored["type"])) == humanAttentionWithdrawnEventType) && opts.projectionMaintainer != nil {
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
