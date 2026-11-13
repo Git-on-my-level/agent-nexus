@@ -501,3 +501,53 @@ func TestOrientNextOnlySuggestsMarkingThisSessionsAnswer(t *testing.T) {
 		t.Fatalf("this session's own answer is the next step:\n%s", text)
 	}
 }
+
+// Acceptance (oss#538): anx await --answers wakes once per batch submission.
+// With more pending asks than one poll reads, a batch straddling the poll
+// window is still read whole, so its atomic answers arrive in one result.
+func TestAwaitAnswersHandsOverOneBatchSubmissionTogether(t *testing.T) {
+	fake := &answerWaitFake{}
+	app := answerWaitApp(t, fake)
+	a, out, cfg := app("session-a")
+	store, err := a.answerWaitStore(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asks := map[string]map[string]any{}
+	for i := 0; i < answerWaitPollBudget+5; i++ {
+		id := fmt.Sprintf("solo-%02d", i)
+		if err := store.recordAsk("event:"+id, id, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		asks[id] = map[string]any{"status": "open"}
+	}
+	// Re-record five asks around the window edge as one batch.
+	pending := store.pending()
+	batch := pending[answerWaitPollBudget-3 : answerWaitPollBudget+2]
+	for _, ask := range batch {
+		if err := store.recordAsk(ask.AskID, ask.Title, time.Now(), "batch-1"); err != nil {
+			t.Fatal(err)
+		}
+		id := strings.TrimPrefix(ask.AskID, "event:")
+		asks[id] = answeredOutcome("response-" + id)
+	}
+	fake.set(nil, asks)
+	exit, doc := runAwaitAnswersForTest(t, a, out, "--timeout", "10s", "--settle", "0s")
+	if got := len(asSlice(asMap(doc["result"])["answers"])); exit != 0 || got != len(batch) {
+		t.Fatalf("one batch submission must arrive in one wake: exit=%d answers=%d %v", exit, got, doc)
+	}
+}
+
+func TestAnswerWaitTurnWidensToWholeBatch(t *testing.T) {
+	pending := make([]answerWaitPending, answerWaitPollBudget+5)
+	for i := range pending {
+		pending[i].AskID = fmt.Sprintf("event:%02d", i)
+	}
+	for _, i := range []int{answerWaitPollBudget - 1, answerWaitPollBudget + 3} {
+		pending[i].Batch = "b"
+	}
+	turn := answerWaitTurn(pending, 0)
+	if !turn[answerWaitPollBudget+3] || turn[answerWaitPollBudget+4] || !turn[0] {
+		t.Fatalf("turn = %v", turn)
+	}
+}

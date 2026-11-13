@@ -1,5 +1,6 @@
 <script>
   import AskPresentation from "./AskPresentation.svelte";
+  import DecisionBatch from "./DecisionBatch.svelte";
   let showOriginal = $state(false);
   const shownDecision = $derived(
     showOriginal && decision.presentationRewrite?.original
@@ -32,7 +33,6 @@
     retryInboxResponse,
   } from "$lib/inboxResponseQueue.js";
   import {
-    enqueueCurationUngroup,
     enqueuePmDecisionAnswer,
     mutationOutbox,
   } from "$lib/mutationOutbox.js";
@@ -142,44 +142,8 @@
   let pmSent = $state(false);
   let saveError = $state("");
 
-  let batchTarget = $derived(
-    decision.batch ? `curation-batch:${decision.batch.key}` : "",
-  );
-  let ungroupQueued = $derived(
-    Boolean(batchTarget) &&
-      ($mutationOutbox ?? []).some((entry) => entry.target === batchTarget),
-  );
-  let ungroupError = $state("");
-
-  async function ungroup() {
-    ungroupError = "";
-    try {
-      // Persisted before it is sent; a storage failure stops the send.
-      await enqueueCurationUngroup({
-        key: decision.batch.key,
-        target: batchTarget,
-        href: href("/decide"),
-        title: "Ungroup asks",
-        preview: `Ungroup ${decision.batch.count} grouped asks`,
-      });
-    } catch {
-      ungroupError =
-        "Couldn’t save this on your device, so it was not sent. Try again.";
-    }
-  }
-
-  $effect(() => {
-    if (!batchTarget) return;
-    const confirmed = (event) => {
-      if (event.detail?.target === batchTarget) {
-        void refreshBrief();
-        onAnswered?.(decision);
-      }
-    };
-    window.addEventListener("anx:mutation-confirmed", confirmed);
-    return () =>
-      window.removeEventListener("anx:mutation-confirmed", confirmed);
-  });
+  /** A filed batch answered question by question (DecisionBatch). */
+  let filedBatch = $derived(decision.batch?.questions === true);
 
   function outcomeFor(proposal) {
     if (!structured) return "answered";
@@ -281,6 +245,7 @@
 
   let canChoose = $derived(
     !answered &&
+      !filedBatch &&
       !elsewhere &&
       !confirming &&
       !(pmAnswer && (pmSent || pmQueued)),
@@ -335,7 +300,8 @@
 
   /** `r`: open the composer and put the caret in it. */
   export async function focusReply() {
-    if (structured || pmAnswer || elsewhere || answered) return false;
+    if (structured || pmAnswer || elsewhere || answered || filedBatch)
+      return false;
     replying = true;
     await Promise.resolve();
     replyEl?.focus();
@@ -549,7 +515,9 @@
     {/if}
   </header>
 
-  {#if decision.presentationRewrite || decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
+  {#if filedBatch}
+    <!-- Every question of a filed batch carries its own copy below. -->
+  {:else if decision.presentationRewrite || decision.situation || decision.impact || decision.recommendation || decision.alternatives?.length || decision.if_no_answer || decision.details || decision.evidence?.length}
     {#if decision.presentationRewrite}
       <p class="text-meta text-fg-muted" data-presentation-rewrite>
         {decision.presentationRewrite.undo
@@ -628,50 +596,17 @@
   {/if}
 
   {#if decision.batch}
-    <div
-      class="rounded-md border border-line-subtle bg-bg-soft px-3 py-2 text-meta text-fg-muted {rich
-        ? ''
-        : 'mt-2'}"
-      data-decision-batch
-    >
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="font-medium text-fg" data-decision-batch-count
-          >{decision.batch.count} grouped asks</span
-        >
-        <span class="text-micro">One answer closes all of them.</span>
-        {#if ungroupQueued}
-          <MutationSendStatus target={batchTarget} />
-        {:else if decision.batch.ungroupable !== false}
-          <button
-            type="button"
-            class="ml-auto text-micro text-fg-muted hover:text-fg hover:underline"
-            data-decision-ungroup
-            onclick={ungroup}>Ungroup</button
-          >
-        {/if}
-      </div>
-      {#if ungroupError}
-        <p class="mt-1 text-danger-text" role="alert">{ungroupError}</p>
-      {/if}
-      {#if decision.batch.members.length}
-        <ul class="mt-1 list-disc pl-4" data-decision-batch-members>
-          {#each decision.batch.members as member, index (member.ref || index)}
-            <li class="[overflow-wrap:anywhere]">
-              <details data-decision-batch-member>
-                <summary>{member.title || member.ref}</summary>
-                <AskPresentation
-                  decision={member}
-                  allowRevisionToggle
-                  organizationSlug={organizationSlug ||
-                    $page.params.organization}
-                  workspaceSlug={workspaceSlug || $page.params.workspace}
-                />
-              </details>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </div>
+    <DecisionBatch
+      {decision}
+      {itemId}
+      {rich}
+      {href}
+      {binding}
+      {onAnswered}
+      disabled={answered}
+      organizationSlug={organizationSlug || $page.params.organization}
+      workspaceSlug={workspaceSlug || $page.params.workspace}
+    />
   {/if}
 
   {#if saveError}
@@ -783,7 +718,7 @@
           ? "Answer waiting to send…"
           : "Answered"}{#if overlay?.response_text}: “{overlay.response_text}”{/if}
       </p>
-    {:else if decision.proposals.length}
+    {:else if decision.proposals.length && !filedBatch}
       <div role="group" aria-labelledby={`decide-suggested-${itemId}`}>
         {#if pane || full}
           <p class="ui-label" id={`decide-suggested-${itemId}`}>
@@ -845,6 +780,7 @@
       class="space-y-2"
       class:hidden={!(replying || full || pane) ||
         answered ||
+        filedBatch ||
         structured ||
         pmAnswer ||
         elsewhere}
@@ -902,7 +838,7 @@
     </form>
   </div>
   <div class="flex flex-wrap items-center gap-2 {rich ? '' : 'mt-2'}">
-    {#if !(pane || full) && !(stack && replying) && !answered && !structured && !pmAnswer && !elsewhere && !confirming}
+    {#if !(pane || full) && !(stack && replying) && !answered && !filedBatch && !structured && !pmAnswer && !elsewhere && !confirming}
       <button
         type="button"
         class="inline-flex items-center text-meta text-fg-muted hover:text-fg max-lg:min-h-11 {stack

@@ -38,6 +38,7 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		ActorID    string           `json:"actor_id"`
 		RequestKey string           `json:"request_key"`
 		Asks       []map[string]any `json:"asks"`
+		Context    any              `json:"context"`
 	}
 	if !decodeJSONBody(w, r, &body) {
 		return
@@ -53,11 +54,21 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 			"asks must contain between "+strconv.Itoa(primitives.MinAskBatchMembers)+" and "+strconv.Itoa(primitives.MaxAskBatchMembers)+" human_attention_requested events")
 		return
 	}
+	batchContext, err := normalizeAskBatchContext(body.Context)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	actorID, ok := resolveWriteActorID(w, r, opts, body.ActorID)
 	if !ok {
 		return
 	}
 	requestPayload := map[string]any{"actor_id": body.ActorID, "request_key": body.RequestKey, "asks": body.Asks}
+	if body.Context != nil {
+		// Only a batch that states a context hashes it, so a retry of a
+		// context-free filing keeps the hash it had before contexts existed.
+		requestPayload["context"] = body.Context
+	}
 	requestHash := ""
 	if strings.TrimSpace(body.RequestKey) != "" {
 		var err error
@@ -81,6 +92,7 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 
 	sharedThread := ""
 	sharedKind := ""
+	sharedRecipient := ""
 	members := make([]map[string]any, 0, len(body.Asks))
 	for index, rawEvent := range body.Asks {
 		event, ok := validatedAskBatchMember(w, r, opts, actorID, rawEvent, index)
@@ -94,6 +106,14 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 			writeError(w, http.StatusBadRequest, "invalid_request", "every ask in a batch must share one thread_id")
 			return
 		}
+		// One recipient (or none) for the whole batch: the batch item is one
+		// inbox row, and its audience gate is that row's recipient.
+		if recipient := askBatchRecipientKey(event["payload"].(map[string]any)); index == 0 {
+			sharedRecipient = recipient
+		} else if recipient != sharedRecipient {
+			writeError(w, http.StatusBadRequest, "invalid_request", "every ask in a batch must be addressed to the same recipient_actor_id (or none)")
+			return
+		}
 		kind := canonicalHumanAttentionKind(anyString(event["payload"].(map[string]any)["kind"]))
 		if sharedKind == "" {
 			sharedKind = kind
@@ -103,6 +123,10 @@ func handleCreateAskBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		members = append(members, event)
 	}
+
+	// Position and the shared context are assigned here, after validation and
+	// hashing, exactly as the batch id is: clients cannot supply them.
+	members = stampAskBatchMembers(members, batchContext)
 
 	// The filing replay row commits inside the store transaction, so an exact
 	// retry after a crash or a concurrent same-key create replays the original
@@ -187,6 +211,9 @@ func validatedAskBatchMember(w http.ResponseWriter, r *http.Request, opts handle
 	}
 	if strings.TrimSpace(anyString(payload["batch_id"])) != "" {
 		return invalid(label + ".payload.batch_id is assigned by the server")
+	}
+	if err := validateAskBatchQuestionFields(payload); err != nil {
+		return invalid(label + "." + err.Error())
 	}
 	if code, message := validateAskText(payload); code != "" {
 		writeError(w, http.StatusBadRequest, code, label+": "+message)

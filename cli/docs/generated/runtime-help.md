@@ -3713,6 +3713,7 @@ Inputs:
   - body `notify_target_actor_id` (string)
   - body `notify_target_agent_id` (string)
   - body `outcome` (string)
+  - body `partial` (boolean)
   - body `related_refs` (list<any>)
   - body `response_text` (string)
   Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved

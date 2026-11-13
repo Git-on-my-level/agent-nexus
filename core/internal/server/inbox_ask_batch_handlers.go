@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
@@ -21,6 +23,7 @@ import (
 // askBatchRespondStore is the store surface the atomic batch respond path needs.
 type askBatchRespondStore interface {
 	AppendHumanAttentionBatchResponse(context.Context, string, string, string, string, string, []primitives.HumanAttentionBatchResponseMember, ...map[string]any) (map[string]any, bool, error)
+	AppendHumanAttentionBatchPartialResponse(context.Context, string, string, string, string, string, []primitives.HumanAttentionBatchResponseMember, ...map[string]any) (map[string]any, bool, error)
 	HumanAttentionBatchResponseReplay(context.Context, string, string, string) (map[string]any, error)
 	HumanAttentionBatchResponseClaimed(context.Context, string) (bool, error)
 	HumanAttentionBatchResponseRequest(context.Context, string) (map[string]any, error)
@@ -138,11 +141,38 @@ func handleRespondInboxBatch(
 		writeError(w, http.StatusBadRequest, "invalid_request", "idempotency_key must be at most 128 characters without surrounding whitespace")
 		return
 	}
+	hash, err := hashBatchRespondRequest(actorID, effectiveItemID, req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to hash human attention response")
+		return
+	}
+	// Replay before matching answers to sections: after a partial answer the
+	// item stays open without the members it answered, so a retry of that
+	// answer must return the stored result instead of naming them unknown.
+	if req.IdempotencyKey != "" {
+		replay, replayErr := batchStore.HumanAttentionBatchResponseReplay(r.Context(), actorID, req.IdempotencyKey, hash)
+		if replayErr == nil {
+			writeAuthorizedInboxBatchReplay(w, r, opts, replay)
+			return
+		}
+		if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
+			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
+			return
+		}
+		if !errors.Is(replayErr, primitives.ErrNotFound) {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load response replay")
+			return
+		}
+	}
 	// A flat response_text answers every open member with the same text,
 	// outcome and notify mode. The per-member answers array stays for the
 	// inbox form, which rejects the flat fields.
 	uniformText := strings.TrimSpace(req.ResponseText)
 	uniform := len(req.Answers) == 0 && uniformText != ""
+	if uniform && req.Partial {
+		writeError(w, http.StatusBadRequest, "invalid_request", "partial applies to per-question answers; a flat batch answer closes every open ask")
+		return
+	}
 	if uniform {
 		switch strings.TrimSpace(req.NotifyMode) {
 		case "", "none", "original":
@@ -184,8 +214,12 @@ func handleRespondInboxBatch(
 		return
 	}
 	threadID := batchThreadID
-	if !uniform && len(req.Answers) != len(sections) {
-		writeError(w, http.StatusBadRequest, "invalid_request", "one answer per batch ask is required")
+	if !uniform && !req.Partial && len(req.Answers) != len(sections) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "one answer per batch ask is required; set partial to answer only some and leave the rest open")
+		return
+	}
+	if !uniform && req.Partial && len(req.Answers) > len(sections) {
+		writeError(w, http.StatusBadRequest, "invalid_request", "more answers than open batch asks")
 		return
 	}
 
@@ -220,12 +254,20 @@ func handleRespondInboxBatch(
 	requesterAgentID := strings.TrimSpace(anyString(itemPayload["requester_agent_id"]))
 	requesterLabel := strings.TrimSpace(anyString(itemPayload["requester_label"]))
 
+	// A partial answer must not ref the batch item: that ref closes the whole
+	// item in the projection. Each answer still closes its own ask by its
+	// request_event_ref and its own single-ask inbox ref. Unknown refs are
+	// rejected below, so equal counts mean every open ask is answered.
+	closesBatch := uniform || len(req.Answers) == len(sections)
 	var hygiene markdownHygieneCollector
 	anyNotify := false
 	members := make([]primitives.HumanAttentionBatchResponseMember, 0, len(sections))
 	for _, section := range sections {
 		ref := strings.TrimSpace(anyString(section["request_event_ref"]))
 		answer, ok := answerByRef[ref]
+		if !ok && req.Partial {
+			continue // stays open
+		}
 		if !ok {
 			writeError(w, http.StatusBadRequest, "invalid_request", "missing answer for batch ask "+ref)
 			return
@@ -272,7 +314,15 @@ func handleRespondInboxBatch(
 		}
 		anyNotify = anyNotify || memberNotify
 		summary := buildHumanAttentionResponseSummary(kind, map[string]any{"title": anyString(section["title"])}, answerText)
-		responseRefs := mergeUniqueSortedRefs(append([]string{"thread:" + threadID, "inbox:" + effectiveItemID, "event:" + sourceEventID, ref, strings.TrimSpace(anyString(section["subject_ref"]))}, answerRefs...)...)
+		baseRefs := []string{"thread:" + threadID, "event:" + sourceEventID, ref, strings.TrimSpace(anyString(section["subject_ref"]))}
+		if closesBatch {
+			baseRefs = append(baseRefs, "inbox:"+effectiveItemID)
+		} else {
+			// The member's own single-ask id: it satisfies the inbox-ref rule
+			// for responses and closes nothing but this ask.
+			baseRefs = append(baseRefs, "inbox:"+makeInboxItemID(kind, threadID, sourceEventID, sourceEventID))
+		}
+		responseRefs := mergeUniqueSortedRefs(append(baseRefs, answerRefs...)...)
 		event := map[string]any{
 			"type":      humanAttentionRespondedEventType,
 			"thread_id": threadID,
@@ -350,26 +400,6 @@ func handleRespondInboxBatch(
 		target = humanAttentionResponseTarget{Mode: "none"}
 	}
 
-	hash, err := hashBatchRespondRequest(actorID, effectiveItemID, req)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to hash human attention response")
-		return
-	}
-	if req.IdempotencyKey != "" {
-		replay, replayErr := batchStore.HumanAttentionBatchResponseReplay(r.Context(), actorID, req.IdempotencyKey, hash)
-		if replayErr == nil {
-			writeAuthorizedInboxBatchReplay(w, r, opts, replay)
-			return
-		}
-		if errors.Is(replayErr, primitives.ErrHumanAttentionIdempotencyConflict) {
-			writeError(w, http.StatusConflict, "idempotency_conflict", "idempotency key was used for another response")
-			return
-		}
-		if !errors.Is(replayErr, primitives.ErrNotFound) {
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load response replay")
-			return
-		}
-	}
 	claimed, claimErr := batchStore.HumanAttentionBatchResponseClaimed(r.Context(), batchID)
 	if claimErr != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to check batch response state")
@@ -392,6 +422,9 @@ func handleRespondInboxBatch(
 	}
 
 	notifyMessageText := "All batch answers recorded; wakes queue per ask delivery."
+	if !closesBatch {
+		notifyMessageText = "Answered asks recorded and released per ask delivery; the rest of the batch stays open."
+	}
 	if !anyNotify {
 		notifyMessageText = "Every ask in this batch requested no delivery (mode none); answers recorded without waking the requester."
 		if uniform && strings.EqualFold(strings.TrimSpace(req.NotifyMode), "none") {
@@ -409,7 +442,12 @@ func handleRespondInboxBatch(
 		"batch_id":        batchID,
 	}
 	responseFields := hygiene.attach(map[string]any{"notify": notify})
-	stored, replayed, err := batchStore.AppendHumanAttentionBatchResponse(r.Context(), actorID, batchID, effectiveItemID, req.IdempotencyKey, hash, members, responseFields)
+	appendBatch := batchStore.AppendHumanAttentionBatchResponse
+	if !closesBatch {
+		responseFields["open_ask_count"] = len(sections) - len(members)
+		appendBatch = batchStore.AppendHumanAttentionBatchPartialResponse
+	}
+	stored, replayed, err := appendBatch(r.Context(), actorID, batchID, effectiveItemID, req.IdempotencyKey, hash, members, responseFields)
 	if err != nil {
 		if writePrimitiveQuotaViolationError(w, err) {
 			return
@@ -445,6 +483,13 @@ func handleRespondInboxBatch(
 	}
 
 	notifyProjectionMaintainer(opts)
+	if !closesBatch && opts.projectionMaintainer != nil {
+		// The batch item stays open; rebuild it now so the next read lists
+		// only the asks still waiting.
+		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {
+			log.Printf("best-effort partial batch projection refresh failed (thread=%s): %v", threadID, err)
+		}
+	}
 	writeJSON(w, http.StatusCreated, stored)
 }
 

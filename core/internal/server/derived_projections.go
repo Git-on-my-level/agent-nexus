@@ -183,8 +183,10 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 
 	for _, batchID := range batchOrder {
 		members := askBatchMembers[batchID]
-		if len(members) < 2 {
-			// A lone member cannot form a batch item; fall back to its own item.
+		// A lone member cannot form a batch item, and members addressed to
+		// different people (filed before batches required one recipient) must
+		// not share one: both fall back to each member's own item.
+		if len(members) < 2 || askBatchRecipientsDiffer(members) {
 			for _, event := range members {
 				item, ok := deriveHumanAttentionInboxItem(event)
 				if !ok {

@@ -110,7 +110,7 @@ func resolveInboxItemByVariants(ctx context.Context, store PrimitiveStore, inbox
 			return primitives.DerivedInboxItem{}, err
 		}
 		// Keep the same audience check even while no projection exists.
-		if recipient := anyString(payload["recipient_actor_id"]); recipient != "" {
+		if recipient := normalizeRecipientActorID(payload["recipient_actor_id"]); recipient != "" {
 			item.Data["recipient_actor_id"] = recipient
 		}
 		return primitives.DerivedInboxItem{ID: item.ID, ThreadID: anyString(item.Data["thread_id"]), Category: item.Category, SourceEventID: sourceID, Data: item.Data}, nil

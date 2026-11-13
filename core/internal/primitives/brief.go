@@ -3,7 +3,6 @@ package primitives
 import (
 	"agent-nexus-core/internal/askpresentation"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"time"
@@ -307,6 +306,7 @@ func (b *briefBuild) yourAsks() ([]map[string]any, bool, error) {
 type briefDecisionMeta struct {
 	askID, thread, inboxKind, subject, batchID string
 	created                                    time.Time
+	question, context                          map[string]any // filed batch fields
 }
 
 // renderAsks returns the rendered items and, in the same order, the meta
@@ -421,11 +421,11 @@ func (b *briefBuild) renderAsks(rows []briefAskRow, candidatesTruncated bool) ([
 			item["curation"] = curation
 		}
 		out = append(out, item)
-		metas = append(metas, briefDecisionMeta{
+		metas = append(metas, withBatchQuestion(briefDecisionMeta{
 			askID: a.AskID, thread: r.thread, inboxKind: briefInboxKind(a.Kind),
 			subject: a.SubjectRef, batchID: strings.TrimSpace(anyStringValue(payload["batch_id"])),
 			created: briefEventTime(event, a.CreatedAt),
-		})
+		}, payload))
 	}
 	return out, metas, truncated, nil
 }
@@ -576,7 +576,7 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 			groups[key] = append(groups[key], i)
 		}
 	}
-	anchors, err := b.filedBatchAnchors(groups)
+	anchors, mixed, err := b.filedBatchAnchors(groups)
 	if err != nil {
 		return nil, err
 	}
@@ -584,18 +584,14 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 	for i, id := range ids {
 		key := keys[id]
 		group := groups[key]
-		if key == "" || len(group) < 2 {
+		if key == "" || len(group) < 2 || mixed[key] {
 			out = append(out, items[i])
 			continue
 		}
 		if group[0] != i {
 			continue
 		}
-		list := make([]map[string]any, 0, len(group))
-		for _, mi := range group {
-			list = append(list, briefBatchMember(items[mi], metas[mi]))
-		}
-		items[i]["batch"] = map[string]any{"key": key, "count": len(group), "members": list}
+		items[i]["batch"] = briefBatchView(items, metas, key, group)
 		if respondID := batchRespondInboxID(key, group, metas, anchors); respondID != "" {
 			items[i]["ref"] = respondID
 			items[i]["inbox_item_id"] = respondID
@@ -603,68 +599,6 @@ func (b *briefBuild) collapseBatches(items []map[string]any, metas []briefDecisi
 		out = append(out, items[i])
 	}
 	return out, nil
-}
-
-// filedBatchAnchors reads the oldest member of each filed batch that this
-// page collapses, skipping a member whose thread row is missing. The inbox
-// projection is per thread and writes nothing when GetThread misses, so that
-// member is not an answerable anchor. One indexed seek per batch
-// (idx_brief_asks_batch, LIMIT 1), at most one per decision on the page,
-// then the event and thread primary keys. No INDEXED BY on threads: a scoped
-// read shadows that relation. The row is the anchor even when it is
-// withdrawn or outside the page; the query returns only its id and kind.
-func (b *briefBuild) filedBatchAnchors(groups map[string][]int) (map[string]briefDecisionMeta, error) {
-	out := map[string]briefDecisionMeta{}
-	for key, group := range groups {
-		batchID := strings.TrimPrefix(key, "filed:")
-		if batchID == key || batchID == "" || len(group) < 2 {
-			continue
-		}
-		var askID, kind, created string
-		err := b.s.db.QueryRowContext(b.ctx, `SELECT a.ask_id, a.kind, a.created_at FROM brief_asks a INDEXED BY idx_brief_asks_batch JOIN events e ON e.id=a.ask_id `+briefAnswerableAskJoin+` WHERE a.batch_id=? AND a.batch_id<>'' ORDER BY a.created_at, a.ask_id LIMIT 1`, batchID).Scan(&askID, &kind, &created)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		at, _ := time.Parse(time.RFC3339Nano, created)
-		out[batchID] = briefDecisionMeta{
-			askID: askID, inboxKind: briefInboxKind(kind), batchID: batchID, created: at,
-		}
-	}
-	return out, nil
-}
-
-func briefBatchMember(item map[string]any, meta briefDecisionMeta) map[string]any {
-	member := map[string]any{"ref": item["ref"], "inbox_item_id": item["inbox_item_id"], "title": item["title"]}
-	askpresentation.Copy(member, item)
-	if eventRef := strings.TrimSpace(anyStringValue(item["event_ref"])); eventRef != "" {
-		member["event_ref"] = eventRef
-	} else if meta.askID != "" {
-		member["event_ref"] = "event:" + meta.askID
-	}
-	if meta.subject != "" {
-		member["subject_ref"] = meta.subject
-	}
-	if blocks, ok := item["blocks"].([]map[string]any); ok && len(blocks) > 0 {
-		copied := make([]map[string]any, 0, len(blocks))
-		for _, block := range blocks {
-			ref := strings.TrimSpace(anyStringValue(block["ref"]))
-			if ref == "" {
-				continue
-			}
-			entry := map[string]any{"ref": ref}
-			if title := strings.TrimSpace(anyStringValue(block["title"])); title != "" {
-				entry["title"] = title
-			}
-			copied = append(copied, entry)
-		}
-		if len(copied) > 0 {
-			member["blocks"] = copied
-		}
-	}
-	return member
 }
 
 // batchRespondInboxID is the single inbox id that answers the group. A filed
