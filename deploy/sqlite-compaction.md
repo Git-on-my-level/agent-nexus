@@ -30,6 +30,52 @@ with this procedure.
 - The source is not already the destination, and the destination does not
   exist. The helper never overwrites either file.
 
+## Estimate downtime with an online dry run
+
+Before stopping the core, measure the same image on the same host and volume.
+The dry run opens the source read-only without the serving lease or an
+exclusive SQLite lock, so the core keeps serving. It writes a disposable
+snapshot, checks the output (`quick_check`, `auto_vacuum=2`, page size),
+runs the same per-table `count(*)` and PM identity scans as an offline
+`--verify=quick` run (their mismatches against the changing source are
+expected and ignored), prints phase timings, and removes the snapshot. Its
+output must never be published. Use the same `--user` UID/GID as the core
+container (adapt `10001:10001` to the installation) so the read-only
+connection can use the WAL index and create the snapshot.
+
+```sh
+: "${CORE_CONTAINER:?set the recorded target container}"
+compact_image=$(docker inspect -f '{{.Image}}' "$CORE_CONTAINER")
+compact_root=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/state"}}{{.Source}}{{end}}{{end}}' "$CORE_CONTAINER")
+test -n "$compact_root"
+docker run --rm --network none --read-only --user 10001:10001 \
+  --tmpfs /tmp:rw,nosuid,nodev --mount "type=bind,src=$compact_root,dst=/state" \
+  --entrypoint /usr/local/bin/anx-sqlite-compact "$compact_image" \
+  --source /state/state.sqlite --destination /state/state.dry-run.sqlite \
+  --online-dry-run --verify=quick --timings --timeout=2h
+```
+
+Require exit 0, the `DRY_RUN_NOT_PUBLISHABLE` line, and the phase timings.
+Record `phase=total elapsed_ms`, free space and WAL growth.
+
+While the dry run runs, its read snapshot stops checkpoints from passing it,
+so a busy core keeps growing `state.sqlite-wal`. Watch free space on the
+volume (for example `df` every 30 s). If free space falls below the helper's
+reserve plus the snapshot size, or the WAL grows by more than 1 GiB, stop the
+dry-run container (`docker kill`); the core is unaffected, and its next
+checkpoint reclaims the WAL. The helper creates
+the dry-run file with mode 0600 and removes it before exiting; if it cannot
+remove the file, treat the run as failed and delete the artifact manually.
+
+**Go/no-go rule:** for a ten-minute maintenance window, the dry-run
+`phase=total` must be **at most 8 minutes**, leaving two minutes for stop,
+rename, restart and smoke. The dry-run total already includes the count and
+PM identity scans; only the final fsync (seconds) is extra offline. Add any
+extra time a first-time conversion needs if the dry run logged a fallback
+second `VACUUM`. If it is longer, do not stop the core: defer the
+compaction or schedule a longer outage. Do not assume tuning will close the
+gap.
+
 ## Per-workspace procedure
 
 Use the recorded workspace ID, container name, immutable image ID, volume
@@ -57,7 +103,8 @@ source and listen port. Do not reconstruct a port from an instance name.
    docker run --rm --network none --read-only --user 10001:10001 \
      --tmpfs /tmp:rw,nosuid,nodev --mount "type=bind,src=$compact_root,dst=/state" \
      --entrypoint /usr/local/bin/anx-sqlite-compact "$compact_image" \
-     --source /state/state.sqlite --destination /state/state.compact.sqlite
+     --source /state/state.sqlite --destination /state/state.compact.sqlite \
+     --verify=quick --timings --timeout=2h
    ```
 
    For a workspace that still needs the compact-access certification
@@ -68,11 +115,27 @@ source and listen port. Do not reconstruct a port from an instance name.
    Require exit 0 and the `Verified copy` line. It reports before/after/saved
    bytes, `auto_vacuum=2`, the source page size, live-page bytes, WAL bytes,
    free space and the reserve. The helper takes the serving OS lease and an
-   exclusive SQLite lock,
-   runs `VACUUM INTO`, verifies `integrity_check`, compares every table in both
-   directions, checks PM cursor identities, verifies the output's
+   exclusive SQLite lock and
+   runs `VACUUM INTO`. With the default full verification it verifies
+   `integrity_check`, compares every table in both directions, checks PM cursor identities, verifies the output's
    `auto_vacuum=2` and page size, and fsyncs the result. On failure it removes
    its incomplete output and leaves the source unchanged.
+
+   `--verify=quick` replaces `integrity_check` with `quick_check`, skips the
+   ordinary-table `EXCEPT` passes, and instead compares the full
+   `sqlite_schema` (`type`, `name`, `tbl_name`, `sql`), every table's
+   `count(*)`, and PM `rowid,kind,id` in both directions. Use it only after an
+   online dry run on the same image that passed the go/no-go rule. On a new
+   image, compact the small canary workspace (see Canary order) first with the
+   default full verification, then use quick mode for the rest.
+   `--timings` prints `phase=<name> elapsed_ms=<n>` for `preflight`,
+   `vacuum_into`, `check`, `schema_settings`, `counts`, `pm_identity`,
+   `except`, `fsync` and `total`, including the failed phase. `--timeout`
+   defaults to 2h and can be set with `ANX_SQLITE_COMPACT_TIMEOUT`; flags take
+   precedence over `ANX_SQLITE_COMPACT_VERIFY`,
+   `ANX_SQLITE_COMPACT_TIMINGS=1` and
+   `ANX_SQLITE_COMPACT_ONLINE_DRY_RUN=1`.
+
 5. **Verify the copy before publishing.** While the core is still stopped,
    open the new file read-only and require `PRAGMA integrity_check` = `ok`,
    `PRAGMA auto_vacuum` = `2`, `PRAGMA page_size` equal to the source page size
@@ -90,8 +153,9 @@ source and listen port. Do not reconstruct a port from an instance name.
    state, representative data/blob reads, private owner/stranger controls and a
    write/read/delete synthetic control. Only then resume ingress/UI and
    reconcilers in the normal health-gated order.
-8. **Remove the old file after the smoke check.** Keep `state.sqlite.pre-compact`
-   until the workspace has reopened cleanly and the smoke checks pass. Then
+8. **Remove the old file after the smoke check and a verified backup.** Keep
+   `state.sqlite.pre-compact` until the workspace has reopened cleanly, the
+   smoke checks pass, **and a post-compact verified backup exists**. Then
    remove it according to the backup-retention policy. If the smoke check fails
    before new writes are admitted, stop the core and restore the retained file
    under the same stopped boundary. After new writes are admitted, never
@@ -102,7 +166,8 @@ source and listen port. Do not reconstruct a port from an instance name.
 Roll out one workspace at a time and record before/after bytes, free space,
 helper output and smoke results:
 
-1. A small canary workspace.
+1. A small canary workspace, with the default full verification on a new
+   image.
 2. A medium workspace.
 3. The largest workspace.
 
