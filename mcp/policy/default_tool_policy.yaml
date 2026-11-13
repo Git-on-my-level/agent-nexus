@@ -720,6 +720,12 @@ commands:
   "pm.decisions.list":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."
+  "work.briefing":
+    classification: exposed_read
+    reason: "Read bounded authorized context, with source freshness, attributed checkpoint and explicit coverage."
+  "work.checkpoint":
+    classification: exposed_write
+    reason: "Replace one attributed checkpoint with independent CAS; no task progress, ownership or approval change."
   "work.capabilities":
     classification: exposed_read
     reason: "Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty."

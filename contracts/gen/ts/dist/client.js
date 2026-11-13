@@ -783,7 +783,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -13942,6 +13944,63 @@ export const commandRegistry = [
         "ts_method": "watchTrends"
     },
     {
+        "command_id": "work.briefing",
+        "cli_path": "work briefing",
+        "group": "work",
+        "method": "GET",
+        "path": "/work/{card_ref}/briefing",
+        "operation_id": "workBriefing",
+        "summary": "Read a bounded portable work briefing",
+        "description": "Deterministic read-only projection of one authorized work item and its latest stored evidence. Does not refresh sources, load history, infer approvals, transfer ownership or establish live execution health. Omitted fields are explicit. No briefing is persisted. Maximum encoded response is 65536 bytes.",
+        "why": "Read a bounded portable work briefing.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `WorkBriefing`.",
+        "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "outcome_unknown",
+            "work_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "projection",
+        "agent_notes": "Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.",
+        "path_params": [
+            "card_ref"
+        ],
+        "adjacent_commands": [
+            "work.capabilities",
+            "work.checkpoint",
+            "work.create",
+            "work.fold",
+            "work.get",
+            "work.group",
+            "work.list",
+            "work.move",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
+            "work.patch",
+            "agents.me.presence",
+            "work.refresh.get",
+            "work.refresh.request",
+            "work.resolve",
+            "work.tree",
+            "work.unfold",
+            "work.ungrouped"
+        ],
+        "go_method": "WorkBriefing",
+        "ts_method": "workBriefing"
+    },
+    {
         "command_id": "work.capabilities",
         "cli_path": "work capabilities",
         "group": "work",
@@ -13969,6 +14028,8 @@ export const commandRegistry = [
         "surface": "projection",
         "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
         "adjacent_commands": [
+            "work.briefing",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -13990,6 +14051,97 @@ export const commandRegistry = [
         ],
         "go_method": "WorkCapabilities",
         "ts_method": "workCapabilities"
+    },
+    {
+        "command_id": "work.checkpoint",
+        "cli_path": "work checkpoint",
+        "group": "work",
+        "method": "PUT",
+        "path": "/work/{card_ref}/checkpoint",
+        "operation_id": "workCheckpoint",
+        "summary": "Replace the current attributed recovery checkpoint",
+        "description": "Stores one current checkpoint per card, at most 16384 UTF-8 JSON bytes. This attributed report is not a decision, accepted result, lease or backup. Replaces prior checkpoint without appending events or replay history. Identical current content from the same actor returns unchanged; other writes require matching checkpoint.version (zero when absent). Delayed retries after another change conflict. Does not change work version, decision revision or task activity. Local-only artifacts require a host identifier; references do not copy bytes.",
+        "why": "Replace the current attributed recovery checkpoint.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `WorkCheckpointResponse`.",
+        "error_codes": [
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "outcome_unknown",
+            "work_unavailable"
+        ],
+        "concepts": [
+            "cards",
+            "evidence"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "checkpoint.next_action",
+                    "type": "string"
+                },
+                {
+                    "name": "checkpoint.summary",
+                    "type": "string"
+                },
+                {
+                    "name": "if_version",
+                    "type": "integer"
+                }
+            ],
+            "optional": [
+                {
+                    "name": "checkpoint.artifacts",
+                    "type": "list\u003cobject\u003e"
+                },
+                {
+                    "name": "checkpoint.blockers",
+                    "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "checkpoint.execution.authority",
+                    "type": "string"
+                },
+                {
+                    "name": "checkpoint.execution.run_id",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "card_ref"
+        ],
+        "adjacent_commands": [
+            "work.briefing",
+            "work.capabilities",
+            "work.create",
+            "work.fold",
+            "work.get",
+            "work.group",
+            "work.list",
+            "work.move",
+            "work.observations.list",
+            "work.observations.submit",
+            "work.participants.list",
+            "work.participants.register",
+            "work.patch",
+            "agents.me.presence",
+            "work.refresh.get",
+            "work.refresh.request",
+            "work.resolve",
+            "work.tree",
+            "work.unfold",
+            "work.ungrouped"
+        ],
+        "go_method": "WorkCheckpoint",
+        "ts_method": "workCheckpoint"
     },
     {
         "command_id": "work.create",
@@ -14218,7 +14370,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.fold",
             "work.get",
             "work.group",
@@ -14293,7 +14447,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.get",
             "work.group",
@@ -14346,7 +14502,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.group",
@@ -14421,7 +14579,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14472,7 +14632,9 @@ export const commandRegistry = [
         "surface": "projection",
         "agent_notes": "Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.",
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14561,7 +14723,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14614,7 +14778,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14771,7 +14937,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14828,7 +14996,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -14906,7 +15076,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15044,7 +15216,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15097,7 +15271,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15159,7 +15335,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15207,7 +15385,9 @@ export const commandRegistry = [
         "surface": "canonical",
         "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15255,7 +15435,9 @@ export const commandRegistry = [
         "surface": "canonical",
         "agent_notes": "Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.",
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15320,7 +15502,9 @@ export const commandRegistry = [
             "card_ref"
         ],
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -15367,7 +15551,9 @@ export const commandRegistry = [
         "surface": "projection",
         "agent_notes": "Workspace authenticated; reader-scoped deterministic grouping.",
         "adjacent_commands": [
+            "work.briefing",
             "work.capabilities",
+            "work.checkpoint",
             "work.create",
             "work.fold",
             "work.get",
@@ -16332,8 +16518,14 @@ export class AnxClient {
     watchTrends(options = {}) {
         return this.invoke("watch.trends", {}, options);
     }
+    workBriefing(pathParams, options = {}) {
+        return this.invoke("work.briefing", pathParams, options);
+    }
     workCapabilities(options = {}) {
         return this.invoke("work.capabilities", {}, options);
+    }
+    workCheckpoint(pathParams, options = {}) {
+        return this.invoke("work.checkpoint", pathParams, options);
     }
     workCreate(options = {}) {
         return this.invoke("work.create", {}, options);

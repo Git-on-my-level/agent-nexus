@@ -77,6 +77,9 @@ func workHelpText(topic string) (string, bool) {
 		if topic == "work observations submit" {
 			b.WriteString("Body: {\"observation\":{\"idempotency_key\":\"stable-report-key\",\"reader_id\":\"reader\",\"reader_revision\":\"v1\",\"observed_at\":\"RFC3339 timestamp\",\"status\":\"reported\",\"facts\":{},\"evidence\":[]}}\nPreserve source_sequence and idempotency_key on retry; received_at and actor_id are server-owned. Remote verified labels remain claims.\n")
 		}
+		if topic == "work checkpoint" {
+			b.WriteString("Body: {\"if_version\":0,\"checkpoint\":{\"summary\":\"Progress\",\"next_action\":\"Inspect the latest run\"}}\nRead `anx work briefing <card>` first. Use its `checkpoint.version` as `if_version`, or 0 when the checkpoint is absent; this is independent of `work.version`. Checkpoints replace one attributed report and do not grant ownership, approval or acceptance. Local-only artifacts require a host identifier. For an outage snapshot, explicitly export a private local JSON copy and treat it as stale and reader-scoped; the CLI keeps no implicit offline cache.\n")
+		}
 	} else {
 		names := []string{}
 		for name := range workCommands {

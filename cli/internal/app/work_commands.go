@@ -45,6 +45,8 @@ var workCommands = map[string]workCommandSpec{
 	"work list":                  {path: "/work", method: "GET", summary: "List work cards across sources in the authenticated workspace.", filters: []string{"project-ref", "source", "owner", "phase", "freshness", "q", "limit", "cursor"}},
 	"work resolve":               {path: "/work/resolve", method: "GET", summary: "Resolve a path alias to a canonical card ref.", filters: []string{"path"}},
 	"work get":                   {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
+	"work briefing":              {path: "/work/{id}/briefing", method: "GET", idFlag: "work-id", summary: "Read a bounded portable briefing for one work card."},
+	"work checkpoint":            {path: "/work/{id}/checkpoint", method: "PUT", idFlag: "work-id", body: true, summary: "Replace the current attributed recovery checkpoint."},
 	"work group":                 {path: "/work/{id}/group", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>."},
 	"work fold":                  {path: "/work/{id}/fold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --into <parent> [--request-key key]: transfer references, carry the promise and archive."},
 	"work unfold":                {path: "/work/{id}/unfold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> [--request-key key]: reverse a fold without overwriting conflicting edits."},
@@ -76,7 +78,7 @@ type parsedWorkCommand struct {
 	under, into, after, requestKey string
 	handle                         string
 	reason, toBoard                string
-	topLevel, initiative           bool
+	topLevel, initiative, brief    bool
 	title                          string
 	query                          url.Values
 }
@@ -120,7 +122,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	var id, fromFile, handle, under, into, after, requestKey trackedString
 	var reason, toBoard, title trackedString
 	var limit trackedInt
-	var topLevel, initiative trackedBool
+	var topLevel, initiative, brief trackedBool
 
 	values := map[string]*trackedString{}
 	if spec.idFlag != "" {
@@ -152,6 +154,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		fs.Var(&initiative, "initiative", "Explicitly create a top-level initiative")
 		fs.Var(&title, "title", "Card title (or use --from-file)")
 		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
+	}
+	if out.name == "work context" {
+		fs.Var(&brief, "brief", "Read one bounded portable briefing instead of composing context")
 	}
 	for _, key := range spec.filters {
 		if key == "limit" {
@@ -221,6 +226,9 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 			out.query.Set(strings.ReplaceAll(k, "-", "_"), v.value)
 		}
 	}
+	if out.name == "work context" && brief.value && (limit.set || values["cursor"].set) {
+		return out, errnorm.Usage("invalid_request", "--brief returns a fixed bounded briefing and cannot be combined with --limit or --cursor")
+	}
 	if handle.set {
 		if err := validateCardHandle(handle.value); err != nil {
 			return out, err
@@ -233,6 +241,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.topLevel = topLevel.value
 	out.initiative, out.title = initiative.value, strings.TrimSpace(title.value)
+	out.brief = brief.value
 	if initiative.value && under.set {
 		return out, errnorm.Usage("invalid_request", "--initiative and --under cannot be combined")
 	}
@@ -308,6 +317,11 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		if parsed.handle != "" {
 			object["handle"] = parsed.handle
 		}
+		if parsed.name == "work checkpoint" {
+			if err := validateWorkCheckpointRequest(object); err != nil {
+				return nil, parsed.name, err
+			}
+		}
 		body = object
 	} else if parsed.spec.method == "POST" {
 		body = map[string]any{}
@@ -355,9 +369,14 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	}
 	method := parsed.spec.method
 	path := strings.ReplaceAll(parsed.spec.path, "{id}", url.PathEscape(parsed.id))
+	requestName := parsed.name
 	query := parsed.query
 	if parsed.name == "work context" {
 		query = nil
+		if parsed.brief {
+			requestName = "work briefing"
+			path += "/briefing"
+		}
 	}
 	if len(query) > 0 {
 		path += "?" + query.Encode()
@@ -373,7 +392,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 			return nil, parsed.name, err
 		}
 	}
-	result, err := a.invokeRawJSON(ctx, cfg, parsed.name, method, path, body)
+	result, err := a.invokeRawJSON(ctx, cfg, requestName, method, path, body)
 	if err != nil {
 		if parsed.id != "" && (parsed.name == "pm actions reconcile" || parsed.name == "pm actions acknowledge") {
 			errnorm.AnnotateDetail(err, "action_id", parsed.id)
@@ -386,7 +405,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if commandResultBody(result) == nil {
 		return nil, parsed.name, errnorm.New(errnorm.KindRemote, "invalid_response", "central API returned a non-object response; verify the configured API endpoint")
 	}
-	if parsed.name == "work context" {
+	if parsed.name == "work context" && !parsed.brief {
 		observationPath := path + "/observations"
 		if len(parsed.query) > 0 {
 			observationPath += "?" + parsed.query.Encode()
@@ -409,7 +428,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	if parsed.name == "pm decisions dispatch" {
 		result.Text = formatPMDispatchText(commandResultBody(result), started, "")
 	} else {
-		result.Text = formatWorkCommandText(parsed.name, commandResultBody(result))
+		result.Text = formatWorkCommandText(requestName, commandResultBody(result))
 	}
 	if cfg.Verbose {
 		result.Text = formatPrettyBody(commandResultBody(result))

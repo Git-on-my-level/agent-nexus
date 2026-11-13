@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `274`
+- Commands: `276`
 
 ## `actors.create`
 
@@ -3256,6 +3256,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns bare watch_trends.v1: { schema, group, generated_at, range_days, bucket, buckets, panels }.
 - Agent notes: Three indexed root-owner existence seeks establish full visibility before aggregate reads. Restricted responses are byte-invariant across hidden writes while any denial remains. The eligibility status reveals the empty-versus-nonempty denial set. Enabled reads use capped indexed seeks over a single unpartitioned positions table, plus per-day counts for count series. Scoped aggregates remain unsupported because hidden contributors can change canonical derived state.
 
+## `work.briefing`
+
+- CLI path: `work briefing`
+- HTTP: `GET /work/{card_ref}/briefing`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `none`
+- Why: Read a bounded portable work briefing.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
+- Output: Returns `WorkBriefing`.
+- Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
+
 ## `work.capabilities`
 
 - CLI path: `work capabilities`
@@ -3268,6 +3281,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkCapabilitiesResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
+
+## `work.checkpoint`
+
+- CLI path: `work checkpoint`
+- HTTP: `PUT /work/{card_ref}/checkpoint`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Replace the current attributed recovery checkpoint.
+- Concepts: `cards`, `evidence`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
+- Output: Returns `WorkCheckpointResponse`.
+- Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
 
 ## `work.create`
 

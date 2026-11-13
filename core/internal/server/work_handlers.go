@@ -44,6 +44,15 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPost
 		}
 	}
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) == 2 && parts[0] != "" {
+		if parts[1] == "briefing" {
+			valid = r.Method == http.MethodGet
+		}
+		if parts[1] == "checkpoint" {
+			valid = r.Method == http.MethodPut
+		}
+	}
 	if strings.HasSuffix(path, "/participants") {
 		return routeAccessRequirement{bucket: routeAccessAuthenticatedPrincipal, supported: valid}
 	}
@@ -122,7 +131,7 @@ func publicWork(w map[string]any) map[string]any {
 	out["decision_revision"] = primitives.WorkDecisionRevision(w)
 	delete(out, "id")
 	delete(out, "thread_id")
-	for _, key := range []string{"top_level", "cadence", "goal", "source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "version", "freshness", "latest_observation", "possibly_moot"} {
+	for _, key := range []string{"top_level", "cadence", "goal", "source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "version", "freshness", "latest_observation", "possibly_moot", "checkpoint"} {
 		if value, ok := w[key]; ok {
 			out[key] = value
 		}
@@ -164,7 +173,8 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		return
 	}
 	if path == "/capabilities" {
-		writeJSON(w, 200, map[string]any{"capabilities": map[string]any{"version": "1", "canonical_entity": "card", "projects": "topics", "observations": true, "remote_reports": "attributed_claims", "external_status_write": false, "refresh": "durable_queue", "refresh_executor_configured": opts.observationRuntime != nil, "phases": []string{"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}}})
+		_, checkpoints := store.(WorkCheckpointStore)
+		writeJSON(w, 200, map[string]any{"capabilities": map[string]any{"version": "1", "canonical_entity": "card", "projects": "topics", "observations": true, "briefing": true, "checkpoint": checkpoints, "remote_reports": "attributed_claims", "external_status_write": false, "refresh": "durable_queue", "refresh_executor_configured": opts.observationRuntime != nil, "phases": []string{"backlog", "ready", "in_progress", "blocked", "review", "done", "cancelled", "unknown"}}})
 		return
 	}
 	if path == "" && r.Method == http.MethodGet {
@@ -289,6 +299,8 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 		return
 	}
 	switch parts[1] {
+	case "briefing", "checkpoint":
+		handleWorkContext(w, r, store, id, actor, parts[1], raw)
 	case "observations":
 		if r.Method == http.MethodGet {
 			limit, ok := workLimit(w, r)

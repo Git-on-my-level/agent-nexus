@@ -505,12 +505,27 @@ anx work list --project-ref topic:launch --source github --freshness stale --lim
 anx --json work list --limit 50 --cursor '<opaque next_cursor>'
 anx work get card:launch
 anx context card:launch --limit 10
+anx work briefing card:launch
+anx context card:launch --brief
 anx work freshness card:launch
 anx work observations list card:launch --limit 10
 anx work observations submit card:launch --from-file report.json
 anx work refresh request card:launch
 anx work refresh get card:launch
 ```
+
+The bounded briefing is a single portable read that includes the current
+checkpoint, latest observation summary, refresh status, coverage and omitted
+fields. `context --brief` selects that read; plain `context` keeps its
+observation-page and refresh composition. To replace a checkpoint, read the
+current briefing and submit a JSON file to
+`anx work checkpoint card:launch --from-file checkpoint.json`; use the
+checkpoint envelope's version as `if_version` (or `0` when absent), not
+`work.version`. Checkpoints are
+replaceable attributed reports, not approvals, task activity or accepted
+results. Explicit local exports are for outage context only: keep them private
+and treat them as stale and reader-scoped. The CLI does not create an implicit
+offline cache.
 
 Lists return a single bounded page and preserve `next_cursor`. Pass the cursor
 unchanged with the same filters; the CLI does not silently crawl all projects.

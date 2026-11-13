@@ -448,6 +448,10 @@
     "milliseconds": 5092
   },
   {
+    "key": "GET /work/{card_ref}/briefing",
+    "milliseconds": 5092
+  },
+  {
     "key": "GET /work/{card_ref}/observations",
     "milliseconds": 4900
   },

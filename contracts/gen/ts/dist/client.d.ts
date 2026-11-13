@@ -282,7 +282,9 @@ export declare class AnxClient {
     topicsWorkspace(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     usageSummaryV1(options?: RequestOptions): Promise<InvokeResult>;
     watchTrends(options?: RequestOptions): Promise<InvokeResult>;
+    workBriefing(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workCapabilities(options?: RequestOptions): Promise<InvokeResult>;
+    workCheckpoint(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workCreate(options?: RequestOptions): Promise<InvokeResult>;
     workFold(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

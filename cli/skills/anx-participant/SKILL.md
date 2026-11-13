@@ -5,56 +5,33 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v40.
+Skill contract: anx.participant.v41.
 
 ## Daily loop
 
 Set `--as <name>` / `ANX_AS`; enroll (`anx help enroll`). Pick `--workspace <alias>`. Never hardcode URLs.
 
-`anx orient`; `anx where <ref|path|text>` before edits.
-`anx tree` shows initiatives, children and Unsorted.
-Create with `anx work create --title "<outcome>" --under card:<parent>`;
-`anx work start <card>` takes ownership of native work.
-`anx note <card> "<text>" --evidence <ref>` posts progress and starts
-an unstarted card you or nobody owns.
-`anx done <card> --evidence <ref>` finishes. `anx plan` is for checklists.
+`anx orient`; `anx where <ref|path|text>` before edits. `anx tree` shows initiatives, children and Unsorted.
+`anx work briefing <card>`/`anx context <card> --brief` gives a bounded handoff. No refresh or health proof. At handoff, use `anx work checkpoint <card> --from-file <file|->` with the briefing's `checkpoint.version` as `if_version` (0 absent), never `work.version`. No authority or activity changes. Local artifacts need host refs. For outages, explicitly export private JSON; keep it private, stale and reader-scoped. No implicit cache.
 
-Follow warnings. Promise `--next <when> "<what>"`; renew within two days.
-Next step needs a human? File an ask, not chat.
-Record chat rulings: `anx note <card> "<text>" --decided-by <who>`.
-Cite blockers as `event:<ask-id>`; share `anx link` URLs.
+`anx work create --title "<outcome>" --under card:<parent>` creates; `anx work start <card>` takes native work. `anx note <card> "<text>" --evidence <ref>` posts progress and starts unowned work. `anx done <card> --evidence <ref>` finishes; `anx plan` makes checklists.
 
-Initiatives are top-level cards outside Unsorted; one stored parent each,
-depth at most three (initiative → workstream → task).
-Without `--under` or `--initiative`, creation enters Unsorted.
-`where` suggests; confirm by naming a home: `anx mv <ref|path> --under <ref|path>`.
-Top level: `anx mv <card> --root --reason "Independent outcome"`, or
-back to the tray: `anx mv <card> --unsorted`. Store card refs, not paths.
-One owner per card; no owner means empty assignee, never an expired lease.
+Follow warnings. Promise `--next <when> "<what>"`; renew within two days. Needs a human? File an ask. Record rulings with `anx note <card> "<text>" --decided-by <who>`. Cite blockers `event:<ask-id>`; share `anx link`.
+
+One parent per card; depth ≤3 (initiative → workstream → task). Without `--under` or `--initiative`, creation enters Unsorted. `where` suggests; confirm with `anx mv <ref|path> --under <ref|path>`. Move top-level with `anx mv <card> --root --reason "Independent outcome"`; return with `anx mv <card> --unsorted`. Store card refs, not paths. One owner per card; no owner is empty, never an expired lease.
 
 ## Write for a busy boss
 
-- What's happening (`situation`): baseline, change, numbers.
-- Why it matters (`impact`): who is affected; why facts decide it.
-- What I recommend (`recommendation: {action, why}`): reason, tradeoff, known cost.
-- Alternatives: real actions and consequences.
-- If no answer (`if_no_answer`): known default/blocker.
+- Situation: baseline, change, numbers. Impact: who is affected and why it matters.
+- Recommendation: `{action, why}`, tradeoff and known cost. List real alternatives and consequences.
+- `if_no_answer`: known default or blocker.
 
-Preserve uncertainty; never invent facts, urgency,
-costs, approvals or defaults. Omit unused optional fields. Collapse technical details/evidence.
+Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused fields.
 
-`anx ask --template decision`: fictional narrative example.
-Edit frontmatter; preview: `anx ask --from-file ask.md --preview`.
-`--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`.
-Withdraw stale asks. Answers may be free text or questions: act or re-ask.
-After filing, arm a wake: `anx await <ask>` or background `anx await --answers --deadline <time>`
-(exit 14: no answer by then), re-armed on return. Mark read only your own asks.
-ANX misbehaving? `anx feedback "<text>"`.
+`anx ask --template decision` is a fictional narrative. Edit frontmatter; preview `anx ask --from-file ask.md --preview`. Supply `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`. Withdraw stale asks; act on answers or re-ask.
+
+After filing, arm `anx await <ask>` or `anx await --answers --deadline <time>`; re-arm on return. Mark only your asks read. Report issues with `anx feedback "<text>"`.
 
 ## Advanced setup
 
-`anx help <job>` / `anx api <operation>` cover power verbs
-and automation. Preview setup with `--dry-run`; never alter host
-services for coding. Networkless producers get only `.anx/outbox` writable,
-no credentials; mirrors stay read-only. Keep uncertain originals and keys;
-inspect receipts. Never share secrets or raw transcripts.
+`anx help <job>` / `anx api <operation>` cover automation. Preview with `--dry-run`; never alter host services for coding. Networkless producers write only `.anx/outbox`, without credentials; mirrors are read-only. Keep uncertain originals and keys; inspect receipts. Never share secrets or raw transcripts.

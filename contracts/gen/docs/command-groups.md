@@ -476,10 +476,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `work`
 
-- Commands: `19`
+- Commands: `21`
 - Command IDs:
   - `agents.me.presence` (`work presence`)
+  - `work.briefing` (`work briefing`)
   - `work.capabilities` (`work capabilities`)
+  - `work.checkpoint` (`work checkpoint`)
   - `work.create` (`work create`)
   - `work.fold` (`work fold`)
   - `work.get` (`work get`)

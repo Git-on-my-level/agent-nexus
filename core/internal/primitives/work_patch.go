@@ -97,6 +97,23 @@ func (s *Store) PatchWork(ctx context.Context, actor, identifier string, version
 		}
 	}()
 	defer tx.Rollback()
+	// A recovery checkpoint has its own CAS version and deliberately does not
+	// bump the work annotation version. Merge its latest value while holding the
+	// writer so an otherwise valid annotation patch cannot erase a concurrent
+	// checkpoint written after the snapshot above.
+	var latestMetadataJSON string
+	if err = tx.QueryRowContext(ctx, `SELECT metadata_json FROM work_metadata WHERE card_id=?`, id).Scan(&latestMetadataJSON); err != nil {
+		return nil, err
+	}
+	var latestMetadata map[string]any
+	if err = json.Unmarshal([]byte(latestMetadataJSON), &latestMetadata); err != nil {
+		return nil, err
+	}
+	if checkpoint, ok := latestMetadata[recoveryCheckpointKey]; ok {
+		m[recoveryCheckpointKey] = checkpoint
+	} else {
+		delete(m, recoveryCheckpointKey)
+	}
 	// Preserve concurrent observation progress: observations do not bump the
 	// annotation version, and must not be overwritten by this earlier snapshot.
 	var evidenceAt, evidenceRefs any

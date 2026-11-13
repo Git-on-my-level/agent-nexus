@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 254,
+  "route_count": 256,
   "routes": [
     {
       "method": "GET",
@@ -1190,6 +1190,16 @@
     {
       "method": "PATCH",
       "path": "/work/{card_ref}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/work/{card_ref}/briefing",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "PUT",
+      "path": "/work/{card_ref}/checkpoint",
       "access_class": "workspace_business_surface"
     },
     {

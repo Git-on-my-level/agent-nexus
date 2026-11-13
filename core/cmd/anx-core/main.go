@@ -1,6 +1,6 @@
 // anx-core binary entrypoint: flag and environment wiring, server assembly,
-// startup, and shutdown. The deployment default constants sit beside main()
-// because main is their only reader. Support pieces live in scheduler.go,
+// startup, and shutdown. Deployment defaults live in env_config.go.
+// Support pieces live in scheduler.go,
 // healthcheck_cli.go, env_config.go, dev_auth_bypass.go, and pm_config.go.
 
 package main
@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -44,28 +43,6 @@ import (
 	"agent-nexus-core/internal/server/stream"
 	"agent-nexus-core/internal/sidecar"
 	"agent-nexus-core/internal/storage"
-)
-
-const (
-	defaultHost          = "127.0.0.1"
-	defaultPort          = 8000
-	defaultSchemaPath    = "../contracts/anx-schema.yaml"
-	defaultWorkspaceRoot = ".anx-workspace"
-	defaultAPIVersion    = "v0"
-	defaultInstanceID    = "core-local"
-
-	defaultWorkspaceMaxBlobBytes        int64 = 1 << 30
-	defaultWorkspaceMaxArtifacts        int64 = 100000
-	defaultWorkspaceMaxDocuments        int64 = 50000
-	defaultWorkspaceMaxRevisions        int64 = 250000
-	defaultWorkspaceMaxUploadBytes      int64 = 8 << 20
-	defaultRequestBodyLimit             int64 = 1 << 20
-	defaultAuthRequestBodyLimit         int64 = 256 << 10
-	defaultContentRequestBodyLimit      int64 = 8 << 20
-	defaultAuthRouteRateLimitPerMinute        = 600
-	defaultAuthRouteRateBurst                 = 100
-	defaultWriteRouteRateLimitPerMinute       = 1200
-	defaultWriteRouteRateBurst                = 200
 )
 
 func main() {
@@ -915,22 +892,4 @@ func main() {
 		}
 		fmt.Println("server stopped")
 	}
-}
-
-func asMapAny(value any) map[string]any {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return map[string]any{}
-	}
-	if len(raw) == 0 || string(raw) == "null" {
-		return map[string]any{}
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return map[string]any{}
-	}
-	if decoded == nil {
-		return map[string]any{}
-	}
-	return decoded
 }

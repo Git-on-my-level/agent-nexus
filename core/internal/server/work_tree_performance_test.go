@@ -15,7 +15,7 @@ func TestPerformanceWorkTreeRoutes(t *testing.T) {
 	requirePerformanceTest(t)
 	env := newPerformanceEnv(t)
 	for _, b := range performanceBudgets(t) {
-		if b.Path != "/work/tree" && b.Path != "/work/resolve" && b.Path != "/work/where" {
+		if b.Path != "/work/tree" && b.Path != "/work/resolve" && b.Path != "/work/where" && b.Path != "/work/{card_ref}/briefing" {
 			continue
 		}
 		for pi, principal := range env.principals {

@@ -186,7 +186,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "done", err
 	case "context":
 		if len(args) < 2 {
-			return "context", errnorm.Usage("invalid_args", "usage: anx context <card> [--limit N] [--cursor C]")
+			return "context", errnorm.Usage("invalid_args", "usage: anx context <card> [--brief] [--limit N] [--cursor C]")
 		}
 		_, err := parseWorkCommand(append([]string{"work", "context"}, args[1:]...))
 		return "context", err
