@@ -676,5 +676,10 @@
     "method": "POST",
     "path": "/work/{card_ref}/move",
     "reason": "Atomic replay-safe hierarchy mutation; bounded advisory reads covered by work-tree scale tests."
+  },
+  {
+    "method": "PUT",
+    "path": "/work/{card_ref}/checkpoint",
+    "reason": "Bounded latest checkpoint replacement; single-card independent CAS, no appended history."
   }
 ]

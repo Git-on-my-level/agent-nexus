@@ -2740,3 +2740,20 @@ upgrade. The performance plan allowlist is unchanged: current SQL already
 selects the replacement indexes, so no observed plan shape changes. Historical
 allowlist entries that mention the dropped names are not produced by current
 queries.
+
+## Portable work briefing
+
+`GET /work/{card_ref}/briefing` resolves one authorized card and performs the
+existing point `GetWork` read. It does not enrich a work tree, load observation
+history, query an upstream service or load decisions. Projection adds no SQL;
+optional sections are bounded at 8 KiB each, the current checkpoint at 16 KiB,
+and the response at 64 KiB. The route uses the same ID/handle, work metadata and
+latest-observation primary-key seeks as the work point read. Its scale budget
+uses the standard 100 queries / 1024 rows / 50000 VM steps / 500ms limits.
+Checkpoint storage is one bounded current value per card with independent CAS;
+no event, blob or request-ledger row is created for updates or repeated reads.
+
+The briefing's initial shard scheduling estimate reuses the measured weight for
+`GET /work/{card_ref}`, since it performs that same store read plus an in-memory
+projection. It is a scheduling estimate, not a request budget; CI samples remain
+the timing evidence.

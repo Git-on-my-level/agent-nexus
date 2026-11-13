@@ -19,6 +19,8 @@ import (
 
 var ErrInvalidWorkRequest = errors.New("invalid work request")
 
+const recoveryCheckpointKey = "_recovery_checkpoint"
+
 func workInvalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalidWorkRequest, fmt.Sprintf(format, args...))
 }
@@ -68,6 +70,7 @@ func insertWorkMetadata(ctx context.Context, tx *accessTx, cardID, actorID strin
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	delete(m, sourceEvidenceKey)
 	delete(m, sourceEvidenceRefsKey)
+	delete(m, recoveryCheckpointKey)
 	if sourceEvidenceChanged(nil, m["source_refs"]) {
 		m[sourceEvidenceKey] = now
 		m[sourceEvidenceRefsKey] = m["source_refs"]
@@ -303,6 +306,7 @@ func (s *Store) CreateWork(ctx context.Context, actorID, boardID string, input m
 	delete(m, "board_ref")
 	delete(m, sourceEvidenceKey)
 	delete(m, sourceEvidenceRefsKey)
+	delete(m, recoveryCheckpointKey)
 	if raw, ok := m["plan"]; ok {
 		p, err := workCreatePlan(raw)
 		if err != nil {
@@ -525,7 +529,11 @@ func (s *Store) GetWork(ctx context.Context, identifier string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	return projectWork(card, m, version, latest, attempt, refresh), nil
+	out := projectWork(card, m, version, latest, attempt, refresh)
+	if checkpoint, ok := m[recoveryCheckpointKey]; ok && checkpoint != nil {
+		out["checkpoint"] = checkpoint
+	}
+	return out, nil
 }
 
 // projectWork shares canonical projection logic with bulk work and report reads.

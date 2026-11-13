@@ -111,9 +111,12 @@ func preflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		}
 	}
 	addLayer(map[string]map[string]preflightFlagSpec{
-		"await":      {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "deadline": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}, "settle": {kind: preflightFlagString}, "all": {kind: preflightFlagBool}},
-		"work start": {},
-		"work block": {"again": {kind: preflightFlagBool}, "situation": {kind: preflightFlagString}, "impact": {kind: preflightFlagString}, "why": {kind: preflightFlagString}, "if-no-answer": {kind: preflightFlagString}, "details": {kind: preflightFlagString}, "alternative": {kind: preflightFlagString}, "ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}, "body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}},
+		"await":           {"until": {kind: preflightFlagString}, "timeout": {kind: preflightFlagString}, "deadline": {kind: preflightFlagString}, "answers": {kind: preflightFlagBool}, "settle": {kind: preflightFlagString}, "all": {kind: preflightFlagBool}},
+		"context":         {"brief": {kind: preflightFlagBool}, "limit": {kind: preflightFlagString}, "cursor": {kind: preflightFlagString}},
+		"work start":      {},
+		"work block":      {"again": {kind: preflightFlagBool}, "situation": {kind: preflightFlagString}, "impact": {kind: preflightFlagString}, "why": {kind: preflightFlagString}, "if-no-answer": {kind: preflightFlagString}, "details": {kind: preflightFlagString}, "alternative": {kind: preflightFlagString}, "ask": {kind: preflightFlagBool}, "recommend": {kind: preflightFlagString}, "alt": {kind: preflightFlagString}, "body": {kind: preflightFlagString}, "body-file": {kind: preflightFlagString}, "force": {kind: preflightFlagBool}, "reason": {kind: preflightFlagString}},
+		"work briefing":   {},
+		"work checkpoint": {"from-file": {kind: preflightFlagString}},
 	})
 	for _, kind := range []string{"ask", "review", "escalate"} {
 		addLayer(map[string]map[string]preflightFlagSpec{kind: {

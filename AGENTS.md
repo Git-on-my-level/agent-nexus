@@ -75,6 +75,8 @@ Run the smallest relevant checks first: `make -C core check`, `make cli-check`, 
 
 For every new or changed read path, including streaming poll ticks, describe its per-request complexity in the PR; exactly what to cover, when to run the scale gate, and budget-entry rules are in [docs/agents/per-request-cost.md](docs/agents/per-request-cost.md). Reviewers must treat hot-path O(workspace) work as a merge-blocking P1, including unbounded materialization, per-row queries, full ownership/graph rebuilds, and read-time text/JSON scans. New or changed hot paths cannot be deferred as a performance follow-up, and budgets are never weakened to make a regression pass. Existing main hazards may use exact, finite checked-in baselines linked to their P1 repair, as documented in `core/docs/performance.md`; remove those entries when repaired.
 
+For provider outages or a fresh-agent handoff, use [portable work context](docs/architecture/portable-work-context.md); checkpoints do not transfer ownership.
+
 ## Fast loop
 
 Match the command to the change; anything wider belongs to CI.

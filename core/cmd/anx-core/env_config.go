@@ -12,6 +12,28 @@ import (
 	"time"
 )
 
+const (
+	defaultHost          = "127.0.0.1"
+	defaultPort          = 8000
+	defaultSchemaPath    = "../contracts/anx-schema.yaml"
+	defaultWorkspaceRoot = ".anx-workspace"
+	defaultAPIVersion    = "v0"
+	defaultInstanceID    = "core-local"
+
+	defaultWorkspaceMaxBlobBytes        int64 = 1 << 30
+	defaultWorkspaceMaxArtifacts        int64 = 100000
+	defaultWorkspaceMaxDocuments        int64 = 50000
+	defaultWorkspaceMaxRevisions        int64 = 250000
+	defaultWorkspaceMaxUploadBytes      int64 = 8 << 20
+	defaultRequestBodyLimit             int64 = 1 << 20
+	defaultAuthRequestBodyLimit         int64 = 256 << 10
+	defaultContentRequestBodyLimit      int64 = 8 << 20
+	defaultAuthRouteRateLimitPerMinute        = 600
+	defaultAuthRouteRateBurst                 = 100
+	defaultWriteRouteRateLimitPerMinute       = 1200
+	defaultWriteRouteRateBurst                = 200
+)
+
 func envString(name string, fallback string) string {
 	value := strings.TrimSpace(os.Getenv(name))
 	if value == "" {

@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 274
+- Command count: 276
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -55,15 +55,15 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | usage | 1 |
 | watch | 1 |
 | where | 1 |
-| work | 19 |
+| work | 21 |
 | workspace | 4 |
 
 ## Counts by Classification
 
 | Classification | Commands |
 | --- | --- |
-| exposed_read | 90 |
-| exposed_write | 74 |
+| exposed_read | 91 |
+| exposed_write | 75 |
 | gated_admin | 30 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
@@ -76,7 +76,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 164 | exposed_read + exposed_write + adapted |
+| standalone default | 166 | exposed_read + exposed_write + adapted |
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
@@ -337,7 +337,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | topics.workspace | topics | GET | /topics/{topic_id}/workspace | exposed_read | bounded topic workspace projection |
 | usage.summary.v1 | usage | GET | /v1/usage/summary | gated_admin | versioned usage summary is quota/billing telemetry |
 | watch.trends | watch | GET | /watch/trends | exposed_read | Principal-scoped bounded trends over stored records; read only. |
+| work.briefing | work | GET | /work/{card_ref}/briefing | exposed_read | Read bounded authorized context, with source freshness, attributed checkpoint and explicit coverage. |
 | work.capabilities | work | GET | /work/capabilities | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
+| work.checkpoint | work | PUT | /work/{card_ref}/checkpoint | exposed_write | Replace one attributed checkpoint with independent CAS; no task progress, ownership or approval change. |
 | work.create | work | POST | /work | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.fold | work | POST | /work/{card_ref}/fold | exposed_write | Transfer references and archive with a reversible scoped snapshot. |
 | work.get | work | GET | /work/{card_ref} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |

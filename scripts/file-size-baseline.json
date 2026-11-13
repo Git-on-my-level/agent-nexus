@@ -6,7 +6,7 @@
   "cli/internal/app/resource_messages.go": 879,
   "cli/internal/app/skills_sync.go": 926,
   "cli/internal/errnorm/enrich.go": 891,
-  "core/cmd/anx-core/main.go": 902,
+  "core/cmd/anx-core/main.go": 895,
   "core/cmd/contract-gen/main.go": 2432,
   "core/internal/auth/hosts.go": 1240,
   "core/internal/auth/store.go": 1039,

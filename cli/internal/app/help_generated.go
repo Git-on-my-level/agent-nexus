@@ -1060,7 +1060,7 @@ Usage: anx [global flags] <command>
 
 Loop (stable):
   orient                  Your brief: answers, asks waiting on a human, initiatives vs promises, next (read_only)
-  context <card>          Everything about one initiative (read_only)
+  context <card> [--brief] Everything about one initiative (read_only)
   note <card> ["<text>"] [--next <when> "<what>"] [--evidence <ref>]  Post progress and renew the promise (remote_coordination_write)
   ask <title> --situation <text> --impact <text> --recommend <text> --why <text> [--preview]  Request a human decision (remote_coordination_write)
   await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
@@ -1226,7 +1226,7 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx done [card] --evidence <url|event:ref|artifact:ref>...: resolve a card with evidence and clear presence; omitted card uses presence (remote_coordination_write).\n", true
 	}
 	if topic == "context" {
-		return "anx context <card> [--limit N] [--cursor C]: everything about one initiative: the card, a bounded observation page and refresh state, composed from read-only requests (read_only).\n", true
+		return "anx context <card> [--brief] [--limit N] [--cursor C]: by default, read the card, a bounded observation page and refresh state. With --brief, read one bounded portable briefing instead (read_only). The fixed briefing cannot be combined with --limit or --cursor.\n", true
 	}
 	if topic == "api" {
 		return "anx api <operationId|command-id> [--param name=value]... [--json-body <json>|@<file>|-]: call any contract operation by name. Path parameters are filled from --param; other params become query parameters. Operation names: anx debug meta commands. Raw form: anx api call --method <M> --path <P>.\n", true

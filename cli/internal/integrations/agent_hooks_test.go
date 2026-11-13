@@ -181,9 +181,15 @@ func TestGitFrozenWalkPagesAndMergeOrder(t *testing.T) {
 	testGit(t, root, "init", "-q")
 	testGit(t, root, "commit", "--allow-empty", "-m", "seed")
 	anchor := testGit(t, root, "rev-parse", "HEAD")
+	// Construct the immutable graph directly, then publish its tip once. The
+	// subject here is Collect's pagination/order, not repeated porcelain HEAD
+	// updates (which have failed intermittently in hook-driven fixture setup).
+	tree := testGit(t, root, "rev-parse", anchor+"^{tree}")
+	tip := anchor
 	for n := 0; n < WalkPage+1; n++ {
-		testGit(t, root, "commit", "--allow-empty", "-m", "progress")
+		tip = testGit(t, root, "commit-tree", tree, "-p", tip, "-m", "progress")
 	}
+	testGit(t, root, "update-ref", "HEAD", tip, anchor)
 	s := CaptureState{Root: root, Anchor: anchor}
 	if e := Collect(context.Background(), &s); e != nil {
 		t.Fatal(e)

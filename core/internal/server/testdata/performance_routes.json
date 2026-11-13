@@ -1256,6 +1256,17 @@
   },
   {
     "method": "GET",
+    "path": "/work/{card_ref}/briefing",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "One ID-scoped work read; fixed projection with bounded fields, no history or upstream reads.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/work/{card_ref}/observations",
     "max_queries": 100,
     "max_rows": 1024,

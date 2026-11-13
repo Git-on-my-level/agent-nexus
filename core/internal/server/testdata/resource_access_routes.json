@@ -1230,6 +1230,16 @@
     "policy": "record"
   },
   {
+    "method": "GET",
+    "path": "/work/{card_ref}/briefing",
+    "policy": "record"
+  },
+  {
+    "method": "PUT",
+    "path": "/work/{card_ref}/checkpoint",
+    "policy": "reference-write"
+  },
+  {
     "method": "PATCH",
     "path": "/work/{card_ref}",
     "policy": "record"

@@ -2018,6 +2018,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkCapabilitiesResponse'
+  /work/{card_ref}/briefing:
+    get:
+      operationId: workBriefing
+      summary: Read a bounded portable work briefing
+      description: Deterministic read-only projection of one authorized work item and its latest stored evidence. Does not refresh sources, load history, infer approvals, transfer ownership or establish live execution health. Omitted fields are explicit. No briefing is persisted. Maximum encoded response is 65536 bytes.
+      tags: [work]
+      x-anx-surface: projection
+      x-anx-command-id: work.briefing
+      x-anx-cli-path: work briefing
+      x-anx-why: Read a bounded portable work briefing.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkBriefing`.
+      x-anx-error-codes: [invalid_request, not_found, conflict, outcome_unknown, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      x-anx-agent-notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Read a bounded portable work briefing
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkBriefing'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /work/{card_ref}/checkpoint:
+    put:
+      operationId: workCheckpoint
+      summary: Replace the current attributed recovery checkpoint
+      description: Stores one current checkpoint per card, at most 16384 UTF-8 JSON bytes. This attributed report is not a decision, accepted result, lease or backup. Replaces prior checkpoint without appending events or replay history. Identical current content from the same actor returns unchanged; other writes require matching checkpoint.version (zero when absent). Delayed retries after another change conflict. Does not change work version, decision revision or task activity. Local-only artifacts require a host identifier; references do not copy bytes.
+      tags: [work]
+      x-anx-surface: canonical
+      x-anx-command-id: work.checkpoint
+      x-anx-cli-path: work checkpoint
+      x-anx-why: Replace the current attributed recovery checkpoint.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-output-envelope: Returns `WorkCheckpointResponse`.
+      x-anx-error-codes: [invalid_request, not_found, conflict, outcome_unknown, work_unavailable]
+      x-anx-concepts: [cards, evidence]
+      x-anx-stability: beta
+      x-anx-agent-notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
+      parameters:
+      - {name: card_ref, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WorkCheckpointRequest'}
+      responses:
+        '200':
+          description: Replace the current attributed recovery checkpoint
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WorkCheckpointResponse'}
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
   /work/{card_ref}:
     get:
       operationId: workGet
@@ -11664,6 +11731,74 @@ components:
       properties:
         actor_id: {type: string}
         request_key: {type: string, maxLength: 256}
+    WorkCheckpointContent:
+      type: object
+      additionalProperties: false
+      required: [summary, next_action]
+      description: Current recovery context; the complete stored checkpoint envelope (including attribution, version, digest and timestamp) is limited to 16384 UTF-8 JSON bytes. No transcripts, credentials or raw logs. Replaces its predecessor; use canonical decisions or receipts for durable history.
+      properties:
+        summary: {type: string, minLength: 1, maxLength: 4096}
+        next_action: {type: string, minLength: 1, maxLength: 4096}
+        blockers:
+          type: array
+          maxItems: 16
+          items: {type: string, maxLength: 512}
+        artifacts:
+          type: array
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [ref, portability]
+            properties:
+              ref: {type: string, minLength: 1, maxLength: 1024}
+              portability: {type: string, enum: [portable, local_only]}
+              host: {type: string, minLength: 1, maxLength: 256, description: Required for local_only; not a connection instruction.}
+        execution:
+          type: object
+          additionalProperties: false
+          required: [authority, run_id]
+          properties:
+            authority: {type: string, minLength: 1, maxLength: 256}
+            run_id: {type: string, minLength: 1, maxLength: 256}
+    WorkCheckpoint:
+      type: object
+      required: [version, reporter, updated_at, digest, content]
+      properties:
+        version: {type: integer, minimum: 1}
+        reporter: {type: string}
+        updated_at: {type: string, format: date-time}
+        digest: {type: string}
+        content: {$ref: '#/components/schemas/WorkCheckpointContent'}
+    WorkCheckpointRequest:
+      type: object
+      additionalProperties: false
+      required: [if_version, checkpoint]
+      properties:
+        if_version: {type: integer, minimum: 0, description: Checkpoint version from briefing; zero if absent. Independent of work.version.}
+        checkpoint: {$ref: '#/components/schemas/WorkCheckpointContent'}
+    WorkCheckpointResponse:
+      type: object
+      required: [checkpoint, version, unchanged]
+      properties:
+        checkpoint: {$ref: '#/components/schemas/WorkCheckpoint'}
+        version: {type: integer}
+        unchanged: {type: boolean}
+    WorkBriefing:
+      type: object
+      required: [schema_version, work, checkpoint, observation, refresh, coverage, omitted]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        work: {type: object, additionalProperties: true}
+        checkpoint:
+          allOf: [{$ref: '#/components/schemas/WorkCheckpoint'}]
+          nullable: true
+        observation: {type: object, nullable: true, additionalProperties: true}
+        refresh: {type: object, additionalProperties: true}
+        coverage: {type: object, additionalProperties: true}
+        omitted:
+          type: array
+          items: {type: string}
     WorkResponse:
       type: object
       additionalProperties: true

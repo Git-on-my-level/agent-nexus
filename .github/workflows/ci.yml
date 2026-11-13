@@ -288,7 +288,9 @@ jobs:
 
   cli-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Unit tests and setup precede the integration suite's 13-minute budget.
+    # Leave time for that timeout to emit diagnostics and for job cleanup.
+    timeout-minutes: 25
     needs: changes
     if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:
@@ -317,7 +319,7 @@ jobs:
         working-directory: cli
         # Give the full real-core suite an explicit package budget below the
         # job deadline so timed-out runs still report diagnostics.
-        run: go test -timeout=13m -tags=integration ./integration/...
+        run: go test -v -timeout=13m -tags=integration ./integration/...
 
   # Cheap deterministic checks (lint, unit tests, bundle audit). Runs on every web-ui-related change.
   web-ui-static-check:
