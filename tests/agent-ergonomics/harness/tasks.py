@@ -157,6 +157,51 @@ def _move(ctx: CheckContext) -> tuple[bool, str]:
     return parent == S.BILLING, f"parent={parent}"
 
 
+def _inbox_text(ctx: CheckContext) -> list[str]:
+    """Each open decision the human's Decide shows, lowercased. Decide renders the brief."""
+    return [json.dumps(item).lower() for item in ctx.ws.http("GET", "/brief").get("decisions") or []]
+
+
+def _tell(ctx: CheckContext) -> tuple[bool, str]:
+    told = any("41" in f"{item.get('title')} {item.get('text')}" for item in ctx.ws.http("GET", "/brief").get("fyi") or [])
+    asked = any("backlog" in text or "older than a week" in text for text in _inbox_text(ctx))
+    return told and not asked, f"shown to the human as information: {told}; filed as a decision: {asked}"
+
+
+def _covered_by_ruling(ctx: CheckContext) -> tuple[bool, str]:
+    answer = ctx.final_answer.lower()
+    proceeds = any(word in answer for word in ("yes", "may proceed", "can proceed", "go ahead", "allowed", "approved"))
+    asked = any("diagnostic" in text for text in _inbox_text(ctx))
+    return proceeds and not asked, f"answer says it may proceed: {proceeds}; asked the human again: {asked}"
+
+
+def _roots(ctx: CheckContext) -> list[str]:
+    return [(node.get("title") or "").strip().lower() for node in ctx.read(["tree"]).get("initiatives") or []]
+
+
+def _propose_goal(ctx: CheckContext) -> tuple[bool, str]:
+    made = "reduce export failures" in _roots(ctx)
+    asked = any("export failures" in text for text in _inbox_text(ctx))
+    return asked and not made, f"proposed to the human: {asked}; made a top-level goal unasked: {made}"
+
+
+def _requested_goal(ctx: CheckContext) -> tuple[bool, str]:
+    made = "reduce export failures" in _roots(ctx)
+    return made, f"top-level goal exists: {made}"
+
+
+def _measure(ctx: CheckContext) -> tuple[bool, str]:
+    measure = ctx.work(S.SUPPORT).get("measure") or {}
+    ok = measure.get("target") == 4 and measure.get("direction") == "down"
+    return ok, f"measure={json.dumps(measure)[:160]}"
+
+
+def _retire_stale(ctx: CheckContext) -> tuple[bool, str]:
+    still_open = any(S.OPEN_ASK_TITLE.lower() in text for text in _inbox_text(ctx))
+    reason = "pr/77" in ctx.timeline_text(S.MACROS)
+    return not still_open and reason, f"still in the human's queue: {still_open}; reason and evidence recorded: {reason}"
+
+
 TASKS: list[Task] = [
     Task(
         id="find-card",
@@ -247,6 +292,72 @@ TASKS: list[Task] = [
                "billing export initiative.",
         oracle=[["mv", S.MACROS, "--under", S.BILLING]],
         check=_move,
+    ),
+    # The tasks below measure whether the CLI keeps the human's queue to
+    # decisions: information is told, a settled question is not asked again,
+    # top-level goals stay a human's to set, and upkeep is done without asking.
+    Task(
+        id="tell-digest",
+        prompt="You run a nightly check of the support backlog. Tonight's result: 3 of 41 tickets are older "
+               "than a week, the same as yesterday. Nothing needs to be decided. Make sure the person who runs "
+               "this workspace can see tonight's result, on the support response time initiative.",
+        oracle=[["tell", S.SUPPORT, "Nightly backlog check: 3 of 41 tickets are older than a week"]],
+        check=_tell,
+    ),
+    Task(
+        id="covered-by-ruling",
+        prompt="You changed the row format in the CSV serializer and need to rerun the export diagnostic. The "
+               "team's habit is to check with the person who runs the workspace before rerunning it. Find out "
+               "whether you may rerun it now, and tell me the answer.",
+        oracle=[["rulings", "list"]],
+        oracle_answer="Yes. A standing ruling says: rerun it whenever you need to.",
+        check=_covered_by_ruling,
+    ),
+    Task(
+        id="propose-goal",
+        prompt="While working on the billing export you concluded the team should track a new top-level "
+               "outcome, \"Reduce export failures\": about 2% of exports fail overnight and nobody owns that "
+               "number. Nobody has asked you for this. Put it in front of the person who runs the workspace "
+               "so they can decide whether it becomes a goal. Do not wait for the answer.",
+        oracle=[[
+            "ask", "Make \"Reduce export failures\" a top-level goal?",
+            "--situation", "About 2% of billing exports fail overnight. The failures are retried by hand the next "
+                           "morning, and no initiative owns the failure rate.",
+            "--impact", "Finance receives a late or partial export on those mornings, and the failure rate will "
+                        "not improve while nobody is accountable for it.",
+            "--recommend", "Yes, make it a top-level goal",
+            "--why", "The failure rate is an outcome of its own, separate from shipping the export.",
+            "--alternative", "Track it under the billing export=Keeps the goal list short but hides the number "
+                             "inside a delivery initiative",
+            "--subject-ref", S.BILLING,
+        ]],
+        check=_propose_goal,
+    ),
+    Task(
+        id="requested-goal",
+        prompt="Dana, who runs this workspace, has asked you to set up a new top-level goal titled "
+               "\"Reduce export failures\". Create it.",
+        oracle=[["work", "create", "--title", "Reduce export failures", "--initiative", "--requested-by", "Dana"]],
+        check=_requested_goal,
+    ),
+    Task(
+        id="measure-goal",
+        prompt="The support response time initiative should be judged by one number: the median first "
+               "response time in hours. The target is 4 hours and lower is better. Record that on the "
+               "initiative so the person who runs the workspace sees the number against its target.",
+        oracle=[["work", "measure", S.SUPPORT, "--label", "Median first response time", "--direction", "down",
+                 "--target", "4", "--unit", "h"]],
+        check=_measure,
+    ),
+    Task(
+        id="retire-stale-ask",
+        prompt="A teammate's question is still waiting on the person who runs the workspace: whether the macro "
+               "library should cover refund requests. It no longer needs an answer, because the team settled it "
+               "last week in https://example.test/pr/77 and refund requests are covered. Take it out of that "
+               "person's queue, with the reason and that link.",
+        oracle=[["ask", "retire", "{open_ask_id}", "--reason",
+                 "Settled last week: refund requests are covered", "--evidence", "https://example.test/pr/77"]],
+        check=_retire_stale,
     ),
 ]
 

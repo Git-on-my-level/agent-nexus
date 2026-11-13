@@ -262,6 +262,10 @@ func RunCurationFormula(ctx context.Context, store *primitives.Store) ([]map[str
 		}
 		proposals = append(proposals, curationProposalJSON(rec, true))
 	}
+	// A larger batch replaces the smaller ones it covers.
+	if _, err = store.DismissSupersededBatchSuggestions(ctx); err != nil {
+		return proposals, skipped, err
+	}
 	return proposals, skipped, nil
 }
 

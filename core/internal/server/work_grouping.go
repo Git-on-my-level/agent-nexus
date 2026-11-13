@@ -139,7 +139,7 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return true
 	}
-	for _, key := range []string{"under", "into", "after", "request_key", "reason", "to_board"} {
+	for _, key := range []string{"under", "into", "after", "request_key", "reason", "to_board", "requested_by"} {
 		if value, exists := raw[key]; exists {
 			if _, ok := value.(string); !ok {
 				writeError(w, 400, "invalid_request", key+" must be a string")
@@ -160,6 +160,14 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		return true
 	}
 	verb := parts[1]
+	if verb == "promote" || (verb == "move" && raw["root"] == true) {
+		reason, ok := initiativePromotionReason(r, raw)
+		if !ok {
+			writeError(w, 403, "human_request_required", "a top-level goal is set at a human's request: pass requested_by naming the human who asked, or propose it with an ask")
+			return true
+		}
+		raw["reason"] = reason
+	}
 	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "work."+verb+":"+id, actor, anyString(raw["request_key"]), raw, 200, func(ctx context.Context) (map[string]any, error) {
 		var item map[string]any
 		var err error

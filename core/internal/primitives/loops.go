@@ -281,12 +281,29 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
 			}
 		}
 	}
+	days, err := s.dailySeriesPoints(ctx, refs, now)
+	if err != nil {
+		return err
+	}
+	for _, c := range cards {
+		if ref := byCard[c.id]; ref != "" {
+			out[c.id]["goal"] = loopGoal(workMap(c.metadata["goal"]), append([]map[string]any{}, days[ref]...))
+		}
+	}
+	return nil
+}
+
+// dailySeriesPoints returns, per series ref, one point per UTC day of the loop
+// window (the day's last value), oldest first. One batch resolves the refs and
+// reads at most 31 daily buckets per selected stream in each rollup table.
+func (s *Store) dailySeriesPoints(ctx context.Context, refs []seriesref.Ref, now time.Time) (map[string][]map[string]any, error) {
+	out := map[string][]map[string]any{}
 	if len(refs) == 0 {
-		return nil
+		return out, nil
 	}
 	metrics, err := seriesref.LatestRefs(ctx, s.db, refs, now)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	requests := []map[string]string{}
 	for ref, m := range metrics {
@@ -296,7 +313,7 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
 		}
 	}
 	if len(requests) == 0 {
-		return nil
+		return out, nil
 	}
 	raw, _ := json.Marshal(requests)
 	start := now.Add(-loopWindow).Truncate(24 * time.Hour).UnixNano()
@@ -305,7 +322,7 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
  SELECT r.ref,d.day,d.last_ts,d.last_value FROM requested r JOIN series_live_daily d ON d.series=r.name AND d.labels=r.labels AND d.day>=? AND d.day<=?
  UNION ALL SELECT r.ref,d.day,d.last_ts,d.last_value FROM requested r JOIN series_daily d ON d.series=r.name AND d.labels=r.labels AND d.day>=? AND d.day<=?`, string(raw), start, end, start, end)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 	days := map[string]map[int64]map[string]any{}
@@ -314,7 +331,7 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
 		var day, at int64
 		var value sql.NullFloat64
 		if err = rows.Scan(&ref, &day, &at, &value); err != nil {
-			return err
+			return nil, err
 		}
 		if !value.Valid || at > now.UnixNano() {
 			continue
@@ -329,21 +346,17 @@ func (s *Store) loopSeries(ctx context.Context, cards []loopCard, out map[string
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	for _, c := range cards {
-		ref := byCard[c.id]
-		if ref == "" {
-			continue
-		}
-		points := []map[string]any{}
-		for _, p := range days[ref] {
+	for ref, byDay := range days {
+		points := make([]map[string]any, 0, len(byDay))
+		for _, p := range byDay {
 			points = append(points, p)
 		}
 		sort.Slice(points, func(i, j int) bool { return workString(points[i]["at"]) < workString(points[j]["at"]) })
-		out[c.id]["goal"] = loopGoal(workMap(c.metadata["goal"]), points)
+		out[ref] = points
 	}
-	return nil
+	return out, nil
 }
 
 // LoopReport uses the same computation as brief. Candidate admission is capped

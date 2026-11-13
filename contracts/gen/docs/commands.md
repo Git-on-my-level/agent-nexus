@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `276`
+- Commands: `279`
 
 ## `actors.create`
 
@@ -2807,6 +2807,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `not_found`, `invalid_request`, `unavailable`
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
 - Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.
+
+## `rulings.create`
+
+- CLI path: `rulings create`
+- HTTP: `POST /rulings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Stop a repeated question from returning to Decide.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`, `not_found`
+- Output: Returns `{ ruling }`.
+- Agent notes: Human principals only; agents receive human_required.
+
+## `rulings.list`
+
+- CLI path: `rulings list`
+- HTTP: `GET /rulings`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Check whether a human already answered this kind of question.
+- Concepts: `inbox`, `read`
+- Error codes: `auth_required`, `invalid_token`
+- Output: Returns `{ rulings }`.
+- Agent notes: Any authenticated member. One indexed page; pass include_revoked=true for history.
+
+## `rulings.revoke`
+
+- CLI path: `rulings revoke`
+- HTTP: `POST /rulings/{ruling_id}/revoke`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Take back a standing answer.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_token`, `human_required`, `not_found`
+- Output: Returns `{ ruling }`.
+- Agent notes: Human principals only.
 
 ## `runs.get`
 

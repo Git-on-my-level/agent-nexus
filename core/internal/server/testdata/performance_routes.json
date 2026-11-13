@@ -1600,5 +1600,16 @@
     "reason": "Bounded tree levels and 200-node admission; primary-key ancestor and indexed parent/root/tray seeks precede scoped hydration.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/rulings",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "One page of at most 200 standing rulings, newest first through idx_standing_rulings_recent, joined to the reader's scoped events relation by primary key so a ruling made from an ask the reader cannot see is withheld. No refill after filtering.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

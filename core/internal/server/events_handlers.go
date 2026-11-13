@@ -235,6 +235,21 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		stored, err = opts.primitiveStore.AppendEvent(r.Context(), actorID, req.Event)
 	}
 	if err != nil {
+		var duplicate *primitives.DuplicateAskError
+		if errors.As(err, &duplicate) {
+			// Redirect, never reject: the caller gets the ask it already has open.
+			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), duplicate.AskID)
+			if loadErr == nil {
+				writeJSON(w, http.StatusOK, hygiene.attach(map[string]any{"event": existing, "deduplicated": true}))
+				return
+			}
+			err = loadErr
+		}
+		var covered *primitives.RulingAppliedError
+		if errors.As(err, &covered) {
+			writeRulingApplied(w, r, opts, actorID, req.Event, covered.Ruling)
+			return
+		}
 		if writeEventAppendContentionError(w, r, err) {
 			return
 		}
@@ -286,6 +301,9 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		return
 	}
 	threadID := anyString(stored["thread_id"])
+	if typeValue == humanAttentionRequestedEventType {
+		withdrawSupersededAsk(r.Context(), opts, actorID, stored)
+	}
 	notifyProjectionMaintainer(opts)
 	if (strings.TrimSpace(anyString(stored["type"])) == humanAttentionRequestedEventType || strings.TrimSpace(anyString(stored["type"])) == humanAttentionWithdrawnEventType) && opts.projectionMaintainer != nil {
 		if err := opts.projectionMaintainer.RefreshThread(r.Context(), threadID, time.Now().UTC()); err != nil {

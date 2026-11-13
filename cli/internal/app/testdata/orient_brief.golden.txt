@@ -5,11 +5,11 @@ next "anx" "ask" "Initiatives exceed the target: fold this initiative or keep it
 loops:  signup-loop  moving
 answered for you:  ask/80 "Ship rig firmware 1.4?" → "Hold a week" (not your recommendation)
 waiting on human:  none
-your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 Oct 21 checkpoint) · moved 2×
-your initiatives:  fleet-onboarding  moving · next Oct 16 enroll m6
+your initiatives:  battery-measurement  PAST PROMISE 9d (Oct 6 Oct 21 checkpoint) · moved 2× · Battery life per charge 41.5h → 48h (was 39.2h) · read 1d ago
+your initiatives:  fleet-onboarding  moving · next Oct 16 enroll m6 · Hosts enrolled: no reading (target 7) · link a series: anx work measure card:fleet-onboarding --series series:<name>
 your initiatives:  observability  moving · next Oct 15 report progress
 your initiatives:  labels  no promise · last evidence Oct 3 · possibly moot
-your initiatives:  ble-reliability  no promise
+your initiatives:  ble-reliability  no promise · Pairing success 90.5% → 95% (was 82.5%) · read 1d ago
 your initiatives:  docs-refresh  done
 daily digest:  card:release-check "Release check" · default promise elapsed
 daily digest:  card:orphaned-run "Run awaiting an owner" · awaiting owner

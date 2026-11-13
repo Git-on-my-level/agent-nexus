@@ -41,6 +41,9 @@ func (b *briefBuild) initiativeSeries(ids []string, items []map[string]any) erro
 	if len(ids) == 0 {
 		return nil
 	}
+	if err := b.initiativeMeasures(ids, items); err != nil {
+		return err
+	}
 	encoded, _ := json.Marshal(ids)
 	rows, err := b.s.db.QueryContext(b.ctx, `SELECT id,CAST(substr(CAST(refs_json AS BLOB),1,?) AS TEXT) FROM cards WHERE id IN (SELECT value FROM json_each(?))`, briefSeriesRefBytes, string(encoded))
 	if err != nil {

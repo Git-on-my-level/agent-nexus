@@ -146,6 +146,27 @@ func (s *Store) appendTaskAttentionEventTx(ctx context.Context, tx *accessTx, ac
 			return nil, nil, ErrHumanAttentionAlreadyResponded
 		}
 		subject = resolved.CanonicalRef
+		if kind := strings.TrimSpace(anyStringValue(payload["kind"])); (kind == "" || kind == "ask") && payload["again"] != true && strings.TrimSpace(anyStringValue(payload["batch_id"])) == "" {
+			// One question, one row: a repeat by the same requester about the
+			// same card returns the open ask, and a question a standing ruling
+			// covers returns the ruling. An ask about a non-card subject (older
+			// clients) is left alone: each one names its own compatibility card.
+			requester := firstNonEmpty(strings.TrimSpace(anyStringValue(payload["requester_actor_id"])), actor)
+			duplicate, err := openDuplicateAskTx(ctx, tx, requester, strings.TrimSpace(anyStringValue(payload["recipient_actor_id"])), subject, anyStringValue(payload["title"]), strings.TrimPrefix(strings.TrimSpace(anyStringValue(payload["supersedes"])), "event:"), anyStringValue(prepared.Body["id"]))
+			if err != nil {
+				return nil, nil, err
+			}
+			if duplicate != "" {
+				return nil, nil, &DuplicateAskError{AskID: duplicate}
+			}
+			ruling, err := standingRulingForAskTx(ctx, tx, requester, anyStringValue(payload["title"]))
+			if err != nil {
+				return nil, nil, err
+			}
+			if ruling != nil {
+				return nil, nil, &RulingAppliedError{Ruling: *ruling}
+			}
+		}
 	}
 	payload["subject_ref"] = subject
 	body["id"] = prepared.Body["id"]

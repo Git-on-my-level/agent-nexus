@@ -808,6 +808,15 @@ commands:
   "curation.ungroup":
     classification: exposed_write
     reason: "Authenticated agent or human reverses delivery grouping without answering or withdrawing asks."
+  "rulings.list":
+    classification: exposed_read
+    reason: "One bounded page of standing rulings, scoped to rulings whose source ask the caller can read; an agent checks it before asking."
+  "rulings.create":
+    classification: unsupported_other
+    reason: "Human-only: a standing ruling answers later asks in the human's name, so an agent tool must not create one."
+  "rulings.revoke":
+    classification: unsupported_other
+    reason: "Human-only: revoking a standing ruling is the human's decision, made in Decide."
   "lease.show":
     classification: exposed_read
     reason: "Point read of one card's work lease state, owner, epoch and expiry."

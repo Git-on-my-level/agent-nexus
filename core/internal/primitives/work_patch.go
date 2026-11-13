@@ -16,7 +16,7 @@ import (
 
 // WorkAnnotationKeys returns the keys writable through local work annotations.
 func WorkAnnotationKeys() []string {
-	return []string{"top_level", "cadence", "goal", "labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
+	return []string{"top_level", "cadence", "goal", "measure", "labels", "roles", "project_ref", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "plan", "source_refs"}
 }
 
 // ValidateWorkAnnotations is shared by proposal validation and canonical writes.

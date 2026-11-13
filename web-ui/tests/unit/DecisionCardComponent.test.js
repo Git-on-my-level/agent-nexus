@@ -21,6 +21,7 @@ const queue = await vi.hoisted(async () => {
   };
 });
 vi.mock("$lib/inboxResponseQueue.js", () => ({
+  onInboxResponseCommitted: vi.fn(() => () => {}),
   ...queue,
   editInboxResponse: vi.fn(),
   inboxResponseFailures: queue.failures,

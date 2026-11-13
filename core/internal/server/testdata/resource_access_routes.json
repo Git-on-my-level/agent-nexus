@@ -1346,5 +1346,20 @@
     "path": "/work/{card_ref}/move",
     "policy": "record",
     "reason": "Scoped card and destination parent; atomic replay-safe hierarchy mutation."
+  },
+  {
+    "method": "GET",
+    "path": "/rulings",
+    "policy": "collection"
+  },
+  {
+    "method": "POST",
+    "path": "/rulings",
+    "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/revoke",
+    "policy": "reference-write"
   }
 ]

@@ -764,6 +764,15 @@ reference_conventions:
             Typed refs that evidence progress. A note resets the promise clock only when at
             least one evidence ref resolves (bounded check, at most 8 refs). A note that only
             moves `next` records a promise move.
+        kind:
+          description: >
+            `fyi` marks something an agent tells a human that wants no answer. The brief lists
+            the newest in `fyi` for human readers; it never appears in decisions and never
+            becomes a card's headline note. Omitted for ordinary notes.
+        title:
+          description: One-line headline of an fyi, at most 160 characters.
+        automatic:
+          description: true on reminders core writes itself. Automatic notes and notes by the system actor are never a card's headline note.
 
     document_created:
       refs_must_include: ["document:<document_handle>", "document_revision:<revision_handle>", "artifact:<artifact_handle>"]
@@ -880,6 +889,21 @@ reference_conventions:
             terminal state stops counting automatically; readers only see refs they can read.
         priority:
           description: Optional agent-set badge, p0..p3. Writers send the canonical value; readers still fold the enums.priority aliases (critical/urgent, high, medium/normal, low) found in older asks. A sort key after decide_by and blocks, never a deadline.
+        stakes:
+          type: object
+          description: "{irreversible, cost}: the requester's claim about what the decision risks. irreversible is a boolean; cost is free text of at most 80 characters. Shown as badges; never a sort key."
+        supersedes:
+          description: "event:<ask-id> of the requester's own open ask this one replaces. Core withdraws that ask when this one is stored, so the human sees one row."
+        again:
+          description: "true files the ask even though the requester has the same question open or a standing ruling covers it, because the facts changed."
+      one_question_one_row: >
+        Core, not the client, keeps one row per question. An ask (kind ask, not a batch
+        member) whose requester already has an open ask about the same card, for the same
+        recipient, with the same title key (letters and digits only, case-folded) is not
+        stored: the response carries the open ask and `deduplicated: true`. An ask a live standing ruling covers is not
+        stored either: an answer ruling returns `answered_by_ruling: true` with the ruling;
+        a not_a_decision ruling stores the content as a message_posted fyi on the subject and
+        returns `redirected: tell`. `again: true` bypasses both.
       authoring: >
         Write for a busy boss with no context. Title is a question or decision, ideally
         at most 80 Unicode characters (hard maximum 160). The CLI requires situation,

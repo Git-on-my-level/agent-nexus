@@ -70,7 +70,7 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 		if id := strings.TrimPrefix(anyStringValue(payload["requester_actor_id"]), "actor:"); id != "" {
 			requester = id
 		}
-		if err = auth.RequireAskCuratorTx(ctx, tx, principal, requester); err != nil {
+		if err = auth.RequireAskRetirerTx(ctx, tx, principal); err != nil {
 			return err
 		}
 		subject := anyStringValue(payload["subject_ref"])

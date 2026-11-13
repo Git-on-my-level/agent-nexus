@@ -37,11 +37,12 @@ Use a one-line question or decision near 80 characters (hard maximum 160). Soft 
 anx ask --template decision > ask.md prints a fictional narrative proposal of about 300 words with YAML frontmatter; edit it, then use --from-file ask.md. The example explains why reports that used to arrive in 10 minutes now take 45, and recommends measuring queue wait before buying capacity. See cli/docs/ask-delivery.md for the same example as friendly sections.
 ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
 Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. In YAML, evidence is a list of {label, url} objects, never Label=URL strings. Every named pull request, even in details, needs its own labelled pull-request URL; a checks or commit URL does not qualify. Omit unrelated reference history. When asked for a draft from supplied context, use only that context without research or preparation narration. Tools may only write a requested draft file or run an explicitly requested local preview. Do not perform the underlying work or search for missing facts. State material unknowns. Return only the document, with every field between the two --- delimiters. Body Markdown remains supported for historical asks.
-Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
+Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. Stakes size the decision for the reader: --irreversible when the recommended action cannot be undone, --cost "<text>" for what it costs (at most 80 characters). --supersedes event:<old-ask> replaces your old request and closes it.
 Retire stale asks: anx ask retire <ask-ref> --reason "No longer relevant" --evidence <ref>; anx ask retire <ask-ref> --undo.
 Revise copy: anx ask revise <ask-ref> --from-file presentation.json; anx ask revise <ask-ref> --undo. Read the concurrency token with anx ask presentation <ask-ref>.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
-Repeats: the same question on the same card returns the open ask or its answer instead of filing again, so retrying is safe. --again files a new ask when the facts changed.
+Repeats: the same question on the same card returns your open ask or its answer instead of filing again, so retrying is safe; with no --subject-ref, your open ask with that title anywhere is returned before a card is created for it. A standing ruling that covers the question returns the human's answer at once and files nothing: check anx rulings list first. --again files a new ask when the facts changed.
+Nothing to decide? Use anx tell <card> "<headline>": it shows on Watch and never in Decide.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 `)
@@ -124,7 +125,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		situationFlag, impactFlag, whyFlag, ifNoAnswerFlag, detailsFlag trackedString
 		alternativeFlags                                                trackedStrings
 		dryRunFlag                                                      trackedBool
-		againFlag                                                       trackedBool
+		againFlag, irreversibleFlag                                     trackedBool
+		costFlag                                                        trackedString
 		forceFlag                                                       trackedBool
 		reasonFlag, supersedesFlag, onAnswerFlag, webhookFlag           trackedString
 		deliveryFlag                                                    trackedString
@@ -168,7 +170,9 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	fs.Var(&webhookFlag, "webhook", "HTTPS answer subscription URL")
 	fs.Var(&deliveryFlag, "delivery", "Answer delivery mode: await, resume, batch, or none")
 	fs.Var(&dryRunFlag, "dry-run", "Validate and render the request without sending it")
-	fs.Var(&againFlag, "again", "File a new ask even though this question is already open or answered on the card")
+	fs.Var(&againFlag, "again", "File a new ask even though this question is already open, answered, or covered by a standing ruling")
+	fs.Var(&irreversibleFlag, "irreversible", "Stakes: the recommended action cannot be undone")
+	fs.Var(&costFlag, "cost", "Stakes: what the decision costs, in at most 80 characters")
 	if err := fs.Parse(flagArgs); err != nil {
 		return nil, errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -389,6 +393,12 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 				}
 				return result, nil
 			}
+			if kind == "ask" && !againFlag.value {
+				// Settle a repeat or a ruled question before a subject card exists.
+				if early, _ := a.askBeforeSubject(ctx, cfg, title, kind); early != nil {
+					return early, nil
+				}
+			}
 			if e := ensureGroupingRequestKey(input); e != nil {
 				return nil, e
 			}
@@ -458,6 +468,8 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 			return repeat, nil
 		}
 		loopWarnings = append(loopWarnings, a.priorRulings(ctx, cfg, threadID)...)
+		_, similar := a.coveringRuling(ctx, cfg, title)
+		loopWarnings = append(loopWarnings, similarRulingWarning(similar)...)
 	}
 
 	for _, ref := range relatedRefs {
@@ -494,6 +506,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 		payload["body"] = body
 	}
 	decision.apply(payload)
+	if utf8.RuneCountInString(strings.TrimSpace(costFlag.value)) > askCostMaxRunes {
+		return nil, errnorm.Usage("invalid_request", "--cost is at most 80 characters; put the detail in --situation or --why")
+	}
+	applyAskIntent(payload, againFlag.value, irreversibleFlag.value, costFlag.value)
 	if requestID != "" {
 		if err := validateID(requestID, "request id"); err != nil {
 			return nil, err
@@ -594,6 +610,10 @@ func (a *App) runHumanAttentionCommand(ctx context.Context, kind string, args []
 	result, err := a.invokeTypedJSON(ctx, cfg, kind, "events.create", nil, nil, bodyMap)
 	if err != nil {
 		return nil, err
+	}
+	if redirect, ok := askRedirectResult(commandResultBody(result), subjectRef, kind); ok {
+		a.settleRedirectedAskWait(cfg, "event:"+localAskID, title, commandResultBody(result))
+		return redirect, nil
 	}
 	if askWaitWarning != nil {
 		result.Warnings = append(result.Warnings, *askWaitWarning)

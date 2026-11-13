@@ -488,6 +488,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 	}
 	workspace := a.orientWorkspace(cfg)
 	if !cfg.JSON {
+		brief["upkeep_view"] = orientUpkeepView(args)
 		markOrientAgentInitiatives(brief, agent, detail)
 		a.annotateAnsweredOrigin(brief, cfg)
 		text := workspaceText(workspace) + renderOrientText(brief, a.orientIdentityLine(cfg))
@@ -505,6 +506,7 @@ func (a *App) runOrient(ctx context.Context, args []string, cfg config.Resolved)
 
 func parseOrientArgs(args []string) error {
 	fs := newSilentFlagSet("orient")
+	fs.Bool("upkeep", false, "List every open upkeep suggestion, not only those about your own work")
 	if err := fs.Parse(args); err != nil {
 		return errnorm.Usage("invalid_flags", err.Error())
 	}
@@ -576,22 +578,7 @@ func renderOrientText(brief map[string]any, identity string) string {
 		}
 	}
 
-	for _, raw := range asSlice(brief["curation_suggestions"]) {
-		item := asMap(raw)
-		fmt.Fprintf(&b, "suggestion: %s %s %q\n", anyString(item["key"]), anyString(item["action"]), anyString(item["title"]))
-		for _, verb := range []string{"apply", "dismiss"} {
-			argv := stringList(item[verb+"_argv"])
-			// Quote the JSON argument for copy/paste into a shell.
-			if len(argv) > 0 {
-				for i, arg := range argv {
-					if strings.ContainsAny(arg, " \"'{}") {
-						argv[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
-					}
-				}
-				fmt.Fprintf(&b, "next %s\n", strings.Join(argv, " "))
-			}
-		}
-	}
+	b.WriteString(orientSuggestions(brief))
 	answered := asSlice(brief["answered_for_you"])
 	if len(answered) == 0 {
 		b.WriteString("answered for you:  none\n")
@@ -607,6 +594,7 @@ func renderOrientText(brief map[string]any, identity string) string {
 		}
 		b.WriteString(line + "\n")
 	}
+	b.WriteString(orientReturned(brief))
 	waiting := asSlice(brief["your_asks"])
 	if len(waiting) == 0 {
 		b.WriteString("waiting on human:  none\n")
@@ -696,7 +684,7 @@ func formatOrientInitiativeLine(heading string, item map[string]any) string {
 	if asMap(item["possibly_moot"])["flagged"] == true {
 		line += " · possibly moot"
 	}
-	return line
+	return line + orientMeasure(item)
 }
 
 func stripOrientPrincipalPrefix(raw string) string {

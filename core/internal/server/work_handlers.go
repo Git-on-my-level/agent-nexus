@@ -131,7 +131,7 @@ func publicWork(w map[string]any) map[string]any {
 	out["decision_revision"] = primitives.WorkDecisionRevision(w)
 	delete(out, "id")
 	delete(out, "thread_id")
-	for _, key := range []string{"top_level", "cadence", "goal", "source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "version", "freshness", "latest_observation", "possibly_moot", "checkpoint"} {
+	for _, key := range []string{"top_level", "cadence", "goal", "measure", "source", "project_ref", "owner", "phase", "priority", "next_actor", "next_action", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "version", "freshness", "latest_observation", "possibly_moot", "checkpoint"} {
 		if value, ok := w[key]; ok {
 			out[key] = value
 		}
@@ -237,12 +237,33 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 				return
 			}
 		}
+		redirected, promoteReason := redirectAgentInitiativeCreate(r, raw)
 		status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "work.create", actor, anyString(raw["request_key"]), raw, 201, func(ctx context.Context) (map[string]any, error) {
 			item, err := store.CreateWork(ctx, actor, boardID, raw)
 			if err != nil {
 				return nil, err
 			}
-			return groupingWorkResponse(item), nil
+			if promoteReason != "" {
+				mover, ok := store.(interface {
+					MoveWork(context.Context, string, string, primitives.MoveWorkInput) (map[string]any, error)
+				})
+				if !ok {
+					return nil, primitives.ErrNotFound
+				}
+				moved, err := mover.MoveWork(ctx, actor, anyString(item["id"]), primitives.MoveWorkInput{Root: true, Reason: promoteReason})
+				// Already top level (recurring work) is the requested outcome.
+				if err != nil && !errors.Is(err, primitives.ErrConflict) {
+					return nil, err
+				}
+				if work, ok := moved["work"].(map[string]any); ok {
+					item = work
+				}
+			}
+			out := groupingWorkResponse(item)
+			if redirected {
+				out["redirected"] = "unsorted"
+			}
+			return out, nil
 		})
 		if err != nil {
 			workStoreError(w, r, err)

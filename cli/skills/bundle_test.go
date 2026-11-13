@@ -69,12 +69,12 @@ func TestSkillAuthorityBoundaries(t *testing.T) {
 	if words := len(strings.Fields(participant.Content)); words >= 400 {
 		t.Errorf("participant skill has %d words, want < 400", words)
 	}
-	for _, term := range []string{"anx orient", "anx where", "anx mv", "anx tree", "anx work create", "anx note", "anx ask", "anx await", "anx done", "anx plan", "--subject-ref card:<slug>", "--recommend", "--alt", "--body", "--next <when>", "--evidence <ref>", "--by <when>", "--blocks <ref>", "anx help <job>", "anx api <operation>", "raw transcripts"} {
+	for _, term := range []string{"anx orient", "anx where", "anx mv", "anx tree", "anx work create", "anx note", "anx ask", "anx await", "anx done", "anx plan", "--subject-ref card:<slug>", "--recommend", "--alt", "--body", "--next <when>", "--evidence <ref>", "--by <when>", "--blocks <ref>", "anx tell", "anx rulings list", "anx work measure", "--requested-by <human>", "anx help <job>", "anx api <operation>", "raw transcripts"} {
 		if !strings.Contains(participant.Content, term) {
 			t.Errorf("participant lacks %q", term)
 		}
 	}
-	for _, term := range []string{"ordinary agent", "no built-in Ask PM", "no `anx pm serve` runner", "no turn lease", "The skill grants no extra authority", "last successful read", "excluded paths", "Load anx-participant alongside", "The human is CEO", "never mirror a tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "next_actor"} {
+	for _, term := range []string{"ordinary agent", "no built-in Ask PM", "no `anx pm serve` runner", "no turn lease", "The skill grants no extra authority", "last successful read", "excluded paths", "Load anx-participant alongside", "The human is CEO", "never mirror a tracker 1:1", "15 or fewer open cards", "2–3 alternatives", "next_actor", "Act, do not ask", "At most one upkeep `anx tell` a day", "anx orient --upkeep", "anx ask retire", "anx work measure", "--requested-by"} {
 		if !strings.Contains(pm.Content, term) {
 			t.Errorf("PM lacks %q", term)
 		}

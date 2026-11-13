@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `46`
+- Groups: `47`
 
 ## `topics`
 
@@ -412,6 +412,14 @@ Generated from `contracts/anx-openapi.yaml`.
 - Command IDs:
   - `report.preview` (`report preview`)
   - `report.render` (`report render`)
+
+## `rulings`
+
+- Commands: `3`
+- Command IDs:
+  - `rulings.create` (`rulings create`)
+  - `rulings.list` (`rulings list`)
+  - `rulings.revoke` (`rulings revoke`)
 
 ## `runs`
 

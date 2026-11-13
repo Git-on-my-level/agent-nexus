@@ -393,7 +393,7 @@ func TestInboxSummaryRanksProjectedAskSeverity(t *testing.T) {
 			"type": "human_attention_requested", "thread_id": threadID,
 			"ts":   fmt.Sprintf("2026-01-01T00:00:0%dZ", i),
 			"refs": []string{"thread:" + threadID}, "summary": "Summary ranking",
-			"payload": map[string]any{"kind": "ask", "title": "Summary ranking", "body": "A decision is needed", "severity": severity,
+			"payload": map[string]any{"again": true, "kind": "ask", "title": "Summary ranking", "body": "A decision is needed", "severity": severity,
 				"requester_actor_id": agent.ActorID, "requester_agent_id": agent.AgentID,
 				"subject_ref": card["ref"], "related_refs": []string{"thread:" + threadID}, "response_proposals": []string{"Proceed"}},
 			"provenance": eventProvenance(),

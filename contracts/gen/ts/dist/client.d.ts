@@ -250,6 +250,9 @@ export declare class AnxClient {
     refsResolve(options?: RequestOptions): Promise<InvokeResult>;
     reportPreview(options?: RequestOptions): Promise<InvokeResult>;
     reportRender(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    rulingsCreate(options?: RequestOptions): Promise<InvokeResult>;
+    rulingsList(options?: RequestOptions): Promise<InvokeResult>;
+    rulingsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsList(options?: RequestOptions): Promise<InvokeResult>;
     runsUpsert(options?: RequestOptions): Promise<InvokeResult>;

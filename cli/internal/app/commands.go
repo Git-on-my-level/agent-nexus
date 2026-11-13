@@ -143,6 +143,12 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "feedback":
 		result, err := a.runFeedback(ctx, args[1:], cfg)
 		return "feedback", result, err
+	case "tell":
+		result, err := a.runTell(ctx, args[1:], cfg)
+		return "tell", result, err
+	case "rulings":
+		result, err := a.runRulings(ctx, args[1:], cfg)
+		return "rulings list", result, err
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err

@@ -1,6 +1,6 @@
-Review · from claude on m6 · waiting 5d · 1d overdue Review fleet onboarding runbook Blocks 1: Fleet onboarding Suggested responses Approve Recommended Request changes Reply Send reply Reply… Copy ref
+Review · from claude on m6 · waiting 5d · 1d overdue Review fleet onboarding runbook Blocks 1: Fleet onboarding Suggested responses Approve Recommended Request changes Reply Send reply Reply… Always answer this way Not a decision Copy ref
 ---
-Ask · from build-agent on host-1 · waiting 2d · by Oct 17 HIGH Merge battery-v2 calibration? Blocks 2: Battery curve v2, Calibration table refresh Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Suggested responses Merge Recommended Hold a week Reply Send reply Reply… Copy ref
+Ask · from build-agent on host-1 · waiting 2d · by Oct 17 HIGH Irreversible Cost: $1,200 of rig time Merge battery-v2 calibration? Blocks 2: Battery curve v2, Calibration table refresh Calibration drift is under 2% on all six rigs. Merging unblocks the two PRs below. Suggested responses Merge Recommended Hold a week Reply Send reply Reply… Always answer this way Not a decision Copy ref
 ---
 Access · from fleet-agent · waiting 3h Give fleet-agent access to this workspace Requested by fleet-agent for host m6-mini. Suggested responses Approve Recommended Deny Reply Send reply Copy ref
 ---

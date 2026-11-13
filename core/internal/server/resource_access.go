@@ -24,6 +24,11 @@ func attachResourceAccessScope(r *http.Request, opts handlerOptions) {
 	if store, ok := opts.primitiveStore.(*primitives.Store); ok {
 		ctx = context.WithValue(ctx, resourceAccessCheckKey{}, store.CheckResourceValues)
 	}
+	if principal, ok := cachedAuthenticatedPrincipal(r); ok && isAgentPrincipal(principal) {
+		// An agent's write never makes a top-level goal by layout alone; the
+		// work routes promote explicitly when a requesting human is named.
+		ctx = primitives.WithInitiativeAuthority(ctx, false)
+	}
 	*r = *r.WithContext(ctx)
 }
 func authorizeResourceValues(w http.ResponseWriter, r *http.Request, values any) bool {

@@ -40,6 +40,7 @@ import {
   randomUUID,
 } from "$lib/replayPolicy.js";
 import { removeGroupedStep, sendTopLevel } from "$lib/groupingPlan.js";
+import { sendStandingMutation } from "$lib/standingRulingSend.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -300,6 +301,8 @@ async function send(entry, lease = null) {
       throw new Error("Pins receipt is incomplete.");
     return result;
   }
+  const standing = await sendStandingMutation(client, entry);
+  if (standing !== undefined) return standing;
   if (entry.operation === "curation.ungroup") {
     const result = await client.ungroupCurationBatch(entry.request.body);
     if (typeof result?.ungrouped !== "boolean")
@@ -832,10 +835,7 @@ export function enqueueDashboardPin({ op, ref, ...options }) {
   });
 }
 
-/**
- * Undo an accepted batch. Ungrouping by key is idempotent in core, so a
- * retry of the saved request is replay-safe.
- */
+/** Undo an accepted batch; ungrouping by key is idempotent, so replay-safe. */
 export function enqueueCurationUngroup({ key: batchKey, ...options }) {
   return enqueueLocalMutation({
     ...options,

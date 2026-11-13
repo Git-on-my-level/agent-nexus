@@ -98,24 +98,8 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	}
 	b.fillPrincipals(decisions, "requested_by")
 	b.fillPrincipals(yourAsks, "requested_by")
-	var fillRewrites func([]map[string]any)
-	fillRewrites = func(items []map[string]any) {
-		for _, item := range items {
-			if rewrite, ok := item["presentation_rewrite"].(map[string]any); ok {
-				id := anyStringValue(rewrite["actor_id"])
-				if p, ok := b.display[id]; ok {
-					rewrite["actor"] = p
-				}
-			}
-			if batch, ok := item["batch"].(map[string]any); ok {
-				if members, ok := batch["members"].([]map[string]any); ok {
-					fillRewrites(members)
-				}
-			}
-		}
-	}
-	fillRewrites(decisions)
-	fillRewrites(yourAsks)
+	b.fillRewrites(decisions)
+	b.fillRewrites(yourAsks)
 
 	b.fillPrincipals(answered, "answered_by")
 	for _, initiative := range append(append([]map[string]any{}, initiatives...), loops...) {
@@ -152,6 +136,9 @@ func (s *Store) Brief(ctx context.Context, reader BriefReader, now time.Time) (m
 	}
 	if overTarget != nil {
 		result["over_target"] = overTarget
+	}
+	if err = b.outcomeSections(result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -1177,7 +1164,7 @@ func (b *briefBuild) latestNotes(cardIDs []string) (map[string]map[string]any, m
 	}
 	encoded, _ := json.Marshal(cardIDs)
 	rows, err := b.s.db.QueryContext(b.ctx, `SELECT n.card_id,n.author,n.ts,n.excerpt,e.payload_json FROM json_each(?) j CROSS JOIN brief_notes n ON n.event_id=(
-		SELECT x.event_id FROM brief_notes x JOIN events ev ON ev.id=x.event_id WHERE x.card_id=j.value AND COALESCE(ev.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)
+		SELECT x.event_id FROM brief_notes x JOIN events ev ON ev.id=x.event_id WHERE x.card_id=j.value AND x.automatic=0 AND x.kind='' AND COALESCE(ev.trashed_at,'')='' ORDER BY x.ts DESC LIMIT 1)
 		JOIN events e ON e.id=n.event_id`, string(encoded))
 	if err != nil {
 		return nil, nil, err

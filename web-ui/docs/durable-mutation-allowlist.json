@@ -137,6 +137,16 @@
       "transport:fetchFn": 2
     }
   },
+  "lib/standingRulingSend.js": {
+    "classification": "outbox",
+    "reason": "Audited persisted-request senders for sending an ask back and for making or revoking a standing ruling; called only by the mutation outbox.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "asksRetire": 1,
+      "rulingsCreate": 2,
+      "rulingsRevoke": 1
+    }
+  },
   "lib/workspaceActivation.js": {
     "classification": "stage-2",
     "reason": "TODO: unkeyed workspace activation POST (including its default detached fetch binding) needs an authority/session recovery audit.",

@@ -4,14 +4,14 @@
     {
       "role": "participant",
       "name": "anx-participant",
-      "version": "anx.participant.v41",
-      "content_sha256": "sha256:672702fa08f47f4bc18667b8122c2abed129c32df5fec72500a87db3c64e95d8"
+      "version": "anx.participant.v42",
+      "content_sha256": "sha256:aa1e0f5b06da4e1df24d49f660b837564e2cbc3734678f1ae0425b211b531754"
     },
     {
       "role": "pm",
       "name": "anx-pm",
-      "version": "anx.pm.v8",
-      "content_sha256": "sha256:8513ac1e894d712d900083a18f33e2e7ea8dddde7d4567c4c154bcf5251c6384"
+      "version": "anx.pm.v9",
+      "content_sha256": "sha256:b8f0166af553bf393c738b3cfea88d0117e9feee9a41c30c37f260273cd85abb"
     }
   ]
 }

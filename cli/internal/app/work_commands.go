@@ -32,6 +32,7 @@ var workCommands = map[string]workCommandSpec{
 	"initiative promote":         {path: "/work/{id}/promote", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text: Deprecated: use anx work move <card> --root --reason text."},
 	"initiative retire":          {path: "/work/{id}/retire", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text."},
 	"work cadence":               {method: "PATCH", summary: "Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear."},
+	"work measure":               {method: "PATCH", summary: "Set the number an initiative is judged by: <card> --label text --direction up|down --target n [--series series:ref] [--unit unit] [--baseline n], or --clear. Watch shows the latest reading of the series against the target. Use this for a goal's outcome; work goal is for recurring work scored by run receipts."},
 	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear."},
 	"work receipt":               {method: "POST", summary: "Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay."},
 	"pm card":                    {method: "POST", summary: "Read any visible card in full under the requesting reader."},
@@ -79,6 +80,7 @@ type parsedWorkCommand struct {
 	handle                         string
 	reason, toBoard                string
 	topLevel, initiative, brief    bool
+	requestedBy                    string
 	title                          string
 	query                          url.Values
 }
@@ -120,7 +122,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
 	var id, fromFile, handle, under, into, after, requestKey trackedString
-	var reason, toBoard, title trackedString
+	var reason, toBoard, title, requestedBy trackedString
 	var limit trackedInt
 	var topLevel, initiative, brief trackedBool
 
@@ -152,6 +154,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	if out.name == "work create" {
 		fs.Var(&topLevel, "top-level", "Deprecated and ignored; use --initiative")
 		fs.Var(&initiative, "initiative", "Explicitly create a top-level initiative")
+		fs.Var(&requestedBy, "requested-by", "The human who asked for this top-level goal (with --initiative)")
 		fs.Var(&title, "title", "Card title (or use --from-file)")
 		fs.Var(&handle, "handle", "Client-chosen lowercase card slug (1-64 characters)")
 	}
@@ -241,6 +244,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	}
 	out.topLevel = topLevel.value
 	out.initiative, out.title = initiative.value, strings.TrimSpace(title.value)
+	out.requestedBy = strings.TrimSpace(requestedBy.value)
 	out.brief = brief.value
 	if initiative.value && under.set {
 		return out, errnorm.Usage("invalid_request", "--initiative and --under cannot be combined")
@@ -347,6 +351,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 			}
 			if parsed.initiative {
 				object["initiative"] = true
+			}
+			if parsed.requestedBy != "" {
+				object["requested_by"] = parsed.requestedBy
 			}
 			if object["initiative"] == true && anyString(object["under"]) != "" {
 				return nil, parsed.name, errnorm.Usage("invalid_request", "initiative and under cannot be combined")

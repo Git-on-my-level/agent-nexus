@@ -181,6 +181,12 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 	case "feedback":
 		_, err := parseFeedbackArgs(args[1:])
 		return "feedback", err
+	case "tell":
+		_, err := parseTellArgs(args[1:])
+		return "tell", err
+	case "rulings":
+		_, err := parseRulingsArgs(args[1:])
+		return "rulings list", err
 	case "done":
 		_, _, err := parseDoneArgs(args[1:])
 		return "done", err
@@ -340,7 +346,7 @@ func preflightKnownCommandShape(args []string) error {
 		return preflightSubcommand(args[1:], draftSubcommandSpec)
 	case "provenance":
 		return preflightSubcommand(args[1:], provenanceSubcommandSpec)
-	case "orient", "note", "done", "context", "ask", "review", "escalate", "await", "feedback":
+	case "orient", "note", "done", "context", "ask", "review", "escalate", "await", "feedback", "tell", "rulings":
 		return nil
 	case "secret":
 		return preflightSubcommand(args[1:], secretSubcommandSpec)
@@ -506,7 +512,7 @@ func preflightInferredCommandName(args []string) string {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "feedback": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
+		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "feedback": {}, "tell": {}, "rulings": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}

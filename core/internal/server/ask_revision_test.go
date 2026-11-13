@@ -44,7 +44,7 @@ func TestAskRevisionAuthorizationAndIntegrity(t *testing.T) {
 	}
 	fileAsk := func() map[string]any {
 		t.Helper()
-		ask, err := store.AppendTaskAttentionEvent(ctx, requester.ActorID, map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{anyString(card["ref"]), "thread:" + anyString(card["thread_id"])}, "summary": "Original?", "payload": map[string]any{"kind": "ask", "title": "Original?", "body": "Original technical body.", "situation": "Original situation.", "requester_actor_id": requester.ActorID, "subject_ref": card["ref"], "response_proposals": []any{"Ship exact option", "Wait exact option"}, "recommended_response_index": 1, "revision": 7, "by": "2099-01-01T00:00:00Z", "delivery": "batch"}})
+		ask, err := store.AppendTaskAttentionEvent(ctx, requester.ActorID, map[string]any{"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{anyString(card["ref"]), "thread:" + anyString(card["thread_id"])}, "summary": "Original?", "payload": map[string]any{"again": true, "kind": "ask", "title": "Original?", "body": "Original technical body.", "situation": "Original situation.", "requester_actor_id": requester.ActorID, "subject_ref": card["ref"], "response_proposals": []any{"Ship exact option", "Wait exact option"}, "recommended_response_index": 1, "revision": 7, "by": "2099-01-01T00:00:00Z", "delivery": "batch"}})
 		if err != nil {
 			t.Fatal(err)
 		}

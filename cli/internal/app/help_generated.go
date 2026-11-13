@@ -38,6 +38,8 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
 	{Path: "lease", Description: "Claim a card with a TTL work lease before starting work on it"},
 	{Path: "feedback", Description: "Report a problem with ANX itself to the people who run it"},
+	{Path: "rulings", Description: "List the answers a human made durable; check before you ask"},
+	{Path: "tell", Description: "Tell a human something that wants no answer; it shows on Watch, never in Decide"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
 	{Path: "auth", Description: "Inspect the enrolled host and derived-agent identity"},
@@ -1063,6 +1065,8 @@ Loop (stable):
   context <card> [--brief] Everything about one initiative (read_only)
   note <card> ["<text>"] [--next <when> "<what>"] [--evidence <ref>]  Post progress and renew the promise (remote_coordination_write)
   ask <title> --situation <text> --impact <text> --recommend <text> --why <text> [--preview]  Request a human decision (remote_coordination_write)
+  tell <card> "<headline>" [--body <text>]  Tell a human something that wants no answer; shows on Watch (remote_coordination_write)
+  rulings list            Answers a human made durable; check before you ask (read_only)
   await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
   done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   link <ref>...           Browser link to share with a human (read_only)
@@ -1214,10 +1218,22 @@ func helpTopicTextRaw(topic string) (string, bool) {
 		return "anx move card <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]; anx move topic <ref> --to <workspace-alias> [--connection-map <source-id>=<destination-id>] [--dry-run]. Topic moves journal source revisions, rewrite refs, verify every destination resource, and only then archive or tombstone the source.\n", true
 	}
 	if topic == "work" {
-		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
+		return "Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative --requested-by <human>]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> --requested-by <human> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. A human sets top-level goals: an agent names the human who asked with --requested-by, and without one a new card waits in Unsorted. The number a goal is judged by: anx work measure <card> --label <text> --direction up|down --target <n> [--series series:<name>] [--unit <unit>]; Watch shows the latest reading against the target. Recurring work: anx work cadence <card> --every <duration>; anx work goal <card> --metric <name> --direction up|down; anx work receipt <card> --run-id <id> --outcome <acted|measured|no_op|infra_error> --summary <text>. Progress and completion are loop verbs: anx note <card> \"<text>\" [--next <when> \"<what>\"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.\n", true
 	}
 	if topic == "feedback" {
 		return "anx feedback \"<what went wrong or what you need>\" [--evidence <url|ref>]... [--dry-run]: report a problem with ANX itself (remote_coordination_write).\n  Posts a note on card:anx-feedback (\"ANX product feedback\", created in Unsorted on first use) so the people who run this workspace see it in Watch and anx tree, and returns upstream_issue_url, a prefilled issue for the public agent-nexus repository.\n  Same idempotent write as anx note: rerunning after a timeout never files twice.\n", true
+	}
+	if topic == "measure" || topic == "work measure" {
+		return "anx work measure <card> --label \"<plain name>\" --direction up|down --target <n> [--series series:<name>] [--unit <unit>] [--baseline <n>] | --clear: set the number an initiative is judged by (remote_coordination_write).\n  Watch shows the latest reading against the target, the change over about a week and how old the reading is. With no reading it says so, which is the loudest state a goal can be in.\n  The reading comes from the series: a producer publishes it with anx series push <name> <value> (declare the series once with anx adapters declare; see anx help series). A measure without --series records the target and shows \"no reading\".\n  A measure does not make the card recurring work. For a loop scored by run receipts use anx work goal with anx work cadence.\nStability: beta\n", true
+	}
+	if topic == "rulings" || topic == "rulings list" {
+		return "anx rulings list [--include-revoked]: list standing rulings, newest first (read_only).\n  A standing ruling is an answer a human made durable. An ask a ruling covers is not filed: anx ask returns the answer at once and nothing reaches Decide, so check here before you ask.\n  Act on a ruling that covers your question and cite its ref (ruling:<id>) in your note. If the facts changed, ask with --again.\n  A \"not a decision\" ruling names a requester: that agent's asks with the same title (numbers aside) are stored as an fyi instead; use anx tell for them.\n  Only a human makes or revokes a ruling, in Decide.\nStability: beta\n", true
+	}
+	if topic == "ask retire" {
+		return askRetireUsageText() + "\n", true
+	}
+	if topic == "tell" {
+		return "anx tell <card> \"<headline>\" [--body \"<text>\"] [--evidence <url|ref>]...: tell a human something that wants no answer (remote_coordination_write).\n  Use it for a digest, a finding or a heads-up. It is stored on the card and listed on Watch under \"For your information\"; it never appears in Decide and never becomes the card's headline note.\n  A repeat of the same headline on the same card collapses into the newest with a count, so a daily digest is one row.\n  The headline is one line of at most 160 characters; --body holds up to 4000 characters of plain words.\n  Need a choice only the human can make? That is anx ask. Progress on your own work is anx note.\n  Retry-safe like anx note: rerunning after a timeout never posts twice.\nStability: beta\n", true
 	}
 	if topic == "note" {
 		return "anx note <card> [\"<text>\"] [--next <when> [\"<what>\"]] [--evidence <url|ref>]... [--met] [--decided-by <who>]: post progress on a card and renew its promise (remote_coordination_write).\n  <when> is a UTC date (YYYY-MM-DD), an RFC3339 timestamp, or a positive duration (36h, 2d); <what> is up to 160 characters.\n  --evidence (repeatable, at most 8) takes an http(s) URL or typed ref; only a note with evidence resets the promise clock.\n  A note with --next or --evidence starts a card that has not started (backlog or ready) when you own it or nobody does: you are assigned if it has no owner and it moves to in_progress (result.started). A card someone else owns stays put, with warning note_card_not_started.\n  Every note carries a request_key kept on disk until confirmed; rerunning the same note after a timeout resends it and never posts twice (result.resumed). A busy workspace is retried within --timeout.\n  Warnings (never errors): note_no_next, note_card_not_started, note_start_failed, note_beyond_horizon, note_moved_without_evidence. See cli/docs/warnings.md.\n  --evidence keeps the live promise running; --met says this note fulfils it.\n  --decided-by <who> records a decision a human made outside ANX, with the decision as the note text.\n", true

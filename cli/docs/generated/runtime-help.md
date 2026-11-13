@@ -33,6 +33,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `deliveries` (group): List, claim and receipt durable notification and wake deliveries
 - `lease` (group): Claim a card with a TTL work lease before starting work on it
 - `feedback` (group): Report a problem with ANX itself to the people who run it
+- `rulings` (group): List the answers a human made durable; check before you ask
+- `tell` (group): Tell a human something that wants no answer; it shows on Watch, never in Decide
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
 - `auth` (group): Inspect the enrolled host and derived-agent identity
@@ -324,6 +326,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work cadence` (command): Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear.
 - `work freshness` (command): Inspect last observed, source activity and meaningful progress independently.
 - `work goal` (command): Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear.
+- `work measure` (command): Set the number an initiative is judged by: <card> --label text --direction up|down --target n [--series series:ref] [--unit unit] [--baseline n], or --clear. Watch shows the latest reading of the series against the target. Use this for a goal's outcome; work goal is for recurring work scored by run receipts.
 - `work receipt` (command): Record a run: <card> --run-id id --outcome acted|measured|no_op|infra_error --summary text [--metric k=v] [--candidate X --decision kept|reverted|rejected --score-before n --score-after n] [--ref ref] [--started-at RFC3339]. Prints original event id on replay.
 
 
@@ -344,11 +347,12 @@ Use a one-line question or decision near 80 characters (hard maximum 160). Soft 
 anx ask --template decision > ask.md prints a fictional narrative proposal of about 300 words with YAML frontmatter; edit it, then use --from-file ask.md. The example explains why reports that used to arrive in 10 minutes now take 45, and recommends measuring queue wait before buying capacity. See cli/docs/ask-delivery.md for the same example as friendly sections.
 ask|review|escalate share these flags. --preview prints Decide copy plus all lint results, completely locally and without creating anything (JSON includes preview, rendered and lint). --dry-run validates and prints the API request without sending it. --force --reason <explanation> records an authoring override; it cannot bypass hard limits.
 Attach to --subject-ref card:<slug>, or the current card; otherwise create a ready card on the default board. --from-file reads YAML frontmatter: situation, impact, recommendation: {action, why}, alternatives: [{action, consequence}], if_no_answer, details, subject_ref and evidence. In YAML, evidence is a list of {label, url} objects, never Label=URL strings. Every named pull request, even in details, needs its own labelled pull-request URL; a checks or commit URL does not qualify. Omit unrelated reference history. When asked for a draft from supplied context, use only that context without research or preparation narration. Tools may only write a requested draft file or run an explicitly requested local preview. Do not perform the underlying work or search for missing facts. State material unknowns. Return only the document, with every field between the two --- delimiters. Body Markdown remains supported for historical asks.
-Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. --supersedes event:<old-ask> replaces an old request.
+Supply 1–6 distinct responses as answer buttons, at most 240 Unicode characters each. --by <when> sets the machine-readable deadline (date, RFC3339 or duration like 2d); --blocks <ref> names blocked work (repeatable, at most 20); --priority p0..p3 sets an optional badge. Stakes size the decision for the reader: --irreversible when the recommended action cannot be undone, --cost "<text>" for what it costs (at most 80 characters). --supersedes event:<old-ask> replaces your old request and closes it.
 Retire stale asks: anx ask retire <ask-ref> --reason "No longer relevant" --evidence <ref>; anx ask retire <ask-ref> --undo.
 Revise copy: anx ask revise <ask-ref> --from-file presentation.json; anx ask revise <ask-ref> --undo. Read the concurrency token with anx ask presentation <ask-ref>.
 Withdraw: anx ask withdraw <event:ask-id> --reason <text>.
-Repeats: the same question on the same card returns the open ask or its answer instead of filing again, so retrying is safe. --again files a new ask when the facts changed.
+Repeats: the same question on the same card returns your open ask or its answer instead of filing again, so retrying is safe; with no --subject-ref, your open ask with that title anywhere is returned before a card is created for it. A standing ruling that covers the question returns the human's answer at once and files nothing: check anx rulings list first. --again files a new ask when the facts changed.
+Nothing to decide? Use anx tell <card> "<headline>": it shows on Watch and never in Decide.
 Batch: anx ask batch --from-file asks.json files 2-10 related asks as one inbox item the human answers in a single pass; every ask passes the same authoring lint and shares one thread. The result lists each ask id with its delivery follow-up.
 Delivery: --delivery await|resume|batch|none records how the answer reaches you (default: resume when the ask has executor wiring via --on-answer, ANX_RESUME_CMD or an agentctl continuation; else the workspace default from anx config ask-delivery; else batch). Every result prints the mode and the exact follow-up. resume registers an executor command fired by anx bridge run; set the bridge up once with anx bridge install. Await: anx await <ask-id> or anx await --answers. Read: anx inbox list --status answered; anx inbox read <ask-id>.
 Stability: stable
@@ -492,12 +496,17 @@ Work tree
 - Start with `anx tree` and `anx where <ref|path|text>`. Suggestions are advisory: confirm a home explicitly with `anx mv card:<slug> --under card:<parent>`. Paths such as initiatives/billing/retries are aliases; stable card refs remain canonical and survive moves and handle renames.
 - Create with `anx work create --title "Retry webhooks" --under card:<parent>`. Without --under or explicit --initiative, new work enters Unsorted with needs_home=true. Nothing is filed automatically. Use `anx mv <card> --root --reason "Independent outcome"` for top level, or `anx mv <card> --unsorted` to return it to the tray. Moving an initiative under another card requires --reason.
 - A card represents a human-level initiative or outcome that may span many executor tasks and outlive them. Keep issue, PR and run detail in its source and link evidence; never mirror a tracker 1:1. Use where before creating to find existing work. Keep about 15 or fewer open cards and very few open asks. Example: 12 PRs + 4 Multica issues for one project can share one outcome card with linked evidence.
+- Top-level goals are a human's to set. Create or promote one only when a human asked, and name them: `anx work create --title <outcome> --initiative --requested-by <human>` or `anx mv <card> --root --reason <why> --requested-by <human>`. Without a named human a new card lands in Unsorted; group it under a goal or propose it with an ask.
+- Give a goal the number it is judged by: `anx work measure <card> --label "<plain name>" --direction up|down --target <n> --series series:<name>`. Publish readings with `anx series push`; Watch shows the latest value against the target. A measure does not make the card recurring work.
 - `anx plan` is a power verb for checklists with external and legacy card steps and after dependencies. Plans never establish parentage. Children are ordered by creation time.
 - Ask only for decisions owned by the human. Recommend one answer, offer 2–3 alternatives, and batch related decisions. Keep next_actor on the agent; do not also block the card for the same ask. Advance with the answer as evidence: `anx done <card> --evidence event:<response_event_id>`.
 
 
 Asking for decisions
 
+- Decide is for choices only a human can make. For anything else a human should know (a digest, a finding, a heads-up) use `anx tell card:<slug> "<headline>" [--body <text>]`: it shows on Watch and never in Decide. One question is one row: core returns your open ask when you repeat it, and `--supersedes event:<old-ask>` closes the ask it replaces.
+- Check `anx rulings list` before asking. A standing ruling is an answer a human made durable; an ask one covers returns that answer at once and reaches nobody. Act on it and cite the ruling ref. Pass `--again` only when the facts changed. Size the decision for the reader with `--irreversible` and `--cost "<text>"`.
+- Any agent may retire a stale ask with `anx ask retire <ask> --reason <why> --evidence <ref>`; the asker is told in `anx orient` under "returned to you" and may undo it. `anx orient` lists the upkeep suggestions about your own work; `anx orient --upkeep` lists all of them.
 - Every ask, review and escalation belongs to a work card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
 - Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.
 - Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.
@@ -1173,12 +1182,39 @@ anx feedback "<what went wrong or what you need>" [--evidence <url|ref>]... [--d
   Same idempotent write as anx note: rerunning after a timeout never files twice.
 ```
 
+## `rulings`
+
+List the answers a human made durable; check before you ask
+
+```text
+anx rulings list [--include-revoked]: list standing rulings, newest first (read_only).
+  A standing ruling is an answer a human made durable. An ask a ruling covers is not filed: anx ask returns the answer at once and nothing reaches Decide, so check here before you ask.
+  Act on a ruling that covers your question and cite its ref (ruling:<id>) in your note. If the facts changed, ask with --again.
+  A "not a decision" ruling names a requester: that agent's asks with the same title (numbers aside) are stored as an fyi instead; use anx tell for them.
+  Only a human makes or revokes a ruling, in Decide.
+Stability: beta
+```
+
+## `tell`
+
+Tell a human something that wants no answer; it shows on Watch, never in Decide
+
+```text
+anx tell <card> "<headline>" [--body "<text>"] [--evidence <url|ref>]...: tell a human something that wants no answer (remote_coordination_write).
+  Use it for a digest, a finding or a heads-up. It is stored on the card and listed on Watch under "For your information"; it never appears in Decide and never becomes the card's headline note.
+  A repeat of the same headline on the same card collapses into the newest with a count, so a daily digest is one row.
+  The headline is one line of at most 160 characters; --body holds up to 4000 characters of plain words.
+  Need a choice only the human can make? That is anx ask. Progress on your own work is anx note.
+  Retry-safe like anx note: rerunning after a timeout never posts twice.
+Stability: beta
+```
+
 ## `work`
 
 Query commitments, evidence, freshness and refresh state
 
 ```text
-Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. Progress and completion are loop verbs: anx note <card> "<text>" [--next <when> "<what>"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.
+Work: anx work start [card]; anx work block <why> [card] [--ask --recommend <answer> [--body <markdown> | --body-file <path|->] [--force --reason <text>]]; anx work create --title <text> [--under <ref|path> | --initiative --requested-by <human>]; anx work list; anx mv <ref|path> (--under <ref|path> | --root --reason <text> --requested-by <human> | --unsorted); anx tree [ref|path]; anx work ls <path>; anx where <ref|path|text>. A human sets top-level goals: an agent names the human who asked with --requested-by, and without one a new card waits in Unsorted. The number a goal is judged by: anx work measure <card> --label <text> --direction up|down --target <n> [--series series:<name>] [--unit <unit>]; Watch shows the latest reading against the target. Recurring work: anx work cadence <card> --every <duration>; anx work goal <card> --metric <name> --direction up|down; anx work receipt <card> --run-id <id> --outcome <acted|measured|no_op|infra_error> --summary <text>. Progress and completion are loop verbs: anx note <card> "<text>" [--next <when> "<what>"] [--evidence <ref>]; anx done [card] --evidence <url|ref>. Omitted cards use presence.
 ```
 
 ## `pm`
@@ -4942,6 +4978,7 @@ Inputs:
   - body `id` (string)
   - body `initiative` (boolean)
   - body `labels` (list<string>)
+  - body `measure` (any)
   - body `next_action` (string)
   - body `next_actor` (string)
   - body `owner` (string)
@@ -4952,6 +4989,7 @@ Inputs:
   - body `related_refs` (list<any>)
   - body `relations` (list<object>)
   - body `request_key` (string)
+  - body `requested_by` (string)
   - body `risk` (string)
   - body `roles` (list<string>)
   - body `source.aliases` (list<string>)
@@ -5176,6 +5214,7 @@ Inputs:
   - body `patch.executions` (list<object>)
   - body `patch.goal` (any)
   - body `patch.labels` (list<string>)
+  - body `patch.measure` (any)
   - body `patch.next_action` (string)
   - body `patch.next_actor` (string)
   - body `patch.plan` (any)
@@ -5792,8 +5831,8 @@ Human authorization: servers that gate this action on a signed-in browser sessio
 Move a card under a parent, to top level or to Unsorted
 
 ```text
-Usage: anx work move <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
+Usage: anx work move <ref|path> (--under <ref|path> | --root --requested-by <human> | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
+Move the stored parent without changing plan steps. A human sets top-level goals: with --root an agent names the human who asked in --requested-by, and is refused without one (propose the goal with anx ask instead). --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
 ```
 
 ## `work tree`
@@ -7961,6 +8000,7 @@ Inputs:
   - body `card.provenance.notes` (string)
   - body `card.provenance.sources` (list<string>)
   - body `card.related_refs` (list<any>)
+  - body `card.requested_by` (string)
   - body `card.resolution` (string)
   - body `card.resolution_refs` (list<any>)
   - body `card.risk` (string)
@@ -7971,6 +8011,7 @@ Inputs:
   - body `if_board_updated_at` (datetime): Optimistic concurrency token. Copy `board.updated_at` from `anx boards get <board-ref-or-handle>`, `anx boards workspace <board-ref-or-handle>`, or the latest board mutation response.
   - body `initiative` (boolean)
   - body `request_key` (string)
+  - body `requested_by` (string)
   - body `under` (string)
   Enum values: card.column_key: backlog, blocked, done, in_progress, ready, review; card.create_surface: ask.auto_create, cards.create, mcp, work.create; card.resolution: done; card.risk: critical, high, low, medium; create_surface: ask.auto_create, cards.create, mcp, work.create
 
@@ -10968,8 +11009,8 @@ Global flags:
 Move a card in the stored work tree.
 
 ```text
-Usage: anx mv <ref|path> (--under <ref|path> | --root | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
-Move the stored parent without changing plan steps. --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
+Usage: anx mv <ref|path> (--under <ref|path> | --root --requested-by <human> | --unsorted) [--reason <text>] [--after <step-id>] [--request-key <key>]
+Move the stored parent without changing plan steps. A human sets top-level goals: with --root an agent names the human who asked in --requested-by, and is refused without one (propose the goal with anx ask instead). --reason (1..2000 characters) is required with --root and whenever an initiative moves (under a parent or to Unsorted). Paths are resolved at request time. Retain the original request key and body for replay; an unkeyed re-run of a promotion that already applied returns 409. Use --json for one envelope.
 ```
 
 ## `tree`
@@ -11066,6 +11107,18 @@ Usage: anx work goal
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
 Use --json for one machine-readable envelope.
+```
+
+## `work measure`
+
+Set the number an initiative is judged by: <card> --label text --direction up|down --target n [--series series:ref] [--unit unit] [--baseline n], or --clear. Watch shows the latest reading of the series against the target. Use this for a goal's outcome; work goal is for recurring work scored by run receipts.
+
+```text
+anx work measure <card> --label "<plain name>" --direction up|down --target <n> [--series series:<name>] [--unit <unit>] [--baseline <n>] | --clear: set the number an initiative is judged by (remote_coordination_write).
+  Watch shows the latest reading against the target, the change over about a week and how old the reading is. With no reading it says so, which is the loudest state a goal can be in.
+  The reading comes from the series: a producer publishes it with anx series push <name> <value> (declare the series once with anx adapters declare; see anx help series). A measure without --series records the target and shows "no reading".
+  A measure does not make the card recurring work. For a loop scored by run receipts use anx work goal with anx work cadence.
+Stability: beta
 ```
 
 ## `work receipt`

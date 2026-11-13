@@ -546,7 +546,7 @@ func projectWork(card, m map[string]any, version int64, latest, attempt, refresh
 	if refs, ok := card["assignee_refs"].([]string); ok && len(refs) > 0 {
 		out["owner"] = refs[0]
 	}
-	for _, key := range []string{"top_level", "cadence", "goal", "source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
+	for _, key := range []string{"top_level", "cadence", "goal", "measure", "source", "project_ref", "priority", "next_actor", "next_action", "next_action_at", "blockers", "wake_condition", "start_at", "due_at", "relations", "executions", "workspace_move", "topic_ref", "document_ref", "related_refs", "risk", "plan", "labels", "roles", "source_refs"} {
 		if v, ok := m[key]; ok {
 			out[key] = v
 		}

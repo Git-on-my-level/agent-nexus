@@ -10,6 +10,7 @@ vi.mock("$app/stores", () => ({
   }),
 }));
 vi.mock("$lib/inboxResponseQueue.js", () => ({
+  onInboxResponseCommitted: vi.fn(() => () => {}),
   queueInboxResponse: vi.fn(),
   captureInboxResponseBinding: vi.fn(),
   editInboxResponse: vi.fn(),

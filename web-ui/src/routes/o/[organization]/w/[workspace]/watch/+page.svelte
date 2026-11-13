@@ -638,6 +638,8 @@
         : ""}
       changes={brief.initiativeChanges}
       hidden={digestHidden}
+      fyi={brief.fyi}
+      upkeep={brief.upkeep}
     />
   {/if}
   {#if tab === "initiatives" && brief && digestCollection.counts.digest && layout !== "list"}

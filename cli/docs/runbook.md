@@ -203,7 +203,7 @@ association should use clear configured evidence and ask when ambiguous. A
 successful run/session does not satisfy the task's acceptance criteria.
 
 The bundled participant skill advertises `anx.participant.v8`; any ordinary
-agent can load the additional `anx.pm.v8` skill to support project PM work. After host enrollment,
+agent can load the additional `anx.pm.v9` skill to support project PM work. After host enrollment,
 the CLI offers `anx skills sync`. Preview with `anx skills sync --dry-run`, then
 run `anx skills sync` to install or refresh clean managed copies for detected
 Claude Code, Codex/OMP, Cursor, Hermes, Gemini CLI, Pi, Continue and OpenCode

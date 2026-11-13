@@ -54,6 +54,9 @@ func loopText(v any, max int, required bool) bool {
 	return ok && utf8.RuneCountInString(s) <= max && (!required || strings.TrimSpace(s) != "")
 }
 func validateLoopMetadata(m map[string]any) error {
+	if err := validateMeasure(m["measure"]); err != nil {
+		return err
+	}
 	for _, key := range []string{"cadence", "goal"} {
 		raw, exists := m[key]
 		if !exists || raw == nil {

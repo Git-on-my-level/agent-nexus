@@ -178,7 +178,7 @@ func TestEventAppendWriterContentionIsRetryableAndAtomic(t *testing.T) {
 			event := map[string]any{"id": fmt.Sprintf("concurrent-append-%d", i), "type": "message_posted", "thread_id": card["thread_id"], "refs": []string{"thread:" + anyString(card["thread_id"])}, "summary": "Concurrent append", "payload": map[string]any{"text": "Concurrent message"}, "provenance": map[string]any{"sources": []string{"inferred"}}}
 			if i%2 == 0 {
 				event["type"] = "human_attention_requested"
-				event["payload"] = map[string]any{"kind": "ask", "title": "Ship now?", "subject_ref": card["ref"], "requester_actor_id": "actor-1", "response_proposals": []string{"Yes", "Wait"}}
+				event["payload"] = map[string]any{"kind": "ask", "title": fmt.Sprintf("Ship change %d now?", i), "subject_ref": card["ref"], "requester_actor_id": "actor-1", "response_proposals": []string{"Yes", "Wait"}}
 			}
 			raw, _ := json.Marshal(map[string]any{"actor_id": "actor-1", "request_key": event["id"], "event": event})
 			<-start

@@ -6774,6 +6774,128 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '403':
           $ref: '#/components/responses/ErrorResponse'
+  /rulings:
+    get:
+      operationId: listStandingRulings
+      summary: List standing rulings
+      description: >
+        Returns the answers a human made durable, newest first, at most 200. An agent reads these
+        before asking: an ask a ruling covers is answered at once and never reaches Decide.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.list
+      x-anx-cli-path: rulings list
+      x-anx-why: Check whether a human already answered this kind of question.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Any authenticated member. One indexed page; pass include_revoked=true for history.
+      x-anx-concepts: [inbox, read]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ rulings }`."
+      x-anx-error-codes: [auth_required, invalid_token]
+      parameters:
+        - name: include_revoked
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Standing rulings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rulings]
+                properties:
+                  rulings: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/StandingRuling' } }
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createStandingRuling
+      summary: Make an answer to one ask a standing ruling
+      description: >
+        Human only. `answer` makes the given answer apply to every later ask with the same title,
+        whoever asks. `not_a_decision` records that the ask should not have reached a human: later
+        asks from the same requester whose title differs only in its numbers are stored as an fyi
+        instead. A newer ruling for the same question replaces the older one.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.create
+      x-anx-cli-path: rulings create
+      x-anx-why: Stop a repeated question from returning to Decide.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Human principals only; agents receive human_required.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ ruling }`."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, human_required, not_found]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ask_ref, kind]
+              properties:
+                ask_ref: { type: string, description: "event:<ask-id>" }
+                kind: { type: string, enum: [answer, not_a_decision] }
+                answer: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: The ruling.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruling]
+                properties:
+                  ruling: { $ref: '#/components/schemas/StandingRuling' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /rulings/{ruling_id}/revoke:
+    post:
+      operationId: revokeStandingRuling
+      summary: Revoke a standing ruling
+      description: Human only. The ruling stops answering asks; asks it already answered are unchanged. Revoking twice is a no-op.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.revoke
+      x-anx-cli-path: rulings revoke
+      x-anx-why: Take back a standing answer.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Human principals only.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ ruling }`."
+      x-anx-error-codes: [auth_required, invalid_token, human_required, not_found]
+      parameters:
+        - name: ruling_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The revoked ruling.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruling]
+                properties:
+                  ruling: { $ref: '#/components/schemas/StandingRuling' }
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
   /curation/run:
     post:
       operationId: runCurationFormula
@@ -11368,6 +11490,18 @@ components:
         baseline: {type: number}
         unit: {type: string, maxLength: 80}
         series_ref: {type: string, maxLength: 2048, description: Existing series ref with optional label selectors.}
+    WorkMeasure:
+      type: object
+      additionalProperties: false
+      description: The number an initiative is judged by. Unlike a goal it does not make the card recurring work; it only says how to read the outcome. Publish the linked series and the brief computes the reading.
+      required: [label, direction, target]
+      properties:
+        label: {type: string, minLength: 1, maxLength: 120}
+        direction: {type: string, enum: [up, down]}
+        target: {type: number}
+        baseline: {type: number}
+        unit: {type: string, maxLength: 80}
+        series_ref: {type: string, maxLength: 2048, description: Existing series ref with optional label selectors.}
     Work:
       type: object
       additionalProperties: true
@@ -11381,6 +11515,7 @@ components:
         top_level: {type: boolean, deprecated: true, description: Ignored. Use initiative on create or the work move route.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
+        measure: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkMeasure'}]}
         source_refs: { $ref: '#/components/schemas/SourceRefs' }
         plan: { $ref: '#/components/schemas/InitiativePlan' }
         plan_state: { $ref: '#/components/schemas/PlanState' }
@@ -11635,7 +11770,8 @@ components:
         actor_id: {type: string}
         request_key: {type: string, maxLength: 256, description: Actor-scoped atomic original-result replay key. Retain the same key and body until confirmed; changed-body reuse conflicts.}
         under: {type: string, minLength: 1, description: Visible open parent card ref.}
-        root: {type: boolean, enum: [true], description: Make this card a top-level initiative.}
+        root: {type: boolean, enum: [true], description: "Make this card a top-level initiative. An agent must also send requested_by; without it the move is refused with human_request_required."}
+        requested_by: {type: string, maxLength: 120, description: The human who asked for this promotion. Appended to the recorded reason.}
         unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
         reason: {type: string, minLength: 1, maxLength: 2000, description: Required for root and when moving an initiative under another card.}
         after: {type: string, description: Optional preceding sibling plan step id; never creates a plan step or hierarchy edge. Children remain ordered by creation time.}
@@ -11830,13 +11966,15 @@ components:
       additionalProperties: true
       properties:
         under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
-        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
+        initiative: {type: boolean, description: "Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true). A human sets top-level goals: an agent must also send requested_by, otherwise its card is created in Unsorted and the response carries redirected: unsorted. Recurring work (cadence or goal) is exempt."}
+        requested_by: {type: string, maxLength: 120, description: The human who asked an agent to create this top-level initiative. Recorded as the reason of the promotion.}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle: {$ref: '#/components/schemas/CardHandle'}
         top_level: {type: boolean, deprecated: true, description: Ignored. Use initiative on create or the work move route.}
         cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
         goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
+        measure: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkMeasure'}]}
         request_key:
           type: string
           maxLength: 256
@@ -11907,6 +12045,7 @@ components:
           properties:
             cadence: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkCadence'}]}
             goal: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkGoal'}]}
+            measure: {nullable: true, allOf: [{$ref: '#/components/schemas/WorkMeasure'}]}
             labels: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             roles: {type: array, maxItems: 16, nullable: true, items: {type: string, minLength: 1, maxLength: 128}}
             source_refs: { $ref: '#/components/schemas/SourceRefs' }
@@ -12860,6 +12999,7 @@ components:
         alternatives: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/AskAlternative'}}
         if_no_answer: {type: string, maxLength: 4000, description: Default or blocked work and by when.}
         details: {type: string, maxLength: 32000}
+        stakes: {$ref: '#/components/schemas/AskStakes'}
         evidence:
           type: array
           items:
@@ -13183,7 +13323,8 @@ components:
       type: object
       properties:
         under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
-        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
+        initiative: {type: boolean, description: "Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true). A human sets top-level goals: an agent must also send requested_by, otherwise its card is created in Unsorted and the response carries redirected: unsorted. Recurring work (cadence or goal) is exempt."}
+        requested_by: {type: string, maxLength: 120, description: The human who asked an agent to create this top-level initiative. Recorded as the reason of the promotion.}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         handle:
@@ -13499,7 +13640,8 @@ components:
       type: object
       properties:
         under: {type: string, description: Optional visible open parent card ref. Stores the sole parent atomically; mutually exclusive with initiative.}
-        initiative: {type: boolean, description: Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true).}
+        initiative: {type: boolean, description: "Explicitly create a top-level initiative. Without under or initiative true the card enters Unsorted (needs_home true). A human sets top-level goals: an agent must also send requested_by, otherwise its card is created in Unsorted and the response carries redirected: unsorted. Recurring work (cadence or goal) is exempt."}
+        requested_by: {type: string, maxLength: 120, description: The human who asked an agent to create this top-level initiative. Recorded as the reason of the promotion.}
         after: {type: string, description: Preceding plan step id; requires under.}
         create_surface: {type: string, enum: [work.create, cards.create, ask.auto_create, mcp], description: Optional client attribution, never authority.}
         actor_id: { type: string }
@@ -14835,6 +14977,38 @@ components:
         initiatives: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefInitiative' } }
         your_asks: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefDecision' } }
         answered_for_you: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/BriefAnswered' } }
+        fyi:
+          type: array
+          maxItems: 10
+          description: What agents told a human reader in the last 7 days without wanting an answer (`anx tell`), newest first. A repeat of one headline on one card by one author collapses into the newest, counted in `repeats`. Empty for agent readers.
+          items: { $ref: '#/components/schemas/BriefFYI' }
+        returned_to_you:
+          type: array
+          maxItems: 10
+          description: The agent reader's own asks that someone else closed in the last 7 days, with the public reason. Empty for human readers.
+          items: { $ref: '#/components/schemas/BriefReturnedAsk' }
+        open_asks:
+          type: array
+          maxItems: 50
+          description: For agent readers, other requesters' open asks the reader may see, oldest deadline first; an agent doing upkeep retires a stale or duplicated one. The reader's own are your_asks. Empty for human readers, whose list is decisions.
+          items:
+            type: object
+            required: [event_ref, title, requested_by, age_seconds]
+            properties:
+              event_ref: { type: string }
+              title: { type: string }
+              requested_by: { $ref: '#/components/schemas/BriefPrincipal' }
+              age_seconds: { type: integer }
+              subject_ref: { type: string }
+        upkeep:
+          type: object
+          description: Whether housekeeping is being done. Omitted for principal-scoped readers so the count never discloses hidden rows.
+          required: [open_suggestions, truncated, oldest_waiting_seconds, untended]
+          properties:
+            open_suggestions: { type: integer, minimum: 0, maximum: 50 }
+            truncated: { type: boolean }
+            untended: { type: boolean, description: The oldest open suggestion has waited longer than the single no-promise fallback (7 days). }
+            oldest_waiting_seconds: { type: integer, nullable: true, description: Age of the oldest open curation suggestion. }
         truncated:
           type: object
           required: [decisions, initiatives, your_asks, answered_for_you]
@@ -14844,6 +15018,71 @@ components:
             initiatives: { type: boolean }
             your_asks: { type: boolean }
             answered_for_you: { type: boolean }
+    BriefFYI:
+      type: object
+      required: [ref, title, text, author, at, subject, repeats]
+      properties:
+        ref: { type: string, description: The fyi event ref. }
+        title: { type: string }
+        text: { type: string, maxLength: 280 }
+        author: { $ref: '#/components/schemas/BriefPrincipal' }
+        at: { type: string, format: date-time }
+        subject: { $ref: '#/components/schemas/BriefRefTitle' }
+        repeats: { type: integer, minimum: 0, description: Older copies of this headline folded into this row. }
+    BriefReturnedAsk:
+      type: object
+      required: [ref, event_ref, title, returned_by, reason]
+      properties:
+        ref: { type: string }
+        event_ref: { type: string }
+        title: { type: string }
+        returned_by: { $ref: '#/components/schemas/BriefPrincipal' }
+        returned_at: { type: string, format: date-time }
+        reason: { type: string }
+        undo_argv: { type: array, items: { type: string }, description: Present when the ask was retired and may be reopened. }
+    BriefMeasure:
+      type: object
+      description: The number an initiative is judged by, with its computed reading. `latest` is null until a producer publishes the linked series.
+      required: [label, direction, target, latest, latest_at, previous, previous_at, on_target, age_seconds, points]
+      properties:
+        label: { type: string }
+        direction: { type: string, enum: [up, down] }
+        target: { type: number }
+        unit: { type: string, nullable: true }
+        baseline: { type: number, nullable: true }
+        series_ref: { type: string, nullable: true }
+        latest: { type: number, nullable: true }
+        latest_at: { type: string, nullable: true }
+        previous: { type: number, nullable: true, description: The newest reading at least 7 days older than the latest, else the oldest in the 30-day window. }
+        previous_at: { type: string, nullable: true }
+        on_target: { type: boolean, nullable: true }
+        age_seconds: { type: integer, nullable: true, description: Age of the latest reading. Nothing judges it stale; a reader sees the age. }
+        points: { type: array, maxItems: 31, items: { type: object, required: [at, value], properties: { at: { type: string }, value: { type: number } } } }
+    AskStakes:
+      type: object
+      description: The asker's claim about what a decision puts at risk, shown as a badge on the decision.
+      additionalProperties: false
+      properties:
+        irreversible: { type: boolean }
+        cost: { type: string, maxLength: 80 }
+    StandingRuling:
+      type: object
+      required: [id, ref, kind, question, answer, created_by, created_at, uses, active]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        kind: { type: string, enum: [answer, not_a_decision] }
+        question: { type: string }
+        answer: { type: string }
+        requester: { type: string, description: Set for not_a_decision rulings, which bind one requester. }
+        source_ask_ref: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        uses: { type: integer, minimum: 0 }
+        last_used_at: { type: string, format: date-time }
+        active: { type: boolean }
+        revoked_at: { type: string, format: date-time }
+        revoked_by: { type: string }
     TrackingDigestCard:
       type: object
       required: [ref, title, reason]
@@ -14892,6 +15131,7 @@ components:
         if_no_answer: {$ref: '#/components/schemas/AskPresentation/properties/if_no_answer'}
         details: {$ref: '#/components/schemas/AskPresentation/properties/details'}
         evidence: {$ref: '#/components/schemas/AskPresentation/properties/evidence'}
+        stakes: { $ref: '#/components/schemas/AskStakes' }
         requested_by: { $ref: '#/components/schemas/BriefPrincipal' }
         subject: { $ref: '#/components/schemas/BriefRefTitle' }
         created_at: { type: string, format: date-time }
@@ -14996,7 +15236,8 @@ components:
             total: { type: integer }
         blocked_count: { type: integer, description: Open asks and blocks refs holding this initiative. }
         waiting_on_you_count: { type: integer, description: Open decisions addressed to the reader about this initiative. }
-        note: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefNote' }] }
+        note: { nullable: true, allOf: [{ $ref: '#/components/schemas/BriefNote' }], description: "The newest note an owner wrote. Notes core wrote itself (reminders, ownership fallback, digests) are never the headline." }
+        measure: { $ref: '#/components/schemas/BriefMeasure' }
         series:
           type: array
           maxItems: 2

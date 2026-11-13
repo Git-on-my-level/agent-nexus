@@ -86,4 +86,7 @@ var recentMigrations = []migration{
 		`DROP INDEX IF EXISTS idx_auth_audit_events_occurred_at;`,
 		`DROP INDEX IF EXISTS idx_auth_audit_events_invite_id;`,
 	}},
+	// Outcome facts for Watch and Decide: authored versus automatic notes,
+	// fyi notes and standing rulings. One backfill statement over brief_notes.
+	{Version: 148, AfterApply: installOutcomeFacts},
 }

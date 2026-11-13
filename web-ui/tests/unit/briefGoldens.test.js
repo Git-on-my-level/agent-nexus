@@ -16,6 +16,7 @@ vi.mock("$app/stores", () => ({
   }),
 }));
 vi.mock("$lib/inboxResponseQueue.js", () => ({
+  onInboxResponseCommitted: vi.fn(() => () => {}),
   queueInboxResponse: vi.fn(),
   captureInboxResponseBinding: vi.fn(),
   editInboxResponse: vi.fn(),
@@ -46,6 +47,8 @@ const watchProps = {
   now: NOW,
   hrefFor: (ref) => `/i/${ref}`,
   decideHref: (row) => `/decide?initiative=${row.ref}`,
+  fyi: brief.fyi,
+  upkeep: brief.upkeep,
 };
 
 /** Visible text, one line per block-ish element, whitespace collapsed. */

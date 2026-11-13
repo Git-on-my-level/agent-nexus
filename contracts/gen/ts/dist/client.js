@@ -4915,6 +4915,10 @@ export const commandRegistry = [
                     "type": "list\u003cany\u003e"
                 },
                 {
+                    "name": "card.requested_by",
+                    "type": "string"
+                },
+                {
                     "name": "card.resolution",
                     "type": "string",
                     "enum_values": [
@@ -4967,6 +4971,10 @@ export const commandRegistry = [
                 },
                 {
                     "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "requested_by",
                     "type": "string"
                 },
                 {
@@ -12139,6 +12147,135 @@ export const commandRegistry = [
         "ts_method": "reportRender"
     },
     {
+        "command_id": "rulings.create",
+        "cli_path": "rulings create",
+        "group": "rulings",
+        "method": "POST",
+        "path": "/rulings",
+        "operation_id": "createStandingRuling",
+        "summary": "Make an answer to one ask a standing ruling",
+        "description": "Human only. `answer` makes the given answer apply to every later ask with the same title, whoever asks. `not_a_decision` records that the ask should not have reached a human: later asks from the same requester whose title differs only in its numbers are stored as an fyi instead. A newer ruling for the same question replaces the older one.",
+        "why": "Stop a repeated question from returning to Decide.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ ruling }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_request",
+            "invalid_token",
+            "human_required",
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Human principals only; agents receive human_required.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "ask_ref",
+                    "type": "string"
+                },
+                {
+                    "name": "kind",
+                    "type": "string",
+                    "enum_values": [
+                        "answer",
+                        "not_a_decision"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "answer",
+                    "type": "string"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "rulings.list",
+            "rulings.revoke"
+        ],
+        "go_method": "RulingsCreate",
+        "ts_method": "rulingsCreate"
+    },
+    {
+        "command_id": "rulings.list",
+        "cli_path": "rulings list",
+        "group": "rulings",
+        "method": "GET",
+        "path": "/rulings",
+        "operation_id": "listStandingRulings",
+        "summary": "List standing rulings",
+        "description": "Returns the answers a human made durable, newest first, at most 200. An agent reads these before asking: an ask a ruling covers is answered at once and never reaches Decide.",
+        "why": "Check whether a human already answered this kind of question.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ rulings }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token"
+        ],
+        "concepts": [
+            "inbox",
+            "read"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Any authenticated member. One indexed page; pass include_revoked=true for history.",
+        "adjacent_commands": [
+            "rulings.create",
+            "rulings.revoke"
+        ],
+        "go_method": "RulingsList",
+        "ts_method": "rulingsList"
+    },
+    {
+        "command_id": "rulings.revoke",
+        "cli_path": "rulings revoke",
+        "group": "rulings",
+        "method": "POST",
+        "path": "/rulings/{ruling_id}/revoke",
+        "operation_id": "revokeStandingRuling",
+        "summary": "Revoke a standing ruling",
+        "description": "Human only. The ruling stops answering asks; asks it already answered are unchanged. Revoking twice is a no-op.",
+        "why": "Take back a standing answer.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ ruling }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "human_required",
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Human principals only.",
+        "path_params": [
+            "ruling_id"
+        ],
+        "adjacent_commands": [
+            "rulings.create",
+            "rulings.list"
+        ],
+        "go_method": "RulingsRevoke",
+        "ts_method": "rulingsRevoke"
+    },
+    {
         "command_id": "runs.get",
         "cli_path": "runs get",
         "group": "runs",
@@ -14246,6 +14383,10 @@ export const commandRegistry = [
                     "type": "list\u003cstring\u003e"
                 },
                 {
+                    "name": "measure",
+                    "type": "any"
+                },
+                {
                     "name": "next_action",
                     "type": "string"
                 },
@@ -14283,6 +14424,10 @@ export const commandRegistry = [
                 },
                 {
                     "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "requested_by",
                     "type": "string"
                 },
                 {
@@ -14697,6 +14842,10 @@ export const commandRegistry = [
                 },
                 {
                     "name": "request_key",
+                    "type": "string"
+                },
+                {
+                    "name": "requested_by",
                     "type": "string"
                 },
                 {
@@ -15165,6 +15314,10 @@ export const commandRegistry = [
                 {
                     "name": "patch.labels",
                     "type": "list\u003cstring\u003e"
+                },
+                {
+                    "name": "patch.measure",
+                    "type": "any"
                 },
                 {
                     "name": "patch.next_action",
@@ -16421,6 +16574,15 @@ export class AnxClient {
     }
     reportRender(pathParams, options = {}) {
         return this.invoke("report.render", pathParams, options);
+    }
+    rulingsCreate(options = {}) {
+        return this.invoke("rulings.create", {}, options);
+    }
+    rulingsList(options = {}) {
+        return this.invoke("rulings.list", {}, options);
+    }
+    rulingsRevoke(pathParams, options = {}) {
+        return this.invoke("rulings.revoke", pathParams, options);
     }
     runsGet(pathParams, options = {}) {
         return this.invoke("runs.get", pathParams, options);
