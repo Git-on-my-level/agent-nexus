@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -43,7 +43,7 @@ func TestScopeInboxInvalidationActualPMInitialization(t *testing.T) {
 		}
 	}
 	install(false)
-	if _, err = pm.NewStore(ws.DB()); err != nil {
+	if _, err = decide.NewStore(ws.DB()); err != nil {
 		t.Fatal(err)
 	}
 	// The current production PM initializer deliberately remains unchanged. A

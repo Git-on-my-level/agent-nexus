@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -69,12 +69,12 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := newOnboardedPMRuntime(t, db, store, env.authStore, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+	rt, err := newOnboardedDecideRuntime(t, db, store, env.authStore, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}
-	input := pm.DecisionInput{RequestKey: "dvis-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1.1", Instruction: "Finish", Payload: &pm.ActionPayload{Phase: "done", ResolutionRefs: []string{privateEventRef, privateArtifactRef, publicArtifactRef}}}
+	p := decide.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}
+	input := decide.DecisionInput{RequestKey: "dvis-done", WorkRef: asString(work["ref"]), Scope: "work.phase", TargetRevision: "1.1", Instruction: "Finish", Payload: &decide.ActionPayload{Phase: "done", ResolutionRefs: []string{privateEventRef, privateArtifactRef, publicArtifactRef}}}
 	decision, err := rt.Service.ProposeDecision(ctx, p, input)
 	if err != nil {
 		t.Fatal(err)
@@ -100,11 +100,11 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		}
 		return rr
 	}
-	summaryByRef := func(t *testing.T, body []byte, wantCount int) map[string]pm.ResolutionRef {
+	summaryByRef := func(t *testing.T, body []byte, wantCount int) map[string]decide.ResolutionRef {
 		t.Helper()
 		var out struct {
 			Payload struct {
-				Resolution []pm.ResolutionRef `json:"resolution"`
+				Resolution []decide.ResolutionRef `json:"resolution"`
 			} `json:"payload"`
 		}
 		if err := json.Unmarshal(body, &out); err != nil {
@@ -113,13 +113,13 @@ func TestPMDecisionRefSummariesRespectRequesterVisibility(t *testing.T) {
 		if len(out.Payload.Resolution) != wantCount {
 			t.Fatalf("resolution projection: %s", body)
 		}
-		byRef := map[string]pm.ResolutionRef{}
+		byRef := map[string]decide.ResolutionRef{}
 		for _, entry := range out.Payload.Resolution {
 			byRef[entry.Ref] = entry
 		}
 		return byRef
 	}
-	expect := func(t *testing.T, got map[string]pm.ResolutionRef, ref, summary string, exists bool) {
+	expect := func(t *testing.T, got map[string]decide.ResolutionRef, ref, summary string, exists bool) {
 		t.Helper()
 		entry, ok := got[ref]
 		if !ok {

@@ -4,7 +4,7 @@ import (
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/commandcenter"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/schema"
@@ -43,7 +43,7 @@ func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 	}
 	ctx := context.Background()
 	s := env.primitiveStore.(*primitives.Store)
-	if _, err := pm.NewStore(env.workspace.DB()); err != nil {
+	if _, err := decide.NewStore(env.workspace.DB()); err != nil {
 		t.Fatal(err)
 	}
 	stranger := seedHumanPrincipalForLockoutTest(t, ctx, env.workspace.DB(), "perf-reader", "perf-reader-actor", "perf-reader", "perf-reader-token")
@@ -177,7 +177,7 @@ func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 		if i >= 101 {
 			ref, instruction, revision = privateRefs[i-101], "PrivatePerformanceSecret", "1.1"
 		}
-		d := pm.Decision{ID: fmt.Sprintf("perf-awaiting-%d", i), WorkspaceID: "ws_main", ActorID: stranger.ActorID, WorkRef: ref, Status: pm.AwaitingAnswer, TargetRevision: revision, Scope: "work.annotate", Instruction: instruction, CreatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}
+		d := decide.Decision{ID: fmt.Sprintf("perf-awaiting-%d", i), WorkspaceID: "ws_main", ActorID: stranger.ActorID, WorkRef: ref, Status: decide.AwaitingAnswer, TargetRevision: revision, Scope: "work.annotate", Instruction: instruction, CreatedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}
 		body, err := json.Marshal(d)
 		if err != nil {
 			t.Fatal(err)
@@ -225,7 +225,7 @@ func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 	t.Cleanup(func() { counted.Close() })
 	measuredStore := primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
 	measuredAuth := auth.NewStore(counted)
-	runtime, err := newOnboardedPMRuntime(t, counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+	runtime, err := newOnboardedDecideRuntime(t, counted, measuredStore, measuredAuth, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	measuredServer := httptest.NewServer(NewHandler("test", WithPrimitiveStore(measuredStore), WithAuthStore(measuredAuth), WithActorRegistry(actors.NewStore(counted)), WithRunStore(commandcenter.NewStore(counted, commandcenter.SQLIdentities{DB: counted})), WithPMRuntime(runtime), WithSchemaContract(contract)))
+	measuredServer := httptest.NewServer(NewHandler("test", WithPrimitiveStore(measuredStore), WithAuthStore(measuredAuth), WithActorRegistry(actors.NewStore(counted)), WithRunStore(commandcenter.NewStore(counted, commandcenter.SQLIdentities{DB: counted})), WithDecideRuntime(runtime), WithSchemaContract(contract)))
 	t.Cleanup(measuredServer.Close)
 	env.server = measuredServer
 	t.Run("event-stream-10k", func(t *testing.T) {
@@ -374,11 +374,11 @@ func testResourceAccessCommonReadPerformance(t *testing.T, compact bool) {
 			defer counted.Close()
 			measuredStore = primitives.NewTestStore(counted, env.workspace.Layout().ArtifactContentDir)
 			measuredAuth = auth.NewStore(counted)
-			runtime, err = newOnboardedPMRuntime(t, counted, measuredStore, measuredAuth, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main"}})
+			runtime, err = newOnboardedDecideRuntime(t, counted, measuredStore, measuredAuth, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			measuredServer = httptest.NewServer(NewHandler("test", WithPrimitiveStore(measuredStore), WithAuthStore(measuredAuth), WithActorRegistry(actors.NewStore(counted)), WithRunStore(commandcenter.NewStore(counted, commandcenter.SQLIdentities{DB: counted})), WithPMRuntime(runtime), WithSchemaContract(contract)))
+			measuredServer = httptest.NewServer(NewHandler("test", WithPrimitiveStore(measuredStore), WithAuthStore(measuredAuth), WithActorRegistry(actors.NewStore(counted)), WithRunStore(commandcenter.NewStore(counted, commandcenter.SQLIdentities{DB: counted})), WithDecideRuntime(runtime), WithSchemaContract(contract)))
 			defer measuredServer.Close()
 			env.server = measuredServer
 

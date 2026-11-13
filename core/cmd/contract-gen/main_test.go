@@ -157,8 +157,8 @@ func TestCollectCommandsUsesAdjacentCommandMetadataOverride(t *testing.T) {
 					Adjacent:  []string{"pm card", "pm propose"},
 				},
 			},
-			"/pm/connect": {
-				Post: &operation{CommandID: "pm.connect", CLIPath: "pm connect"},
+			"/pm/actions": {
+				Post: &operation{CommandID: "pm.actions.list", CLIPath: "pm actions list"},
 			},
 		},
 	}

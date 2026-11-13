@@ -78,9 +78,28 @@ document and every revision, but each target is stored once per document rather
 than once per revision. Triggers redirect those edge inserts; an artifact shared by
 several documents or backing a card revision keeps its own edges. A bounded maintenance cursor moves
 legacy per-revision edges after startup; never drop superseded revision targets.
+Migration 142 keeps a card revision artifact's complete raw reference edges but
+stores only its reference atoms in `artifacts.content_refs_json`; the prose body
+used to contribute the whole string plus a `$anx-ref-text$` candidate. The
+artifact update trigger recognizes exactly that prune on a card-revision
+artifact whose content hash still matches and skips the edge rebuild; every
+other update rebuilds normally. A bounded `resource_access_card_manifest_job`
+cursor prunes legacy manifests by artifact id, verifies the authoritative
+revision content first, and leaves a manifest untouched when another writer
+changed it or when its content cannot be loaded or verified. A revision that
+cannot be loaded is skipped and logged, and the cursor still advances past it,
+so one bad row cannot wedge the job. No decision and no revision content byte
+changes.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.
+Migration 139 makes auth audit rows auth-admin-only at the repository read, not
+only in the HTTP handler. `auth_audit_events` is no longer a filter source, so
+audit metadata contributes no per-row `filter/auth_audit_events` edges and no
+inbox invalidation. The migration only drops the old filter triggers and
+installs a durable cursor; a bounded maintenance job deletes existing edges in
+chunks, cascading through the exact/compact/admission indexes. Audit rows and
+payloads are retained unchanged, and non-admin or scoped readers fail closed.
 
 All canonical, PM and command-center database access must use
 `internal/resourceaccess` handles with the request context. Scoped SELECTs use

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	p "agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 )
@@ -21,7 +21,7 @@ func ledgerFixture(t *testing.T) (*sql.DB, *p.Store) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ws.Close() })
-	if _, err := pm.NewStore(ws.DB()); err != nil {
+	if _, err := decide.NewStore(ws.DB()); err != nil {
 		t.Fatal(err)
 	}
 	return ws.DB(), p.NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)

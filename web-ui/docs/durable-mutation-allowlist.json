@@ -48,11 +48,11 @@
   },
   "lib/components/setup/SetupPrompt.svelte": {
     "classification": "stage-2",
-    "reason": "TODO: setup enrollment token creation/revocation, runner selection and cleanup recovery.",
+    "reason": "TODO: setup enrollment token creation and revocation cleanup recovery.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "createHostEnrollmentToken": 1,
-      "revokeHostEnrollmentToken": 2
+      "revokeHostEnrollmentToken": 1
     }
   },
   "lib/coreClient.js": {
@@ -99,14 +99,12 @@
       "createArtifactAttachment": 1,
       "createDocument": 1,
       "createEvent": 1,
-      "createPmConversation": 1,
       "createPmDecision": 1,
       "createWork": 1,
       "dispatchPmDecision": 2,
       "moveBoardCard": 1,
       "patchDocument": 1,
       "reconcilePmAction": 2,
-      "sendPmMessage": 1,
       "setNotificationSettings": 1,
       "updateBoardCard": 1,
       "updateDocument": 1,
@@ -196,7 +194,7 @@
   },
   "routes/o/[organization]/w/[workspace]/events/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -204,7 +202,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -212,7 +210,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte": {
     "classification": "stage-2",
-    "reason": "TODO: work refresh intent/replay; fetch is PM presence wiring and resolveRefs is a read helper.",
+    "reason": "TODO: work refresh intent/replay; fetch is work refresh wiring and resolveRefs is a read helper.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1,
@@ -222,7 +220,7 @@
   },
   "routes/o/[organization]/w/[workspace]/initiatives/new/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -230,7 +228,7 @@
   },
   "routes/o/[organization]/w/[workspace]/integrations/+page.svelte": {
     "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
+    "reason": "Existing fetch function injection for read helpers; resolveRefs is read-only. Remaining lifecycle work stays a stage-2 audit.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "raw-fetch": 1
@@ -247,23 +245,6 @@
       "passkeyLoginVerify": 1,
       "passkeyRegisterOptions": 1,
       "passkeyRegisterVerify": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/pm/+page.svelte": {
-    "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "raw-fetch": 1,
-      "resolveRefs": 1
-    }
-  },
-  "routes/o/[organization]/w/[workspace]/pm/setup/+page.svelte": {
-    "classification": "transport",
-    "reason": "Existing fetch function injection for read/presence helpers; PM resolveRefs is read-only. Setup lifecycle remains a stage-2 audit.",
-    "followup": "durable-user-work.md#stage-2-handoff",
-    "references": {
-      "raw-fetch": 1
     }
   },
   "routes/o/[organization]/w/[workspace]/secrets/+page.svelte": {

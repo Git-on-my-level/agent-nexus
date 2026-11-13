@@ -311,7 +311,7 @@ func TestUnifiedWorkPolicyPreservesApprovalBoundary(t *testing.T) {
 			t.Errorf("missing supported work/receipt tool %s", id)
 		}
 	}
-	for _, id := range []string{"pm.decisions.answer", "pm.decisions.dispatch", "pm.bindings.create"} {
+	for _, id := range []string{"pm.decisions.answer", "pm.decisions.dispatch"} {
 		if _, ok := cat.Lookup(ToolName(id)); ok {
 			t.Errorf("approval/source action exposed by default: %s", id)
 		}

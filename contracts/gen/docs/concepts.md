@@ -15,7 +15,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `24`
+- Commands: `21`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
@@ -35,9 +35,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `hosts.get`
   - `hosts.list`
   - `hosts.patch`
-  - `pm.connect`
-  - `pm.disconnect`
-  - `pm.presence`
   - `runs.get`
   - `runs.list`
   - `runs.upsert`
@@ -141,7 +138,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `89`
+- Commands: `75`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -185,26 +182,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.actions.get`
   - `pm.actions.list`
   - `pm.actions.reconcile`
-  - `pm.bindings.create`
-  - `pm.bindings.list`
   - `pm.context`
-  - `pm.conversations.create`
-  - `pm.conversations.get`
-  - `pm.conversations.list`
-  - `pm.conversations.messages.create`
   - `pm.decisions.answer`
   - `pm.decisions.create`
   - `pm.decisions.dispatch`
   - `pm.decisions.get`
   - `pm.decisions.list`
-  - `pm.turns.claim`
-  - `pm.turns.complete`
-  - `pm.turns.context`
-  - `pm.turns.decisions.create`
-  - `pm.turns.fail`
-  - `pm.turns.get`
-  - `pm.turns.heartbeat`
-  - `pm.turns.release`
   - `report.preview`
   - `report.render`
   - `runs.list`
@@ -319,7 +302,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `44`
+- Commands: `30`
 - Command IDs:
   - `initiative.promote`
   - `initiative.retire`
@@ -327,26 +310,12 @@ Generated from `contracts/anx-openapi.yaml`.
   - `pm.actions.get`
   - `pm.actions.list`
   - `pm.actions.reconcile`
-  - `pm.bindings.create`
-  - `pm.bindings.list`
   - `pm.context`
-  - `pm.conversations.create`
-  - `pm.conversations.get`
-  - `pm.conversations.list`
-  - `pm.conversations.messages.create`
   - `pm.decisions.answer`
   - `pm.decisions.create`
   - `pm.decisions.dispatch`
   - `pm.decisions.get`
   - `pm.decisions.list`
-  - `pm.turns.claim`
-  - `pm.turns.complete`
-  - `pm.turns.context`
-  - `pm.turns.decisions.create`
-  - `pm.turns.fail`
-  - `pm.turns.get`
-  - `pm.turns.heartbeat`
-  - `pm.turns.release`
   - `report.preview`
   - `report.render`
   - `sessions.get`

@@ -15,7 +15,7 @@ import {
   sortDecisions,
 } from "$lib/brief.js";
 import { formatAgo } from "$lib/time/format.js";
-import { countWord, label as phaseLabel } from "$lib/pm/presentation.js";
+import { countWord, label as phaseLabel } from "$lib/work/presentation.js";
 
 // ---------------------------------------------------------------------------
 // Children

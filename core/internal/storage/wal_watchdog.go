@@ -30,6 +30,7 @@ type sqliteMaintenanceConfig struct {
 	pinnedRuns          int
 	truncateBusyTimeout time.Duration
 	journalSizeLimit    int64
+	incrementalVacuum   incrementalVacuumConfig
 }
 
 func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
@@ -40,6 +41,13 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		pinnedRuns:          defaultWALPinnedRuns,
 		truncateBusyTimeout: defaultWALTruncateBusyTimeout,
 		journalSizeLimit:    defaultJournalSizeLimit,
+		incrementalVacuum: incrementalVacuumConfig{
+			enabled:            true,
+			minFreelistBytes:   defaultIncrementalVacuumMinFreelistBytes,
+			minFreelistPercent: defaultIncrementalVacuumMinFreelistPercent,
+			pages:              defaultIncrementalVacuumPages,
+			busyTimeout:        defaultIncrementalVacuumBusyTimeout,
+		},
 	}
 	if value, ok := os.LookupEnv("ANX_SQLITE_WAL_WATCHDOG"); ok {
 		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
@@ -90,6 +98,44 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		}
 		config.truncateBusyTimeout = parsed
 	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM"); ok {
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		if err != nil {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM: must be a boolean")
+		}
+		config.incrementalVacuum.enabled = parsed
+	}
+	if !config.incrementalVacuum.enabled {
+		return config, nil
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES"); ok {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES: must be a positive integer")
+		}
+		config.incrementalVacuum.minFreelistBytes = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT"); ok {
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 0 || parsed > 100 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT: must be an integer from 0 to 100")
+		}
+		config.incrementalVacuum.minFreelistPercent = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES"); ok {
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed <= 0 || parsed > maxIncrementalVacuumPages {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_PAGES: must be an integer from 1 to %d", maxIncrementalVacuumPages)
+		}
+		config.incrementalVacuum.pages = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT"); ok {
+		parsed, err := time.ParseDuration(strings.TrimSpace(value))
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT: must be a positive duration")
+		}
+		config.incrementalVacuum.busyTimeout = parsed
+	}
 	return config, nil
 }
 
@@ -111,6 +157,7 @@ type walWatchdog struct {
 	config       sqliteMaintenanceConfig
 	statWAL      func() (int64, error)
 	openExecutor func(ctx context.Context) (walCheckpointExecutor, error)
+	openVacuum   func(ctx context.Context) (incrementalVacuumExecutor, error)
 	logf         func(format string, args ...any)
 	cancel       context.CancelFunc
 	done         chan struct{}
@@ -135,6 +182,13 @@ func newWALWatchdog(db *sql.DB, walPath string, config sqliteMaintenanceConfig) 
 			conn:                conn,
 			truncateBusyTimeout: config.truncateBusyTimeout,
 		}, nil
+	}
+	watchdog.openVacuum = func(ctx context.Context) (incrementalVacuumExecutor, error) {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &sqliteIncrementalVacuumExecutor{conn: conn}, nil
 	}
 	return watchdog
 }
@@ -170,6 +224,7 @@ func (w *walWatchdog) tick(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+	defer w.reclaimIncremental(ctx)
 	executor, err := w.openExecutor(ctx)
 	if err != nil {
 		w.recordFailure(ctx)
@@ -228,6 +283,33 @@ func (w *walWatchdog) recordFailure(ctx context.Context) {
 		return
 	}
 	w.logf("anx-core: WAL watchdog maintenance failed stage=wal_watchdog")
+}
+
+func (w *walWatchdog) reclaimIncremental(ctx context.Context) {
+	if !w.config.incrementalVacuum.enabled || w.openVacuum == nil || ctx.Err() != nil {
+		return
+	}
+	executor, err := w.openVacuum(ctx)
+	if err != nil {
+		w.logf("anx-core: SQLite incremental vacuum failed stage=incremental_vacuum")
+		return
+	}
+	defer func() {
+		_ = executor.Close(ctx)
+	}()
+	result, err := executor.Reclaim(ctx, w.config.incrementalVacuum)
+	if err != nil {
+		if ctx.Err() == nil {
+			w.logf("anx-core: SQLite incremental vacuum failed stage=incremental_vacuum")
+		}
+		return
+	}
+	if result.reclaimed > 0 {
+		w.logf(
+			"anx-core: SQLite incremental vacuum stage=incremental_vacuum pages_reclaimed=%d freelist_before=%d freelist_after=%d page_count=%d",
+			result.reclaimed, result.freelistBefore, result.stats.freelistCount, result.stats.pageCount,
+		)
+	}
 }
 
 func (w *walWatchdog) statWALFile() (int64, error) {

@@ -60,7 +60,7 @@ var conceptsGuidePrimitives = []conceptsPrimitive{
 	{
 		Name:        "inbox",
 		UseWhen:     "A human operator needs to inspect the human attention queue (`ask`, `review`, `escalate`).",
-		NotFor:      "Agent wake/attention; agents use `anx notifications`. PM decisions (`anx pm decisions create`, `pm.turns.decisions.create`) are PM conversation proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
+		NotFor:      "Agent wake/attention; agents use `anx notifications`. Decide decisions (`anx pm decisions create`) are proposals, not operator Inbox items. Create operator Inbox items with `anx ask|review|escalate` (`human_attention_requested` with required ordered `response_proposals`).",
 		Examples:    []string{"asks", "reviews", "escalations"},
 		RelatedRead: []string{"anx ask", "anx review", "anx escalate"},
 	},

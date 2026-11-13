@@ -55,13 +55,8 @@ func enrichRemoteError(e *Error, httpStatus int) {
 	var hint string
 
 	switch code {
-	case "lease_required", "lease_mismatch", "turn_not_claimed":
-		hint, recovery = enrichLease(code, msg)
 	case "conflict":
-		hint, recovery = enrichLease(code, msg)
-		if hint == "" && recovery == nil {
-			hint, recovery = enrichConflict(msg)
-		}
+		hint, recovery = enrichConflict(msg)
 	case "invalid_request":
 		hint, recovery = enrichInvalidRequest(msg)
 	case "key_mismatch":
@@ -70,10 +65,6 @@ func enrichRemoteError(e *Error, httpStatus int) {
 		hint, recovery = enrichAgentRevoked()
 	case "human_proposal_pending":
 		hint, recovery = enrichHumanProposalPending(e)
-	case "busy":
-		if strings.EqualFold(lookupErrorDetail(e, "reason"), "queue") {
-			hint, recovery = enrichPMBusy(e)
-		}
 	}
 
 	if hint == "" && recovery == nil {
@@ -141,21 +132,6 @@ func EnrichForCommand(e *Error, commandID string) {
 func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 	code := strings.TrimSpace(e.Code)
 	switch commandID {
-	case "pm.conversations.message", "pm.conversations.messages.create", "pm.ask":
-		var hint string
-		var recovery map[string]any
-		if code == "busy" {
-			hint, recovery = enrichPMBusy(e)
-		}
-		if commandID == "pm.ask" {
-			hint, recovery = enrichPMAskConversation(e, hint, recovery)
-		}
-		return hint, recovery
-	case "pm.turns.decisions.create":
-		if code == "human_proposal_pending" {
-			return enrichHumanProposalPending(e)
-		}
-		return "", nil
 	case "pm.actions.acknowledge":
 		if code == "conflict" {
 			return "This action is not in a state that can be acknowledged. Reconcile first if a read-back can still advance it (`anx pm actions reconcile <id>`).",
@@ -165,10 +141,6 @@ func enrichPMCommandError(commandID string, e *Error) (string, map[string]any) {
 				}
 		}
 		return "", nil
-	case "pm.turns.complete", "pm.turns.fail":
-		return enrichPMTurnTerminalLease(e)
-	case "pm.turns.release":
-		return enrichPMTurnReleaseLease(e)
 	case "pm.decisions.answer", "pm.decisions.dispatch", "pm.decisions.create", "pm.actions.reconcile":
 	default:
 		return "", nil
@@ -310,7 +282,7 @@ func enrichDecisionAnswerStale(reason string) (string, map[string]any) {
 	case "work_missing":
 		return "The task no longer exists, so this proposal cannot be approved. " + decline + ".", rec
 	case "revision_changed":
-		return "The task changed after this proposal, so approving it would have failed at delivery. " + decline + ", or ask for a fresh proposal (`anx pm turns propose` from the PM, or a board move for a human).", rec
+		return "The task changed after this proposal, so approving it would have failed at delivery. " + decline + ", or ask for a fresh proposal (`anx pm decisions create`, or a board move for a human).", rec
 	default:
 		return "This proposal is no longer valid to approve. " + decline + ", or re-read it with `anx pm decisions get <id>`.", rec
 	}
@@ -323,7 +295,7 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 	details, _ := e.Details.(map[string]any)
 	if rec, _ := details["anx_cli_recovery"].(map[string]any); rec != nil {
 		switch rec["kind"] {
-		case "stale_concurrency_token", "resource_exists", "lease_required", "lease_mismatch", "turn_not_claimed":
+		case "stale_concurrency_token", "resource_exists":
 			return "", nil
 		}
 	}
@@ -354,35 +326,6 @@ func enrichConcurrencyCommandError(commandID string, e *Error) (string, map[stri
 	}
 }
 
-func enrichPMBusy(e *Error) (string, map[string]any) {
-	reason := strings.ToLower(lookupErrorDetail(e, "reason"))
-	if reason == "conversation" || reason == "queue" || reason == "capacity" || reason == "" {
-		rec := true
-		e.Recoverable = &rec
-	}
-	switch reason {
-	case "conversation":
-		return "The previous message in this conversation is still queued or being answered. Wait for it to finish or expire (its deadline is on the turn: `anx pm conversations get <id>`), or start a new conversation.",
-			map[string]any{
-				"kind":        "busy",
-				"reason":      "conversation",
-				"refresh_cli": "anx pm conversations get <id>",
-			}
-	case "queue":
-		return "The PM queue for this workspace is full; try again in a moment or ask a runner operator to attach more capacity.",
-			map[string]any{
-				"kind":   "busy",
-				"reason": "queue",
-			}
-	default:
-		return "The PM is at its in-flight limit for this workspace; wait for another turn to finish or expire, or release a stuck runner",
-			map[string]any{
-				"kind":   "busy",
-				"reason": "capacity",
-			}
-	}
-}
-
 func enrichHumanProposalPending(e *Error) (string, map[string]any) {
 	id := lookupErrorDetail(e, "pending_decision_id")
 	rec := map[string]any{"kind": "human_proposal_pending"}
@@ -393,27 +336,6 @@ func enrichHumanProposalPending(e *Error) (string, map[string]any) {
 		proposal = "A human proposal " + id
 	}
 	return proposal + " is already waiting on this task. It must be answered or declined before the PM can propose something different; an identical proposal is accepted as the same decision.", rec
-}
-
-func enrichPMAskConversation(e *Error, hint string, recovery map[string]any) (string, map[string]any) {
-	convID := lookupErrorDetail(e, "conversation_id")
-	if convID == "" {
-		return hint, recovery
-	}
-	retry := fmt.Sprintf("Conversation %s: the message was not sent and can be retried into that conversation with `anx pm conversations message %s ...`.", convID, convID)
-	if strings.TrimSpace(hint) != "" {
-		hint = retry + " " + hint
-	} else {
-		hint = retry
-	}
-	if recovery == nil {
-		recovery = map[string]any{}
-	}
-	recovery["conversation_id"] = convID
-	if _, ok := recovery["refresh_cli"]; !ok {
-		recovery["refresh_cli"] = "anx pm conversations message " + convID
-	}
-	return hint, recovery
 }
 
 func actionAlreadyAcknowledged(e *Error, commandID string) bool {
@@ -488,79 +410,6 @@ func mergeRecovery(details map[string]any, rec map[string]any) {
 		return
 	}
 	details["anx_cli_recovery"] = rec
-}
-
-func enrichLease(code, msg string) (string, map[string]any) {
-	code = strings.TrimSpace(code)
-	lmsg := strings.ToLower(strings.TrimSpace(msg))
-	switch code {
-	case "lease_required":
-		return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`).",
-			map[string]any{"kind": "lease_required", "field": "lease_token"}
-	case "lease_mismatch":
-		if leaseReplayAlreadyTerminal(lmsg) {
-			return "This turn is already delivered and no retry is needed.",
-				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-		}
-		return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
-			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-	case "turn_not_claimed":
-		return "This turn is not claimed; there is nothing to release.",
-			map[string]any{"kind": "turn_not_claimed"}
-	case "conflict":
-		if strings.Contains(lmsg, "this turn is not claimed") || strings.Contains(lmsg, "lease") {
-			if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "released") || strings.Contains(lmsg, "re-claim") || strings.Contains(lmsg, "reclaim") {
-				return "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN).",
-					map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-			}
-			return "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`). If the lease was released or re-claimed, claim the turn again.",
-				map[string]any{"kind": "lease_required", "field": "lease_token"}
-		}
-	}
-	return "", nil
-}
-
-func leaseReplayAlreadyTerminal(msg string) bool {
-	return strings.Contains(msg, "already delivered") || strings.Contains(msg, "no retry is needed") || strings.Contains(msg, "no retry needed")
-}
-
-func enrichPMTurnTerminalLease(e *Error) (string, map[string]any) {
-	if e == nil {
-		return "", nil
-	}
-	code := strings.TrimSpace(e.Code)
-	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
-	if (code == "lease_mismatch" || code == "lease_required" || code == "conflict") && leaseReplayAlreadyTerminal(lmsg) {
-		return "This turn is already delivered and no retry is needed.",
-			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-	}
-	return "", nil
-}
-
-func enrichPMTurnReleaseLease(e *Error) (string, map[string]any) {
-	if e == nil {
-		return "", nil
-	}
-	code := strings.TrimSpace(e.Code)
-	lmsg := strings.ToLower(strings.TrimSpace(e.Message))
-	switch code {
-	case "turn_not_claimed":
-		return "This turn is not claimed; there is nothing to release.",
-			map[string]any{"kind": "turn_not_claimed"}
-	case "lease_mismatch":
-		return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
-			map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-	case "conflict":
-		if strings.Contains(lmsg, "not claimed") {
-			return "This turn is not claimed; there is nothing to release.",
-				map[string]any{"kind": "turn_not_claimed"}
-		}
-		if strings.Contains(lmsg, "mismatch") || strings.Contains(lmsg, "lease") {
-			return "This lease token does not match the current lease. Pass the runner_id and lease_token printed by `anx pm turns claim`.",
-				map[string]any{"kind": "lease_mismatch", "field": "lease_token"}
-		}
-	}
-	return "", nil
 }
 
 // enrichConflict maps core conflict messages (boards_handlers.go, cards_handlers.go, …) to hints.

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 273,
+  "route_count": 254,
   "routes": [
     {
       "method": "GET",
@@ -904,42 +904,7 @@
     },
     {
       "method": "GET",
-      "path": "/pm/bindings",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/bindings",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/connect",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "GET",
       "path": "/pm/context",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "GET",
-      "path": "/pm/conversations",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/conversations",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "GET",
-      "path": "/pm/conversations/{conversation_id}",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/conversations/{conversation_id}/messages",
       "access_class": "workspace_business_surface"
     },
     {
@@ -965,66 +930,6 @@
     {
       "method": "POST",
       "path": "/pm/decisions/{decision_id}/dispatch",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/disconnect",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/ingress/discord",
-      "access_class": "always_public"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/ingress/telegram",
-      "access_class": "always_public"
-    },
-    {
-      "method": "GET",
-      "path": "/pm/presence",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/claim",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "GET",
-      "path": "/pm/turns/{turn_id}",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/complete",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/context",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/decisions",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/fail",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/heartbeat",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/pm/turns/{turn_id}/release",
       "access_class": "workspace_business_surface"
     },
     {

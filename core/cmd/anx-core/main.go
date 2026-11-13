@@ -29,11 +29,11 @@ import (
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/buildinfo"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/delivery"
 	"agent-nexus-core/internal/heartbeat"
 	"agent-nexus-core/internal/loopstats"
 	"agent-nexus-core/internal/observation"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/router"
 	"agent-nexus-core/internal/runtimememory"
@@ -537,8 +537,7 @@ func main() {
 		invStore, invErr := observation.NewInvestigationStore(workspace.DB(), func(_ context.Context, preset string) error {
 			preset = strings.TrimSpace(preset)
 			allowed := envString("ANX_INVESTIGATION_PRESET", "")
-			handle := envString("ANX_PM_AGENT_HANDLE", "")
-			if preset != "" && ((allowed != "" && preset == allowed) || (handle != "" && preset == handle)) {
+			if preset != "" && allowed != "" && preset == allowed {
 				return nil
 			}
 			return fmt.Errorf("existing investigation preset is unavailable; no model fallback")
@@ -554,34 +553,12 @@ func main() {
 		}
 		observationRuntime.BindInvestigations(invRuntime)
 	}
-	pmActorID := configuredPMActor(os.Stderr)
-	pmRuntime, err := server.NewPMRuntime(workspace.DB(), primitiveStore, authStore, server.PMRuntimeConfig{
-		PM: pm.Config{
-			WorkspaceID:    workspaceID,
-			WorkspaceName:  workspaceName,
-			BaseURL:        envString("ANX_PM_BASE_URL", "http://127.0.0.1:"+strconv.Itoa(port)),
-			AgentActorID:   pmActorID,
-			AgentHandle:    envString("ANX_PM_AGENT_HANDLE", ""),
-			TurnTimeout:    envDuration("ANX_PM_TURN_TIMEOUT", 2*time.Minute),
-			LeaseTTL:       envDuration("ANX_PM_LEASE_TTL", time.Minute),
-			MaxOutputBytes: envInt("ANX_PM_MAX_OUTPUT_BYTES", 16000),
-			MaxConcurrent:  envInt("ANX_PM_MAX_CONCURRENT", 2),
-			MaxQueued:      envInt("ANX_PM_MAX_QUEUED", 20),
-		},
-		BridgeEnabled:           envBool("ANX_PM_BRIDGE_ENABLED", false),
-		RuntimeEnvelopeEnforced: envBool("ANX_PM_RUNTIME_ENVELOPE_ENFORCED", false),
-		Observation:             observationRuntime,
-		TelegramWebhookSecret:   envString("ANX_PM_TELEGRAM_WEBHOOK_SECRET", ""),
-		TelegramBotID:           envString("ANX_PM_TELEGRAM_BOT_ID", ""),
-		TelegramBotToken:        envString("ANX_PM_TELEGRAM_BOT_TOKEN", ""),
-		TelegramAPIBase:         envString("ANX_PM_TELEGRAM_API_BASE", ""),
-		DiscordPublicKeyHex:     envString("ANX_PM_DISCORD_PUBLIC_KEY", ""),
-		DiscordApplicationID:    envString("ANX_PM_DISCORD_APPLICATION_ID", ""),
-		DiscordBotToken:         envString("ANX_PM_DISCORD_BOT_TOKEN", ""),
-		DiscordAPIBase:          envString("ANX_PM_DISCORD_API_BASE", ""),
+	decideRuntime, err := server.NewDecideRuntime(workspace.DB(), primitiveStore, authStore, server.DecideRuntimeConfig{
+		Decide:      decide.Config{WorkspaceID: workspaceID},
+		Observation: observationRuntime,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to initialize PM runtime: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to initialize decision runtime: %v\n", err)
 		os.Exit(1)
 	}
 	handler := server.NewHandler(
@@ -598,7 +575,7 @@ func main() {
 		server.WithPasskeySessionStore(passkeySessionStore),
 		server.WithAllowPasskeyDevBypass(passkeyDevBypassEffective),
 		server.WithPrimitiveStore(primitiveStore),
-		server.WithPMRuntime(pmRuntime),
+		server.WithDecideRuntime(decideRuntime),
 		server.WithObservationRuntime(observationRuntime),
 		server.WithSchemaContract(contract),
 		server.WithWebAuthnConfig(server.WebAuthnConfig{
@@ -679,7 +656,7 @@ func main() {
 		p, err := authStore.PrincipalForActor(ctx, actor)
 		return err == nil && !p.Revoked && p.PrincipalKind == string(auth.PrincipalKindAgent)
 	})
-	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router", "watcher_health")
+	loopstats.Register("ask_webhooks", "ask_lifecycle", "brief", "ask_subjects", "inbox_lifecycle", "document_history", "auth_audit_access", "card_manifest", "curation", "replay_gc", "document_search", "comment_search", "scope_inbox", "projection", "answer_wake", "escalation", "card_lease", "observation", "pm", "heartbeat", "compact_migration", "compact_retired", "router", "watcher_health")
 	go loopstats.Run(maintenanceCtx, os.Stderr)
 	go primitiveStore.RunAskLifecycle(maintenanceCtx, func(err error) { fmt.Fprintln(os.Stderr, "ask lifecycle maintenance: retrying bounded batch") })
 	go primitiveStore.RunBriefMaintenance(maintenanceCtx, func(err error) { fmt.Fprintf(os.Stderr, "brief maintenance: %v\n", err) })
@@ -702,6 +679,40 @@ func main() {
 		})
 	}()
 	defer func() { maintenanceCancel(); <-documentHistoryDone }()
+	authAuditDone := make(chan struct{})
+	go func() {
+		defer close(authAuditDone)
+		// Deleting audit filter edges advances the authorization epoch, which
+		// would restart compact access certification; let a resumed run finish.
+		if compactWait != nil {
+			select {
+			case <-compactWait:
+			case <-maintenanceCtx.Done():
+				return
+			}
+		}
+		workspace.RunAuthAuditAccessMaintenance(maintenanceCtx, func(err error) {
+			fmt.Fprintf(os.Stderr, "auth audit access maintenance: retrying bounded batch: %v\n", err)
+		})
+	}()
+	defer func() { maintenanceCancel(); <-authAuditDone }()
+	cardManifestDone := make(chan struct{})
+	go func() {
+		defer close(cardManifestDone)
+		// Pruning an artifact advances the authorization epoch, which would
+		// restart compact access certification; let a resumed certification finish.
+		if compactWait != nil {
+			select {
+			case <-compactWait:
+			case <-maintenanceCtx.Done():
+				return
+			}
+		}
+		workspace.RunCardManifestMaintenance(maintenanceCtx, func(err error) {
+			fmt.Fprintf(os.Stderr, "card manifest maintenance: %v\n", err)
+		})
+	}()
+	defer func() { maintenanceCancel(); <-cardManifestDone }()
 	go server.RunCurationFormulaLoop(maintenanceCtx, primitiveStore, func(err error) { fmt.Fprintf(os.Stderr, "curation formula pass: %v\n", err) })
 
 	replayGCDone := make(chan struct{})
@@ -747,39 +758,18 @@ func main() {
 		LinkBase:      publicWebUIWorkspaceURL,
 		DigestHourUTC: envInt("ANX_DIGEST_HOUR_UTC", delivery.DefaultDigestHourUTC),
 		CanRead:       server.NewEscalationReadCheck(primitiveStore),
-		AskPM:         server.NewEscalationPMWaker(workspace.DB(), primitiveStore, authStore, pmRuntime.AgentActorID, server.NewEscalationReadCheck(primitiveStore), workspaceID, workspaceName),
 	}
 	go escalator.Run(maintenanceCtx)
 	// The lease clock records each expired work lease once and wakes the
 	// card's agent assignee (or the PM). Lease state itself is computed on
 	// read, so a sleeping hosted core only delays the audit event and wake.
 	cardLeaseClock := &server.CardLeaseClock{Store: primitiveStore, AuthStore: authStore, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
-	if pmRuntime != nil {
-		cardLeaseClock.PMActorID = pmRuntime.AgentActorID
-		primitiveStore.SetTrackingLead(pmRuntime.AgentActorID)
-	}
 	go cardLeaseClock.Run(maintenanceCtx)
 	workTrackingClock := &server.WorkTrackingClock{Store: primitiveStore, AuthStore: authStore, Deliveries: delivery.Store{DB: workspace.DB()}, WorkspaceID: workspaceID, WorkspaceName: workspaceName}
-	go server.RunWorkTrackingClocks(maintenanceCtx, workTrackingClock, pmRuntime)
+	go server.RunWorkTrackingClocks(maintenanceCtx, workTrackingClock)
 	sidecarHost.Run(maintenanceCtx)
 	if observationRuntime != nil {
 		go observationRuntime.Run(maintenanceCtx)
-	}
-	if pmRuntime != nil {
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-maintenanceCtx.Done():
-					return
-				case <-ticker.C:
-					if err := pmRuntime.Tick(maintenanceCtx); err != nil {
-						fmt.Fprintf(os.Stderr, "pm maintenance: %v\n", err)
-					}
-				}
-			}
-		}()
 	}
 	heartbeatURL := strings.TrimSpace(os.Getenv("ANX_HEARTBEAT_PUBLISHER_URL"))
 	if heartbeatURL == "" {

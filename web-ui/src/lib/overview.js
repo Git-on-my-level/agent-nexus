@@ -16,7 +16,7 @@ import {
   taskDetailPath,
   workFreshness,
   workKey,
-} from "$lib/pm/presentation.js";
+} from "$lib/work/presentation.js";
 import { resourceRouteSegment } from "$lib/resourceIdentity.js";
 import {
   parseVisualReport,

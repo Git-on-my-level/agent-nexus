@@ -286,7 +286,7 @@ sequence,config_revision,version,signed_at,last_seen_at,expires_at)` and
   backfill. Auth principal enrichment, commandcenter, host and agent responses use
   indexed per-actor wake-job joins instead of shared host expiry. Fresh parent
   presence + enabled/ready wake job + non-revoked host/actor is required everywhere,
-  including PM readiness and mention routing. Config/revocation publishes the
+  including agent readiness and mention routing. Config/revocation publishes the
   existing agents-change signal; reads evaluate expiry at request time and UI
   ages locally, without a new expiry sweep or progress event.
 - Authenticated read-only `POST /hosts/bridge-status` input `{host_ids:[]}`;
@@ -356,8 +356,7 @@ bridge. Do not delete capabilities along with the package:
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Python bridge / CLI lifecycle / wake E2E                                                               | Port wake packet reads, claims/outcomes, exact runtime launch, optional agentctl run + runs-ingest callbacks and retry receipts into Go jobs; then remove `adapters/agent-bridge/`, `bridge_lifecycle*`, Python installer/probes and per-agent unit rendering. Replace tests with unified-service integration coverage. |
 | Makefile, version sync/managed-files scripts, hook fixtures, release docs, deterministic-bridge script | Remove Python build/version targets; replace the deterministic fixture (its referenced examples are already absent), update inventories/generated help and test selection.                                                                                                                                              |
-| `adapters/pm/pm_adapter.py`                                                                            | Independent subprocess protocol wrapper, no import from the removed package: retain its PM limits/isolation contract. README's example module `anx_agent_bridge.adapters.hermes_acp` is absent already; replace stale guidance with generic registered runtime wiring.                                                  |
-| Core router/PM/auth + guides                                                                           | Preserve workspace-side wake/PM contracts; fix the stale models.py comment, consume per-agent readiness, update root/module guides, README and both ask-delivery docs. No separate PM bridge daemon required.                                                                                                           |
+| Core router/auth + guides                                                                              | Preserve workspace-side wake contracts; fix the stale models.py comment, consume per-agent readiness, update root/module guides, README and both ask-delivery docs. No separate bridge daemon required.                                                                                                                  |
 
 If implementation reveals an additional dependency that cannot be folded, report
 it and leave that component intact pending resolution; do not substitute a second

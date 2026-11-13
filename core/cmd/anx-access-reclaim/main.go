@@ -15,6 +15,7 @@ import (
 func main() {
 	source := flag.String("source", "", "stopped workspace state.sqlite")
 	destination := flag.String("destination", "", "new verified database file (must not exist)")
+	reserve := flag.Int64("reserve-bytes", storage.DefaultCompactReserveBytes, "free space to leave on the destination filesystem after live pages")
 	flag.Parse()
 	if *source == "" || *destination == "" {
 		fmt.Fprintln(os.Stderr, "--source and --destination are required; stop the core first")
@@ -29,7 +30,7 @@ func main() {
 	}
 	defer tempLease.Close()
 	sqlite3.Xsqlite3_temp_directory = tempLease.NativePath
-	if err := storage.ReclaimCompactAccessOffline(ctx, *source, *destination); err != nil {
+	if err := storage.ReclaimCompactAccessOfflineWithReserve(ctx, *source, *destination, *reserve); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

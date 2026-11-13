@@ -381,35 +381,18 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `pm`
 
-- Commands: `27`
+- Commands: `10`
 - Command IDs:
   - `pm.actions.acknowledge` (`pm actions acknowledge`)
   - `pm.actions.get` (`pm actions get`)
   - `pm.actions.list` (`pm actions list`)
   - `pm.actions.reconcile` (`pm actions reconcile`)
-  - `pm.bindings.create` (`pm bindings create`)
-  - `pm.bindings.list` (`pm bindings list`)
-  - `pm.connect` (`pm connect`)
   - `pm.context` (`pm context`)
-  - `pm.conversations.create` (`pm conversations create`)
-  - `pm.conversations.get` (`pm conversations get`)
-  - `pm.conversations.list` (`pm conversations list`)
-  - `pm.conversations.messages.create` (`pm conversations messages create`)
   - `pm.decisions.answer` (`pm decisions answer`)
   - `pm.decisions.create` (`pm decisions create`)
   - `pm.decisions.dispatch` (`pm decisions dispatch`)
   - `pm.decisions.get` (`pm decisions get`)
   - `pm.decisions.list` (`pm decisions list`)
-  - `pm.disconnect` (`pm disconnect`)
-  - `pm.presence` (`pm presence`)
-  - `pm.turns.claim` (`pm turns claim`)
-  - `pm.turns.complete` (`pm turns complete`)
-  - `pm.turns.context` (`pm turns context`)
-  - `pm.turns.decisions.create` (`pm turns decisions create`)
-  - `pm.turns.fail` (`pm turns fail`)
-  - `pm.turns.get` (`pm turns get`)
-  - `pm.turns.heartbeat` (`pm turns heartbeat`)
-  - `pm.turns.release` (`pm turns release`)
 
 ## `ref-edges`
 

@@ -71,7 +71,7 @@ afterEach(() => cleanup());
 describe("a deployment agents can reach", () => {
   it("issues one short-lived token when the panel opens", async () => {
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
 
     await waitFor(() =>
@@ -93,7 +93,7 @@ describe("a deployment agents can reach", () => {
 
   it("copies a prompt carrying that token", async () => {
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await tokenReady();
 
@@ -114,7 +114,7 @@ describe("a deployment agents can reach", () => {
       .mockResolvedValueOnce(tokenResponse("htok_second"));
 
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await tokenReady();
 
@@ -137,7 +137,7 @@ describe("a deployment agents can reach", () => {
       Object.assign(new Error("forbidden"), { status: 403 }),
     );
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
 
     // Lands on the path that works for them, with no error banner.
@@ -168,7 +168,7 @@ describe("a deployment agents can reach", () => {
         }),
     );
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
 
     // A copy control that hands over "" and then says "copied" is worse than
@@ -190,7 +190,7 @@ describe("a deployment agents can reach", () => {
 
   it("hands back a token nobody ever received", async () => {
     const view = render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await tokenReady();
 
@@ -210,7 +210,7 @@ describe("a deployment agents can reach", () => {
      * reader is in the middle of.
      */
     const view = render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await tokenReady();
     await fireEvent.click(
@@ -231,7 +231,7 @@ describe("a deployment agents can reach", () => {
       },
     });
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await waitFor(() =>
       expect(coreClientMock.revokeHostEnrollmentToken).toHaveBeenCalledWith(
@@ -246,7 +246,7 @@ describe("a deployment agents can reach", () => {
       enrollment_token: { id: "htok_x" },
     });
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
 
     await waitFor(() =>
@@ -267,7 +267,7 @@ describe("a deployment agents can reach", () => {
       Object.assign(new Error("nope"), { details: "Not an administrator." }),
     );
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+      props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
     });
     await expect(
       screen.findByText("Not an administrator."),
@@ -276,116 +276,6 @@ describe("a deployment agents can reach", () => {
     expect(
       screen.queryByRole("button", { name: "Copy setup prompt" }),
     ).toBeNull();
-  });
-
-  it("bakes the chosen PM runner into the prompt", async () => {
-    render(SetupPrompt, {
-      props: {
-        kind: "pm",
-        cliBaseUrl: REMOTE,
-        workspaceLabel: "Ops",
-        runnerKey: "hermes",
-      },
-    });
-    await tokenReady();
-
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Copy setup prompt" }),
-    );
-    await waitFor(() => expect(clipboard.text).toContain("pm install"));
-    expect(clipboard.text).toContain("hermes chat --query-file");
-    expect(clipboard.text).toContain("--as 'pm' pm install");
-    expect(clipboard.text).toContain("--as 'pm' --json doctor");
-    expect(clipboard.text).not.toContain("--as 'hermes'");
-    // The machine about to run a PM needs the PM skill, not just participant.
-    expect(clipboard.text).toContain("anx skills sync --pm");
-    // One-shot: it joins the machine to the workspace when it has to.
-    expect(clipboard.text).toContain("host enroll --token-stdin");
-    expect(clipboard.text).toContain("the token unspent");
-  });
-
-  it("revokes a copied PM setup token when the PM connects", async () => {
-    const props = {
-      kind: "pm",
-      completed: false,
-      cliBaseUrl: REMOTE,
-      workspaceLabel: "Ops",
-      runnerKey: "hermes",
-    };
-    const view = render(SetupPrompt, { props });
-    await tokenReady();
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Copy setup prompt" }),
-    );
-    await waitFor(() => expect(clipboard.text).toContain("htok_first"));
-
-    coreClientMock.revokeHostEnrollmentToken.mockResolvedValue({
-      enrollment_token: {
-        consumed_at: null,
-        revoked_at: new Date().toISOString(),
-      },
-    });
-    await view.rerender({ ...props, completed: true });
-    await waitFor(() =>
-      expect(coreClientMock.revokeHostEnrollmentToken).toHaveBeenCalledWith(
-        "htok_htok_first",
-      ),
-    );
-    await expect(
-      screen.findByText("PM connected. The unused setup token was revoked."),
-    ).resolves.toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Copy setup prompt" }),
-    ).toBeNull();
-  });
-
-  it("does not call a consumed PM setup token unused or revoked", async () => {
-    const props = {
-      kind: "pm",
-      completed: false,
-      cliBaseUrl: REMOTE,
-      runnerKey: "hermes",
-    };
-    const view = render(SetupPrompt, { props });
-    await tokenReady();
-    coreClientMock.revokeHostEnrollmentToken.mockRejectedValue(
-      new Error("enrollment token already consumed"),
-    );
-
-    await view.rerender({ ...props, completed: true });
-    await expect(
-      screen.findByText(
-        "PM connected. The setup token may already have been used; check Access → Hosts for its status.",
-      ),
-    ).resolves.toBeTruthy();
-    expect(
-      screen.queryByText("PM connected. The unused setup token was revoked."),
-    ).toBeNull();
-  });
-
-  it("does not issue a setup token when the PM is already connected", async () => {
-    render(SetupPrompt, {
-      props: { kind: "pm", completed: true, cliBaseUrl: REMOTE },
-    });
-    await expect(
-      screen.findByText("PM connected. No setup token is needed."),
-    ).resolves.toBeTruthy();
-    expect(coreClientMock.createHostEnrollmentToken).not.toHaveBeenCalled();
-  });
-
-  it("switches the runner with the picker", async () => {
-    render(SetupPrompt, {
-      props: { kind: "pm", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
-    });
-    await tokenReady();
-
-    await fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "hermes" },
-    });
-    await fireEvent.click(
-      screen.getByRole("button", { name: "Copy setup prompt" }),
-    );
-    await waitFor(() => expect(clipboard.text).toContain("hermes chat"));
   });
 });
 
@@ -397,7 +287,7 @@ describe("an expired token leaves the page", () => {
         tokenResponse("htok_short", 1),
       );
       render(SetupPrompt, {
-        props: { kind: "machine", cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
+        props: { cliBaseUrl: REMOTE, workspaceLabel: "Ops" },
       });
       await vi.waitFor(() =>
         expect(coreClientMock.createHostEnrollmentToken).toHaveBeenCalled(),
@@ -420,7 +310,6 @@ describe("a deployment agents cannot reach", () => {
   it("withholds the prompt, issues no token, and keeps the commands", async () => {
     render(SetupPrompt, {
       props: {
-        kind: "machine",
         cliBaseUrl: "http://127.0.0.1:8000",
         workspaceLabel: "Ops",
       },
@@ -449,7 +338,7 @@ describe("a deployment agents cannot reach", () => {
 
   it("says what is missing when the deployment has no API address", async () => {
     render(SetupPrompt, {
-      props: { kind: "machine", cliBaseUrl: "", workspaceLabel: "Ops" },
+      props: { cliBaseUrl: "", workspaceLabel: "Ops" },
     });
     await fireEvent.click(
       screen.getByRole("tab", { name: "Have your agent do it" }),

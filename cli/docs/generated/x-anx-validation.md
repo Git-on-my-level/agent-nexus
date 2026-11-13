@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `291`
+- Command operations: `274`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `240`
+- Missing recommended examples: `223`
 
 ## Baseline gap counts
 
@@ -300,29 +300,12 @@ Generated from `contracts/anx-openapi.yaml`.
 - `pm.actions.get` `GET /pm/actions/{action_id}`
 - `pm.actions.list` `GET /pm/actions`
 - `pm.actions.reconcile` `POST /pm/actions/{action_id}/reconcile`
-- `pm.bindings.create` `POST /pm/bindings`
-- `pm.bindings.list` `GET /pm/bindings`
-- `pm.connect` `POST /pm/connect`
 - `pm.context` `GET /pm/context`
-- `pm.conversations.create` `POST /pm/conversations`
-- `pm.conversations.get` `GET /pm/conversations/{conversation_id}`
-- `pm.conversations.list` `GET /pm/conversations`
-- `pm.conversations.messages.create` `POST /pm/conversations/{conversation_id}/messages`
 - `pm.decisions.answer` `POST /pm/decisions/{decision_id}/answer`
 - `pm.decisions.create` `POST /pm/decisions`
 - `pm.decisions.dispatch` `POST /pm/decisions/{decision_id}/dispatch`
 - `pm.decisions.get` `GET /pm/decisions/{decision_id}`
 - `pm.decisions.list` `GET /pm/decisions`
-- `pm.disconnect` `POST /pm/disconnect`
-- `pm.presence` `GET /pm/presence`
-- `pm.turns.claim` `POST /pm/turns/claim`
-- `pm.turns.complete` `POST /pm/turns/{turn_id}/complete`
-- `pm.turns.context` `POST /pm/turns/{turn_id}/context`
-- `pm.turns.decisions.create` `POST /pm/turns/{turn_id}/decisions`
-- `pm.turns.fail` `POST /pm/turns/{turn_id}/fail`
-- `pm.turns.get` `GET /pm/turns/{turn_id}`
-- `pm.turns.heartbeat` `POST /pm/turns/{turn_id}/heartbeat`
-- `pm.turns.release` `POST /pm/turns/{turn_id}/release`
 - `ref_edges.list` `GET /ref-edges`
 - `refs.resolve` `POST /refs/resolve`
 - `report.preview` `POST /reports/preview`

@@ -14,13 +14,12 @@ import (
 
 // WatcherHealthConfig controls alarm delivery, never the promise/health fold.
 type WatcherHealthConfig struct {
-	PMOfflineAfter                                time.Duration
 	LoopDigestCadences, LoopDecideCadences        int
 	AgentActivityWithin, RepeatInitial, RepeatMax time.Duration
 }
 
 func DefaultWatcherHealthConfig() WatcherHealthConfig {
-	return WatcherHealthConfig{time.Hour, 2, 4, time.Hour, time.Hour, 24 * time.Hour}
+	return WatcherHealthConfig{LoopDigestCadences: 2, LoopDecideCadences: 4, AgentActivityWithin: time.Hour, RepeatInitial: time.Hour, RepeatMax: 24 * time.Hour}
 }
 
 type watcherAlarm struct {
@@ -99,34 +98,6 @@ func saveWatcherAlarm(ctx context.Context, tx *accessTx, a watcherAlarm) error {
 	return err
 }
 
-// ReconcilePMHealth is passed a content-free signal from PM's own indexed
-// store. It deliberately never copies private turn text, IDs or owner refs.
-func (s *Store) ReconcilePMHealth(ctx context.Context, unhealthy bool, now time.Time, cfg WatcherHealthConfig) error {
-	return s.watcherWriteTransaction(ctx, func(ctx context.Context, tx *accessTx) error {
-		a, err := loadWatcherAlarm(ctx, tx, "pm", "")
-		if err != nil {
-			return err
-		}
-		if !unhealthy {
-			return s.reconcileWatcherAlarm(ctx, tx, a, "", "", "", a.Thread, "thread:"+a.Thread, "", nil, now, cfg)
-		}
-		recipient, err := watcherHumanRecipient(ctx, tx, "")
-		if err != nil || recipient == "" {
-			return err
-		}
-		if a.Thread == "" || a.Recipient != recipient {
-			// Persist the random identity with the alarm. A public client cannot
-			// preclaim either the thread or its asks by predicting a counter.
-			a.Thread = uuid.NewString()
-			if _, err = s.CreateThread(ctx, actors.SystemActorID, map[string]any{"id": a.Thread, "title": "PM health", "pm_actor_id": recipient}); err != nil {
-				return err
-			}
-		}
-		scoped := WithAccessScope(ctx, AccessScope{ActorID: recipient})
-		return s.reconcileWatcherAlarm(scoped, tx, a, "decide", recipient, "pm", a.Thread, "thread:"+a.Thread, "The workspace PM is offline or has missed a turn deadline. Restore the PM runner and verify a successful reply.", nil, now, cfg)
-	})
-}
-
 func (s *Store) reconcileWatcherAlarm(ctx context.Context, tx *accessTx, a watcherAlarm, level, recipient, askKind string, thread, subject, reason string, evidence []string, now time.Time, cfg WatcherHealthConfig) error {
 	ask := askKind != ""
 	if level == "" {
@@ -187,15 +158,11 @@ func (s *Store) reconcileWatcherAlarm(ctx context.Context, tx *accessTx, a watch
 	}
 	if ask && a.Ask == "" {
 		a.Ask = uuid.NewString()
-		title := "Restore the workspace PM?"
-		proposals := []string{"Restore the PM runner", "Disconnect the PM intentionally"}
-		if a.Card != "" {
-			title = "Restore reliable loop runs?"
-			proposals = []string{"Fix the loop and resume reliable runs", "Hand off the loop to an active owner"}
-			if askKind == "stop" {
-				title = "Retire or resume this loop?"
-				proposals = []string{"Resume after fixing the loop", "Retire the loop"}
-			}
+		title := "Restore reliable loop runs?"
+		proposals := []string{"Fix the loop and resume reliable runs", "Hand off the loop to an active owner"}
+		if askKind == "stop" {
+			title = "Retire or resume this loop?"
+			proposals = []string{"Resume after fixing the loop", "Retire the loop"}
 		}
 		_, err := s.AppendEvent(ctx, actors.SystemActorID, map[string]any{"id": a.Ask, "type": "human_attention_requested", "thread_id": thread, "refs": append([]string{"thread:" + thread, subject}, evidence...), "summary": title, "payload": map[string]any{"kind": "ask", "title": title, "subject_ref": subject, "requester_actor_id": actors.SystemActorID, "recipient_actor_id": recipient, "response_proposals": proposals, "situation": reason, "impact": "The watcher cannot provide reliable follow-through until it recovers.", "recommendation": map[string]any{"action": proposals[0], "why": "Restore follow-through or explicitly end the monitoring expectation."}, "request_key": key, "watcher_health_kind": askKind}})
 		if err != nil {

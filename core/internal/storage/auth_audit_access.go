@@ -1,0 +1,218 @@
+package storage
+
+import (
+	"agent-nexus-core/internal/loopstats"
+	"agent-nexus-core/internal/sqliteutil"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// Auth audit rows are auth-admin-only at the repository read. Their metadata no
+// longer contributes filter-source access edges, so the old per-row triggers
+// are dropped and existing edges are removed by a bounded, resumable job. The
+// migration itself never deletes edges: startup stays short and each committed
+// chunk cascades through exact/compact/admission indexes atomically.
+const (
+	authAuditAccessJobTable   = "resource_access_auth_audit_job"
+	authAuditAccessSourceKind = "filter/auth_audit_events"
+	authAuditAccessBatchSize  = 2000
+	// authAuditAccessChunkBudget bounds one chunk's write transaction. It is
+	// enforced between statements, never by cancelling a statement.
+	authAuditAccessChunkBudget = 50 * time.Millisecond
+	// authAuditAccessDeleteBatch is the most edges one DELETE statement removes.
+	authAuditAccessDeleteBatch = 25
+	// authAuditAccessScanQuery walks the table in rowid order. NOT INDEXED keeps
+	// the planner on the integer primary key: the covering (source_kind,...)
+	// index would otherwise sort every remaining audit edge per chunk.
+	authAuditAccessScanQuery = `SELECT rowid,source_kind FROM resource_access_edges NOT INDEXED WHERE rowid>? ORDER BY rowid LIMIT ?`
+)
+
+func installAuthAuditAccessCleanup(ctx context.Context, tx *sql.Tx) error {
+	for _, q := range []string{
+		`DROP TRIGGER IF EXISTS access_auth_audit_events_insert`,
+		`DROP TRIGGER IF EXISTS access_auth_audit_events_update`,
+		`DROP TRIGGER IF EXISTS access_auth_audit_events_delete`,
+		// Scope-inbox invalidation is not wired in production, but a preview
+		// installation may have left audit rows in its dependency ledger.
+		`DROP TRIGGER IF EXISTS scope_inbox_invalidate_auth_audit_events_insert`,
+		`DROP TRIGGER IF EXISTS scope_inbox_invalidate_auth_audit_events_update`,
+		`DROP TRIGGER IF EXISTS scope_inbox_invalidate_auth_audit_events_delete`,
+		`CREATE TABLE IF NOT EXISTS ` + authAuditAccessJobTable + `(singleton INTEGER PRIMARY KEY CHECK(singleton=1),cursor INTEGER,done INTEGER NOT NULL DEFAULT 0 CHECK(done IN (0,1)))`,
+		`INSERT INTO ` + authAuditAccessJobTable + `(singleton,cursor,done) VALUES(1,NULL,0) ON CONFLICT DO NOTHING`,
+		`UPDATE ` + authAuditAccessJobTable + ` SET cursor=NULL,done=0 WHERE singleton=1`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("install auth audit access cleanup: %w", err)
+		}
+	}
+	return nil
+}
+
+// MaintainAuthAuditAccessBatch deletes at most one bounded page of legacy
+// filter/auth_audit_events edges. The cursor and deleted rows commit together,
+// so an interrupted run resumes without skipping or redoing committed work.
+func (w *Workspace) MaintainAuthAuditAccessBatch(ctx context.Context) (bool, error) {
+	ctx, finish := loopstats.Start(ctx, "auth_audit_access")
+	defer finish()
+	return w.maintainAuthAuditAccessChunk(ctx, authAuditAccessBatchSize)
+}
+
+func (w *Workspace) maintainAuthAuditAccessChunk(ctx context.Context, limit int) (bool, error) {
+	return w.maintainAuthAuditAccessChunkUntil(ctx, limit, authAuditAccessChunkBudget, func() bool { return ctx.Err() != nil })
+}
+
+func (w *Workspace) maintainAuthAuditAccessChunkUntil(ctx context.Context, limit int, budget time.Duration, stop func() bool) (bool, error) {
+	sqlCtx := context.WithoutCancel(ctx)
+	var exists bool
+	err := w.db.QueryRowContext(sqlCtx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='`+authAuditAccessJobTable+`')`).Scan(&exists)
+	if err != nil || !exists {
+		return true, err
+	}
+	var idle bool
+	if err = w.db.QueryRowContext(sqlCtx, `SELECT done FROM `+authAuditAccessJobTable+` WHERE singleton=1`).Scan(&idle); err != nil || idle {
+		return idle, err
+	}
+	// Cancelling a statement inside this write transaction can leave the
+	// driver connection open outside the pool with the write lock held, which
+	// blocks every later writer until the process exits. Statements therefore
+	// run uncancelled; the time budget and shutdown are checked between them.
+	tx, cleanup, err := sqliteutil.BeginMaintenanceChunkWithBusyWait(sqlCtx, w.db, 20*time.Millisecond)
+	if err != nil {
+		return false, err
+	}
+	defer cleanup()
+	deadline := time.Now().Add(budget)
+	done, err := deleteAuthAuditAccessEdges(sqlCtx, tx, limit, func() bool {
+		return stop() || time.Now().After(deadline)
+	})
+	if err != nil {
+		return false, err
+	}
+	return done, tx.Commit()
+}
+
+// deleteAuthAuditAccessEdges scans at most limit rows in rowid order, deletes
+// the audit edges among them in small batches, and advances the cursor past
+// every scanned row. Total work is O(edges) even when audit edges are sparse:
+// each row is scanned once, and a window with no audit edges still moves the
+// cursor forward.
+func deleteAuthAuditAccessEdges(ctx context.Context, tx *sql.Tx, limit int, stop func() bool) (bool, error) {
+	limit = max(1, limit)
+	var cursor sql.NullInt64
+	var done bool
+	if err := tx.QueryRowContext(ctx, `SELECT cursor,done FROM `+authAuditAccessJobTable+` WHERE singleton=1`).Scan(&cursor, &done); err != nil || done {
+		return done, err
+	}
+	start := int64(0)
+	if cursor.Valid {
+		start = cursor.Int64
+	}
+	rows, err := tx.QueryContext(ctx, authAuditAccessScanQuery, start, limit)
+	if err != nil {
+		return false, err
+	}
+	var ids []int64
+	var lastScanned int64
+	scanned := 0
+	for rows.Next() {
+		var id int64
+		var kind string
+		if err = rows.Scan(&id, &kind); err != nil {
+			rows.Close()
+			return false, err
+		}
+		scanned++
+		lastScanned = id
+		if kind == authAuditAccessSourceKind {
+			ids = append(ids, id)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return false, err
+	}
+	loopstats.Rows(ctx, scanned)
+	if scanned == 0 {
+		if _, err = tx.ExecContext(ctx, `UPDATE `+authAuditAccessJobTable+` SET cursor=?,done=1 WHERE singleton=1`, cursor); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	// Delete in small batches so one statement never holds the write lock for
+	// a whole page, and stop between batches when the chunk budget or shutdown
+	// asks for it. The cursor only advances past rows already deleted.
+	deletedThrough := start
+	for i := 0; i < len(ids); i += authAuditAccessDeleteBatch {
+		end := min(i+authAuditAccessDeleteBatch, len(ids))
+		encoded, err := json.Marshal(ids[i:end])
+		if err != nil {
+			return false, err
+		}
+		if _, err = tx.ExecContext(ctx, `DELETE FROM resource_access_edges WHERE rowid IN (SELECT value FROM json_each(?))`, string(encoded)); err != nil {
+			return false, err
+		}
+		deletedThrough = ids[end-1]
+		if end < len(ids) && stop() {
+			if _, err = tx.ExecContext(ctx, `UPDATE `+authAuditAccessJobTable+` SET cursor=?,done=0 WHERE singleton=1`, deletedThrough); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+	}
+	// Every scanned row is handled. Advance past the whole window even when it
+	// held no audit edges, so sparse legacy edges cannot stall the cursor.
+	done = scanned < limit
+	if !done {
+		var more bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM resource_access_edges WHERE rowid>?)`, lastScanned).Scan(&more); err != nil {
+			return false, err
+		}
+		done = !more
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE `+authAuditAccessJobTable+` SET cursor=?,done=? WHERE singleton=1`, lastScanned, done); err != nil {
+		return false, err
+	}
+	return done, nil
+}
+
+// RunAuthAuditAccessMaintenance drains legacy audit filter edges after startup.
+// Failures back off exponentially; leaving an edge in place is authorization-safe
+// because filter sources never match a real resource.
+func (w *Workspace) RunAuthAuditAccessMaintenance(ctx context.Context, report func(error)) {
+	delay, failures := 50*time.Millisecond, 0
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		done, err := w.MaintainAuthAuditAccessBatch(ctx)
+		if err == nil {
+			if done {
+				return
+			}
+			delay, failures = 50*time.Millisecond, 0
+			timer.Reset(delay)
+			continue
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		failures++
+		delay = 50 * time.Millisecond
+		for i := 1; i < failures && delay < 5*time.Minute; i++ {
+			delay *= 2
+		}
+		delay = min(delay, 5*time.Minute)
+		if report != nil {
+			report(fmt.Errorf("auth audit access cleanup (%s), retry %d in %s: %w", maintenanceErrorClass(err), failures, delay, err))
+		}
+		timer.Reset(delay)
+	}
+}

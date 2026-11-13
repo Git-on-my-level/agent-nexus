@@ -2,18 +2,12 @@ package app
 
 import (
 	"agent-nexus-cli/internal/config"
-	"agent-nexus-cli/internal/errnorm"
 	"context"
-	"crypto/ed25519"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
-
-	"agent-nexus-cli/internal/hostidentity"
 )
 
 func TestPMProposalPreflight(t *testing.T) {
@@ -24,23 +18,7 @@ func TestPMProposalPreflight(t *testing.T) {
 	}
 }
 
-func TestClaimedPMContextRejectsEveryArgumentBeforeTransport(t *testing.T) {
-	for _, args := range [][]string{{"--limit", "8"}, {"--work-ref", "card:private"}, {"--query", "secret"}, {"--cursor", "x"}, {"card:private"}} {
-		a := New()
-		a.Getenv = func(k string) string {
-			if k == "ANX_PM_TURN_ID" {
-				return "turn"
-			}
-			return ""
-		}
-		_, name, err := a.runWorkCommand(context.Background(), append([]string{"pm", "context"}, args...), config.Resolved{})
-		if err == nil || name != "pm context" || !strings.Contains(err.Error(), "anx pm context") {
-			t.Fatalf("%v: %s %v", args, name, err)
-		}
-	}
-}
-
-func TestPMContextOutsideTurnKeepsLegacyFlags(t *testing.T) {
+func TestPMContextKeepsFilters(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" || r.URL.Path != "/pm/context" || r.URL.Query().Get("limit") != "8" || r.URL.Query().Get("work_ref") != "card:x" {
 			t.Error(r.Method, r.URL)
@@ -55,272 +33,58 @@ func TestPMContextOutsideTurnKeepsLegacyFlags(t *testing.T) {
 	}
 }
 
-func TestInTurnPM403ExplainsIdentityMismatch(t *testing.T) {
-	for _, command := range []string{"context", "card", "propose"} {
-		t.Run(command, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if command == "propose" && strings.HasSuffix(r.URL.Path, "/context") {
-					_, _ = w.Write([]byte(`{"items":[{"ref":"card:x","decision_revision":"1.2"}]}`))
-					return
-				}
-				w.WriteHeader(http.StatusForbidden)
-				_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"PM permission denied"}}`))
-			}))
-			defer srv.Close()
-
-			a := New()
-			a.Getenv = func(key string) string {
-				switch key {
-				case "ANX_PM_TURN_ID":
-					return "turn"
-				case "ANX_PM_LEASE_TOKEN":
-					return "lease"
-				case "ANX_PM_AGENT":
-					return "pm"
-				default:
-					return ""
-				}
-			}
-			cfg := config.Resolved{BaseURL: srv.URL, AccessToken: "token", Agent: "hermes"}
-
-			var err error
-			switch command {
-			case "context":
-				_, err = a.runPMCardRead(context.Background(), nil, cfg)
-			case "card":
-				_, err = a.runPMCardRead(context.Background(), []string{"card:x"}, cfg)
-			case "propose":
-				_, err = a.runPMPropose(context.Background(), []string{"card:x", "--status", "ready", "--why", "Move it"}, cfg)
-			}
-			if err == nil {
-				t.Fatal("expected forbidden response")
-			}
-			var typed *errnorm.Error
-			if !errors.As(err, &typed) {
-				t.Fatalf("error type %T: %v", err, err)
-			}
-			want := "Acting as `hermes`, but this turn belongs to `pm`; run the anx CLI the runner started."
-			if typed.Hint != want {
-				t.Fatalf("hint %q, want %q", typed.Hint, want)
-			}
-		})
-	}
-}
-
-func TestPMTurnLeaseIdentityOverridesExplicitIdentityForInTurnCommands(t *testing.T) {
-	for _, command := range []string{"context", "card", "propose"} {
-		t.Run(command, func(t *testing.T) {
-			a := New()
-			a.Getenv = func(key string) string {
-				switch key {
-				case "ANX_PM_TURN_ID":
-					return "turn"
-				case "ANX_PM_LEASE_TOKEN":
-					return "lease"
-				case "ANX_PM_AGENT":
-					return "pm"
-				}
-				return ""
-			}
-			got, warning := a.resolvePMTurnLeaseIdentity([]string{"pm", command}, config.Resolved{As: "hermes", Agent: "hermes"})
-			if got.As != "pm" || got.Agent != "pm" {
-				t.Fatalf("resolved identity As=%q Agent=%q", got.As, got.Agent)
-			}
-			want := "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`."
-			if warning != want {
-				t.Fatalf("warning %q, want %q", warning, want)
-			}
-		})
-	}
-}
-
-func TestPMTurnLeaseIdentityDoesNotChangeOtherCommandsOrIncompleteLease(t *testing.T) {
-	a := New()
-	a.Getenv = func(key string) string {
-		switch key {
-		case "ANX_PM_TURN_ID":
-			return "turn"
-		case "ANX_PM_LEASE_TOKEN":
-			return "lease"
-		case "ANX_PM_AGENT":
-			return "pm"
-		}
-		return ""
-	}
-	for _, args := range [][]string{{"pm", "turns", "context"}, {"pm", "status"}, {"cards", "get", "card:x"}} {
-		got, warning := a.resolvePMTurnLeaseIdentity(args, config.Resolved{As: "hermes", Agent: "hermes"})
-		if got.As != "hermes" || got.Agent != "hermes" || warning != "" {
-			t.Fatalf("%v changed identity to As=%q Agent=%q warning=%q", args, got.As, got.Agent, warning)
-		}
-	}
-	a.Getenv = func(key string) string {
-		if key == "ANX_PM_TURN_ID" {
-			return "turn"
-		}
-		return ""
-	}
-	got, warning := a.resolvePMTurnLeaseIdentity([]string{"pm", "context"}, config.Resolved{As: "hermes", Agent: "hermes"})
-	if got.As != "hermes" || got.Agent != "hermes" || warning != "" {
-		t.Fatalf("incomplete lease changed identity to As=%q Agent=%q warning=%q", got.As, got.Agent, warning)
-	}
-}
-
-func TestPMContextUsesLeaseAgentWhenANXASIsDifferent(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		args        []string
-		envAs       string
-		wantWarning bool
-	}{
-		{name: "ANX_AS mismatch", args: []string{"pm", "context"}, envAs: "hermes", wantWarning: true},
-		{name: "flag mismatch", args: []string{"--as", "hermes", "pm", "context"}, wantWarning: true},
-		{name: "labels match but inherited token is foreign", args: []string{"pm", "context"}, envAs: "pm"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var requestAgent, requestAuth, tokenAgent string
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/auth/token":
-					var body map[string]any
-					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-						t.Error(err)
-					}
-					tokenAgent = anyString(body["agent_name"])
-					_, _ = w.Write([]byte(`{"agent":{"id":"agent-pm","actor_id":"actor-pm","handle":"pm"},"tokens":{"access_token":"pm-token","expires_in":900}}`))
-				case "/pm/turns/turn/context":
-					if r.Method != http.MethodPost {
-						t.Errorf("method %s", r.Method)
-					}
-					requestAgent = r.Header.Get("X-ANX-Agent")
-					requestAuth = r.Header.Get("Authorization")
-					w.WriteHeader(http.StatusForbidden)
-					_, _ = w.Write([]byte(`{"error":{"code":"forbidden","message":"PM permission denied"}}`))
-				default:
-					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
-					http.NotFound(w, r)
-				}
-			}))
-			defer srv.Close()
-			home := t.TempDir()
-			_, hostKey, err := ed25519.GenerateKey(nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := hostidentity.Save(home, hostidentity.Host{ID: "host-1", KeyID: "key-1", WorkspaceID: "ws-test", BaseURL: srv.URL}, hostKey); err != nil {
-				t.Fatal(err)
-			}
-
-			env := map[string]string{
-				"ANX_BASE_URL":       srv.URL,
-				"ANX_ACCESS_TOKEN":   "hermes-token",
-				"HOME":               home,
-				"ANX_PM_TURN_ID":     "turn",
-				"ANX_PM_LEASE_TOKEN": "lease",
-				"ANX_PM_AGENT":       "pm",
-			}
-			if tc.envAs != "" {
-				env["ANX_AS"] = tc.envAs
-			}
-			a := New()
-			a.Getenv = func(key string) string { return env[key] }
-			a.UserHomeDir = func() (string, error) { return home, nil }
-			var stdout, stderr strings.Builder
-			a.Stdout = &stdout
-			a.Stderr = &stderr
-			args := append([]string{"--json"}, tc.args...)
-			if code := a.Run(args); code == 0 {
-				t.Fatalf("expected forbidden response; stdout=%s stderr=%s", stdout.String(), stderr.String())
-			}
-			if requestAgent != "pm" {
-				t.Fatalf("request acted as %q, want pm", requestAgent)
-			}
-			if tokenAgent != "pm" || requestAuth != "Bearer pm-token" {
-				t.Fatalf("credential selection agent=%q authorization=%q, want pm token", tokenAgent, requestAuth)
-			}
-			if !strings.Contains(stdout.String(), "Acting as `pm` with credentials from the PM host-key exchange.") {
-				t.Fatalf("403 hint does not name the authenticated PM identity: %s", stdout.String())
-			}
-			wantWarning := ""
-			if tc.wantWarning {
-				wantWarning = "warning: ignoring explicit identity `hermes`; this PM turn lease is bound to `pm`, so acting as `pm`.\n"
-			}
-			if stderr.String() != wantWarning {
-				t.Fatalf("warning %q, want one line %q", stderr.String(), wantWarning)
-			}
-		})
-	}
-}
-
-func TestPMLeaseIdentityFailsClearlyWhenPMCredentialsAreUnavailable(t *testing.T) {
-	var requests int
+func TestPMCardReadUsesContextRoute(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests++
-		http.NotFound(w, r)
+		if r.Method != "GET" || r.URL.Path != "/pm/context" || r.URL.Query().Get("work_ref") != "card:x" {
+			t.Error(r.Method, r.URL)
+		}
+		_, _ = w.Write([]byte(`{"items":[{"ref":"card:x","title":"X","status":"ready"}]}`))
 	}))
 	defer srv.Close()
-	home := t.TempDir()
-	env := map[string]string{
-		"ANX_BASE_URL":       srv.URL,
-		"ANX_ACCESS_TOKEN":   "hermes-token",
-		"ANX_AS":             "pm",
-		"HOME":               home,
-		"ANX_PM_TURN_ID":     "turn",
-		"ANX_PM_LEASE_TOKEN": "lease",
-		"ANX_PM_AGENT":       "pm",
-	}
 	a := New()
-	a.Getenv = func(key string) string { return env[key] }
-	a.UserHomeDir = func() (string, error) { return home, nil }
-	var stdout, stderr strings.Builder
-	a.Stdout = &stdout
-	a.Stderr = &stderr
-	if code := a.Run([]string{"--json", "pm", "context"}); code == 0 {
-		t.Fatalf("expected credential resolution failure; output=%s", stdout.String())
+	a.Getenv = func(string) string { return "" }
+	r, err := a.runPMCardRead(context.Background(), []string{"card:x"}, config.Resolved{BaseURL: srv.URL, AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "host is not enrolled") {
-		t.Fatalf("missing clear credential failure: %s", stdout.String())
-	}
-	if requests != 0 {
-		t.Fatalf("sent %d request(s) with the discarded Hermes token", requests)
+	finishPMCardRead(r)
+	if !strings.Contains(r.Text, "card card:x X status=ready") {
+		t.Fatalf("text %q", r.Text)
 	}
 }
 
 func TestPMProposeBuildsPayloadAndHidesPlumbing(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&body)
 		calls++
-		if body["lease_token"] != "lease" {
-			t.Errorf("missing lease: %v", body)
-		}
-		if calls == 1 {
-			if body["view"] != "card" || body["context_ref"] != "card:x" {
-				t.Error(body)
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/pm/context":
+			if r.URL.Query().Get("work_ref") != "card:x" {
+				t.Error(r.URL)
 			}
 			_, _ = w.Write([]byte(`{"items":[{"ref":"card:x","title":"X","decision_revision":"1.2"}]}`))
-			return
+		case r.Method == http.MethodPost && r.URL.Path == "/pm/decisions":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if _, ok := body["lease_token"]; ok {
+				t.Errorf("proposal must not carry a lease: %v", body)
+			}
+			if body["work_ref"] != "card:x" || body["target_revision"] != "1.2" || body["instruction"] != "Evidence reviewed" {
+				t.Error(body)
+			}
+			payload := asMap(body["payload"])
+			if payload["phase"] != "done" || payload["resolution_refs"].([]any)[0] != "event:proof" {
+				t.Error(body)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "d", "work_ref": "card:x", "status": "awaiting_answer", "scope": "work.phase", "payload": payload})
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
 		}
-		if body["work_ref"] != "card:x" || body["target_revision"] != "1.2" || body["instruction"] != "Evidence reviewed" {
-			t.Error(body)
-		}
-		payload := asMap(body["payload"])
-		if payload["phase"] != "done" || payload["resolution_refs"].([]any)[0] != "event:proof" {
-			t.Error(body)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "d", "work_ref": "card:x", "status": "awaiting_answer", "scope": "work.phase", "payload": payload})
 	}))
 	defer srv.Close()
 	a := New()
-	a.Getenv = func(k string) string {
-		switch k {
-		case "ANX_PM_TURN_ID":
-			return "turn"
-		case "ANX_PM_LEASE_TOKEN":
-			return "lease"
-		}
-		return ""
-	}
+	a.Getenv = func(string) string { return "" }
 	r, err := a.runPMPropose(context.Background(), []string{"card:x", "--status", "done", "--why", "Evidence reviewed", "--evidence", "event:proof"}, config.Resolved{BaseURL: srv.URL, AccessToken: "token"})
 	if err != nil {
 		t.Fatal(err)
@@ -331,23 +95,4 @@ func TestPMProposeBuildsPayloadAndHidesPlumbing(t *testing.T) {
 	if asMap(commandResultBody(r))["scope"] != "status" {
 		t.Fatal(r.Data)
 	}
-}
-
-func TestPMTurnPromptMeasurement(t *testing.T) {
-	before, err := os.ReadFile("testdata/pm_prompt_before.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	after, err := os.ReadFile("testdata/pm_prompt_after.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	prompt := buildPMPrompt("pm", map[string]any{"id": "pm_turn_1", "actor_id": "human-reader", "deadline": "2026-10-10T10:00:00Z", "text": "What needs my decision?", "context_refs": []string{"card:eval-card"}}, 16000)
-	if prompt != string(after) {
-		t.Fatal("refresh rendered after prompt fixture")
-	}
-	if len(after)*100 >= len(before)*40 {
-		t.Fatalf("prompt over 40%%: %d/%d", len(after), len(before))
-	}
-	t.Logf("prompt bytes before=%d after=%d ratio=%.1f%%", len(before), len(after), 100*float64(len(after))/float64(len(before)))
 }

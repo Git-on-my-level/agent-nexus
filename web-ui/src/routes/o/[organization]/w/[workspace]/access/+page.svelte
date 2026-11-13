@@ -952,11 +952,6 @@
               appear under Agents as soon as each one uses <code>anx</code>.
             </p>
             <div class="flex flex-wrap items-center gap-2 pt-1">
-              <Button
-                variant="primary"
-                size="compact"
-                href={workspaceHref("/pm/setup")}>Set up your PM</Button
-              >
               <button
                 class="text-micro text-fg-muted hover:text-fg"
                 type="button"
@@ -975,7 +970,6 @@
             data-host-enroll-help
           >
             <SetupPrompt
-              kind="machine"
               {cliBaseUrl}
               {cliInstallCommand}
               {workspaceLabel}

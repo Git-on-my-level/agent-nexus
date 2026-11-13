@@ -5,7 +5,7 @@ import {
   sourceLabel,
   workKey,
   workTargetRevision,
-} from "./pm/presentation.js";
+} from "./work/presentation.js";
 
 export function phaseRequestKey(work, phase) {
   // The revision is part of the key: a request made after the work moved is

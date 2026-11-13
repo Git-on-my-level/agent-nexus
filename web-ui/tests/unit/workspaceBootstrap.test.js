@@ -246,12 +246,12 @@ describe("restartSession", () => {
       organizationSlug: "acme",
       workspaceSlug: "proj",
       hostedMode: false,
-      currentAppPath: "/pm",
-      search: "?conversation=c1",
+      currentAppPath: "/decide",
+      search: "?view=board",
       assign: (url) => assigned.push(url),
     });
     expect(destination).toBe(
-      "/o/acme/w/proj/login?return_to=%2Fpm%3Fconversation%3Dc1",
+      "/o/acme/w/proj/login?return_to=%2Fdecide%3Fview%3Dboard",
     );
     expect(assigned).toEqual([destination]);
   });

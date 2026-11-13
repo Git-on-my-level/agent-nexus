@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 )
 
 type indexedPMPrincipalStore struct {
@@ -41,11 +41,11 @@ func TestPMIndexedIdentityExpiryRetainsFreshAuthority(t *testing.T) {
 		t.Fatalf("expired routing or stale authority: %+v %v", p, err)
 	}
 	st.readErr = errors.New("private authority read failure")
-	if _, err := l.findForAuthorization(ctx, "actor"); !errors.Is(err, pm.ErrUnavailable) {
+	if _, err := l.findForAuthorization(ctx, "actor"); !errors.Is(err, decide.ErrUnavailable) {
 		t.Fatalf("authority failure downgraded: %v", err)
 	}
 	st.readErr, st.principal.Revoked = nil, true
-	if _, err := l.findForAuthorization(ctx, "actor"); !errors.Is(err, pm.ErrForbidden) {
+	if _, err := l.findForAuthorization(ctx, "actor"); !errors.Is(err, decide.ErrForbidden) {
 		t.Fatalf("revoked identity accepted: %v", err)
 	}
 	if _, ok := l.identities["actor"]; ok {

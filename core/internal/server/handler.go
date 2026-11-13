@@ -194,26 +194,12 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		writeError(w, http.StatusNotFound, "stream_not_found", "stream endpoint not found")
 	})
 
-	registerRoute("/pm/ingress/telegram", exactRouteAccess(routeAccessAlwaysPublic, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if opts.pmRuntime == nil {
-			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM channel ingress is not configured")
-			return
-		}
-		opts.pmRuntime.Ingress.Telegram(w, r)
-	})
-	registerRoute("/pm/ingress/discord", exactRouteAccess(routeAccessAlwaysPublic, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
-		if opts.pmRuntime == nil {
-			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM channel ingress is not configured")
-			return
-		}
-		opts.pmRuntime.Ingress.Discord(w, r)
-	})
 	registerRoute("/pm/", pmRouteAccess, func(w http.ResponseWriter, r *http.Request) {
-		if opts.pmHandler == nil {
-			writeError(w, http.StatusServiceUnavailable, "unavailable", "PM service is not configured")
+		if opts.decideRuntime == nil {
+			writeError(w, http.StatusServiceUnavailable, "unavailable", "Decision service is not configured")
 			return
 		}
-		opts.pmHandler.ServeHTTP(w, r)
+		opts.decideRuntime.ServeHTTP(w, r)
 	})
 
 	registerRoute("/sessions", sessionsRouteAccess, func(w http.ResponseWriter, r *http.Request) { handleSessions(w, r, opts) })

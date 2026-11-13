@@ -788,7 +788,7 @@ func TestUnifiedObservationIdempotencyUsesCanonicalNestedField(t *testing.T) {
 
 func TestUnifiedPMDoesNotInventRequestKeysForCASActions(t *testing.T) {
 	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
-	for _, id := range []string{"work.patch", "work.refresh.request", "pm.actions.reconcile", "pm.turns.complete"} {
+	for _, id := range []string{"work.patch", "work.refresh.request", "pm.actions.reconcile", "pm.actions.acknowledge"} {
 		tool, ok := cat.Lookup(catalog.ToolName(id))
 		if !ok {
 			t.Fatalf("missing %s", id)

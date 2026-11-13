@@ -98,7 +98,6 @@ const ROUTES = [
   { name: "integrations", path: `${W}/integrations` },
   { name: "secrets", path: `${W}/secrets` },
   { name: "archive", path: `${W}/archive` },
-  { name: "pm setup", path: `${W}/pm/setup` },
   { name: "sign in", path: `${W}/login`, setup: signOut },
   {
     name: "invite",

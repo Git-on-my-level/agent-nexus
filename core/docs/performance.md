@@ -1150,7 +1150,7 @@ statement budget.
 `internal/server/testdata/resource_access_routes.json` is the authority for route
 coverage. Every entry must have either a budget in `performance_routes.json` or
 an explicit mutation reason in `performance_write_routes.json`. Read-only POSTs
-(ref resolution, report previews, PM turn context and secret reveals) have budgets too. A new or
+(ref resolution, report previews, Decide context and secret reveals) have budgets too. A new or
 stale entry fails in the short tier; GETs cannot be classified as mutations.
 
 Each route uses an owner (or the appropriate agent) and an unrelated principal.
@@ -1529,12 +1529,11 @@ on indexed candidate lookups. It permits no scans or budget increases; the
 200-subject owner/stranger probes measured one SQL execution and at most 8,685 VM
 instructions.
 
-## Claimed PM card and workspace reads (SCA-733)
+## PM card and workspace reads (SCA-733)
 
-`POST /pm/turns/{id}/context` validates the selected PM and lease, then binds
-the conversation requester and pins one epoch-validated read snapshot. Pinned
-reads admit at most eight refs; a full card read admits one requester-visible ref,
-including an unpinned plan step. Batches cover aliases, card bodies, metadata,
+`GET /pm/context` uses the authenticated reader's ordinary visibility and pins
+one epoch-validated read snapshot. Card-scoped reads admit one requester-visible
+ref, including an unpinned plan step; a full context read stays bounded. Batches cover aliases, card bodies, metadata,
 plans, and six candidates each for asks, activity and awaiting decisions per card.
 Hidden candidates do not refill.
 
@@ -2716,3 +2715,28 @@ and zero full scans.
 ANX_PERFORMANCE_TEST=1 GOMAXPROCS=4 GOFLAGS='-p=2' go test -C core ./internal/storage \
   -run '^TestPerformanceWatcherHealthReleasedUpgrade$' -count=1 -v -timeout=10m
 ```
+
+## Redundant index removal
+
+Migration 147 drops four indexes that no current runtime plan needs. Fresh
+databases no longer create them, so fresh and upgraded schemas agree.
+
+- `idx_events_thread_ts(thread_id, ts)` is a prefix of
+  `idx_events_thread_ts_id(thread_id, ts DESC, id DESC)`. Thread event reads
+  already seek the wider index; the narrower one only added write and page cost.
+- `idx_events_overview_answers(type, ts, id)` has the same keys as
+  `idx_events_type_ts_id(type, ts DESC, id DESC)`. Type-filtered event reads
+  already use the wider index, including the overview answer page.
+- `idx_auth_audit_events_occurred_at(occurred_at DESC, id DESC)` is not read at
+  runtime: audit listing orders by `occurred_at_sort_key`, and the only
+  `occurred_at` ordering query (migration 132's sponsor backfill) filters
+  `event_type` and seeks `idx_auth_audit_events_event_type`, which carries the
+  same `occurred_at DESC, id DESC` order.
+- `idx_auth_audit_events_invite_id(invite_id, occurred_at DESC, id DESC)` has no
+  reader; audit inserts write `invite_id` but no query filters on it.
+
+`TestDropRedundantIndexes` verifies both fresh initialization and a schema-138
+upgrade. The performance plan allowlist is unchanged: current SQL already
+selects the replacement indexes, so no observed plan shape changes. Historical
+allowlist entries that mention the dropped names are not produced by current
+queries.

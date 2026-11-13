@@ -20,8 +20,8 @@ import (
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/blob"
 	"agent-nexus-core/internal/commandcenter"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/delivery"
-	"agent-nexus-core/internal/pm"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/schema"
 	"agent-nexus-core/internal/secrets"
@@ -120,7 +120,7 @@ func performanceBudgets(t *testing.T) []routeBudget {
 }
 
 func performanceReadPOST(method, path string) bool {
-	return method == http.MethodPost && (path == "/hosts/bridge-status" || path == "/refs/resolve" || path == "/reports/preview" || path == "/pm/turns/{turn_id}/context" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
+	return method == http.MethodPost && (path == "/hosts/bridge-status" || path == "/refs/resolve" || path == "/reports/preview" || path == "/secrets/{secret_id}/reveal" || path == "/secrets/reveal-batch")
 }
 
 func TestPerformanceRouteInventory(t *testing.T) {
@@ -266,11 +266,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	t.Cleanup(func() { observed.Close() })
 	ps := primitives.NewStore(observed, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir)
 	as := auth.NewStore(observed)
-	runtime, err := newOnboardedPMRuntime(t, observed, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, err := runtime.Service.CreateConversation(ctx, pm.Principal{WorkspaceID: "ws_main", ActorID: owner.ActorID, Human: true}, pm.CreateConversation{RequestKey: "scale", Title: "Scale target", WorkRef: "card:" + cardID})
+	runtime, err := newOnboardedDecideRuntime(t, observed, ps, as, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,14 +281,13 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	}
 	now := time.Now().UTC()
 	for kind, value := range map[string]any{
-		"decision": pm.Decision{ID: "scale-target-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: "card:" + cardID, Status: pm.AwaitingAnswer, Revision: 1, CreatedAt: now},
-		"action":   pm.Action{ID: "scale-target-action", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: "card:" + cardID, DecisionID: "scale-target-decision", Status: pm.Pending},
-		"turn":     pm.Turn{ID: "scale-target-turn", ConversationID: conversation.ID, WorkspaceID: "ws_main", ActorID: owner.ActorID, Text: "Scale target", Status: pm.Pending, AgentActorID: agent.ActorID, Deadline: now.Add(time.Hour), LeaseToken: "synthetic-lease", LeaseOwner: agent.ActorID, LeaseExpiresAt: now.Add(time.Hour)},
+		"decision": decide.Decision{ID: "scale-target-decision", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: "card:" + cardID, Status: decide.AwaitingAnswer, Revision: 1, CreatedAt: now},
+		"action":   decide.Action{ID: "scale-target-action", WorkspaceID: "ws_main", ActorID: owner.ActorID, WorkRef: "card:" + cardID, DecisionID: "scale-target-decision", Status: decide.Pending},
 	} {
 		raw, _ := json.Marshal(value)
 		var v map[string]any
 		_ = json.Unmarshal(raw, &v)
-		if _, err := db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?)`, kind, v["id"], "ws_main", owner.ActorID, conversation.ID, raw); err != nil {
+		if _, err := db.ExecContext(ctx, `INSERT INTO pm_records(kind,id,workspace_id,actor_id,parent_id,revision,body) VALUES(?,?,?,?,?,1,?)`, kind, v["id"], "ws_main", owner.ActorID, "", raw); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -304,9 +299,9 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		t.Fatal(err)
 	}
 	var configured *handlerOptions
-	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
+	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithDecideRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
 	result := performanceEnv{store: store, workspace: env.workspace, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
-		"{ask_id}", "scale-task-ask", "{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{conversation_id}", conversation.ID, "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{turn_id}", "scale-target-turn", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
+		"{ask_id}", "scale-task-ask", "{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
 	result.fresh = func(t *testing.T) (http.Handler, *perfguard.Capture, *agentChangeHub, func()) {
 		t.Helper()
 		pool, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)&_txlock=immediate")
@@ -315,7 +310,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		}
 		ps := primitives.NewStore(pool, blob.NewFilesystemBackend(env.workspace.Layout().ArtifactContentDir), env.workspace.Layout().ArtifactContentDir)
 		as := auth.NewStore(pool)
-		runtime, err := newOnboardedPMRuntime(t, pool, ps, as, PMRuntimeConfig{PM: pm.Config{WorkspaceID: "ws_main", AgentActorID: agent.ActorID}})
+		runtime, err := newOnboardedDecideRuntime(t, pool, ps, as, DecideRuntimeConfig{Decide: decide.Config{WorkspaceID: "ws_main"}})
 		if err != nil {
 			pool.Close()
 			t.Fatal(err)
@@ -323,7 +318,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		// The delivery routes need their store; without it they answer 503 before
 		// any work, so the measured request would not be the route under test.
 		var configured *handlerOptions
-		h := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secrets.NewStore(pool, encryptor)), WithActorRegistry(actors.NewStore(pool)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithPMRuntime(runtime), WithSeriesStore(&series.Store{DB: pool, Auth: as}), WithRunStore(commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool})), WithDeliveryStore(&delivery.Store{DB: pool, AccessContext: DeliveryAccessContext}), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
+		h := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secrets.NewStore(pool, encryptor)), WithActorRegistry(actors.NewStore(pool)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithDecideRuntime(runtime), WithSeriesStore(&series.Store{DB: pool, Auth: as}), WithRunStore(commandcenter.NewStore(pool, commandcenter.SQLIdentities{DB: pool})), WithDeliveryStore(&delivery.Store{DB: pool, AccessContext: DeliveryAccessContext}), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
 		return h, capture, configured.agentChanges, func() { pool.Close() }
 	}
 	return result
@@ -530,7 +525,7 @@ func TestPerformanceRoutes(t *testing.T) {
 	baseline := performanceBaselineBudgets(t, allBudgets) // expire pins before the costly corpus
 	fixtureStarted := time.Now().UnixNano()
 	env := preparePerformanceStreamCases(t, newPerformanceEnv(t), allBudgets) // every shard retains the complete privacy selector set
-	for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
+	for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{decision_id}", "{action_id}"} {
 		if value := env.replace.Replace(selector); value == "" || value == selector {
 			t.Fatalf("shard omitted privacy selector %s", selector)
 		}
@@ -806,7 +801,7 @@ func TestPerformanceRoutes(t *testing.T) {
 						if strings.Contains(w.Body.String(), "Private scale target") {
 							t.Error("unauthorized response exposed private target title")
 						}
-						for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{conversation_id}", "{decision_id}", "{action_id}", "{turn_id}"} {
+						for _, selector := range []string{"{board_id}", "{card_id}", "{document_id}", "{artifact_id}", "{event_id}", "{thread_id}", "{topic_id}", "{decision_id}", "{action_id}"} {
 							if len(b.UnauthorizedExactBody) > 0 {
 								continue // the complete exact body above permits only the supplied reference
 							}

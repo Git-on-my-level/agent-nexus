@@ -28,8 +28,6 @@ func commandRequiresHuman(cmd registry.Command) bool {
 		return cmd.Method == "PATCH"
 	case "/curation/ungroup", "/derived/rebuild", "/ops/blob-usage/rebuild":
 		return cmd.Method == "POST"
-	case "/pm/bindings":
-		return true
 	case "/pm/decisions":
 		return cmd.Method == "POST"
 	case "/pm/decisions/{decision_id}/answer", "/pm/decisions/{decision_id}/dispatch", "/pm/actions/{action_id}/acknowledge", "/pm/actions/{action_id}/reconcile":

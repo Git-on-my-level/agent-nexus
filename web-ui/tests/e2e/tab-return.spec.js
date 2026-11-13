@@ -20,24 +20,29 @@ async function visibility(page, state) {
 
 async function installPage(page) {
   const api = await installWorkspaceApi(page);
-  await page.route("**/work/**", (route) => {
-    const path = new URL(route.request().url()).pathname;
-    const body = path.endsWith("/plan")
-      ? { plan: { steps: [] } }
-      : path.endsWith("/observations")
-        ? { observations: [] }
-        : path.endsWith("/participants")
-          ? { participants: [] }
-          : {
-              work: {
-                ref: "card:return-test",
-                title: "Return test initiative",
-                phase: "in_progress",
-                source: { authority: "nexus" },
-              },
-            };
-    return route.fulfill({ json: body });
-  });
+  // Match the core API only: a glob like `**/work/**` also catches the app's
+  // own `/src/lib/work/*` modules and answers them with this 404.
+  await page.route(
+    (url) => url.pathname.startsWith("/work/"),
+    (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const body = path.endsWith("/plan")
+        ? { plan: { steps: [] } }
+        : path.endsWith("/observations")
+          ? { observations: [] }
+          : path.endsWith("/participants")
+            ? { participants: [] }
+            : {
+                work: {
+                  ref: "card:return-test",
+                  title: "Return test initiative",
+                  phase: "in_progress",
+                  source: { authority: "nexus" },
+                },
+              };
+      return route.fulfill({ json: body });
+    },
+  );
   return api;
 }
 

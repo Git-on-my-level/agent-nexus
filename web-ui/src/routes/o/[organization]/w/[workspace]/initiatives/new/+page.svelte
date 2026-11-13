@@ -10,7 +10,7 @@
   import { coreClient } from "$lib/coreClient";
   import { initializeAuthSession } from "$lib/authSession";
   import { bindWorkspaceHref } from "$lib/workspacePaths";
-  import { workKey, errorMessage } from "$lib/pm/presentation.js";
+  import { workKey, errorMessage } from "$lib/work/presentation.js";
   import { boardRecordFromBoardsListRow } from "$lib/searchHelpers";
   import { datetimeLocalToIso } from "$lib/formatDate";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";

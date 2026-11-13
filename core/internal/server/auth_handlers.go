@@ -13,7 +13,6 @@ import (
 
 	"agent-nexus-core/internal/actors"
 	"agent-nexus-core/internal/auth"
-	"agent-nexus-core/internal/pm"
 )
 
 type principalContextKey struct{}
@@ -278,15 +277,7 @@ func handleGetCurrentAgent(w http.ResponseWriter, r *http.Request, opts handlerO
 		writeInternalError(w, r, err, "failed to resolve current principal")
 		return
 	}
-	state := pm.Presence{State: "not_onboarded"}
-	if opts.pmRuntime != nil && opts.pmRuntime.Service != nil {
-		state, err = opts.pmRuntime.Service.Presence(r.Context(), pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: principal.ActorID, Human: principal.PrincipalKind == "human"})
-		if err != nil {
-			writeInternalError(w, r, err, "failed to read PM state")
-			return
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent": agent, "pm": map[string]any{"state": state.State, "last_seen": state.LastSeen, "runner": state.Runner, "host": state.Host}})
+	writeJSON(w, http.StatusOK, map[string]any{"agent": agent})
 }
 
 func handleRevokePrincipal(w http.ResponseWriter, r *http.Request, opts handlerOptions, agentID string) {

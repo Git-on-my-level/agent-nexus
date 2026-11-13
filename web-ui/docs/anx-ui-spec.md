@@ -4,7 +4,7 @@
 
 Agent Nexus web UI is the operator interface for Agent Nexus.
 
-Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). Agent Nexus web UI provides visibility into the workspace maintained by anx-core and a surface for operator intervention: Inbox triage, Tasks (work projection), Docs, Ask PM, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
+Agent Nexus is a manager and executive operating system, not a generic work-management tool. The product foundation and architecture decisions are documented in [docs/architecture/foundation.md](../../docs/architecture/foundation.md). Agent Nexus web UI provides visibility into the workspace maintained by anx-core and a surface for operator intervention: Inbox triage, Tasks (work projection), Docs, and settings. Boards and cards remain the store behind Tasks; threads remain inspection. It is one of many possible clients of anx-core — agents should prefer the CLI and generated clients; operators use this UI.
 
 Agent Nexus web UI does **not**:
 
@@ -108,26 +108,25 @@ The practical rule: if an operator has to learn a word to use the product, it be
 
 ---
 
-## 2. Core UX model: Decide, Watch, Ask
+## 2. Core UX model: Decide and Watch
 
 ### 2.1 Primary navigation
 
-The primary destinations are **Decide**, **Watch** and **Ask**, in that order,
-in the sidebar on desktop and in the bottom bar on a phone (with **More**).
-Ask is the PM conversation and is hidden entirely when no PM is connected;
-global search (⌘K) is not a PM feature. Everything else is one hop down:
+The primary destinations are **Decide** and **Watch**, in that order, in the
+sidebar on desktop and in the bottom bar on a phone (with **More**). Global
+search (⌘K) is not a PM feature. Everything else is one hop down:
 **Initiatives** (the table), Docs, Agents and Archive under **Workspace**;
-Access, Secrets, Integrations, Notifications and PM setup under **Settings**; Audit and
+Access, Secrets, Integrations and Notifications under **Settings**; Audit and
 Threads under **Diagnostics**. They live in the account menu, the `/more`
 hub, the ⌘K palette, ref chips and the initiative page, never in primary nav.
 Adding a primary destination needs a DECISIONS entry (end-state §4).
 
-All three screens and the initiative page read one `brief.v1`
+All screens and the initiative page read one `brief.v1`
 (`GET /brief`, fixture `contracts/fixtures/brief/brief.v1.json`) through
 `src/lib/briefStore.js`, so they never disagree and a cold open is one read.
 
 **Decide** (`/decide`) is every decision waiting on the reader: asks, reviews,
-access and host approvals, PM proposals. Order is `decide_by`, then blocked
+access and host approvals, Decide proposals. Order is `decide_by`, then blocked
 count, then priority, then age. `src/lib/components/decide/DecisionCard.svelte`
 is the only rendering of a decision (list, permalink `/decide/{id}`, the
 initiative page). Proposals are buttons with the recommendation first; one tap
@@ -426,11 +425,11 @@ Docs are a first-class operator surface. Boards are the backing store Tasks writ
 
 The palette (`CommandPalette.svelte`, model in `lib/commandPaletteModel.js`) is keyboard-first and takes actions, not only searches. Rows are grouped, in this order:
 
-1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref, Ask PM about this task. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
-2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), Ask PM (⌘J), then every Settings and Diagnostics destination. With no PM agent onboarded, "Ask PM about this task" and "Ask PM" are absent and "Set up your PM" takes their place (3.9).
+1. **Actions on the task or doc in view.** Task: Move to… (M), Assign to… (A, Nexus-owned tasks only; source-owned assignment belongs to the source), Open in <source> (O, when the source has a URL), Copy link, Copy ref. Doc: Edit doc (E), Copy link, Copy ref. "Move to…" and "Assign to…" open a sub-list; with a query, their leaves ("Move to In review", "Assign to Leo Park") match directly. A source-owned task's moves read "Request move to … at GitHub" and file a PM decision exactly like a board drop. Done is not offered: completion needs an evidence ref, which the board's evidence form collects.
+2. **Go to:** Overview (G O), Inbox (G I), Agents (G A), Tasks (G T), Docs (G D), then every Settings and Diagnostics destination.
 3. **Search results:** tasks (one row per source item) and docs, from two characters on.
 
-Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through the durable task-move outbox, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, PM decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
+Matching is fuzzy (subsequence, word starts and runs rank higher; spaces are ignored, so "assign leo" finds "Assign to Leo Park"). Arrow keys or Ctrl+N/P move, Enter runs, Esc backs out of a sub-list and then closes, Backspace on an empty sub-list query goes back. Actions use existing calls only (`cards.move` through the durable task-move outbox, `cards.patch` for `assignee_refs` fenced on the card's current `updated_at`, Decide decisions) and report the outcome in a transient notice (with "Open in Inbox" for a filed request).
 
 Every shortcut the palette shows is bound, by the palette itself, in a capture-phase window listener: G then O/I/A/T/D anywhere; M, A, O on a task page; E on a doc page. None fire while focus is in an input, textarea, select or contenteditable, or while a dialog is open. The Tasks `?` overlay lists G O/I/A/T/D and ⌘K alongside the page's own keys.
 
@@ -529,112 +528,17 @@ Waiting rows read everything from the roster: `waiting_ask` carries the ask's ti
 
 ---
 
-### 3.8a Ask PM
+### 3.8a Ask PM (removed)
 
-The heading is the conversation when the conversation has a name of its own,
-with "Ask PM" as the eyebrow above it. Core names a conversation
-`text.slice(0, 100)` of its first question, so a title the first question
-already starts with is an echo, not a title: the page stays named "Ask PM"
-and the first bubble is the question. A title that is the heading is clamped
-to two lines, with the whole of it in the tooltip.
+The built-in Ask PM conversation, its setup and presence surfaces, and the
+`/pm` and `/pm/setup` routes were removed in 2026-11. There is no PM runner to
+connect, no presence state to gate on, and no PM chat to open. Any ordinary
+agent can support project PM work with the `anx-pm` skill and the normal CLI (`pm.propose` and `pm.approve` remain human-only).
 
-PM presence is a dot and one word on the heading's baseline — Connected or
-Offline — with the runner, the host and the last-seen age in its tooltip, and
-Manage as a small link beside it. The sentence about a proposal going to Inbox
-for approval appears only on a new, empty conversation.
-
-A turn's run reads as one line. While it is working that line is
-`Working · <elapsed>` (never the last step's own label, which the steps below
-it already carry) and the steps are collapsed behind it; once it is answered
-the line is `Finished · N steps`, below the answer and quieter than it. The
-wait note appears only past ninety seconds, when the wait is genuinely
-unusual. A turn's time is the group header's; a bubble does not repeat it.
-
-Evidence under an answer is a bounded "Sources" row: three chips and the rest
-behind a `+N`. The thread re-pins to the bottom when it grows under a reader
-who is already there, so a row that wraps late cannot end up behind the
-composer.
-
-### 3.9 PM onboarding and gating
-
-A PM agent runs on the reader's own computer, never on the server, so a
-workspace can have none. `GET /pm/presence` answers
-`{ state, last_seen, runner, host }` — `not_onboarded` until a PM has
-connected at least once, then `connected` or `offline` by heartbeat freshness
-— read in `lib/pm/onboardingState.js` and held for the shell by
-`lib/pm/presence.js`, which shows a PM surface only on a state core has
-positively reported. The response's older `configured` / `connected`
-booleans are used only when `state` is absent, so this UI still works against
-a core that predates it; there `configured` alone decides, and a missing
-`last_seen_at` is deliberately not read as "never connected", because that
-core's presence projection is newer than the PM itself and a workspace that
-has used its PM for months reports no last-seen on its first run.
-
-**The gate is on affordances, never on reads.** A PM runs on the reader's own
-computer, so one can be absent while proposals it filed earlier still wait for
-a yes — and core still lists them and still accepts an answer. The Inbox and
-Tasks therefore always read the PM decision and receipt feeds, whatever the
-state says; hiding an obligation the Inbox is the only place to answer would
-be worse than two already-bounded reads. When core answers the reserved
-`pm_not_onboarded` code, the UI reads that as an empty feed rather than an
-error, so the Inbox does not look broken for a feature the workspace does not
-have. Core does not emit that code yet: today a missing PM identity and a PM
-bridge that is merely down both answer 503 `unavailable`, and those cannot be
-told apart from the response — so a bare 503 keeps its error rather than being
-read as "install a PM", which would throw away the reader's draft.
-
-- **`not_onboarded`:** every PM surface is **absent, not disabled** — the
-  sidebar and bottom-bar Ask PM action, the PM conversation, "Ask PM about
-  this" on Inbox rows and tasks, the palette's PM rows, and PM hints in copy
-  elsewhere. ⌘J is swallowed rather than left to the browser. `/pm`
-  redirects to `/pm/setup`; a conversation already in core stays there and is
-  readable again once a PM is set up. What stays named is a PM proposal the
-  reader has in front of them: a row the PM filed earlier is still a PM
-  proposal, and describing it without the word would be a worse sentence than
-  an accurate one. Moving work a source owns is also gone: that move
-  is a PM proposal the PM carries out at the source, so with no PM
-  The task-move surfaces refuse before saving a submitted request and the surfaces say where to
-  set one up, rather than filing a proposal nobody would carry out. A move on
-  Nexus-owned work is unaffected.
-- **Setup:** exactly one calm entry point, in the slot Ask PM occupies, leading
-  to `/pm/setup`. That page says in two sentences that the PM runs on the
-  reader's computer through their own agent, gives the copyable
-  `anx --as 'pm' pm install` command for this workspace, and shows a live "Waiting for
-  your PM to connect…" state that flips to "Connected" in place on the first
-  heartbeat. PM surfaces appear without a reload. The live watch is bounded:
-  after a few minutes it stops and names the `anx --as 'pm' pm status` check instead of
-  waiting silently forever, and it spends no requests while the tab is hidden.
-- **`offline`:** PM features stay visible with a quiet "PM offline, last seen
-  X" status and the `anx --as 'pm' pm status` hint. Sending stays open; the answer waits
-  for the machine to come back.
-- **Manage:** `/pm/setup` doubles as the status page once a PM exists (state,
-  last seen, and the runner and host the PM registered with, plus the
-  `anx --as 'pm' pm status` and `anx --as 'pm' pm uninstall` commands), reached from the "Manage"
-  link beside the PM status.
-- **An unknown state shows nothing.** Before the first read returns, after a
-  read fails, and against a core with no `/pm/presence` at all, no PM
-  affordance is rendered anywhere the reader did not ask for one — the shell
-  slot, the palette, the Inbox and Tasks entry points, the ⌘J shortcut: the
-  slot holds its space and commits to a label only once core answers.
-  `/pm/setup` stays reachable by typing the URL, and says it is still checking
-  rather than claiming either answer. Showing a guess made the row flash in and out
-  on every load, and a read that never succeeded left a button that could not
-  work. Answering an existing proposal is never gated this way (see above), so
-  nothing already asked of the reader becomes unreachable. A core old enough
-  to lack the route cannot serve this UI anyway: `pm.presence` is in the
-  command registry the shell checks against core's handshake at startup.
-- **Refusing a PM write needs a confirmed absence**, not an unproven one.
-  `pmFeaturesVisible` and `pmKnownAbsent` are mirror images rather than
-  negations of each other — both false while the state is unknown — so a slow
-  or failed read defers the source-owned move to core instead of telling a
-  workspace that has a PM that it has none.
-- **Server-side gating** is core's, not the UI's: the PM routes answer
-  `pm_not_onboarded` where there is no PM. The UI reads that refusal as "no
-  PM" wherever it can arrive. A bare 503 `unavailable` is not read that way:
-  core answers it both for a missing PM identity and for a PM bridge that is
-  merely down, and swallowing the second would throw away the reader's draft.
-
----
+Decide remains: Inbox still lists decisions awaiting a human answer, and the
+Inbox and Tasks surfaces still read the decision and receipt feeds. A
+source-owned task move still files a decision for a human to answer; it is not
+carried out by a built-in PM.
 
 ## 4. Grounding and restricted updates
 

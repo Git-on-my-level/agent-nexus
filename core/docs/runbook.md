@@ -47,21 +47,6 @@ rollback. Default activation awaits the documented retention decision.
 | Embedded router poll interval                                                                                                                                                     | n/a                             | `ANX_SIDECAR_ROUTER_POLL_INTERVAL`        | `1s`                                                                       |
 | Embedded router principal cache TTL                                                                                                                                               | n/a                             | `ANX_SIDECAR_ROUTER_PRINCIPAL_CACHE_TTL`  | `60s`                                                                      |
 | Bootstrap token for first principal registration                                                                                                                                  | n/a                             | `ANX_BOOTSTRAP_TOKEN`                     | unset                                                                      |
-| Selected PM agent actor (claim/complete/fail when set)                                                                                                                            | n/a                             | `ANX_PM_AGENT_ACTOR_ID`                   | unset                                                                      |
-| Selected PM agent handle (wake-bridge path only)                                                                                                                                  | n/a                             | `ANX_PM_AGENT_HANDLE`                     | unset                                                                      |
-| PM runner lease TTL (renew at a cadence strictly less than TTL/2)                                                                                                                 | n/a                             | `ANX_PM_LEASE_TTL`                        | `60s` (range `1s`–`10m`)                                                   |
-| PM turn wall time (queued runner and wake dispatch)                                                                                                                               | n/a                             | `ANX_PM_TURN_TIMEOUT`                     | `2m` (max `10m`)                                                           |
-| PM turn response byte cap                                                                                                                                                         | n/a                             | `ANX_PM_MAX_OUTPUT_BYTES`                 | `16000`                                                                    |
-| Enable wake-routing PM bridge                                                                                                                                                     | n/a                             | `ANX_PM_BRIDGE_ENABLED`                   | `false`                                                                    |
-| Attest an independently enforced PM capability envelope                                                                                                                           | n/a                             | `ANX_PM_RUNTIME_ENVELOPE_ENFORCED`        | `false`                                                                    |
-| Telegram webhook secret (≥32 chars)                                                                                                                                               | n/a                             | `ANX_PM_TELEGRAM_WEBHOOK_SECRET`          | unset                                                                      |
-| Telegram bot id (tenant)                                                                                                                                                          | n/a                             | `ANX_PM_TELEGRAM_BOT_ID`                  | unset                                                                      |
-| Telegram bot token (outbound only)                                                                                                                                                | n/a                             | `ANX_PM_TELEGRAM_BOT_TOKEN`               | unset                                                                      |
-| Telegram Bot API base (fakes/tests only)                                                                                                                                          | n/a                             | `ANX_PM_TELEGRAM_API_BASE`                | `https://api.telegram.org`                                                 |
-| Discord application public key (32-byte hex)                                                                                                                                      | n/a                             | `ANX_PM_DISCORD_PUBLIC_KEY`               | unset                                                                      |
-| Discord application id                                                                                                                                                            | n/a                             | `ANX_PM_DISCORD_APPLICATION_ID`           | unset                                                                      |
-| Discord bot token (outbound only)                                                                                                                                                 | n/a                             | `ANX_PM_DISCORD_BOT_TOKEN`                | unset                                                                      |
-| Discord REST API base (fakes/tests only)                                                                                                                                          | n/a                             | `ANX_PM_DISCORD_API_BASE`                 | `https://discord.com/api/v10`                                              |
 | WebAuthn RP ID                                                                                                                                                                    | n/a                             | `ANX_WEBAUTHN_RPID`                       | derived from browser origin host                                           |
 | WebAuthn origin                                                                                                                                                                   | n/a                             | `ANX_WEBAUTHN_ORIGIN`                     | derived from browser request origin                                        |
 | WebAuthn allowed origins                                                                                                                                                          | n/a                             | `ANX_WEBAUTHN_ALLOWED_ORIGINS`            | unset                                                                      |
@@ -87,6 +72,11 @@ rollback. Default activation awaits the documented retention decision.
 | Consecutive qualifying runs before one pinned WARN                                                                                                                                | n/a                             | `ANX_SQLITE_WAL_PINNED_RUNS`              | `3`                                                                        |
 | Connection-local busy timeout for conditional TRUNCATE                                                                                                                            | n/a                             | `ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT`    | `250ms`                                                                    |
 | Per-connection SQLite `journal_size_limit`                                                                                                                                        | n/a                             | `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`     | `67108864` (64 MiB)                                                        |
+| Enable bounded online incremental vacuum                                                                                                                                          | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM`           | `true`                                                                     |
+| Minimum freelist bytes before incremental vacuum                                                                                                                                  | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES` | `67108864` (64 MiB)                                               |
+| Minimum freelist share of page count before incremental vacuum                                                                                                                    | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT` | `10`                                                              |
+| Pages reclaimed per incremental-vacuum tick                                                                                                                                       | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_PAGES`     | `2048` (8 MiB at 4 KiB pages; maximum `65536`)                             |
+| Connection-local busy timeout for incremental vacuum                                                                                                                              | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT` | `250ms`                                                                 |
 
 ### SQLite WAL watchdog
 
@@ -112,6 +102,31 @@ tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES` still applies to every connection
 through the DSN and is still validated while the watchdog is disabled. An
 invalid journal-limit value stops workspace initialization rather than
 silently changing the policy.
+
+### SQLite incremental vacuum
+
+The same watchdog tick can reclaim free pages online, but only on databases
+built with `auto_vacuum=INCREMENTAL` (the offline compaction helper produces
+that format). On an `auto_vacuum=NONE` database it is a no-op. When
+`freelist_count * page_size` is at least the absolute threshold **and**
+`freelist_count` is at least the configured percentage of `page_count`, the
+worker runs `PRAGMA incremental_vacuum(N)` with a short connection-local busy
+timeout. It reclaims at most `N` pages per tick, so writers are not held for a
+long transaction. A busy tick logs a maintenance failure and is retried on the
+next interval; it does not hold writers or retain partial work.
+
+`ANX_SQLITE_INCREMENTAL_VACUUM=false` disables the worker and ignores its
+tuning values. It runs on the WAL watchdog tick, so
+`ANX_SQLITE_WAL_WATCHDOG=false` also disables it and ignores these values. The
+thresholds and page budget are
+`ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES` (default 64 MiB),
+`ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT` (default 10),
+`ANX_SQLITE_INCREMENTAL_VACUUM_PAGES` (default 2048, maximum 65536) and
+`ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT` (default 250 ms). Reclaimed pages
+are logged as `stage=incremental_vacuum pages_reclaimed=...`. This online path
+does not replace the offline compaction needed to convert an existing
+`auto_vacuum=NONE` file; see
+[per-workspace SQLite compaction](../../deploy/sqlite-compaction.md).
 
 ### Browser links (`ANX_WEB_BASE_URL`)
 
@@ -211,6 +226,71 @@ setting. `scripts/hosted/backup-workspace.sh` exports the same default (or prese
 an explicit override) for its separate `sqlite3` process and never sweeps files
 while a core may be serving. Backup output still occupies its chosen destination.
 
+## Migration 138: remove built-in PM product data
+
+Migration 138 archives the retired built-in PM product rows and then deletes
+them. Decide records (`decision`, `action`, `cursor`) are kept.
+
+Prerequisites:
+
+- Set `ANX_BACKUP_AGE_RECIPIENTS` and `ANX_VAULT_REC_RECIPIENT` to public age
+  recipients in the core process environment before upgrading. When PM product
+  rows exist and either value is missing or malformed, the migration fails
+  closed: startup aborts, no product row is deleted, and version 138 is not
+  recorded. A workspace with no product rows needs no recipients.
+- Reserve disk headroom for a second copy of the PM product data plus the
+  compressed/encrypted archive. The archive is written beside `state.sqlite`
+  in the workspace root, so size the state volume, not only `/tmp`.
+
+Archive location and handling:
+
+- The archive is `state.pm-archive-138-<UTC>.tar.zst.age` beside
+  `state.sqlite`. Its receipt (path, size, SHA-256, recipient fingerprint) is
+  stored in `pm_archive_receipts`.
+- Routine backup bundles do not include this archive. During the canary, copy
+  it off-host to the operations archive location before relying on the
+  migration as the only copy.
+- Verify the canary archive by decrypting it with the operations identity and
+  checking that the manifest and table parts are readable. On resume, behavior
+  depends on whether product rows remain:
+  - With no product rows (`productRows == 0`), the recorded receipt is only a
+    record of the completed archive. The migration re-verifies its size,
+    SHA-256, and age header before deleting anything; a damaged or missing
+    archive aborts startup.
+  - With product rows present (`productRows > 0`), a receipt only proves that
+    some earlier archive was written, not that it covers the rows present now.
+    The migration ignores a damaged or stale receipt, writes and verifies a new
+    archive of the current rows, replaces the receipt, and then proceeds.
+
+Rollback:
+
+- Restore the pre-138 workspace backup. Do not start an older binary against
+  the migrated database: the product rows and tables are gone, and the old
+  binary cannot reconstruct them from the archive.
+
+## Migration 142: card revision manifests without prose bodies
+
+Migration 142 installs an artifact-update trigger whose `WHEN` clause calls the
+Go scalar `anx_resource_without_prose`, and starts a bounded backfill that
+rewrites legacy card revision manifests to their reference-only form. Revision
+content bytes, raw access edges and authorization decisions are unchanged.
+
+Prerequisites:
+
+- Take a fresh per-workspace backup before upgrading. The trigger is part of
+  the migrated schema, not a runtime-only optimization.
+
+Rollback:
+
+- Restore the pre-142 workspace backup. Do not start v0.13.65 or older against
+  a 142+ database: those binaries do not register
+  `anx_resource_without_prose`, so every `UPDATE` of `artifacts` fails with
+  "no such function" (card revision writes, artifact lifecycle, document
+  history probes and the NULL-manifest backfill). The failure is loud and
+  non-destructive, but there is no in-place downgrade.
+- Migrations 139 (v0.13.65), 142 and 147 are forward-only. A rollback to an
+  older release requires restoring the backup taken before the first of them.
+
 ## Local development run
 
 ```bash
@@ -218,29 +298,8 @@ while a core may be serving. Backup output still occupies its chosen destination
 ```
 
 From the repo root, `make serve` starts `anx-core`, seeds a local workspace,
-and starts the web UI. For the default game-dev-studio scenario it also seeds
-the Studio PM agent (`actor-gds-pm` / `pm.dev-host`), sets `ANX_PM_AGENT_ACTOR_ID`
-and `ANX_PM_AGENT_HANDLE`, enrolls the local dev host, and prints `anx pm serve`.
-`make serve` also configures the local workspace web URL so interactive host
-enrollment links to the web UI port.
-Queued PM turns do not require `ANX_PM_BRIDGE_ENABLED` or an online wake handle.
-`POST /pm/turns/claim` leases one `sending` turn; complete/fail with that
-`lease_token`. Runners must renew through `POST /pm/turns/{turn_id}/heartbeat`
-with `{"lease_token":"..."}` at a cadence strictly less than `ANX_PM_LEASE_TTL / 2`
-(for example every 20s for the default 60s TTL). Use returned `lease_expires_at`
-to track ownership, and stop execution on `409 lease_mismatch`. Renewal never
-extends the turn deadline. A crashed runner frees capacity when its lease expires;
-the next poll can reclaim the same turn with a fresh token and preserved history.
-Ensure runner implementations support heartbeat before relying on turns longer
-than the lease TTL. Past-deadline sending turns expire to `failed` on claim.
-`ANX_PM_MAX_CONCURRENT` (default 2) bounds claimed turns with unexpired runner
-leases; new claims with waiting work return `429 busy` at that cap (204 if no work waits). `ANX_PM_MAX_QUEUED` (default 20)
-separately bounds open turns waiting without an unexpired lease, including
-unknown wakeup outcomes. A full queue returns `429 busy` with `reason: queue`,
-`queued`, and `limit`; each conversation still allows at most one pending turn.
-Channel ingress turns carry `origin` and use this same claim pipeline. See
-`cli/docs/runbook.md` for the omp / `zai/glm-5.3` recipe and `{prompt}` Hermes
-or Codex argv.
+and starts the web UI. `make serve` also configures the local workspace web URL
+so interactive host enrollment links to the web UI port.
 
 ## Decision deadlines and notification delivery
 
@@ -258,41 +317,11 @@ with `PUT /notification-settings` (`anx notifications settings set`).
 
 The escalation clock runs every 30s and once at boot. When an ask's `decide_by`
 passes unanswered it pushes immediately if the ask's window was at most 2h or
-it still blocks 3+ open refs; otherwise the ask joins the daily digest. It also
-wakes the workspace PM, when one is configured and can read the ask, to answer,
-withdraw or re-ask. A push or digest only names asks the recipient can read.
-`ANX_DIGEST_HOUR_UTC` (default `9`) sets the first hour at which the day's
-digest is queued, one message per channel per day, only when something is
-overdue. Reference adapters live in `adapters/channels/` (SMTP email and
-Telegram).
-
-## PM channels (Telegram and Discord)
-
-Ingress is webhook/interaction only: `POST /pm/ingress/telegram` and
-`POST /pm/ingress/discord`. Core never calls `setWebhook`, polls `getUpdates`,
-or opens a Discord gateway. Point production bots here only after an explicit
-canary; local proof uses the fakes under `tests/channels/` and the test-only
-API bases `ANX_PM_TELEGRAM_API_BASE` / `ANX_PM_DISCORD_API_BASE`.
-
-Operator setup, once dedicated bot credentials exist:
-
-1. Set the env vars in the configuration table. Tokens stay in env, never in Git.
-2. Bind each channel identity before anyone talks to the PM:
-   `anx pm bindings create --from-file binding.json`
-   (`transport`, `tenant_id`, `channel_id`, `external_user_id`, target actor,
-   `can_approve`). Shared-channel membership is not authority.
-3. Point Telegram's webhook at `/pm/ingress/telegram` with
-   `secret_token` equal to `ANX_PM_TELEGRAM_WEBHOOK_SECRET`. Point Discord
-   Interactions URL at `/pm/ingress/discord`. Do not reuse CAR or other
-   production bot streams.
-4. `anx pm channels doctor --telegram-webhook-url <ingress> --discord-webhook-url <ingress>`
-   checks secret shape, GET reachability (no POST), and binding list. It
-   never sends a chat message.
-
-Unbound identities receive a bind-first reply and no turn. Duplicate
-webhook/interaction ids do not create a second turn or a second outbound
-send. 429/409 stay `pending_delivery` with backoff; unknown outcomes are not
-auto-retried.
+it still blocks 3+ open refs; otherwise the ask joins the daily digest. A push
+or digest only names asks the recipient can read. `ANX_DIGEST_HOUR_UTC`
+(default `9`) sets the first hour at which the day's digest is queued, one
+message per channel per day, only when something is overdue. Reference adapters
+live in `adapters/channels/` (SMTP email and Telegram).
 
 ## Router responsibilities
 

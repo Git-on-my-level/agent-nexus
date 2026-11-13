@@ -731,29 +731,6 @@
   },
   {
     "method": "GET",
-    "path": "/pm/bindings",
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 403,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "latency_ms": 500,
-    "max_vm_steps": 50000
-  },
-  {
-    "method": "GET",
-    "path": "/pm/presence",
-    "max_queries": 20,
-    "max_rows": 32,
-    "authorized_status": 200,
-    "unauthorized_status": 200,
-    "reason": "Authenticated workspace connection timestamps expose no resource data. Exact composite primary-key lookup; no history scan. Includes authentication.",
-    "latency_ms": 100,
-    "max_vm_steps": 3000,
-    "must_contain": "\"connected\":false"
-  },
-  {
-    "method": "GET",
     "path": "/pm/context",
     "max_queries": 100,
     "max_rows": 1024,
@@ -761,28 +738,6 @@
     "unauthorized_status": 403,
     "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
     "query": "work_ref={card_ref}&limit=1",
-    "latency_ms": 500,
-    "max_vm_steps": 50000
-  },
-  {
-    "method": "GET",
-    "path": "/pm/conversations",
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 200,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "latency_ms": 500,
-    "max_vm_steps": 50000
-  },
-  {
-    "method": "GET",
-    "path": "/pm/conversations/{conversation_id}",
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },
@@ -800,17 +755,6 @@
   {
     "method": "GET",
     "path": "/pm/decisions/{decision_id}",
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 404,
-    "reason": "Read work must be bounded by selectors or page size; includes authentication and authorization.",
-    "latency_ms": 500,
-    "max_vm_steps": 50000
-  },
-  {
-    "method": "GET",
-    "path": "/pm/turns/{turn_id}",
     "max_queries": 100,
     "max_rows": 1024,
     "authorized_status": 200,
@@ -1418,22 +1362,6 @@
     "unauthorized_status": 200,
     "reason": "Representative populated fleet-health preview with capped host/agent inventory. The saved-document report case covers live-activity fanout; uncached read-only POST activity rebuilds remain tracked by SCA-665.",
     "must_contain": "scale-host",
-    "latency_ms": 500,
-    "max_vm_steps": 50000
-  },
-  {
-    "method": "POST",
-    "path": "/pm/turns/{turn_id}/context",
-    "body": {
-      "limit": 1,
-      "lease_token": "synthetic-lease"
-    },
-    "max_queries": 100,
-    "max_rows": 1024,
-    "authorized_status": 200,
-    "unauthorized_status": 403,
-    "reason": "Read-only POST; request payload and context limit bound work.",
-    "authorized_as": "agent",
     "latency_ms": 500,
     "max_vm_steps": 50000
   },

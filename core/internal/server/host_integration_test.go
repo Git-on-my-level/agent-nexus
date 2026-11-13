@@ -2,6 +2,7 @@ package server
 
 import (
 	"agent-nexus-core/internal/auth"
+	"agent-nexus-core/internal/resourceaccess"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -273,7 +274,7 @@ func TestHostIdentityLifecycle(t *testing.T) {
 	if p["error"].(map[string]any)["code"] != "host_revoked" {
 		t.Fatalf("revoked host grant: %#v", p)
 	}
-	events, _, err := env.authStore.ListAuditEvents(context.Background(), auth.AuthAuditListFilter{})
+	events, _, err := env.authStore.ListAuditEvents(resourceaccess.WithAuthAdmin(context.Background(), true), auth.AuthAuditListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

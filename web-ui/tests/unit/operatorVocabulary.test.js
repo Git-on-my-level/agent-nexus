@@ -67,7 +67,7 @@ describe("operator vocabulary", () => {
   });
 
   it("never says card in the Tasks board drag instructions", () => {
-    const src = readSrc("lib/components/pm/WorkViews.svelte");
+    const src = readSrc("lib/components/work/WorkViews.svelte");
     const help = src.match(
       /<p id="task-board-card-help"[^>]*>([\s\S]*?)<\/p>/,
     )?.[1];

@@ -273,7 +273,7 @@ func kernelImportAllowed(name string) bool {
 }
 
 func TestKernelCannotAcquireIndirectFactories(t *testing.T) {
-	for _, name := range []string{"database/sql", "agent-nexus-core/internal/primitives", "agent-nexus-core/internal/storage", "agent-nexus-core/internal/scopedrepo", "agent-nexus-core/internal/pm", "os", "net/http", "unsafe", "C", "agent-nexus-core/internal/readmodel/nested"} {
+	for _, name := range []string{"database/sql", "agent-nexus-core/internal/primitives", "agent-nexus-core/internal/storage", "agent-nexus-core/internal/scopedrepo", "agent-nexus-core/internal/decide", "os", "net/http", "unsafe", "C", "agent-nexus-core/internal/readmodel/nested"} {
 		if kernelImportAllowed(name) {
 			t.Fatal("indirect or direct authority ingress admitted", name)
 		}

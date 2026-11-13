@@ -29,10 +29,7 @@ func commandSideEffectClass(command string) string {
 	if isLoopWork(command) {
 		return "remote_coordination_write"
 	}
-	if command == "pm install" || command == "pm uninstall" {
-		return "local_operational_write"
-	}
-	if command == "pm card" || command == "pm context" || command == "pm status" || command == "pm presence" {
+	if command == "pm card" || command == "pm context" {
 		return "read_only"
 	}
 	if command == "work move" || command == "mv" || command == "work group" || command == "work fold" || command == "work unfold" || strings.HasPrefix(command, "initiative ") {

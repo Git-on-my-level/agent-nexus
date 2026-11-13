@@ -119,14 +119,5 @@ export function freshRequest(request, operation = "", receipt = null) {
       value.autoReconcileKey = randomUUID();
     }
   }
-  // This is an explicit new intent, not recovery of the old body. Legacy PM
-  // requests now opt into receipts just like any newly queued PM request.
-  if (operation === "pm.chat.send") {
-    for (const body of [value.creation, value.message]) {
-      if (!body) continue;
-      body.request_key ||= randomUUID();
-      body.replay_key ||= randomUUID();
-    }
-  }
   return value;
 }

@@ -121,6 +121,9 @@ stopped for **all** of the following steps. Disable supervisor restarts first.
    checks output integrity and all table contents in both directions, plus counts
    and PM rowid-based cursor identities, then fsyncs the new file. A failed copy
    is removed. It refuses a workspace whose core still holds the serving lease.
+   The output is built with `auto_vacuum=INCREMENTAL` and the source page size,
+   and the helper refuses to start unless the destination filesystem has the
+   live page bytes plus the source WAL size plus a 2 GiB reserve.
 
 3. While the core remains stopped, retain the old database as a rollback backup
    outside the active workspace. Replace `state.sqlite` with the verified copy

@@ -15,10 +15,10 @@ import (
 
 func workHelpText(topic string) (string, bool) {
 	if topic == "pm card" {
-		return "Usage: anx pm card <card-ref>\nRead any visible card in full inside a claimed PM turn.", true
+		return "Usage: anx pm card <card-ref>\nRead any visible card in full under the requesting reader.", true
 	}
 	if topic == "pm propose" {
-		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity and conversation come from the runner.", true
+		return "Usage: anx pm propose <card-ref> (--status <backlog|ready|in_progress|blocked|review|done> | --note <text>) --why <reason> [--evidence <ref> ...]\nProposes for human approval in Inbox. done requires evidence. Identity comes from the authenticated principal.", true
 	}
 	if topic == "pm context" {
 		meta, _ := registry.LoadEmbedded()
@@ -31,7 +31,7 @@ func workHelpText(topic string) (string, bool) {
 		if len(adjacent) == 0 {
 			adjacent = []string{"pm card", "pm propose"}
 		}
-		return fmt.Sprintf("Usage: anx pm context\n\nInside a claimed turn, run with no flags. Open a card with `anx pm card <card-ref>`; propose with `anx pm propose`.\n\nAdjacent commands: `%s`\n\nOutside a claimed turn\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
+		return fmt.Sprintf("Usage: anx pm context\n\nOpen a card with `anx pm card <card-ref>`. `anx pm propose` is human-only; agents file recommendations with `anx ask`.\n\nAdjacent commands: `%s`\n\nLegacy filters: `--work-ref`, `--query`, `--limit`, `--cursor`. Pass `next_cursor` unchanged as `--cursor`; cursors are bound to the workspace, principal and record kind. Context limits are 1..50.\n\nUse `--json` for one machine-readable envelope.\n", strings.Join(adjacent, "`, `")), true
 	}
 
 	if isInternalWorkCommand(topic) {
@@ -67,21 +67,9 @@ func workHelpText(topic string) (string, bool) {
 		if spec.optionalBody {
 			b.WriteString(" [--from-file <path|->]")
 		}
-		if workCommandUsesRunnerID(topic) {
-			b.WriteString(" [--runner-id <id>]")
-		}
-		if workCommandUsesLeaseToken(topic) {
-			b.WriteString(" [--lease-token <token>]")
-		}
 		b.WriteString("\n")
 		for _, f := range spec.filters {
 			fmt.Fprintf(&b, "  --%s <value>\n", f)
-		}
-		if workCommandUsesRunnerID(topic) {
-			b.WriteString("  --runner-id <id> (defaults to the authenticated actor id; claims are idempotent for the same runner_id)\n")
-		}
-		if workCommandUsesLeaseToken(topic) {
-			b.WriteString("  --lease-token <token> (or ANX_PM_LEASE_TOKEN from `anx pm serve`)\n")
 		}
 		if spec.body || spec.optionalBody {
 			b.WriteString("\nJSON body follows the central API contract; use anx meta commands for generated schemas. Server validates scope, versions and evidence.\n")
@@ -156,22 +144,7 @@ func formatWorkCommandText(name string, body any) string {
 		}
 		return strings.Join(lines, "\n")
 	}
-	if name == "pm bindings list" {
-		rows, _ := root["items"].([]any)
-		lines := []string{fmt.Sprintf("bindings: %d", len(rows))}
-		for _, row := range rows {
-			item := asMap(row)
-			origin := asMap(item["origin"])
-			line := fmt.Sprintf("%s  %s %s/%s user=%s -> %s", anyString(item["id"]), anyString(origin["transport"]), anyString(origin["tenant_id"]), anyString(origin["channel_id"]), anyString(origin["external_user_id"]), anyString(item["actor_id"]))
-			if thread := anyString(origin["thread_id"]); thread != "" {
-				line += " thread=" + thread
-			}
-			line += fmt.Sprintf(" can_approve=%t enabled=%t revision=%s", item["can_approve"] == true, item["enabled"] == true, fmt.Sprintf("%v", item["revision"]))
-			lines = append(lines, line)
-		}
-		return strings.Join(appendPaginationLines(lines, root), "\n")
-	}
-	if name == "pm context" || name == "pm turns context" {
+	if name == "pm context" {
 		rows, _ := root["items"].([]any)
 		lines := []string{fmt.Sprintf("context: %d", len(rows))}
 		for _, row := range rows {
@@ -191,22 +164,6 @@ func formatWorkCommandText(name string, body any) string {
 		if limitations, ok := root["limitations"].([]any); ok && len(limitations) > 0 {
 			encoded, _ := json.Marshal(limitations)
 			lines = append(lines, "limitations: "+string(encoded))
-		}
-		return strings.Join(appendPaginationLines(lines, root), "\n")
-	}
-	if name == "pm conversations list" {
-		rows, _ := root["items"].([]any)
-		lines := []string{fmt.Sprintf("conversations: %d", len(rows))}
-		for _, row := range rows {
-			item := asMap(row)
-			line := fmt.Sprintf("%s  %s", anyString(item["id"]), anyString(item["work_ref"]))
-			if status := conversationListStatus(item); status != "" {
-				line += "  status=" + status
-			}
-			if title := firstNonEmpty(anyString(item["title"]), anyString(item["instruction"])); title != "" {
-				line += "  " + strings.Join(strings.Fields(title), " ")
-			}
-			lines = append(lines, line)
 		}
 		return strings.Join(appendPaginationLines(lines, root), "\n")
 	}
@@ -234,12 +191,6 @@ func formatWorkCommandText(name string, body any) string {
 	}
 	if name == "pm decisions get" {
 		return formatPMDecisionGetText(root)
-	}
-	if name == "pm turns get" {
-		return formatPMTurnGetText(root)
-	}
-	if name == "pm turns claim" {
-		return formatPMTurnClaimText(root)
 	}
 	if name == "pm decisions dispatch" {
 		return formatPMDispatchText(root, time.Time{}, "")

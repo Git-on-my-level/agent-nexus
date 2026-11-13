@@ -2,11 +2,10 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 )
 
@@ -26,7 +25,7 @@ func overviewPrincipal(r *http.Request) string {
 }
 
 func appendOverviewDecisions(r *http.Request, opts handlerOptions, d *primitives.OverviewChanges, now time.Time) error {
-	if d.Since == nil || opts.pmRuntime == nil || opts.pmRuntime.Service == nil {
+	if d.Since == nil || opts.decideRuntime == nil || opts.decideRuntime.Service == nil {
 		return nil
 	}
 	p, ok := cachedAuthenticatedPrincipal(r)
@@ -37,10 +36,7 @@ func appendOverviewDecisions(r *http.Request, opts handlerOptions, d *primitives
 	if err != nil {
 		return err
 	}
-	decisions, partial, err := opts.pmRuntime.Service.NewDecisions(r.Context(), pm.Principal{WorkspaceID: opts.pmRuntime.cfg.PM.WorkspaceID, ActorID: p.ActorID, Human: p.PrincipalKind == "human"}, since, now)
-	if errors.Is(err, pm.ErrNotOnboarded) {
-		return nil
-	}
+	decisions, partial, err := opts.decideRuntime.Service.NewDecisions(r.Context(), decide.Principal{WorkspaceID: opts.decideRuntime.cfg.Decide.WorkspaceID, ActorID: p.ActorID, Human: p.PrincipalKind == "human"}, since, now)
 	if err != nil {
 		return err
 	}

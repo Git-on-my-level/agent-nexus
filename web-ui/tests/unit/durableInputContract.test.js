@@ -44,8 +44,6 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "updateTopic",
           "respondInboxItem",
           "createEvent",
-          "createPmConversation",
-          "sendPmMessage",
           "answerPmDecision",
           "ungroupCurationBatch",
           "createPmDecision",
@@ -175,11 +173,8 @@ it("discussion text and metadata use a durable composer and outbox", () => {
   expect(composer).toBe(1);
 });
 
-it("PM chat and decision notes use durable form snapshots", () => {
-  for (const path of [
-    "routes/o/[organization]/w/[workspace]/pm/+page.svelte",
-    "lib/components/pm/DecisionPanel.svelte",
-  ]) {
+it("decision notes use durable form snapshots", () => {
+  for (const path of ["lib/components/decide/DecisionPanel.svelte"]) {
     const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
     let forms = 0;
     walk(ast.html, (node) => {
@@ -194,29 +189,6 @@ it("PM chat and decision notes use durable form snapshots", () => {
     });
     expect(forms).toBe(1);
   }
-});
-
-it("PM recovery sends the checkpointed bodies without upgrading or rebuilding them", () => {
-  const source = readFileSync(`${root}/lib/mutationOutbox.js`, "utf8");
-  const ast = parse(`<script>${source}</script>`);
-  function path(node) {
-    if (node?.type === "Identifier") return node.name;
-    if (node?.type !== "MemberExpression") return "";
-    return `${path(node.object)}.${node.property.name ?? node.property.value}`;
-  }
-  const calls = [];
-  walk(ast.instance, (node) => {
-    if (node.type !== "CallExpression") return;
-    if (path(node.callee) === "client.createPmConversation") {
-      expect(path(node.arguments[0])).toBe("entry.request.creation");
-      calls.push("creation");
-    }
-    if (path(node.callee) === "client.sendPmMessage") {
-      expect(path(node.arguments[1])).toBe("entry.request.message");
-      calls.push("message");
-    }
-  });
-  expect(calls.sort()).toEqual(["creation", "message"]);
 });
 
 it("task and document authoring surfaces checkpoint complete forms", () => {

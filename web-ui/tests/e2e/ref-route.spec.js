@@ -19,22 +19,27 @@ const CARD = {
 async function installRefApi(page, overrides = {}) {
   const api = await installWorkspaceApi(page, overrides);
   const reads = [];
-  await page.route("**/work/**", (route) => {
-    const path = decodeURIComponent(new URL(route.request().url()).pathname);
-    reads.push(path);
-    if (path.endsWith("/plan"))
-      return route.fulfill({ json: { plan: { steps: [] } } });
-    if (path.endsWith("/observations"))
-      return route.fulfill({ json: { observations: [] } });
-    if (path.endsWith("/participants"))
-      return route.fulfill({ json: { participants: [] } });
-    if (path === "/work/card:launch-plan")
-      return route.fulfill({ json: { work: CARD } });
-    return route.fulfill({
-      status: 404,
-      json: { error: { code: "not_found", message: "card not found" } },
-    });
-  });
+  // Match the core API only: a glob like `**/work/**` also catches the app's
+  // own `/src/lib/work/*` modules and answers them with this 404.
+  await page.route(
+    (url) => url.pathname.startsWith("/work/"),
+    (route) => {
+      const path = decodeURIComponent(new URL(route.request().url()).pathname);
+      reads.push(path);
+      if (path.endsWith("/plan"))
+        return route.fulfill({ json: { plan: { steps: [] } } });
+      if (path.endsWith("/observations"))
+        return route.fulfill({ json: { observations: [] } });
+      if (path.endsWith("/participants"))
+        return route.fulfill({ json: { participants: [] } });
+      if (path === "/work/card:launch-plan")
+        return route.fulfill({ json: { work: CARD } });
+      return route.fulfill({
+        status: 404,
+        json: { error: { code: "not_found", message: "card not found" } },
+      });
+    },
+  );
   await page.route(
     (url) => url.pathname.startsWith("/docs/handbook"),
     (route) => {

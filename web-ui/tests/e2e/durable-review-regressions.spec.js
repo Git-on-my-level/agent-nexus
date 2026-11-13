@@ -6,7 +6,6 @@ import {
   URL,
   setup as inboxSetup,
 } from "./helpers/durable-decide.js";
-import { setup as pmSetup } from "./helpers/pm-work.js";
 
 const discussionURL =
   "/o/local/w/local/threads/thread-durable-comment?tab=messages";
@@ -462,51 +461,3 @@ for (const surface of ["discussion", "inbox", "inbox-unknown-age"])
     delete newBody[key];
     expect(newBody).toEqual(oldBody);
   });
-
-test("an expired first PM message retries with fresh message keys in its confirmed conversation", async ({
-  page,
-}) => {
-  let reject = true;
-  const { calls, conversations } = await pmSetup(page, {
-    handle: async ({ path, reply }) => {
-      if (path.endsWith("/messages") && reject) {
-        await reply({ error: { code: "conflict" } }, 409);
-        return true;
-      }
-    },
-  });
-  await page.goto("/o/local/w/local/pm?work_ref=card%3Arelease");
-  await page.getByLabel("Message PM", { exact: true }).fill(text);
-  await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await expect(page.locator('[data-mutation-state="attention"]')).toBeVisible();
-  const original = calls.find((call) => call.path.endsWith("/messages")).body;
-  await page.evaluate(async () => {
-    const store = await import("/src/lib/localWorkStore.js");
-    const { readerScopeKey } = await import("/src/lib/readerScope.js");
-    const { autoRetryMaxAgeMs } = await import("/src/lib/replayPolicy.js");
-    const [record] = await store.listLocalWork(readerScopeKey(), "mutation");
-    // A deliberate new retry upgrades a legacy message to receipt mode;
-    // automatic recovery must continue to leave such old bodies untouched.
-    delete record.value.request.message.replay_key;
-    delete record.value.request.creation.replay_key;
-    await store.saveLocalWork(readerScopeKey(), "mutation", record.target, {
-      ...record.value,
-      createdAt: Date.now() - autoRetryMaxAgeMs - 1,
-    });
-  });
-  await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Retry as new", exact: true }),
-  ).toBeVisible();
-  reject = false;
-  await page.getByRole("button", { name: "Retry as new", exact: true }).click();
-  await expect(page.getByText(/^Working/)).toBeVisible();
-  const messages = calls.filter((call) => call.path.endsWith("/messages"));
-  expect(messages).toHaveLength(2);
-  expect(messages[1].path).toBe(messages[0].path);
-  expect(messages[1].body.request_key).not.toBe(original.request_key);
-  expect(messages[1].body.replay_key).not.toBe(original.replay_key);
-  expect(messages[1].body.replay_key).toEqual(expect.any(String));
-  expect(messages[1].body.text).toBe(original.text);
-  expect(conversations).toHaveLength(1);
-});

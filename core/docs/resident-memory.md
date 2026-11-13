@@ -142,16 +142,14 @@ accepted. Capturing a heap profile does not force GC.
 
 Set `ANX_MEMORY_HOSTED_MIX=1` to add five real HTTP SSE subscriptions (events,
 inbox and notification receipts), signed heartbeat publishing to an in-process
-collector, agent wake claim/completion cycles, PM message/lease/heartbeat/reply
-cycles, projection maintenance, and the normal ask/inbox maintenance loops.
+collector, agent wake claim/completion cycles, Decide maintenance, projection
+maintenance, and the normal ask/inbox maintenance loops.
 No model, external service or source credentials are used. All goroutines and
 HTTP connections are canceled and joined before the probe returns.
 
 Prepare a **fresh current-schema synthetic** fixture with `ANX_MEMORY_SEED=1`
-and `ANX_MEMORY_HOSTED_SEED=1`. The latter removes the incomplete, expired PM turn
-placeholders used by the read-plan fixture; live turns are created through the
-PM service. Legacy upgrade queues and read-only fake turn rows must not be
-confused with ordinary hosted activity. Failed legacy/overload experiments are
+and `ANX_MEMORY_HOSTED_SEED=1`. Legacy upgrade queues and read-only fake rows
+must not be confused with ordinary hosted activity. Failed legacy/overload experiments are
 retained as separate evidence. Clone the prepared workspace for both revisions.
 Fixture setup occurs before maintenance and is excluded from timed reads.
 

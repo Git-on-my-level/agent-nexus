@@ -1834,12 +1834,6 @@ func formatGlobalFlagUsage(topic string) string {
 	if path == "" {
 		path = "<command>"
 	}
-	if path == "pm install" || path == "pm status" || path == "pm uninstall" {
-		return strings.TrimSpace(fmt.Sprintf(`Global flags:
-  Global flags can appear before or after the command path.
-  Examples: anx --as pm %s ... ; anx --as pm --json %s ... ; anx --as pm %s ... --json (last two: JSON envelope on stdout)
-  Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>`, path, path, path))
-	}
 	return strings.TrimSpace(fmt.Sprintf(`Global flags:
   Global flags can appear before or after the command path.
   Examples: anx %s ... ; anx --json %s ... ; anx %s ... --json (last two: JSON envelope on stdout)
@@ -2250,20 +2244,18 @@ func mapRuntimePathToRegistryPath(path string) string {
 	// Live CLI paths that differ from OpenAPI x-anx-cli-path. This is not a
 	// compatibility table for deleted commands.
 	rewrites := map[string]string{
-		"mv":                       "work move",
-		"tree":                     "work tree",
-		"pm conversations message": "pm conversations messages create",
-		"pm turns propose":         "pm turns decisions create",
-		"events tail":              "events stream",
-		"inbox tail":               "inbox stream",
-		"threads get":              "threads inspect",
-		"artifacts get":            "artifacts inspect",
-		"artifacts download":       "artifacts content",
-		"secret get":               "secret get --reveal",
-		"meta commands":            "meta commands list",
-		"meta command":             "meta commands get",
-		"meta concepts":            "meta concepts list",
-		"meta concept":             "meta concepts get",
+		"mv":                 "work move",
+		"tree":               "work tree",
+		"events tail":        "events stream",
+		"inbox tail":         "inbox stream",
+		"threads get":        "threads inspect",
+		"artifacts get":      "artifacts inspect",
+		"artifacts download": "artifacts content",
+		"secret get":         "secret get --reveal",
+		"meta commands":      "meta commands list",
+		"meta command":       "meta commands get",
+		"meta concepts":      "meta concepts list",
+		"meta concept":       "meta concepts get",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		return rewritten
@@ -2279,12 +2271,10 @@ func runtimePathFromRegistryPath(path string) string {
 	}
 	path = strings.Join(parts, " ")
 	rewrites := map[string]string{
-		"pm conversations messages create": "pm conversations message",
-		"pm turns decisions create":        "pm turns propose",
-		"meta commands list":               "meta commands",
-		"meta commands get":                "meta command",
-		"meta concepts list":               "meta concepts",
-		"meta concepts get":                "meta concept",
+		"meta commands list": "meta commands",
+		"meta commands get":  "meta command",
+		"meta concepts list": "meta concepts",
+		"meta concepts get":  "meta concept",
 	}
 	if rewritten, ok := rewrites[path]; ok {
 		path = rewritten

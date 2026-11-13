@@ -12,13 +12,13 @@
     sourceLabel,
     workFreshness,
     workKey,
-  } from "$lib/pm/presentation.js";
-  import { integrationGroups } from "$lib/pm/health.js";
+  } from "$lib/work/presentation.js";
+  import { integrationGroups } from "$lib/work/health.js";
   import { formatTimestamp } from "$lib/formatDate";
   import WorkspacePageShell from "$lib/components/layout/WorkspacePageShell.svelte";
   import WorkspacePageHeader from "$lib/components/layout/WorkspacePageHeader.svelte";
   import StateError from "$lib/components/state/StateError.svelte";
-  import SignalBadge from "$lib/components/pm/SignalBadge.svelte";
+  import SignalBadge from "$lib/components/work/SignalBadge.svelte";
   import CopyButton from "$lib/components/CopyButton.svelte";
   import { usePageTitle } from "$lib/pageTitle.svelte.js";
   let work = $state([]),

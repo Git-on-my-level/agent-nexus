@@ -276,20 +276,8 @@
     "milliseconds": 4280
   },
   {
-    "key": "GET /pm/bindings",
-    "milliseconds": 3998
-  },
-  {
     "key": "GET /pm/context",
     "milliseconds": 4667
-  },
-  {
-    "key": "GET /pm/conversations",
-    "milliseconds": 4073
-  },
-  {
-    "key": "GET /pm/conversations/{conversation_id}",
-    "milliseconds": 4130
   },
   {
     "key": "GET /pm/decisions",
@@ -298,14 +286,6 @@
   {
     "key": "GET /pm/decisions/{decision_id}",
     "milliseconds": 4305
-  },
-  {
-    "key": "GET /pm/presence",
-    "milliseconds": 100
-  },
-  {
-    "key": "GET /pm/turns/{turn_id}",
-    "milliseconds": 4141
   },
   {
     "key": "GET /readyz",
@@ -490,10 +470,6 @@
   {
     "key": "POST /hosts/bridge-status",
     "milliseconds": 3500
-  },
-  {
-    "key": "POST /pm/turns/{turn_id}/context",
-    "milliseconds": 13699
   },
   {
     "key": "POST /refs/resolve",

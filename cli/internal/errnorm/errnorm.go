@@ -151,9 +151,9 @@ func ExitCode(err error) int {
 	switch typed.Code {
 	case "not_found", "draft_not_found", "profile_not_found":
 		return 3
-	case "quota_exceeded", "conflict", "source_revision_changed", "lease_mismatch", "lease_not_held", "actor_exists", "username_taken":
+	case "quota_exceeded", "conflict", "source_revision_changed", "lease_not_held", "actor_exists", "username_taken":
 		return 4
-	case "pm_actor_mismatch", "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "agent_archived", "wake_proof_required":
+	case "auth_admin_required", "human_required", "host_self_revoke", "auth_required", "authentication_required", "authorization_denied", "forbidden", "invalid_token", "key_mismatch", "agent_revoked", "agent_archived", "wake_proof_required":
 		return 5
 	case "outcome_unknown", "network_error", "request_failed", "stream_connect_failed", "stream_read_failed", "storage_unavailable", "primitives_unavailable", "schema_unavailable", "meta_unavailable":
 		return 6
@@ -315,7 +315,6 @@ var defaultMetadataByCode = map[string]Metadata{
 	"auth_registration_unavailable": {Recoverable: true, Hint: "Core auth may still be starting. Retry `anx host enroll` in a few seconds, or run `anx doctor` to check core liveness and readiness."},
 	"auth_admin_required":           {Recoverable: false, Hint: "A human must grant this agent administration access through Access or anx auth admins grant <principal>."},
 	"human_required":                {Recoverable: false, Hint: humanRequiredHint},
-	"pm_actor_mismatch":             {Recoverable: false, Hint: "Ask the workspace operator to rebind ANX_PM_AGENT_ACTOR_ID to the acting actor and restart anx-core."},
 	"forbidden":                     {Recoverable: false, Hint: forbiddenHint},
 	"authorization_denied":          {Recoverable: false, Hint: forbiddenHint},
 	"host_self_revoke":              {Recoverable: false, Hint: "Ask a human or an auth-admin on another host to revoke this host."},
@@ -338,8 +337,6 @@ var defaultMetadataByCode = map[string]Metadata{
 	"invalid_request":               {Recoverable: true, Hint: "Review required fields and request shape, then retry."},
 	"invalid_token":                 {Recoverable: true, Hint: "Run `anx --as <name> auth whoami`; if host assertion fails, ask a human auth-admin to review enrollment."},
 	"key_mismatch":                  {Recoverable: true, Hint: "Check local host key permissions with `anx doctor`; ask a human auth-admin to re-enroll the host if its key changed."},
-	"lease_mismatch":                {Recoverable: true, Hint: "This lease token no longer matches. The lease was released or re-claimed; claim the turn again and retry with the new token (`--lease-token` or ANX_PM_LEASE_TOKEN)."},
-	"lease_required":                {Recoverable: true, Hint: "This turn's current lease token is required. Pass `--lease-token` or set ANX_PM_LEASE_TOKEN (exported by `anx pm serve`)."},
 	"last_active_principal":         {Recoverable: true, Hint: "Retry only with `--allow-human-lockout --human-lockout-reason <why>` for explicit break-glass recovery; it can leave the workspace without any active human principal."},
 	"method_not_allowed":            {Recoverable: true, Hint: "Use the HTTP method documented for this endpoint."},
 	"network_error":                 {Recoverable: true, Hint: "Check network/core availability and retry with backoff."},
@@ -349,7 +346,6 @@ var defaultMetadataByCode = map[string]Metadata{
 	"stream_connect_failed":         {Recoverable: true, Hint: "Retry with `--follow` after verifying stream endpoint availability."},
 	"stream_read_failed":            {Recoverable: true, Hint: "Retry with `--follow` or use `--last-event-id` to resume."},
 	"timeout_exceeded":              {Recoverable: true, Hint: "Increase `--timeout` or reduce request scope."},
-	"turn_not_claimed":              {Recoverable: true, Hint: "This turn is not claimed; there is nothing to release."},
 	"unknown_actor_id":              {Recoverable: true, Hint: "Register/select a valid actor id before issuing writes."},
 	"unknown_command":               {Recoverable: true, Hint: "Run `anx help` to list available commands."},
 	"username_taken":                {Recoverable: true, Hint: "Choose a different username and retry."},

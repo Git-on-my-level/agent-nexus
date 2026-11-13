@@ -1,7 +1,7 @@
 package primitives_test
 
 import (
-	"agent-nexus-core/internal/pm"
+	"agent-nexus-core/internal/decide"
 	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/resourceaccess"
 	"agent-nexus-core/internal/testutil/perfguard"
@@ -28,7 +28,7 @@ func TestResourceAccessPMWriteIndex(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "owner", private["thread_id"].(string), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = pm.NewStore(ws.DB()); err != nil {
+	if _, err = decide.NewStore(ws.DB()); err != nil {
 		t.Fatal(err)
 	}
 	put := func(kind, id string, body any) {

@@ -5,10 +5,10 @@ info:
   description: |
     Canonical workspace HTTP contract for Agent Nexus.
 
-    PM designation grants no additional private-resource read permissions.
-    Direct PM and native resource reads use ordinary principal visibility.
-    Only explicitly queued, lease-validated PM turn operations may read for
-    their requesting principal; the lease is not authority on other routes.
+    Agents support PM work through the CLI (orient, triage, file `anx ask`
+    recommendations, update cards), but `pm.propose` and `pm.approve` are
+    human-only. PM designation grants no additional private-resource read
+    permissions. All reads use ordinary principal visibility.
 
     Public workspace identity is ref/handle first. Durable resources expose a
     typed `ref` (for cross-resource links) and kind-scoped `handle` (for URLs
@@ -884,288 +884,11 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
-  /pm/conversations:
-    get:
-      operationId: pmConversationsList
-      summary: List PM conversations
-      description: Newest first by created_at descending, then internal rowid descending. Opaque cursors retain both ordering values so newer inserts do not shift subsequent pages. Pagination applies permission filtering before deriving has_more and next_cursor.
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.conversations.list
-      x-anx-cli-path: pm conversations list
-      x-anx-why: List PM conversations.
-      x-anx-input-mode: none
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMConversationListResponse`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: limit
-        in: query
-        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
-      - name: cursor
-        in: query
-        schema: {type: string}
-      responses:
-        '200':
-          description: List PM conversations
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMConversationListResponse'
-    post:
-      operationId: pmConversationsCreate
-      summary: Create a durable PM conversation
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.conversations.create
-      x-anx-cli-path: pm conversations create
-      x-anx-why: Create a durable PM conversation.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMConversation`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMConversationCreateRequest'
-      responses:
-        '201':
-          description: Create a durable PM conversation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMConversation'
-  /pm/conversations/{conversation_id}:
-    get:
-      operationId: pmConversationsGet
-      summary: Read PM conversation and turns
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.conversations.get
-      x-anx-cli-path: pm conversations get
-      x-anx-why: Read PM conversation and turns.
-      x-anx-input-mode: none
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMConversationDetailResponse`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: conversation_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: limit
-        in: query
-        schema: {type: integer, minimum: 1, maximum: 200, default: 200}
-      - name: cursor
-        in: query
-        schema: {type: string}
-      responses:
-        '200':
-          description: Read PM conversation and turns
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMConversationDetailResponse'
-  /pm/conversations/{conversation_id}/messages:
-    post:
-      operationId: pmConversationsMessagesCreate
-      summary: Queue a contextual PM turn
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.conversations.messages.create
-      x-anx-cli-path: pm conversations messages create
-      x-anx-why: Queue a contextual PM turn.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Channel ingress uses this same turn pipeline; Telegram and Discord messages become turns with `origin` set. Decisions do not imply application; receipts distinguish delivery, source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: conversation_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMMessageCreateRequest'
-      responses:
-        '202':
-          description: Queue a contextual PM turn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMTurn'
-        '429':
-          description: Busy; details.reason is conversation with details.turn_id, or queue with details.queued and details.limit. Unclaimed turns do not consume runner capacity.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMErrorResponse'
-  /pm/connect:
-    post:
-      operationId: pmConnect
-      summary: Connect a local workspace PM runner
-      tags: [pm]
-      x-anx-surface: canonical
-      x-anx-command-id: pm.connect
-      x-anx-cli-path: pm connect
-      x-anx-why: Register the selected PM's local connection without queueing a turn.
-      x-anx-agent-notes: Send safe runner and host labels only. This bootstrap operation remains available before onboarding.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `PMPresence`.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, pm_actor_mismatch, conflict, invalid_request, unavailable]
-      x-anx-concepts: [agents]
-      x-anx-stability: beta
-      description: Only the explicitly selected PM or a verified host-derived agent named pm when none is selected may connect. Labels are short display metadata, never commands or credentials. An authenticated agent whose actor differs from ANX_PM_AGENT_ACTOR_ID receives HTTP 403 pm_actor_mismatch with configured_actor_id, acting_actor_id and a hint to rebind that server setting. Unauthenticated callers and human principals receive no binding details.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMConnectRequest'
-      responses:
-        '403':
-          description: Authenticated principal denied; pm_actor_mismatch identifies a stale configured PM actor binding.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMErrorResponse'
-        '200':
-          description: Workspace PM connection state
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMPresence'
-  /pm/disconnect:
-    post:
-      operationId: pmDisconnect
-      summary: Reset workspace PM onboarding after explicit uninstall
-      tags: [pm]
-      x-anx-surface: canonical
-      x-anx-command-id: pm.disconnect
-      x-anx-cli-path: pm disconnect
-      x-anx-why: Stop expecting the selected PM to return after explicit uninstall.
-      x-anx-agent-notes: Idempotent. Only the selected PM principal may reset onboarding. Existing decisions remain readable and answerable. Unfinished turns fail with failure_kind pm_not_onboarded. A later explicit pm connect re-enables onboarding; idle claims and heartbeats cannot undo the reset.
-      x-anx-input-mode: none
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `PMPresence` with state not_onboarded.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, pm_actor_mismatch, unavailable]
-      x-anx-concepts: [agents]
-      x-anx-stability: beta
-      description: Authenticated selected PM principal only, including when already disconnected. Ordinary silence remains offline. Reset is durable across restarts and preserves historical conversations, decisions and approvals.
-      responses:
-        '200':
-          description: Workspace PM is not set up
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMPresence'
-  /pm/presence:
-    get:
-      operationId: pmPresence
-      summary: Read recent PM connection state
-      tags: [pm]
-      x-anx-surface: canonical
-      x-anx-command-id: pm.presence
-      x-anx-cli-path: pm presence
-      x-anx-why: Check whether a PM runner is connected before requesting help.
-      x-anx-input-mode: none
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `PMPresence`.
-      x-anx-error-codes: [auth_required, invalid_token, forbidden, unavailable]
-      x-anx-concepts: [agents]
-      x-anx-stability: beta
-      x-anx-agent-notes: Same computed PM state included in agents me. Accepted local connections, claims and lease heartbeats count; connected expires after 90 seconds. Labels never contain runner commands. Upgrades preserve prior PM activity as durable offline onboarding; existing proposals remain readable and answerable independently of onboarding. New questions and proposals require onboarding.
-      responses:
-        '200':
-          description: Workspace PM connection state; connected expires after 90 seconds.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMPresence'
   /pm/context:
     get:
       operationId: pmContext
       summary: Read bounded authorized PM context
-      description: Direct reads use the authenticated principal's ordinary resource visibility. PM designation grants no additional access to private cards, asks, decisions or evidence. Use a claimed turn and its lease for requester-scoped context.
+      description: Direct reads use the authenticated principal's ordinary resource visibility. Acting as PM grants no additional access to private cards, asks, decisions or evidence.
       tags:
       - pm
       x-anx-surface: canonical
@@ -1177,7 +900,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMContextResponse`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1191,7 +913,7 @@ paths:
       - cards
       - evidence
       x-anx-stability: beta
-      x-anx-agent-notes: Direct reads use ordinary principal visibility; PM designation grants no private access. Inside a claimed turn use requester-scoped context with its lease.
+      x-anx-agent-notes: Direct reads use ordinary principal visibility; acting as PM grants no private access.
       x-anx-adjacent-commands: [pm card, pm propose]
       parameters:
       - name: work_ref
@@ -1241,7 +963,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecisionListResponse`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1286,7 +1007,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1323,61 +1043,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/PMDecision'
         '409':
-          description: Request key intent conflicts include error.details.existing_decision_id. Non-human proposals blocked by an awaiting human proposal on the same approver actor, work, and scope return human_proposal_pending with error.details.pending_decision_id; a human must decline or answer it first.
+          description: Request key intent conflicts include error.details.existing_decision_id. Non-human principals are rejected with forbidden before proposal creation. The human_proposal_pending code is retained for compatibility with the removed agent-propose path and is not returned by current servers.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PMErrorResponse'
-  /pm/turns/{turn_id}:
-    get:
-      operationId: pmTurnsGet
-      summary: Read a PM conversation turn
-      description: The requesting actor with conversation read permission may read the turn. The configured PM actor must supply X-ANX-PM-Lease-Token with its live turn lease or the matching finishing lease for a terminal replay. Missing, invalid or expired read leases make the turn appear not found, without exposing its status. PM designation alone grants no conversation read authority. Active lease_owner is the runner ID; lease_token is returned only by claim.
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.get
-      x-anx-cli-path: pm turns get
-      x-anx-why: Read a PM conversation turn.
-      x-anx-input-mode: none
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: The conversation owner can read this turn. PM runners must send X-ANX-PM-Lease-Token; designation alone grants no private reads. Past-deadline open turns are failed before returning.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: X-ANX-PM-Lease-Token
-        in: header
-        required: false
-        description: Runner lease credential; never returned by this read.
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Read a PM conversation turn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMTurn'
   /pm/decisions/{decision_id}:
     get:
       operationId: pmDecisionsGet
@@ -1393,7 +1063,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1426,7 +1095,7 @@ paths:
     post:
       operationId: pmDecisionsAnswer
       summary: Answer and authorize a scoped decision
-      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies human, channel, or pm_turn proposals and proposed_by identifies the proposing actor, so clients can direct reproposal to the board or the PM truthfully. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
+      description: Fresh approval requires target_revision to equal current Work.decision_revision and work not already at the payload phase. Stale, missing (including trashed or archived), already-at-target, or unreadable work returns 409 source_revision_changed without recording an answer or action. The refusal message is "Proposal target has changed (proposed at <rev>, source now <rev|unavailable>). Approval refused (<reason>); decline it or wait for a fresh proposal." Details retain approved_revision (the proposed target revision), current_revision (null if unavailable), reason (revision_changed, work_missing, already_at_target, or work_read_failed), origin_kind, and proposed_by. Every source_revision_changed response on answer, dispatch, or reconcile includes origin_kind and proposed_by as strings copied from the decision (empty for legacy decisions without provenance); origin_kind identifies the recorded provenance (human, or legacy channel or pm_turn) and proposed_by identifies the proposing actor so clients can display attribution truthfully. New proposals are human-only; channel and pm_turn values appear only on legacy records. Decline remains allowed in all these cases. Identical recorded answers replay with 200 even after work changes; different answers or decision revision conflicts remain 409.
       tags:
       - pm
       x-anx-surface: canonical
@@ -1438,7 +1107,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMDecision`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1495,7 +1163,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1558,7 +1225,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMActionListResponse`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1603,7 +1269,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1648,7 +1313,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1704,7 +1368,6 @@ paths:
         mode: none
       x-anx-output-envelope: Returns `PMAction`.
       x-anx-error-codes:
-      - pm_not_onboarded
       - auth_required
       - invalid_token
       - invalid_request
@@ -1745,474 +1408,6 @@ paths:
           description: Only the decision actor may acknowledge.
         '409':
           description: Action is not failed or unresolvable unknown.
-  /pm/bindings:
-    get:
-      operationId: pmBindingsList
-      summary: List channel identity bindings in the workspace
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.bindings.list
-      x-anx-cli-path: pm bindings list
-      x-anx-why: Show which exact channel identities may talk to the PM, and with what authority, without sending anything.
-      x-anx-input-mode: none
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMBindingListResponse`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. A binding is an operator mapping, not proof that the
-        channel is configured or reachable; `anx pm channels doctor` checks configuration without sending.
-      parameters:
-      - name: limit
-        in: query
-        schema: {type: integer, minimum: 1, maximum: 200, default: 50}
-      - name: cursor
-        in: query
-        schema: {type: string}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMBindingListResponse'
-    post:
-      operationId: pmBindingsCreate
-      summary: Bind an exact channel identity to a workspace principal
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.bindings.create
-      x-anx-cli-path: pm bindings create
-      x-anx-why: Bind an exact channel identity to a workspace principal.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMBinding`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMBinding'
-      responses:
-        '201':
-          description: Bind an exact channel identity to a workspace principal
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMBinding'
-  /pm/turns/claim:
-    post:
-      operationId: pmTurnsClaim
-      summary: Claim or recover a PM turn with an exclusive runner lease
-      description: 'New leases are allocated atomically only while the workspace has fewer than ANX_PM_MAX_CONCURRENT (default 2) claimed turns with unexpired leases. When a waiting turn for the selected PM actor exists but workspace lease capacity is reached, returns 429 busy with error.details {reason: capacity, in_flight: N, limit: M, waiting: K}; waiting counts eligible unleased turns for that actor before their deadline. The message is "Workspace PM capacity reached (N in flight; limit M)". Runners retry after one poll interval. With no waiting turn for that actor, returns 204 even at capacity. Expired leases free capacity. Recovers an unexpired lease held by the same selected PM actor and runner_id before allocating new work, returning its existing token without extending expiry or changing claimed_at. Other runners cannot steal an unexpired lease. Leases last ANX_PM_LEASE_TTL (default 60s), bounded by the turn deadline. Runners must POST heartbeat with the token at a cadence strictly less than TTL/2. Expired leases are reclaimable with a fresh token until the turn deadline; the same open turn becomes unclaimed and waiting again, preserving its history rather than failing. A runner_id identifies one serial worker and must not be shared by concurrent workers. Release the lease on SIGINT or SIGTERM before exiting; a restart with the same runner_id can recover after an abrupt kill.'
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.claim
-      x-anx-cli-path: pm turns claim
-      x-anx-why: Claim one queued turn for the selected PM agent so two runners never answer it.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMClaimedTurn`.
-      x-anx-error-codes:
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - source_revision_changed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. Empty body is allowed. 204 means no waiting turn; 429 busy with reason capacity means waiting work is blocked by the lease cap and should be retried after one poll interval.
-        Claims recover the same runner_id lease first, or allocate a fresh lease. Past-deadline open turns are
-        expired to `failed` on reads, claims, and periodic maintenance. Lease expiry is bounded by the turn deadline and ANX_PM_LEASE_TTL (default 60s). Channel-origin turns use this same claim/complete/fail pipeline.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMClaimRequest'
-      responses:
-        '200':
-          description: Claimed queued turn with a runner lease
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMClaimedTurn'
-        '204':
-          description: No waiting turn for the selected PM actor and no owned lease to recover, including at capacity
-        '429':
-          description: Waiting work exists but workspace runner lease capacity is reached; busy with reason capacity, in_flight, limit, and waiting. Retry after one poll interval.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMErrorResponse'
-  /pm/turns/{turn_id}/fail:
-    post:
-      operationId: pmTurnsFail
-      summary: Mark a claimed PM turn failed
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.fail
-      x-anx-cli-path: pm turns fail
-      x-anx-why: Record a selected PM agent failure reason without inventing a reply.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - turn_closed
-      - lease_required
-      - lease_mismatch
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only. An active lease is required and lease_token must match. Missing tokens return 409 lease_required; stale or expired lease tokens return 409 lease_mismatch and require claiming again. Identical terminal failure replays with the token that failed the turn return 200 without mutation, including after the deadline; a different reason returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already failed and no retry is needed.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMFailRequest'
-      responses:
-        '200':
-          description: Mark a claimed PM turn failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMTurn'
-  /pm/turns/{turn_id}/release:
-    post:
-      operationId: pmTurnsRelease
-      summary: Release a claimed PM turn back to the queue
-      description: The selected PM actor releases its unexpired lease using runner_id and lease_token. A different runner or incorrect token returns 409 lease_mismatch; no active lease returns 409 turn_not_claimed explaining that it is already released or expired and no release is needed. Clears lease credentials, preserves claimed_at, and returns status sending with claimed false. CLI runners should stop local execution and release on SIGINT or SIGTERM using a bounded shutdown request. Terminal or expired turns return 409 turn_closed; expired turns include failure_kind expired and a message naming the deadline.
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.release
-      x-anx-cli-path: pm turns release
-      x-anx-why: Return interrupted work to the queue for another claim.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - lease_mismatch
-      - turn_not_claimed
-      - turn_closed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Selected PM agent only; runner_id and lease_token must match the unexpired lease owner.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMReleaseRequest'
-      responses:
-        '200':
-          description: Release a claimed PM turn back to the queue
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMTurn'
-        '403':
-          description: Caller is not the selected PM actor or runner_id and lease_token do not match the lease.
-        '409':
-          description: No active lease or turn is closed; expired turns report failure_kind expired and the deadline.
-  /pm/turns/{turn_id}/heartbeat:
-    post:
-      operationId: pmTurnsHeartbeat
-      summary: Renew a claimed PM turn lease
-      description: Selected PM actor only. Requires the current lease_token. Extends lease_expires_at to min(now + ANX_PM_LEASE_TTL, turn deadline). ANX_PM_LEASE_TTL defaults to 60s (valid range 1s to 10m); runners must renew at a cadence strictly less than TTL/2. Missing tokens return 409 lease_required; expired, released, or foreign tokens return 409 lease_mismatch. Terminal turns return 409 turn_closed. Returns PMHeartbeatTurn without exposing the token; preserves status, claimed_at, and existing history.
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.heartbeat
-      x-anx-cli-path: pm turns heartbeat
-      x-anx-why: Keep an active runner lease alive during execution.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMHeartbeatTurn`.
-      x-anx-error-codes:
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - lease_mismatch
-      - lease_required
-      - turn_closed
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Renew at a cadence strictly less than TTL/2; stop execution if ownership is lost.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMHeartbeatRequest'
-      responses:
-        '200':
-          description: Renew a claimed PM turn lease
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMHeartbeatTurn'
-        '403':
-          description: Caller is not the selected PM actor.
-        '409':
-          description: Missing lease token, lease mismatch, or closed turn.
-  /pm/turns/{turn_id}/context:
-    post:
-      operationId: pmTurnsContext
-      description: Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
-      summary: Read requesting principal context as selected PM agent
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.context
-      x-anx-cli-path: pm turns context
-      x-anx-why: Read requesting principal context as selected PM agent.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMContextResponse`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - turn_closed
-      - lease_required
-      - lease_mismatch
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMTurnContextRequest'
-      responses:
-        '200':
-          description: Read requesting principal context as selected PM agent
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMContextResponse'
-  /pm/turns/{turn_id}/decisions:
-    post:
-      operationId: pmTurnsDecisionsCreate
-      description: For work.note, payload.note is required and instruction carries the rationale; approval posts a Nexus card message with atomic revision fencing and action-key readback. For work.annotate, instruction must be a nonempty JSON object containing only labels, roles, project_ref, priority, next_actor, next_action, blockers, wake_condition, start_at, due_at, relations, executions. Priority accepts p0, p1, p2, p3 (or an empty string or null to clear); start_at and due_at accept an RFC 3339 timestamp (or an empty string or null to clear). Blockers accepts an array of strings; relations accepts an array of objects with kind (parent, child, depends_on, related, artifact) and a nonempty string ref of the form <type>:<handle-or-id> (card refs for parent, child, depends_on, also accepting bare card handles or IDs); executions accepts an array of objects with nonempty string authority and run_id. Labels and roles accept arrays of at most 16 nonempty strings of at most 128 characters (or null to clear). Keys and value shapes are validated before proposal insertion; invalid input returns 400 invalid_request, naming the allowed keys for unknown keys or the accepted values and shape for invalid values. Requires the current active lease token in the request body. Missing tokens return 409 lease_required; expired, released, or stale tokens return 409 lease_mismatch and require claiming again.
-      summary: Record a selected PM agent proposal
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.decisions.create
-      x-anx-cli-path: pm turns decisions create
-      x-anx-why: Record a selected PM agent proposal.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMDecision`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - human_proposal_pending
-      - turn_closed
-      - lease_required
-      - lease_mismatch
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMTurnProposeRequest'
-      responses:
-        '409':
-          description: Lease or request-key conflict, or human_proposal_pending with error.details.pending_decision_id; a human must decline or answer the pending human proposal on the same approver actor, work, and scope first.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMErrorResponse'
-        '200':
-          description: Record or replay a selected PM agent proposal. Replays include replayed true and terminal replays also include replayed_terminal_status.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMDecision'
-  /pm/turns/{turn_id}/complete:
-    post:
-      operationId: pmTurnsComplete
-      description: Requires an active lease. Missing tokens return 409 lease_required; released, expired, or stale tokens return 409 lease_mismatch and require claiming again. Identical terminal completion replays (text and evidence_refs) with the token that completed the turn return 200 without mutation, including after the deadline; different content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch explaining that the turn is already delivered and no retry is needed.
-      summary: Record a selected PM agent response
-      tags:
-      - pm
-      x-anx-surface: canonical
-      x-anx-command-id: pm.turns.complete
-      x-anx-cli-path: pm turns complete
-      x-anx-why: Record a selected PM agent response.
-      x-anx-input-mode: json-body
-      x-anx-streaming:
-        mode: none
-      x-anx-output-envelope: Returns `PMTurn`.
-      x-anx-error-codes:
-      - pm_not_onboarded
-      - auth_required
-      - invalid_token
-      - invalid_request
-      - forbidden
-      - not_found
-      - conflict
-      - turn_closed
-      - lease_required
-      - lease_mismatch
-      - busy
-      - unavailable
-      x-anx-concepts:
-      - cards
-      - evidence
-      x-anx-stability: beta
-      x-anx-agent-notes: Workspace principal is authoritative. Decisions do not imply application; receipts distinguish delivery,
-        source reports, and independent verification. Unknown sends must not be blindly retried.
-      parameters:
-      - name: turn_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PMCompleteRequest'
-      responses:
-        '200':
-          description: Record a selected PM agent response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PMTurn'
   /sessions:
     post:
       operationId: sessionsRegister
@@ -9658,7 +8853,7 @@ paths:
       x-anx-why: Resolve any workspace bearer to its principal and durable actor identity, including host-derived agent details when present.
       x-anx-input-mode: none
       x-anx-streaming: { mode: none }
-      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf, pm: PMState }` for a human, derived/adopted agent, or standalone agent. The agent key is retained for existing clients."
+      x-anx-output-envelope: "Returns `{ agent: PrincipalSelf }` for a human, derived/adopted agent, or standalone agent."
       x-anx-error-codes: [auth_required, invalid_token]
       x-anx-concepts: [auth, agents]
       x-anx-stability: beta
@@ -11248,8 +10443,7 @@ components:
       additionalProperties: false
       properties:
         agent: {$ref: '#/components/schemas/PrincipalSelf'}
-        pm: {$ref: '#/components/schemas/PMState'}
-      required: [agent, pm]
+      required: [agent]
     PrincipalSelf:
       type: object
       additionalProperties: false
@@ -11292,31 +10486,6 @@ components:
       properties:
         presence: {$ref: '#/components/schemas/Presence'}
       required: [presence]
-    PMConversation:
-      type: object
-      additionalProperties: true
-      properties:
-        id: &id001
-          type: string
-        workspace_id: &id002
-          type: string
-        actor_id: &id003
-          type: string
-        context_refs:
-          type: array
-          maxItems: 8
-          items: {type: string, maxLength: 512}
-          description: Pinned typed refs, persisted on the conversation. work_ref remains the primary task for compatibility.
-        work_ref: &id004
-          type: string
-        created_at: &id005
-          type: string
-        title:
-          type: string
-        thread_id:
-          type: string
-        origin:
-          $ref: '#/components/schemas/PMOrigin'
     PMOrigin:
       type: object
       additionalProperties: true
@@ -11331,112 +10500,6 @@ components:
           type: string
         external_user_id:
           type: string
-    PMTurn:
-      required: [deadline, claimed]
-      type: object
-      additionalProperties: true
-      properties:
-        id: *id001
-        workspace_id: *id002
-        actor_id: *id003
-        work_ref: *id004
-        created_at: *id005
-        conversation_id:
-          type: string
-        text:
-          type: string
-        context_refs:
-          type: array
-          maxItems: 8
-          items: {type: string}
-        activity:
-          type: array
-          maxItems: 50
-          items: {$ref: '#/components/schemas/PMTurnActivity'}
-        partial_sequence: {type: integer, minimum: 1}
-        partial_response:
-          type: string
-          description: Latest draft answer snapshot, bounded by max_output_bytes. Not a completed answer.
-        response:
-          type: string
-        wakeup_id:
-          type: string
-        agent_actor_id:
-          type: string
-        deadline:
-          type: string
-          format: date-time
-          description: Turn completion deadline; open turns expire to failed on reads and periodic maintenance.
-        status:
-          type: string
-          enum:
-          - pending_delivery
-          - sending
-          - delivered
-          - unknown
-          - failed
-        revision:
-          type: integer
-        evidence_refs:
-          type: array
-          items:
-            type: string
-        decision_ids:
-          type: array
-          items:
-            type: string
-        failure:
-          type: string
-        failure_kind:
-          type: string
-          readOnly: true
-          description: Machine-readable failure reason; pm_not_onboarded means explicit uninstall terminated unfinished PM work; expired means the turn deadline elapsed. Absent for failures without a classified reason. Also returned in error.details for turn_closed 409 responses; expiry messages say expired at followed by the RFC3339 deadline.
-        claimed:
-          type: boolean
-          readOnly: true
-          description: True while a runner holds an unexpired lease. Only the runner ID is exposed as lease_owner; no lease token is exposed on public turn responses.
-        lease_owner:
-          type: string
-          readOnly: true
-          description: Runner ID of the active lease, visible to the requesting actor and configured PM actor. Never a lease token; absent after release or expiry.
-        claimed_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: Time of the most recent runner claim, if recorded; retained after completion or expiry.
-        max_output_bytes:
-          type: integer
-        origin:
-          $ref: '#/components/schemas/PMOrigin'
-    PMHeartbeatTurn:
-      description: Renewal response with the new expiry and no lease token.
-      allOf:
-      - $ref: '#/components/schemas/PMTurn'
-      - type: object
-        required:
-        - lease_expires_at
-        properties:
-          lease_expires_at:
-            type: string
-            format: date-time
-            description: Renewed lease expiry, never later than the turn deadline.
-    PMClaimedTurn:
-      description: Authenticated runner claim response; lease credentials are returned only by the claim endpoint.
-      allOf:
-      - $ref: '#/components/schemas/PMTurn'
-      - type: object
-        properties:
-          activity_supported:
-            type: boolean
-            readOnly: true
-            description: True when this core supports bounded activity in heartbeats. Older cores omit it; direct runners then keep lease-only heartbeats.
-          lease_token:
-            type: string
-          lease_owner:
-            type: string
-          lease_expires_at:
-            type: string
-            format: date-time
     PMActionPayload:
       type: object
       additionalProperties: false
@@ -11489,9 +10552,9 @@ components:
           type: string
           readOnly: true
           description: Configured executor route (for example nexus or github); none when no route is available. Open string for future integrations; configured denotes a legacy unnamed executor. Unknown denotes a legacy record whose source cannot be recovered after work purge; deliverable is null.
-        id: *id001
-        workspace_id: *id002
-        actor_id: *id003
+        id: {type: string}
+        workspace_id: {type: string}
+        actor_id: {type: string}
         proposed_by:
           type: string
           readOnly: true
@@ -11500,13 +10563,13 @@ components:
           type: string
           readOnly: true
           enum: [human, pm_turn, channel]
-          description: Human principal proposals retain human even through a channel; the existing origin field records the validated channel identity. PM turn proposals use pm_turn. The channel value is retained for legacy records. Absent on legacy decisions without provenance.
+          description: Legacy human channel proposals retain origin_kind human; the existing origin field records the validated historical channel identity. pm_turn and channel values are retained for legacy records only. New proposals record origin_kind human and do not accept caller-supplied origin. Absent on legacy decisions without provenance.
         turn_id:
           type: string
           readOnly: true
-          description: Originating PM turn ID, present for pm_turn proposals.
-        work_ref: *id004
-        created_at: *id005
+          description: Originating turn ID on legacy pm_turn proposals.
+        work_ref: {type: string}
+        created_at: {type: string}
         instruction:
           type: string
         payload:
@@ -11611,11 +10674,11 @@ components:
           type: string
           readOnly: true
           description: Trusted source authority captured at proposal and copied to the action for executor routing even after work is purged. Absent on legacy records; live work supplies the legacy fallback.
-        id: *id001
-        workspace_id: *id002
-        actor_id: *id003
-        work_ref: *id004
-        created_at: *id005
+        id: {type: string}
+        workspace_id: {type: string}
+        actor_id: {type: string}
+        work_ref: {type: string}
+        created_at: {type: string}
         decision_id:
           type: string
         instruction:
@@ -11682,68 +10745,8 @@ components:
                 $ref: '#/components/schemas/PMReceipt'
         revision:
           type: integer
-    PMBinding:
-      type: object
-      additionalProperties: true
-      properties:
-        id: *id001
-        workspace_id: *id002
-        actor_id: *id003
-        work_ref: *id004
-        created_at: *id005
-        origin:
-          $ref: '#/components/schemas/PMOrigin'
-        can_approve:
-          type: boolean
-        enabled:
-          type: boolean
-        revision:
-          type: integer
-    PMConversationCreateRequest:
-      type: object
-      additionalProperties: true
-      properties:
-        actor_id:
-          type: string
-          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
-        request_key:
-          type: string
-        replay_key:
-          type: string
-          maxLength: 256
-          description: Opt in to an atomic original 201 receipt, binding the authenticated actor and complete decoded request. Requires a new conversation request_key; legacy conversations without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect; new writes retain the setup gate.
-        title:
-          type: string
-        context_refs:
-          type: array
-          maxItems: 8
-          items: {type: string, maxLength: 512}
-          description: Pinned typed refs, persisted on the conversation. work_ref remains the primary task for compatibility.
-        work_ref:
-          type: string
-      required:
-      - request_key
-      - title
-    PMMessageCreateRequest:
-      type: object
-      additionalProperties: true
-      properties:
-        actor_id:
-          type: string
-          description: When supplied, must match the authenticated actor. Binds a recovered local mutation to its original identity.
-        request_key:
-          type: string
-        replay_key:
-          type: string
-          maxLength: 256
-          description: Opt in to the original 202 receipt. Atomically commits the turn and durable dispatch intent; binds actor, conversation and complete decoded body. Existing turns without a receipt cannot be adopted. Recovery checks current access and works after PM disconnect. Legacy callers replay current turn state.
-        text:
-          type: string
-      required:
-      - request_key
-      - text
     PMErrorResponse:
-      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Turn admission returns HTTP 429 with code busy. error.details.reason is conversation with turn_id identifying the blocking turn, or queue with queued and limit for the workspace (ANX_PM_MAX_QUEUED, default 20). Waiting turns are open, before their deadline, and have no unexpired runner lease, including unknown wakeup outcomes. Conversation serialization takes precedence when both limits apply. Capacity means claimed turns with unexpired leases (ANX_PM_MAX_CONCURRENT, default 2); it is enforced atomically at claim time with HTTP 204, not at message admission. The capacity reason remains reserved for compatibility.
+      description: Temporary principal authorization lookup failures return HTTP 503 unavailable without granting permission or recording a proposal; unknown or revoked principals remain forbidden. Approval and dispatch conflicts return HTTP 409 with a reason naming the stale-work or extra-proposal condition.
       type: object
       required: [error]
       properties:
@@ -11764,34 +10767,13 @@ components:
             details:
               type: object
               properties:
-                configured_actor_id:
-                  type: string
-                  description: Configured PM actor, disclosed only after authenticating an agent on a PM connection operation.
-                acting_actor_id:
-                  type: string
-                  description: Authenticated acting agent for pm_actor_mismatch.
-                turn_id:
-                  type: string
-                  description: Blocking turn ID for conversation busy errors, or closed turn ID for turn_closed errors.
                 reason:
                   type: string
-                  enum: [conversation, capacity, queue, revision_changed, work_missing, already_at_target, work_read_failed, conversation_owner_not_human]
-                  description: Turn admission constraint, approval/source preflight refusal, or conversation_owner_not_human for a turn proposal whose owner is an agent principal. That 403 message is "Proposals need a human approver; this conversation belongs to an agent principal".
-                queued:
-                  type: integer
-                  description: Current workspace waiting turns for queue errors.
-                waiting:
-                  type: integer
-                  description: Eligible unleased turns for the selected PM actor before their deadline, for claim capacity errors.
-                in_flight:
-                  type: integer
-                  description: Current workspace claimed turns with unexpired runner leases for capacity errors.
-                limit:
-                  type: integer
-                  description: Workspace queue limit for queue errors, or runner lease limit for capacity errors.
+                  enum: [revision_changed, work_missing, already_at_target, work_read_failed]
+                  description: Approval/source preflight refusal.
                 pending_decision_id:
                   type: string
-                  description: Awaiting human decision blocking a different non-human proposal on the same approver actor, work, and scope.
+                  description: Retained for compatibility with the removed agent-propose path; current servers reject non-human principals with forbidden before this check.
                 approved_revision:
                   type: string
                   description: Decision target_revision that the refused approval would authorize.
@@ -11832,33 +10814,8 @@ components:
           maxItems: 32
           items:
             type: string
-    PMTurnContextRequest:
-      type: object
-      additionalProperties: false
-      required: [lease_token]
-      properties:
-        view:
-          type: string
-          enum: [cards, card]
-          description: Optional PM card view. cards returns pinned cards (at most 8) with bounded asks, decisions and activity. Without pins it returns a bounded requester-scoped workspace overview with up to 15 open initiatives ordered by attention, 15 open asks, 15 awaiting decisions and 15 recent events. Fixed candidate windows may yield partial previews. card requires a card context_ref and opens any card visible to the requester, including unpinned plan-step refs. All views validate the turn lease and requester permissions. Query and cursor are not supported with a view.
-        lease_token:
-          type: string
-          minLength: 1
-        context_ref:
-          type: string
-          maxLength: 512
-          description: For view card, any card ref visible to the requesting reader. For other views, an optional pinned ref selector belonging to conversation context_refs or legacy work_ref. Defaults to the primary work_ref or first pinned ref. Reads always use the requesting reader's scope.
-        query:
-          type: string
-        cursor:
-          type: string
-        limit:
-          type: integer
-          minimum: 1
-          maximum: 50
-          default: 20
     PMDecisionCreateRequest:
-      description: Direct creation requires a human; agents use the turn decisions endpoint. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
+      description: Direct creation is human-only; non-human principals are rejected with forbidden. Agents support PM work by orienting, triaging, filing `anx ask` recommendations, and updating cards, but cannot create or approve PM decisions. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) from a human proposer returns the existing decision with 200, preserving original authorship without a new decision. The human_proposal_pending code is retained for compatibility with the removed agent-propose path; current servers reject non-human principals with forbidden before this check. Human proposals may atomically supersede changed human proposals for the same approver, work, and scope. Caller-supplied origin is not accepted; channel origin delivery was removed with the built-in PM product.
       type: object
       additionalProperties: false
       properties:
@@ -11868,11 +10825,7 @@ components:
         replay_key:
           type: string
           maxLength: 256
-          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes, origin delivery and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization, including after PM disconnection. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
-        origin:
-          allOf:
-            - $ref: '#/components/schemas/PMOrigin'
-          description: Optional existing enabled channel binding owned by the authenticated actor; another actor's origin is rejected.
+          description: Optional actor/workspace-bound original HTTP receipt key. The decision, superseding writes and original response commit atomically. Retain request_key, replay_key and the complete body unchanged until confirmed. Exact retries return the original status/body after fresh authorization. Clients omitting replay_key retain current-decision replay and its terminal-state metadata.
         request_key:
           type: string
         work_ref:
@@ -11887,34 +10840,6 @@ components:
           type: string
           description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
       required:
-      - request_key
-      - work_ref
-      - instruction
-      - scope
-      - target_revision
-    PMTurnProposeRequest:
-      description: Selected PM agents must supply the current lease token; stale tokens return 409. With pinned conversation refs, work_ref must be one of those exact refs (including the legacy primary work_ref); another card returns 403. Legacy unpinned conversations retain requester-authorized proposal behavior. work.note requires a nonempty payload.note and no phase or resolution_refs; instruction is the reason, separate from note content. Request keys bind immutable intent. Conflicting reuse (including a different target_revision) returns 409 with error.details.existing_decision_id. Identical awaiting intent (same approver, work, scope, instruction, payload, and target revision) returns the existing decision with 200 regardless of proposer or origin, preserving original authorship and origin without a new decision. A different non-human proposal is rejected with 409 human_proposal_pending while a human-origin decision awaits an answer on that same approver actor, work, and scope in the workspace; error.details.pending_decision_id identifies it, and a human must decline or answer it first. Human proposals may atomically supersede changed human or PM proposals for the same approver, work, and scope.
-      type: object
-      additionalProperties: false
-      properties:
-        lease_token:
-          type: string
-          minLength: 1
-        request_key:
-          type: string
-        work_ref:
-          type: string
-        instruction:
-          type: string
-        payload:
-          $ref: '#/components/schemas/PMActionRequestPayload'
-        scope:
-          type: string
-        target_revision:
-          type: string
-          description: Copy Work.decision_revision exactly. Core uses source.revision when source.authority is external and the revision is known (nonempty); otherwise it uses <work_metadata.version>.<head_revision_number> (decimal components). Either a canonical metadata mutation or a card content revision changes this fence; refresh attempts, failures, and freshness bookkeeping do not. Dispatch checks the same rule again; freshness.source_revision is not a fallback.
-      required:
-      - lease_token
       - request_key
       - work_ref
       - instruction
@@ -11941,98 +10866,6 @@ components:
       - revision
       - approve
       - text
-    PMCompleteRequest:
-      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
-      type: object
-      additionalProperties: true
-      properties:
-        text:
-          type: string
-        evidence_refs:
-          type: array
-          items:
-            type: string
-        lease_token:
-          type: string
-      required:
-      - lease_token
-      - text
-    PMClaimRequest:
-      type: object
-      additionalProperties: true
-      properties:
-        runner_id:
-          type: string
-          description: Stable identity for one serial worker; defaults to the authenticated actor ID when omitted. Reuse on restart to recover its existing lease.
-    PMTurnActivity:
-      type: object
-      additionalProperties: false
-      required: [sequence, kind, label]
-      properties:
-        sequence: {type: integer, minimum: 1}
-        kind: {type: string, enum: [status, tool]}
-        label: {type: string, minLength: 1, maxLength: 120}
-        target: {type: string, maxLength: 160}
-        recorded_at:
-          type: string
-          format: date-time
-          readOnly: true
-          description: Timestamp assigned by core.
-    PMActivityAppend:
-      type: object
-      additionalProperties: false
-      required: [kind, label]
-      properties:
-        kind: {type: string, enum: [status, tool]}
-        label: {type: string, minLength: 1, maxLength: 120}
-        target: {type: string, maxLength: 160}
-    PMHeartbeatRequest:
-      type: object
-      additionalProperties: false
-      required:
-      - lease_token
-      properties:
-        activity_append:
-          type: array
-          maxItems: 50
-          items: {$ref: '#/components/schemas/PMActivityAppend'}
-          description: Best-effort append with core-assigned sequence numbers under the lease lock, for concurrent runner and CLI emitters. Never automatically retry; delivery uncertainty may duplicate a step if retried. Cannot be combined with activity.
-        activity:
-          type: array
-          maxItems: 50
-          description: Append events with increasing sequence numbers. Identical retries are ignored; conflicting sequences are rejected. Only short safe labels and targets, never tool arguments, output, credentials or raw payloads.
-          items: {$ref: '#/components/schemas/PMTurnActivity'}
-        partial_sequence: {type: integer, minimum: 1}
-        partial_response:
-          type: string
-          description: Optional latest draft snapshot, bounded by the turn output limit. Requires increasing partial_sequence; identical retries are accepted. Omitted preserves the draft; empty clears it.
-        lease_token:
-          type: string
-          minLength: 1
-    PMReleaseRequest:
-      type: object
-      additionalProperties: false
-      required: [runner_id, lease_token]
-      properties:
-        runner_id:
-          type: string
-          minLength: 1
-          maxLength: 256
-        lease_token:
-          type: string
-          minLength: 1
-    PMFailRequest:
-      description: Requires the current active lease token. Identical terminal content and the token that completed or failed the turn replay with 200, even after the deadline; changed content returns 409 turn_closed; a stale or missing replay token returns 409 lease_mismatch with the terminal status and no retry needed.
-      type: object
-      additionalProperties: true
-      properties:
-        reason:
-          type: string
-        lease_token:
-          type: string
-      required:
-      - lease_token
-      - reason
     PMControlRequest:
       type: object
       description: >-
@@ -12046,45 +10879,6 @@ components:
         if_revision: { type: integer, minimum: 1 }
         if_action_revision: { type: integer, minimum: 1 }
 
-    PMEmptyRequest:
-      type: object
-      additionalProperties: true
-      properties: &id006 {}
-    PMState:
-      type: object
-      additionalProperties: false
-      required: [state, last_seen, runner, host]
-      properties:
-        state: {type: string, enum: [not_onboarded, connected, offline]}
-        last_seen: {type: string, format: date-time, nullable: true}
-        runner: {type: string, nullable: true, maxLength: 80}
-        host: {type: string, nullable: true, maxLength: 80}
-      description: Registered workspace PM with at least one accepted local connection is onboarded. Connected expires after 90 seconds; offline remains onboarded until explicit disconnect. An unconnected or explicitly disconnected registered PM is not_onboarded.
-    PMConnectRequest:
-      type: object
-      additionalProperties: false
-      required: [runner, host]
-      properties:
-        runner: {type: string, minLength: 1, maxLength: 80}
-        host: {type: string, minLength: 1, maxLength: 80}
-    PMPresence:
-      type: object
-      required: [configured, connected, state, last_seen, runner, host]
-      properties:
-        state: {type: string, enum: [not_onboarded, connected, offline]}
-        last_seen: {type: string, format: date-time, nullable: true}
-        runner: {type: string, nullable: true, maxLength: 80}
-        host: {type: string, nullable: true, maxLength: 80}
-        configured:
-          type: boolean
-        connected:
-          type: boolean
-        last_seen_at:
-          type: string
-          format: date-time
-        signal:
-          type: string
-          enum: [connect, claim, heartbeat]
     PMContextResponse:
       type: object
       additionalProperties: true
@@ -12094,7 +10888,7 @@ components:
           items:
             type: object
             additionalProperties: true
-            properties: *id006
+            properties: {}
         asks:
           type: array
           description: Bounded open asks awaiting the requesting reader in a no-pin overview.
@@ -12115,35 +10909,6 @@ components:
             type: string
       required:
       - items
-    PMConversationDetailResponse:
-      type: object
-      additionalProperties: true
-      properties:
-        has_more: {type: boolean}
-        next_cursor: {type: string}
-        conversation:
-          $ref: '#/components/schemas/PMConversation'
-        turns:
-          type: array
-          items:
-            $ref: '#/components/schemas/PMTurn'
-      required:
-      - conversation
-      - turns
-    PMConversationListResponse:
-      type: object
-      additionalProperties: true
-      properties:
-        next_cursor: {type: string}
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/PMConversation'
-        has_more:
-          type: boolean
-      required:
-      - items
-      - has_more
     PMDecisionListResponse:
       type: object
       additionalProperties: true
@@ -12153,20 +10918,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PMDecision'
-        has_more:
-          type: boolean
-      required:
-      - items
-      - has_more
-    PMBindingListResponse:
-      type: object
-      additionalProperties: true
-      properties:
-        next_cursor: {type: string}
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/PMBinding'
         has_more:
           type: boolean
       required:
