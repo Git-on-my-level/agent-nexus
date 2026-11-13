@@ -26,7 +26,7 @@ DEV_SEED_SCENARIO ?= game-dev-studio
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate http-record-test http-record-run http-record-compile http-record-replay bridge-test release-check release-patch platform-constraints core-% web-ui-% web-ui-static-ci
+.PHONY: help setup install-hooks check serve kill lint test format contract-gen contract-check contract-check-committed workflow-check version-sync version-check e2e-smoke agent-ergonomics-check hosted-smoke hosted-smoke-script-audit hosted-ops-test hosted-ops-smoke cli-check mcp-check cli-build cli-integration-test scenario-validate http-record-test http-record-run http-record-compile http-record-replay bridge-test release-check release-patch platform-constraints core-% web-ui-% web-ui-static-ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"; printf "Targets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -175,6 +175,10 @@ bridge-test: ## Run host bridge and migration fixture tests
 
 e2e-smoke: ## Run end-to-end core + CLI + web-ui smoke flow
 	./scripts/e2e-smoke
+
+agent-ergonomics-check: ## Replay the agent ergonomics eval's known solutions (no model; see tests/agent-ergonomics/README.md)
+	python3 -m unittest discover -s tests/agent-ergonomics -p 'test_*.py'
+	python3 tests/agent-ergonomics/run.py --mode oracle
 
 platform-constraints: ## Check for Unix-only syscalls without build constraints
 	./scripts/check-platform-constraints.sh

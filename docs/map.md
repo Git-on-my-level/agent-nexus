@@ -34,7 +34,7 @@ Where things live. Generated; never hand-edited.
 | ------------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | cli/cmd/anx                                | 2     | anx is the Agent Nexus command-line runtime for agents and automation                                                                                                                                                                                                 |
 | cli/cmd/anx-docs-gen                       | 2     | anx-docs-gen writes the CLI's runtime help markdown into docs/generated so the committed documentation stays in sync with the built command surface.                                                                                                                  |
-| cli/internal/app                           | 180   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
+| cli/internal/app                           | 181   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
 | cli/internal/authcli                       | 2     | Package authcli defines the result and payload types shared by the CLI's authentication and auth-admin commands (invites, principals, audit events, bootstrap status) so their handlers and output envelopes keep one shape.                                          |
 | cli/internal/bridge                        | 7     | Package bridge owns the single OS-user host service, local registration and migration state.                                                                                                                                                                          |
 | cli/internal/bridgeconfig                  | 2     | Package bridgeconfig loads the host bridge's TOML configuration and owns its on-disk root directory layout.                                                                                                                                                           |
@@ -92,7 +92,7 @@ Where things live. Generated; never hand-edited.
 | core/internal/primitives                   | 177   | Package primitives is core's canonical domain layer                                                                                                                                                                                                                   |
 | core/internal/readmodel                    | 8     | Package readmodel contains bounded projection algorithms.                                                                                                                                                                                                             |
 | core/internal/replaypolicy                 | 1     | Package replaypolicy owns the receipt/recovery window shared with the web UI.                                                                                                                                                                                         |
-| core/internal/resourceaccess               | 15    | Package resourceaccess applies the request's record policy at database reads and writes without coupling auxiliary stores to the canonical primitive store.                                                                                                           |
+| core/internal/resourceaccess               | 16    | Package resourceaccess applies the request's record policy at database reads and writes without coupling auxiliary stores to the canonical primitive store.                                                                                                           |
 | core/internal/router                       | 7     | Package router watches canonical events and routes agent wake packets to registered agent bridges, building the wake artifacts and verifying signed bridge check-ins.                                                                                                 |
 | core/internal/runtimememory                | 3     | Package runtimememory owns process memory policy and isolated operator diagnostics.                                                                                                                                                                                   |
 | core/internal/schedule                     | 2     | Package schedule parses, normalizes and validates thread cadences                                                                                                                                                                                                     |
@@ -110,7 +110,7 @@ Where things live. Generated; never hand-edited.
 | core/internal/sidecar                      | 2     | Package sidecar hosts privileged in-process services inside anx-core                                                                                                                                                                                                  |
 | core/internal/sqliteutil                   | 2     | Package sqliteutil opens the bounded maintenance transactions used by background rebuild programs                                                                                                                                                                     |
 | core/internal/sqltext                      | 1     | Package sqltext provides deterministic projection keys shared by SQL and Go.                                                                                                                                                                                          |
-| core/internal/storage                      | 106   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
+| core/internal/storage                      | 107   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
 | core/internal/testsql                      | 1     | Package testsql instruments real SQLite reads in integration tests.                                                                                                                                                                                                   |
 | core/internal/testutil/perfguard           | 4     | Package perfguard contains synthetic data and SQL instrumentation for scale integration tests.                                                                                                                                                                        |
 | core/internal/textdiff                     | 1     | Package textdiff renders bounded line diffs.                                                                                                                                                                                                                          |
@@ -134,7 +134,7 @@ Where things live. Generated; never hand-edited.
 | tools/anx-http-record/internal/recorder    | 2     | Package recorder writes the JSONL exchange log                                                                                                                                                                                                                        |
 | tools/anx-http-record/internal/replay      | 2     | Package replay sends a compiled run against a target core and resolves the runtime ID bindings the run produced.                                                                                                                                                      |
 
-1 of 100 packages are undocumented.
+1 of 101 packages are undocumented.
 
 ## web-ui areas
 
@@ -230,7 +230,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1315  | core/internal/primitives/topics_store.go                                           |
 | 1282  | web-ui/src/lib/inboxResponseQueue.js                                               |
 | 1266  | web-ui/src/lib/server/authSession.js                                               |
-| 1259  | core/internal/storage/migrations.go                                                |
+| 1249  | core/internal/storage/migrations.go                                                |
 | 1240  | core/internal/auth/hosts.go                                                        |
 | 1197  | core/internal/primitives/derived_store.go                                          |
 | 1074  | web-ui/src/lib/visualReportCharts.js                                               |
@@ -240,10 +240,10 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 959   | core/internal/server/stream_handlers.go                                            |
 | 954   | cli/internal/app/loop_tier.go                                                      |
 | 946   | web-ui/src/lib/brief.js                                                            |
+| 936   | core/cmd/anx-core/main.go                                                          |
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |
 | 926   | cli/internal/app/skills_sync.go                                                    |
 | 926   | web-ui/scripts/qa-capture.mjs                                                      |
-| 919   | core/cmd/anx-core/main.go                                                          |
 | 909   | cli/internal/app/host_bridge_install.go                                            |
 | 909   | web-ui/src/lib/components/decide/DecisionCard.svelte                               |
 | 908   | core/internal/primitives/watch_trends.go                                           |
