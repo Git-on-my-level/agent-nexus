@@ -153,10 +153,18 @@ func askBatchQuestionFields(dst, payload map[string]any) {
 
 func askBatchPosition(payload map[string]any) int { return primitives.AskBatchPosition(payload) }
 
+// normalizeRecipientActorID stores and compares recipients the way principals
+// are matched: with or without the actor: prefix. Inbox access, listing and
+// the brief all compare the stored value exactly, so every write path must
+// keep the unprefixed form.
+func normalizeRecipientActorID(value any) string {
+	return strings.TrimPrefix(strings.TrimSpace(anyString(value)), "actor:")
+}
+
 // askBatchRecipientKey compares recipients the way principals are matched:
 // with or without the actor: prefix.
 func askBatchRecipientKey(payload map[string]any) string {
-	return strings.TrimPrefix(strings.TrimSpace(anyString(payload["recipient_actor_id"])), "actor:")
+	return normalizeRecipientActorID(payload["recipient_actor_id"])
 }
 
 // askBatchRecipientsDiffer reports members addressed to different people (or
@@ -175,11 +183,12 @@ func askBatchRecipientsDiffer(members []map[string]any) bool {
 	return false
 }
 
-// askBatchRecipient is the recipient every member names, as stored.
+// askBatchRecipient is the recipient every member names, normalized the way
+// principals are matched so the stored inbox value gates access correctly.
 func askBatchRecipient(members []map[string]any) string {
 	for _, member := range members {
 		payload, _ := member["payload"].(map[string]any)
-		if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+		if recipient := normalizeRecipientActorID(payload["recipient_actor_id"]); recipient != "" {
 			return recipient
 		}
 	}

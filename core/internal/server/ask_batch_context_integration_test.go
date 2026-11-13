@@ -430,6 +430,49 @@ func TestAskBatchRecipientVisibility(t *testing.T) {
 
 func asSliceOf(v any) []any { s, _ := v.([]any); return s }
 
+// Review (oss#542): the batch item stored the first member's recipient
+// verbatim, so a batch whose first member was written "actor:X" was invisible
+// to principal X. The stored value is normalized, so member order no longer
+// decides whether the recipient can list and open the batch.
+func TestAskBatchRecipientVisibilityWithPrefixedFirstMember(t *testing.T) {
+	c := newContextBatchEnv(t, "ctxreciporder")
+	other := seedHumanPrincipalForLockoutTest(t, context.Background(), c.env.workspace.DB(), "ctxreciporder-other", "ctxreciporder-other-actor", "ctxreciporder-other", "ctxreciporder-other-token")
+	to := func(n int, recipient string) map[string]any {
+		return c.question(n, map[string]any{"recipient_actor_id": recipient})
+	}
+	status, body := hostHTTP(t, http.MethodPost, c.env.server.URL+"/asks/batch", c.agent.AccessToken, map[string]any{
+		"context": sharedBatchContext,
+		"asks":    []map[string]any{to(1, "actor:"+c.human.ActorID), to(2, c.human.ActorID)},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("prefixed-first batch: %d %#v", status, body)
+	}
+	item, ok := c.batchItem(t, c.human.ActorID)
+	if !ok {
+		t.Fatal("the recipient cannot list a batch whose first member was actor:-prefixed")
+	}
+	if item.Data["recipient_actor_id"] != c.human.ActorID {
+		t.Fatalf("stored recipient = %#v, want %q", item.Data["recipient_actor_id"], c.human.ActorID)
+	}
+	inboxPath := c.env.server.URL + "/inbox/" + url.PathEscape(item.ID)
+	if status, _ := hostHTTP(t, http.MethodGet, inboxPath, c.human.AccessToken, nil); status != http.StatusOK {
+		t.Fatalf("the recipient cannot open the batch: %d", status)
+	}
+	if status, _ := hostHTTP(t, http.MethodGet, inboxPath, other.AccessToken, nil); status != http.StatusNotFound {
+		t.Fatalf("another human read the addressed batch: %d", status)
+	}
+	_, page := hostHTTP(t, http.MethodGet, c.env.server.URL+"/inbox?limit=100", c.human.AccessToken, nil)
+	listed := 0
+	for _, raw := range asSliceOf(page["items"]) {
+		if row, _ := raw.(map[string]any); row != nil && row["batch"] != nil {
+			listed++
+		}
+	}
+	if listed != 1 {
+		t.Fatalf("the recipient's inbox listed %d batches, want 1", listed)
+	}
+}
+
 // Review (oss#538): the projection kept a single ask's recipient only on the
 // no-projection fallback, so another human could read and answer it.
 func TestAddressedSingleAskStaysWithItsRecipient(t *testing.T) {

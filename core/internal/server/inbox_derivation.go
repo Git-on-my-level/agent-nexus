@@ -217,7 +217,7 @@ func deriveHumanAttentionInboxItem(event map[string]any) (derivedInboxItem, bool
 	}
 	// An addressed ask is visible and answerable only by its recipient; the
 	// inbox read, respond and list paths enforce this field on the item.
-	if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+	if recipient := normalizeRecipientActorID(payload["recipient_actor_id"]); recipient != "" {
 		data["recipient_actor_id"] = recipient
 	}
 
@@ -302,7 +302,7 @@ func deriveHumanAttentionBatchInboxItem(members []map[string]any, decidedIDs map
 		}
 		askpresentation.Copy(section, payload)
 		askBatchQuestionFields(section, payload)
-		if recipient := strings.TrimSpace(anyString(payload["recipient_actor_id"])); recipient != "" {
+		if recipient := normalizeRecipientActorID(payload["recipient_actor_id"]); recipient != "" {
 			section["recipient_actor_id"] = recipient
 		}
 		if body := strings.TrimSpace(anyString(payload["body"])); body != "" {

@@ -287,9 +287,9 @@ func filterAccessibleInboxItems(r *http.Request, opts handlerOptions, items []ma
 		// not rebuild the denial graph for every ordinary row in a collection.
 		// Report reviews retain their additional legacy backing-owner check.
 		if canonical && scoped && anyString(item["kind"]) != "report_review" {
-			if recipient := anyString(item["recipient_actor_id"]); recipient != "" {
+			if recipient := normalizeRecipientActorID(item["recipient_actor_id"]); recipient != "" {
 				principal, ok := cachedAuthenticatedPrincipal(r)
-				if !ok || principal == nil || principal.ActorID != recipient {
+				if !ok || principal == nil || normalizeRecipientActorID(principal.ActorID) != recipient {
 					continue
 				}
 			}

@@ -256,6 +256,29 @@ func TestSplitTextKeepsBatchIdentityAndLimit(t *testing.T) {
 	}
 }
 
+// Review (oss#542): a rejected text answer must not be named as the words a
+// later answer was cut out of. Here question 1 is already answered, so the
+// "1: text" fragment is refused and "5a" is not reported as its tail.
+func TestRejectedTextDoesNotNameTail(t *testing.T) {
+	b := mustBatch(t)
+	r := Parse(b, "1a 1: text 5a")
+	if r.OK() {
+		t.Fatalf("expected refusal: %+v", r)
+	}
+	var tail *Answer
+	for i := range r.Answers {
+		if r.Answers[i].Number == 5 {
+			tail = &r.Answers[i]
+		}
+	}
+	if tail == nil || tail.AfterTextOf != 0 {
+		t.Fatalf("5a named a rejected text as its tail: %+v", r.Answers)
+	}
+	if problems := Problems(r); !strings.Contains(problems, "question 1 is answered twice") {
+		t.Fatalf("missing refusal in:\n%s", problems)
+	}
+}
+
 func unfragmented(answers []Answer) []Answer {
 	out := append([]Answer(nil), answers...)
 	for i := range out {

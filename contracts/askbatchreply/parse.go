@@ -171,11 +171,16 @@ func (p *parser) parseLine(s string) int {
 				end = p.freeTextEnd(s, k+1, number)
 			}
 			text := strings.TrimSpace(s[k+1 : end])
-			if index := p.addText(strings.TrimSpace(s[start:end]), number, text); index >= 0 && end == len(s) {
-				textAtEnd = index
-			}
-			if end < len(s) {
-				p.tailOf = number
+			// Only a text answer that was actually recorded can be the one a
+			// later answer was cut out of; a rejected one (already answered,
+			// empty, unknown question) leaves the tail unnamed.
+			if index := p.addText(strings.TrimSpace(s[start:end]), number, text); index >= 0 {
+				if end == len(s) {
+					textAtEnd = index
+				}
+				if end < len(s) {
+					p.tailOf = number
+				}
 			}
 			i = end
 			continue
