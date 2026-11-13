@@ -995,6 +995,10 @@ derived:
           response_proposals. One response answers every member atomically; the item disappears
           when the last member is answered or withdrawn. Top-level response_proposals then carry
           the first member's proposals for compatibility; decision UIs use batch.asks entries.
+          `context` (situation, impact, details, evidence, optional title) is the background the
+          questions share, stated once; asks are listed in question order with position,
+          multi_select and note. A partial response (partial=true) answers some members and
+          leaves the item open with the rest.
 
   agent_notification:
     fields:

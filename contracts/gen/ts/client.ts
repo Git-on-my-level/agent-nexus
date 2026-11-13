@@ -1440,6 +1440,26 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "context.details",
+          "type": "string"
+        },
+        {
+          "name": "context.evidence",
+          "type": "list\u003cobject\u003e"
+        },
+        {
+          "name": "context.impact",
+          "type": "string"
+        },
+        {
+          "name": "context.situation",
+          "type": "string"
+        },
+        {
+          "name": "context.title",
+          "type": "string"
+        },
+        {
           "name": "request_key",
           "type": "string"
         }
@@ -9901,6 +9921,10 @@ export const commandRegistry: CommandSpec[] = [
             "rejected",
             "resolved"
           ]
+        },
+        {
+          "name": "partial",
+          "type": "boolean"
         },
         {
           "name": "related_refs",

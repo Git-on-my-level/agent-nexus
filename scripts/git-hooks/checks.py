@@ -690,6 +690,7 @@ def fast_tests(changed, base=None):
         run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/gen/go", slot="tests")
         run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/visualreport", slot="tests")
         run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/markdownhygiene", slot="tests")
+        run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./...", cwd=ROOT / "contracts/askbatchreply", slot="tests")
         run("node", "scripts/check-visual-report-conformance.mjs")
         run("node", "scripts/check-enum-conformance.mjs")
 

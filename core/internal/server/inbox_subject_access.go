@@ -12,9 +12,9 @@ import (
 // The canonical request scope checks all inherited references together. The
 // fallback supports alternate stores without a canonical database policy.
 func inboxItemAccessible(r *http.Request, opts handlerOptions, threadID string, item map[string]any) bool {
-	if recipient := anyString(item["recipient_actor_id"]); recipient != "" {
+	if recipient := normalizeRecipientActorID(item["recipient_actor_id"]); recipient != "" {
 		principal, ok := cachedAuthenticatedPrincipal(r)
-		if !ok || principal == nil || principal.ActorID != recipient {
+		if !ok || principal == nil || normalizeRecipientActorID(principal.ActorID) != recipient {
 			return false
 		}
 	}
