@@ -406,6 +406,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		work := asMap(asMap(commandResultBody(result))["work"])
 		asMap(result.Data)["body"] = map[string]any{"ref": work["ref"], "freshness": work["freshness"], "latest_observation": work["latest_observation"], "refresh": work["refresh"]}
 	}
+	if parsed.name == "work get" || parsed.name == "work context" {
+		a.attachCardNotes(ctx, cfg, parsed.id, commandResultBody(result))
+	}
 	if parsed.name == "pm decisions dispatch" {
 		result.Text = formatPMDispatchText(commandResultBody(result), started, "")
 	} else {
@@ -419,6 +422,14 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		status, _ := data["status_code"].(int)
 		headers, _ := data["headers"].(map[string][]string)
 		result.Text = formatBodyWithHeaders(status, headers, result.Text)
+	}
+	if parsed.name == "work context" && !cfg.JSON && !cfg.Verbose && !cfg.Headers {
+		out := result.Text
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		a.writeOutput(a.Stdout, out)
+		result.RawWritten = true
 	}
 	return result, parsed.name, nil
 }

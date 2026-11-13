@@ -201,6 +201,9 @@ func formatWorkCommandText(name string, body any) string {
 	if name == "pm actions reconcile" {
 		return formatPMActionReconcileText(root)
 	}
+	if name == "work context" {
+		return formatWorkContextText(root)
+	}
 	if name == "work get" || name == "work create" || name == "work patch" {
 		work := asMap(root["work"])
 		lines := []string{renderWorkLine(work)}
@@ -226,9 +229,52 @@ func formatWorkCommandText(name string, body any) string {
 				lines = append(lines, key+": "+string(encoded))
 			}
 		}
-		return strings.Join(lines, "\n")
+		return appendNotesText(strings.Join(lines, "\n"), root, firstNonEmpty(anyString(work["ref"]), anyString(work["id"])))
 	}
 	return formatPrettyBody(body)
+}
+
+func formatWorkContextText(root map[string]any) string {
+	work := asMap(root["work"])
+	lines := []string{renderWorkLine(work)}
+	if health := asMap(work["plan_health"]); anyString(health["state"]) != "" {
+		line := "plan_health: " + anyString(health["state"])
+		if reason := anyString(health["reason"]); reason != "" {
+			line += " — " + reason
+		}
+		lines = append(lines, line)
+	}
+	for _, key := range []string{"project_ref", "next_actor", "next_action", "wake_condition"} {
+		if value := anyString(work[key]); value != "" {
+			lines = append(lines, key+": "+value)
+		}
+	}
+	if moot := asMap(work["possibly_moot"]); moot["flagged"] == true {
+		lines = append(lines, "possibly_moot: "+anyString(moot["reason"]))
+	}
+	obsRoot := asMap(root["observations"])
+	observations := asSlice(obsRoot["observations"])
+	lines = append(lines, fmt.Sprintf("observations: %d", len(observations)))
+	for _, row := range observations {
+		observation := asMap(row)
+		lines = append(lines, fmt.Sprintf("%s  status=%s verification=%s observed=%s", firstNonEmpty(anyString(observation["id"]), "observation"), anyString(observation["status"]), firstNonEmpty(anyString(observation["verification"]), "reported"), anyString(observation["observed_at"])))
+	}
+	if cursor := anyString(obsRoot["next_cursor"]); cursor != "" {
+		lines = append(lines, "next_cursor: "+cursor)
+	}
+	if more, _ := obsRoot["has_more"].(bool); more {
+		lines = append(lines, "has_more: true")
+	}
+	refresh := asMap(root["refresh"])
+	if state := firstNonEmpty(anyString(refresh["state"]), ""); state != "" || len(refresh) > 0 {
+		line := "refresh: state=" + firstNonEmpty(state, "unknown")
+		errObj := asMap(refresh["last_error"])
+		if errText := firstNonEmpty(anyString(errObj["message"]), anyString(errObj["code"]), anyString(refresh["last_error"])); errText != "" {
+			line += " last_error=" + errText
+		}
+		lines = append(lines, line)
+	}
+	return appendNotesText(strings.Join(lines, "\n"), root, firstNonEmpty(anyString(work["ref"]), anyString(work["id"])))
 }
 
 func formatParticipantLine(participant map[string]any) string {

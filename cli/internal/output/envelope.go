@@ -117,6 +117,8 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 			projectCardCreate(&lines, result)
 		} else if envelope.Command == "cards list" {
 			projectCardsList(&lines, result)
+		} else if !detailed && hasNotesSection(result) {
+			projectResultWithCappedNotes(&lines, result)
 		} else {
 			project(&lines, "result", result)
 		}
@@ -137,6 +139,124 @@ func WriteEnvelopeTextDetailed(w io.Writer, envelope Envelope, detailed bool) er
 	}
 	_, err := io.WriteString(w, strings.Join(lines, "\n")+"\n")
 	return err
+}
+
+const notesTextLimit = 5
+
+func hasNotesSection(result any) bool {
+	root, ok := result.(map[string]any)
+	if !ok {
+		return false
+	}
+	notes, ok := root["notes"].(map[string]any)
+	if !ok || notes == nil {
+		return false
+	}
+	if _, ok := notes["items"]; ok {
+		return true
+	}
+	if _, ok := notes["error"]; ok {
+		return true
+	}
+	if _, ok := notes["follow_up"]; ok {
+		return true
+	}
+	return false
+}
+
+func projectResultWithCappedNotes(lines *[]string, result any) {
+	root, _ := result.(map[string]any)
+	keys := make([]string, 0, len(root))
+	for key := range root {
+		if key != "notes" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		project(lines, "result."+key, root[key])
+	}
+	projectNotes(lines, asNotesMap(root["notes"]))
+}
+
+func asNotesMap(value any) map[string]any {
+	notes, _ := value.(map[string]any)
+	if notes == nil {
+		return map[string]any{}
+	}
+	return notes
+}
+
+func projectNotes(lines *[]string, notes map[string]any) {
+	followUp := strings.TrimSpace(fmt.Sprint(notes["follow_up"]))
+	if followUp == "<nil>" {
+		followUp = ""
+	}
+	if errText := strings.TrimSpace(fmt.Sprint(notes["error"])); errText != "" && errText != "<nil>" {
+		*lines = append(*lines, "notes: error: "+errText)
+		if followUp != "" {
+			*lines = append(*lines, "Retry with `"+followUp+"`.")
+		}
+		return
+	}
+	items, _ := notes["items"].([]any)
+	count := len(items)
+	switch raw := notes["count"].(type) {
+	case int:
+		if raw > count {
+			count = raw
+		}
+	case int64:
+		if int(raw) > count {
+			count = int(raw)
+		}
+	case float64:
+		if int(raw) > count {
+			count = int(raw)
+		}
+	}
+	*lines = append(*lines, "notes: "+strconv.Itoa(count))
+	shown := items
+	if len(shown) > notesTextLimit {
+		shown = shown[:notesTextLimit]
+	}
+	for _, raw := range shown {
+		item, _ := raw.(map[string]any)
+		if item == nil {
+			continue
+		}
+		line := firstNotesField(item, "ts", "id", "note")
+		if actor := firstNotesField(item, "actor_id", "decided_by", ""); actor != "" {
+			line += "  " + actor
+		}
+		if text := strings.Join(strings.Fields(fmt.Sprint(item["text"])), " "); text != "" && text != "<nil>" {
+			line += "  " + text
+		}
+		*lines = append(*lines, line)
+	}
+	truncated := notes["truncated"] == true
+	if len(items) > notesTextLimit || truncated {
+		if followUp != "" {
+			*lines = append(*lines, "More notes: `"+followUp+"`")
+		}
+	}
+}
+
+func firstNotesField(item map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if value, ok := item[key]; ok {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" && text != "<nil>" {
+				return text
+			}
+		} else if key == "note" {
+			return "note"
+		}
+	}
+	return ""
 }
 
 func projectCardsList(lines *[]string, result any) {

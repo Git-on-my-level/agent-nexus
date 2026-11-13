@@ -102,7 +102,6 @@ func TestWorkRequestsUseCentralAPI(t *testing.T) {
 	}{
 		{[]string{"work", "list", "--project-ref", "topic:launch", "--source", "github", "--owner", "actor:dev", "--phase", "review", "--freshness", "stale", "--limit", "2", "--cursor", "opaque+cursor"}, "GET", "/work", "cursor=opaque%2Bcursor&freshness=stale&limit=2&owner=actor%3Adev&phase=review&project_ref=topic%3Alaunch&source=github", "", `{"work":[],"next_cursor":"next"}`},
 		{[]string{"report", "render", "document:dashboard"}, "GET", "/docs/document:dashboard/report", "", "", `{"observed_at":"2026-10-04T00:00:00Z","panels":[]}`},
-		{[]string{"work", "get", "card:launch"}, "GET", "/work/card:launch", "", "", `{"work":{"ref":"card:launch","phase":"unknown"}}`},
 		{[]string{"work", "observations", "list", "card:launch", "--limit", "1", "--cursor", "next"}, "GET", "/work/card:launch/observations", "cursor=next&limit=1", "", `{"observations":[],"next_cursor":"older"}`},
 		{[]string{"work", "observations", "submit", "card:launch", "--from-file", "-"}, "POST", "/work/card:launch/observations", "", `{"observation":{"idempotency_key":"report-1","reader_id":"reader","reader_revision":"v1","observed_at":"2026-09-08T00:00:00Z","status":"reported","facts":{},"evidence":[]}}`, `{"duplicate":true,"observation":{"id":"obs-1"},"work":{"ref":"card:launch"}}`},
 		{[]string{"work", "refresh", "request", "card:launch"}, "POST", "/work/card:launch/refresh", "", `{}`, `{"refresh":{"state":"queued"}}`},
@@ -176,11 +175,13 @@ func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/work/card:launch":
-			io.WriteString(w, `{"work":{"ref":"card:launch","phase":"done","freshness":{"status":"error","last_observed_at":"2026-01-01T00:00:00Z"},"executions":[{"result_ref":"artifact:build"}],"latest_observation":{"status":"uncertain"}}}`)
+			io.WriteString(w, `{"work":{"ref":"card:launch","phase":"done","thread_id":"thread_launch","freshness":{"status":"error","last_observed_at":"2026-01-01T00:00:00Z"},"executions":[{"result_ref":"artifact:build"}],"latest_observation":{"status":"uncertain"}}}`)
 		case "/work/card:launch/observations":
 			io.WriteString(w, `{"observations":[{"status":"error"}],"next_cursor":"older"}`)
 		case "/work/card:launch/refresh":
 			io.WriteString(w, `{"refresh":{"state":"failed","last_error":"reader unavailable"}}`)
+		case "/threads/thread_launch/timeline":
+			io.WriteString(w, `{"events":[{"id":"event_note","type":"message_posted","summary":"human answered","payload":{"text":"use the existing export","decided_by":"human:ops"},"occurred_at":"2026-11-12T00:00:00Z"}],"artifacts":{}}`)
 		default:
 			http.NotFound(w, r)
 		}
@@ -194,8 +195,16 @@ func TestWorkContextReadOnlyAndFreshnessHonest(t *testing.T) {
 	if got := asMap(body["refresh"])["state"]; got != "failed" {
 		t.Errorf("failure lost: %v", body)
 	}
-	if len(calls) != 3 || calls[1] != "/work/card:launch/observations?cursor=page&limit=1" {
+	notes := asMap(body["notes"])
+	items := asSlice(notes["items"])
+	if len(items) != 1 || anyString(asMap(items[0])["text"]) != "use the existing export" {
+		t.Errorf("notes missing from context: %v", body)
+	}
+	if len(calls) != 4 || calls[1] != "/work/card:launch/observations?cursor=page&limit=1" {
 		t.Errorf("requests=%v", calls)
+	}
+	if calls[3] != "/threads/thread_launch/timeline" {
+		t.Errorf("notes request=%v", calls)
 	}
 	calls = nil
 	payload = assertEnvelopeOK(t, runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "--base-url", server.URL, "work", "freshness", "card:launch"}))

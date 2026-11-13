@@ -2681,19 +2681,26 @@ func TestCardsTimelineDispatchesToAPI(t *testing.T) {
 	const cardID = "card_timeline_test_123456"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/cards/"+cardID+"/timeline" {
+		if r.Method != http.MethodGet {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"card":{"id":"` + cardID + `","title":"Example","thread_id":"thread_1"},
-			"events":[{"id":"event_1","type":"card_updated","occurred_at":"2026-04-05T00:00:00Z"}],
-			"artifacts":[],
-			"cards":[],
-			"documents":[],
-			"threads":[]
-		}`))
+		switch r.URL.Path {
+		case "/cards/" + cardID + "/timeline":
+			_, _ = w.Write([]byte(`{
+				"card":{"id":"` + cardID + `","title":"Example","thread_id":"thread_1"},
+				"events":[{"id":"event_1","type":"card_updated","occurred_at":"2026-04-05T00:00:00Z"}],
+				"artifacts":[],
+				"cards":[],
+				"documents":[],
+				"threads":[]
+			}`))
+		case "/threads/thread_1/timeline":
+			_, _ = w.Write([]byte(`{"events":[{"id":"event_note","type":"message_posted","summary":"note one","payload":{"text":"note one"},"occurred_at":"2026-04-05T01:00:00Z"}],"artifacts":{}}`))
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer server.Close()
 

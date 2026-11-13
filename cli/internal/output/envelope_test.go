@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -78,5 +79,52 @@ func TestCardsListTextProjection(t *testing.T) {
 	}
 	if strings.Contains(got, "thread=") || strings.Contains(got, "rank=") || strings.Contains(got, "::") {
 		t.Fatalf("old card fields: %s", got)
+	}
+}
+
+func TestNotesSectionDefaultTextIsCapped(t *testing.T) {
+	t.Parallel()
+	items := make([]any, 0, 7)
+	for i := 1; i <= 7; i++ {
+		items = append(items, map[string]any{"id": "e" + strconv.Itoa(i), "text": "body " + strconv.Itoa(i)})
+	}
+	var buf bytes.Buffer
+	doc := Envelope{OK: true, Command: "work get", Result: map[string]any{
+		"work":  map[string]any{"ref": "card:x"},
+		"notes": map[string]any{"items": items, "count": 7, "follow_up": "anx cards messages card:x --max-events 20"},
+	}}
+	if err := WriteEnvelopeText(&buf, doc); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "notes: 7") || !strings.Contains(got, "body 5") || !strings.Contains(got, "More notes: `anx cards messages card:x --max-events 20`") {
+		t.Fatalf("compact notes missing: %s", got)
+	}
+	if strings.Contains(got, "body 6") || strings.Contains(got, "result.notes.items") {
+		t.Fatalf("default text leaked the full notes list: %s", got)
+	}
+	buf.Reset()
+	if err := WriteEnvelopeTextDetailed(&buf, doc, true); err != nil {
+		t.Fatal(err)
+	}
+	detailed := buf.String()
+	if !strings.Contains(detailed, "fact result.notes.items.6.text=") {
+		t.Fatalf("verbose text should keep all notes: %s", detailed)
+	}
+}
+
+func TestNotesSectionDefaultTextSurfacesReadErrors(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	doc := Envelope{OK: true, Command: "context", Result: map[string]any{
+		"work":  map[string]any{"ref": "card:x"},
+		"notes": map[string]any{"items": []any{}, "error": "timeline down", "follow_up": "anx cards messages card:x --max-events 20"},
+	}}
+	if err := WriteEnvelopeText(&buf, doc); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "notes: error: timeline down") || !strings.Contains(got, "Retry with `anx cards messages card:x --max-events 20`.") {
+		t.Fatalf("notes error not visible: %s", got)
 	}
 }
