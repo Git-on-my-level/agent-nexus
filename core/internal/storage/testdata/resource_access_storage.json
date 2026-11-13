@@ -3751,7 +3751,7 @@
     "../storage/card_manifest.go:artifactManifestUpdateTriggerSQL": "cbfb410fd99d878c72a4686a08f98a50a1b508d6f9897121a60cd274d8a22d80",
     "../storage/card_manifest.go:existingSourceColumns": "6ae6a84ce45f33dcec60aaed84c7b51d66ca59f05a6ef1aa04de0c063a9cc116",
     "../storage/card_manifest.go:installCardManifestPruning": "9eb0822668fd066c2e6770037bad56b645a4ce14e9fe2950cf91f5fd6ebecb73",
-    "../storage/card_manifest.go:pruneCardManifestsUntil": "9b1d732e1d4223314f21e66d3a0f4150fb2da67fbfd593c0517ec2325be5b9ed",
+    "../storage/card_manifest.go:pruneCardManifestsUntil": "1cb89db336b355648d5a2c68af9869ef1a489ed30172bbf09a4a81318909d45c",
     "../storage/channel_declarations.go:installChannelDeclarations": "2dc23035fca96469610df8646dc488de57258e1391006d43f3bbd44f12c04f24",
     "../storage/comment_search.go:*Workspace:MaintainCommentSearchBatch": "40ef6d55707db75d4a088065e26c98e989f276b1d0f0d71b9bfd71870cc8bc48",
     "../storage/comment_search.go:*Workspace:RunCommentSearchMaintenance": "a62072f132d3dcce8d23aaef990f89d9cdd1157ef2d6b19a74334f81f59530cc",

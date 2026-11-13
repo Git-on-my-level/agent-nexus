@@ -86,7 +86,10 @@ artifact whose content hash still matches and skips the edge rebuild; every
 other update rebuilds normally. A bounded `resource_access_card_manifest_job`
 cursor prunes legacy manifests by artifact id, verifies the authoritative
 revision content first, and leaves a manifest untouched when another writer
-changed it. No decision and no revision content byte changes.
+changed it or when its content cannot be loaded or verified. A revision that
+cannot be loaded is skipped and logged, and the cursor still advances past it,
+so one bad row cannot wedge the job. No decision and no revision content byte
+changes.
 Event content and navigational `ref_edges` also commit in a single transaction.
 Filtering a linked plan suppresses its stored refs and titles, not merely live
 reference previews. Never serialize a shared maintenance error to a reader.

@@ -16,7 +16,9 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"agent-nexus-core/internal/cardcontent"
@@ -148,6 +150,8 @@ func (w *Workspace) maintainCardManifestChunk(ctx context.Context, limit int, bu
 // keyframe/delta rows, never from the manifest being pruned. A manifest is
 // only rewritten when it still equals the complete manifest derived from
 // those bytes; otherwise another writer owns it and it is left untouched.
+// A revision whose content cannot be loaded is skipped and logged, and the
+// cursor still advances past it, so one bad row cannot wedge the job.
 func pruneCardManifestsUntil(ctx context.Context, tx *sql.Tx, cursor string, limit int, stop func() bool) (bool, error) {
 	limit = max(1, limit)
 	rows, err := tx.QueryContext(ctx, `SELECT cr.artifact_id, cr.revision_id, cr.content_hash, a.content_hash, a.content_refs_json
@@ -192,8 +196,14 @@ func pruneCardManifestsUntil(ctx context.Context, tx *sql.Tx, cursor string, lim
 		return true, nil
 	}
 	contents, err := cardcontent.LoadRevisionContents(ctx, tx, revisionIDs)
-	if err != nil {
-		return false, fmt.Errorf("load card revision content: %w", err)
+	perRow := err != nil
+	if perRow {
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || !cardManifestContentError(err) {
+			return false, fmt.Errorf("load card revision content: %w", err)
+		}
+		// One unreadable revision must not wedge the cursor. Fall back to
+		// per-row loads so only the rows that cannot be read are skipped.
+		contents = nil
 	}
 	pruned := 0
 	for _, w := range work {
@@ -206,6 +216,18 @@ func pruneCardManifestsUntil(ctx context.Context, tx *sql.Tx, cursor string, lim
 			continue
 		}
 		content, ok := contents[w.revisionID]
+		if perRow {
+			loaded, loadErr := cardcontent.LoadRevisionContents(ctx, tx, []string{w.revisionID})
+			if loadErr != nil {
+				if ctx.Err() != nil || errors.Is(loadErr, context.Canceled) || errors.Is(loadErr, context.DeadlineExceeded) || !cardManifestContentError(loadErr) {
+					return false, fmt.Errorf("load card revision content: %w", loadErr)
+				}
+				// Leave this manifest untouched and keep the cursor moving.
+				log.Printf("anx-core: card manifest backfill skipped artifact %s: %s", w.artifactID, cardManifestLoadErrorClass(loadErr))
+				continue
+			}
+			content, ok = loaded[w.revisionID]
+		}
 		if !ok || cardcontent.Hash(content) != w.revisionHash {
 			continue
 		}
@@ -228,6 +250,28 @@ func pruneCardManifestsUntil(ctx context.Context, tx *sql.Tx, cursor string, lim
 		return false, err
 	}
 	return done, nil
+}
+
+// cardManifestContentError reports a revision-specific content failure that
+// the backfill can skip. Database and context failures are not row-specific
+// and must abort the batch so it retries instead of skipping every row.
+func cardManifestContentError(err error) bool {
+	return errors.Is(err, cardcontent.ErrCorrupt) || errors.Is(err, cardcontent.ErrNotStored) || errors.Is(err, sql.ErrNoRows)
+}
+
+// cardManifestLoadErrorClass names why a revision's content could not be
+// loaded, without including any content bytes.
+func cardManifestLoadErrorClass(err error) string {
+	switch {
+	case errors.Is(err, cardcontent.ErrCorrupt):
+		return "corrupt content"
+	case errors.Is(err, cardcontent.ErrNotStored):
+		return "content not stored"
+	case errors.Is(err, sql.ErrNoRows):
+		return "missing content"
+	default:
+		return maintenanceErrorClass(err)
+	}
 }
 
 func boolInt(v bool) int {
