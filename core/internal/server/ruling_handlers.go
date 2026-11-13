@@ -77,6 +77,8 @@ func handleCreateRuling(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		writeError(w, http.StatusNotFound, "not_found", "ask not found")
 	case errors.Is(err, primitives.ErrInvalidWorkRequest):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	case errors.Is(err, primitives.ErrStandingRulingAskOpen):
+		writeError(w, http.StatusConflict, "ask_open", err.Error())
 	case err != nil:
 		writeReadInternalError(w, r, err, "cannot create standing ruling")
 	default:
@@ -108,16 +110,33 @@ func handleRevokeRuling(w http.ResponseWriter, r *http.Request, opts handlerOpti
 // Decide. An answer ruling returns the human's answer. A not_a_decision ruling
 // turns the ask into an fyi on its subject, so the information still arrives
 // where the human reads, and the response says where it landed.
-func writeRulingApplied(w http.ResponseWriter, r *http.Request, opts handlerOptions, actorID string, ask map[string]any, ruling primitives.StandingRuling) {
-	if store, ok := opts.primitiveStore.(rulingStore); ok {
-		if err := store.RecordStandingRulingUse(r.Context(), ruling.ID, time.Now()); err != nil {
-			log.Printf("record standing ruling use failed (ruling=%s): %v", ruling.ID, err)
+//
+// A retry with the same request key replays the first response: the use is
+// counted once and the fyi is stored once.
+func writeRulingApplied(w http.ResponseWriter, r *http.Request, opts handlerOptions, actorID, requestKey string, ask map[string]any, req any, ruling primitives.StandingRuling) {
+	if strings.TrimSpace(anyString(ask["id"])) == "" && strings.HasPrefix(requestKey, "ruled:") {
+		requestKey = ""
+	}
+	if status, payload, replayed, err := readIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, requestKey, req); err == nil && replayed {
+		writeJSON(w, status, payload)
+		return
+	}
+	finish := func(response map[string]any) {
+		if store, ok := opts.primitiveStore.(rulingStore); ok {
+			if err := store.RecordStandingRulingUse(r.Context(), ruling.ID, time.Now()); err != nil {
+				log.Printf("record standing ruling use failed (ruling=%s): %v", ruling.ID, err)
+			}
 		}
+		status, payload, err := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, requestKey, req, http.StatusOK, response)
+		if err != nil {
+			status, payload = http.StatusOK, response
+		}
+		writeJSON(w, status, payload)
 	}
 	response := map[string]any{"ruling": ruling.JSON()}
 	if ruling.Kind != primitives.RulingKindNotADecision {
 		response["answered_by_ruling"] = true
-		writeJSON(w, http.StatusOK, response)
+		finish(response)
 		return
 	}
 	response["redirected"] = "tell"
@@ -137,5 +156,27 @@ func writeRulingApplied(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		response["event"] = stored
 		notifyProjectionMaintainer(opts)
 	}
-	writeJSON(w, http.StatusOK, response)
+	finish(response)
+}
+
+// handleRulingApplied counts an ask a ruling answered before it was filed.
+// The CLI settles an ask that names no card against the rulings list, so that
+// no card is created for a question that is never asked; this keeps the use
+// count, which the human reads, true for that path too.
+func handleRulingApplied(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
+	if _, ok := requireAuthenticatedPrincipal(w, r, opts); !ok {
+		return
+	}
+	store, ok := rulingStoreFrom(w, opts)
+	if !ok {
+		return
+	}
+	switch err := store.RecordStandingRulingUse(r.Context(), id, time.Now()); {
+	case errors.Is(err, primitives.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "ruling not found")
+	case err != nil:
+		writeReadInternalError(w, r, err, "cannot record standing ruling use")
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"recorded": true})
+	}
 }

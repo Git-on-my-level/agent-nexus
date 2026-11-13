@@ -6816,7 +6816,9 @@ paths:
         Human only. `answer` makes the given answer apply to every later ask with the same title,
         whoever asks. `not_a_decision` records that the ask should not have reached a human: later
         asks from the same requester whose title differs only in its numbers are stored as an fyi
-        instead. A newer ruling for the same question replaces the older one.
+        instead. A newer ruling for the same question replaces the older one. The ask must
+        already be answered or sent back (409 ask_open otherwise), and the caller must be able
+        to read it.
       tags: [inbox]
       x-anx-surface: canonical
       x-anx-command-id: rulings.create
@@ -6828,7 +6830,7 @@ paths:
       x-anx-concepts: [inbox, write]
       x-anx-stability: beta
       x-anx-output-envelope: "Returns `{ ruling }`."
-      x-anx-error-codes: [auth_required, invalid_request, invalid_token, human_required, not_found]
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, human_required, not_found, ask_open]
       requestBody:
         required: true
         content:
@@ -6893,6 +6895,45 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
         '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+  /rulings/{ruling_id}/applied:
+    post:
+      operationId: recordStandingRulingApplied
+      summary: Count an ask a standing ruling answered before it was filed
+      description: >
+        Core counts a ruling's uses when it applies one to a filed ask. A client that settles an
+        ask against the rulings list before filing it (the CLI does, for an ask that names no
+        card) calls this so the use count the human reads stays true. Increments `uses` only.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.applied
+      x-anx-cli-path: rulings applied
+      x-anx-why: Keep a ruling's use count true when a client applied it.
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-agent-notes: Any authenticated member who can read the ruling. anx ask calls it for you.
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-output-envelope: "Returns `{ recorded }`."
+      x-anx-error-codes: [auth_required, invalid_token, not_found]
+      parameters:
+        - name: ruling_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The use was counted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded]
+                properties:
+                  recorded: { type: boolean }
+        '401':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'

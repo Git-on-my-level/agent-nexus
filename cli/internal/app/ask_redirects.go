@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -182,10 +183,18 @@ func (a *App) openAskOfMine(ctx context.Context, cfg config.Resolved, title stri
 // similar rulings come back for the caller's warnings.
 func (a *App) askBeforeSubject(ctx context.Context, cfg config.Resolved, title, kind string) (*commandResult, []map[string]any) {
 	if prior := a.openAskOfMine(ctx, cfg, title); prior != nil {
-		return priorAskResult(prior, "", kind), nil
+		result := priorAskResult(prior, "", kind)
+		// This session now waits on the open ask it would have filed.
+		if warning := a.recordAskForSession(cfg, prior.ref, title); warning != nil {
+			result.Warnings = append(result.Warnings, *warning)
+		}
+		return result, nil
 	}
 	ruling, similar := a.coveringRuling(ctx, cfg, title)
 	if ruling != nil && anyString(ruling["kind"]) == "answer" {
+		// Core counts a ruling's uses when it applies one; this ask never
+		// reaches core, so say so. Best effort: the answer stands either way.
+		_, _ = a.invokeRawJSON(ctx, cfg, "ask rulings", "POST", "/rulings/"+url.PathEscape(anyString(ruling["id"]))+"/applied", map[string]any{})
 		result, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "", kind)
 		return result, nil
 	}

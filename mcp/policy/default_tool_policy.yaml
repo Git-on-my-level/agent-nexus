@@ -814,6 +814,9 @@ commands:
   "rulings.create":
     classification: unsupported_other
     reason: "Human-only: a standing ruling answers later asks in the human's name, so an agent tool must not create one."
+  "rulings.applied":
+    classification: unsupported_other
+    reason: "Bookkeeping the CLI does for an ask it settled against a ruling before filing; not an agent action."
   "rulings.revoke":
     classification: unsupported_other
     reason: "Human-only: revoking a standing ruling is the human's decision, made in Decide."

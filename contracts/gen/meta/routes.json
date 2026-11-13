@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 259,
+  "route_count": 260,
   "routes": [
     {
       "method": "GET",
@@ -960,6 +960,11 @@
     {
       "method": "POST",
       "path": "/rulings",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/{ruling_id}/applied",
       "access_class": "workspace_business_surface"
     },
     {

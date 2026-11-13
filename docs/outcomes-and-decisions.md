@@ -61,7 +61,9 @@ Matching is exact on purpose. Whether a differently worded question is covered
 is a judgment for the asking agent, which reads `anx rulings list` before it
 asks; `anx ask` also names up to three rulings that read alike
 (`ask_similar_ruling`). Only a person makes or revokes a ruling
-(`POST /rulings`, `POST /rulings/{id}/revoke`); every member may read them.
+(`POST /rulings`, `POST /rulings/{id}/revoke`), from an ask they can read and
+have already answered or sent back; every member may read the rulings whose
+source ask they can read.
 A ruling counts its uses, and Decide lists rulings with a Revoke button, so a
 person can see what is being answered in their name. `--again` reaches the
 person even when a ruling exists.

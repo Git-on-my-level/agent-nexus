@@ -92,6 +92,30 @@ func TestDecideHoldsOnlyDecisions(t *testing.T) {
 	if rulings := list["rulings"].([]any); len(rulings) != 1 || rulings[0].(map[string]any)["uses"].(float64) != 1 {
 		t.Fatalf("rulings=%v", list)
 	}
+	// A retry with the same request key replays the first response and counts
+	// the use once.
+	retry := map[string]any{"actor_id": asker.ActorID, "request_key": "covered-retry", "event": map[string]any{
+		"type": "human_attention_requested", "thread_id": card["thread_id"], "refs": []string{anyString(card["ref"]), "thread:" + anyString(card["thread_id"])}, "summary": "Rerun the counts-only diagnostic?",
+		"provenance": map[string]any{"sources": []string{"actor_statement:test"}},
+		"payload":    map[string]any{"kind": "ask", "title": "Rerun the counts-only diagnostic?", "requester_actor_id": asker.ActorID, "subject_ref": card["ref"], "response_proposals": []any{"Yes", "No"}}}}
+	for i := 0; i < 2; i++ {
+		status, p = hostHTTP(t, "POST", env.server.URL+"/events", asker.AccessToken, retry)
+		hostStatus(t, status, 200, p)
+		if p["answered_by_ruling"] != true {
+			t.Fatalf("retry %d: %v", i, p)
+		}
+	}
+	status, list = hostHTTP(t, "GET", env.server.URL+"/rulings", asker.AccessToken, nil)
+	if list["rulings"].([]any)[0].(map[string]any)["uses"].(float64) != 2 {
+		t.Fatalf("a retried covered ask must count once: %v", list)
+	}
+	// A client that applied the ruling before filing reports the use.
+	status, p = hostHTTP(t, "POST", env.server.URL+"/rulings/"+rulingID+"/applied", asker.AccessToken, map[string]any{})
+	hostStatus(t, status, 200, p)
+	status, list = hostHTTP(t, "GET", env.server.URL+"/rulings", asker.AccessToken, nil)
+	if list["rulings"].([]any)[0].(map[string]any)["uses"].(float64) != 3 {
+		t.Fatalf("an applied use must be counted: %v", list)
+	}
 	// --again reaches the human even when a ruling exists: the facts changed.
 	status, again := file("Rerun the counts-only diagnostic?", map[string]any{"again": true})
 	hostStatus(t, status, 201, again)
@@ -103,6 +127,11 @@ func TestDecideHoldsOnlyDecisions(t *testing.T) {
 	status, digest := file("Daily digest 2026-11-12: change any priorities?", nil)
 	hostStatus(t, status, 201, digest)
 	digestID := anyString(digest["event"].(map[string]any)["id"])
+	// A ruling is made from an ask the human has dealt with, never an open one.
+	status, p = hostHTTP(t, "POST", env.server.URL+"/rulings", human.AccessToken, map[string]any{"ask_ref": "event:" + digestID, "kind": "not_a_decision"})
+	hostStatus(t, status, 409, p)
+	status, p = hostHTTP(t, "POST", env.server.URL+"/asks/"+url.PathEscape("event:"+digestID)+"/retire", human.AccessToken, map[string]any{"request_key": "send-back", "reason": "Not a decision: this is information, not a choice.", "evidence": []string{"event:" + digestID}})
+	hostStatus(t, status, 200, p)
 	status, p = hostHTTP(t, "POST", env.server.URL+"/rulings", human.AccessToken, map[string]any{"ask_ref": "event:" + digestID, "kind": "not_a_decision"})
 	hostStatus(t, status, 201, p)
 	before := len(brief(human.AccessToken)["decisions"].([]any))

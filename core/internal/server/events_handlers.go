@@ -247,7 +247,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		}
 		var covered *primitives.RulingAppliedError
 		if errors.As(err, &covered) {
-			writeRulingApplied(w, r, opts, actorID, req.Event, covered.Ruling)
+			// Without a request key the event id keys the replay, so a client
+			// that only fixes the id still gets one use and one fyi.
+			replayKey := firstNonEmptyString(strings.TrimSpace(req.RequestKey), "ruled:"+firstNonEmptyString(req.Event["id"]))
+			writeRulingApplied(w, r, opts, actorID, replayKey, req.Event, req, covered.Ruling)
 			return
 		}
 		if writeEventAppendContentionError(w, r, err) {
@@ -276,6 +279,10 @@ func handleAppendEvent(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			eventID := firstNonEmptyString(req.Event["id"])
 			existing, loadErr := opts.primitiveStore.GetEvent(r.Context(), eventID)
 			if loadErr == nil {
+				if typeValue == humanAttentionRequestedEventType {
+					// A retry also retries closing the ask this one replaced.
+					withdrawSupersededAsk(r.Context(), opts, actorID, existing)
+				}
 				response := map[string]any{"event": existing}
 				status, payload, replayErr := persistIdempotencyReplay(r.Context(), opts.primitiveStore, "events.create", actorID, req.RequestKey, req, http.StatusCreated, hygiene.attach(response))
 				if writeIdempotencyError(w, replayErr) {

@@ -19,7 +19,7 @@ import (
 // the insert and restore triggers, so every path that writes a note row (new
 // event, restore from trash, an older migration's backfill) gets them.
 func installOutcomeFacts(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range []string{"brief_notes", "events"} {
+	for _, table := range []string{"brief_notes", "brief_asks", "events"} {
 		has, err := sqliteTableExists(ctx, tx, table)
 		if err != nil || !has {
 			return err
@@ -47,7 +47,10 @@ func installOutcomeFacts(ctx context.Context, tx *sql.Tx) error {
 	}
 	for _, query := range []string{
 		`CREATE TRIGGER IF NOT EXISTS brief_notes_outcome_facts AFTER INSERT ON brief_notes BEGIN UPDATE brief_notes SET ` + facts("NEW.event_id") + ` WHERE event_id=NEW.event_id; END`,
-		`UPDATE brief_notes SET ` + facts("brief_notes.event_id") + ` WHERE true`,
+		// Backfill only the rows that differ from the column defaults: notes
+		// core wrote itself and fyi notes. Each is one primary-key event
+		// lookup per note; ordinary notes are read and left unwritten.
+		`UPDATE brief_notes SET ` + facts("brief_notes.event_id") + ` WHERE EXISTS(SELECT 1 FROM events e WHERE e.id=brief_notes.event_id AND (e.actor_id='system' OR json_extract(e.payload_json,'$.payload.automatic')=1 OR json_extract(e.payload_json,'$.payload.kind')='fyi'))`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_notes_fyi ON brief_notes(ts DESC) WHERE kind='fyi'`,
 		`CREATE INDEX IF NOT EXISTS idx_brief_notes_authored ON brief_notes(card_id,ts DESC) WHERE automatic=0`,
 		`CREATE TABLE IF NOT EXISTS standing_rulings(
@@ -66,6 +69,12 @@ func installOutcomeFacts(ctx context.Context, tx *sql.Tx) error {
 			revoked_by TEXT NOT NULL DEFAULT '')`,
 		`CREATE INDEX IF NOT EXISTS idx_standing_rulings_key ON standing_rulings(title_key,requester) WHERE revoked_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_standing_rulings_recent ON standing_rulings(created_at DESC,id)`,
+		// The default list shows live rulings newest first; this serves that
+		// filter and order together however many have been revoked.
+		`CREATE INDEX IF NOT EXISTS idx_standing_rulings_live ON standing_rulings(created_at DESC,id) WHERE revoked_at IS NULL`,
+		// The duplicate check on every filed ask: one requester's open asks
+		// about one card, newest first.
+		`CREATE INDEX IF NOT EXISTS idx_brief_asks_open_duplicate ON brief_asks(requester,subject_ref,created_at DESC) WHERE state='open'`,
 	} {
 		if _, err := tx.ExecContext(ctx, query); err != nil {
 			return err

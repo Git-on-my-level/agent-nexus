@@ -1361,5 +1361,10 @@
     "method": "POST",
     "path": "/rulings/{ruling_id}/revoke",
     "policy": "reference-write"
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/applied",
+    "policy": "reference-write"
   }
 ]

@@ -32,11 +32,16 @@ func registerCurationAndRulingRoutes(registerRoute func(string, routeAccessClass
 	})
 	registerRoute("/rulings/", func(r *http.Request) routeAccessRequirement {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")
-		if len(parts) == 2 && parts[0] != "" && parts[1] == "revoke" && r.Method == http.MethodPost {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "revoke" || parts[1] == "applied") && r.Method == http.MethodPost {
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, mutation: routeMutationBusiness, supported: true}
 		}
 		return routeAccessRequirement{}
 	}, func(w http.ResponseWriter, r *http.Request) {
-		handleRevokeRuling(w, r, opts, strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")[0])
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")
+		if parts[1] == "applied" {
+			handleRulingApplied(w, r, opts, parts[0])
+			return
+		}
+		handleRevokeRuling(w, r, opts, parts[0])
 	})
 }

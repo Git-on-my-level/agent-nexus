@@ -2782,6 +2782,18 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"report.preview"},
 	},
 	{
+		CommandID:  "rulings.applied",
+		CLIPath:    "rulings applied",
+		Group:      "rulings",
+		Method:     "POST",
+		Path:       "/rulings/{ruling_id}/applied",
+		PathParams: []string{"ruling_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"rulings.create", "rulings.list", "rulings.revoke"},
+	},
+	{
 		CommandID: "rulings.create",
 		CLIPath:   "rulings create",
 		Group:     "rulings",
@@ -2790,7 +2802,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.list", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.list", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.list",
@@ -2801,7 +2813,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.create", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.revoke"},
 	},
 	{
 		CommandID:  "rulings.revoke",
@@ -2813,7 +2825,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.create", "rulings.list"},
+		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list"},
 	},
 	{
 		CommandID:  "runs.get",
@@ -4443,6 +4455,10 @@ func (c *Client) ReportPreview(ctx context.Context, opts RequestOptions) (*http.
 
 func (c *Client) ReportRender(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "report.render", pathParams, opts)
+}
+
+func (c *Client) RulingsApplied(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.applied", pathParams, opts)
 }
 
 func (c *Client) RulingsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

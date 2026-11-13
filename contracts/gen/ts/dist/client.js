@@ -12147,6 +12147,44 @@ export const commandRegistry = [
         "ts_method": "reportRender"
     },
     {
+        "command_id": "rulings.applied",
+        "cli_path": "rulings applied",
+        "group": "rulings",
+        "method": "POST",
+        "path": "/rulings/{ruling_id}/applied",
+        "operation_id": "recordStandingRulingApplied",
+        "summary": "Count an ask a standing ruling answered before it was filed",
+        "description": "Core counts a ruling's uses when it applies one to a filed ask. A client that settles an ask against the rulings list before filing it (the CLI does, for an ask that names no card) calls this so the use count the human reads stays true. Increments `uses` only.",
+        "why": "Keep a ruling's use count true when a client applied it.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns `{ recorded }`.",
+        "error_codes": [
+            "auth_required",
+            "invalid_token",
+            "not_found"
+        ],
+        "concepts": [
+            "inbox",
+            "write"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Any authenticated member who can read the ruling. anx ask calls it for you.",
+        "path_params": [
+            "ruling_id"
+        ],
+        "adjacent_commands": [
+            "rulings.create",
+            "rulings.list",
+            "rulings.revoke"
+        ],
+        "go_method": "RulingsApplied",
+        "ts_method": "rulingsApplied"
+    },
+    {
         "command_id": "rulings.create",
         "cli_path": "rulings create",
         "group": "rulings",
@@ -12154,7 +12192,7 @@ export const commandRegistry = [
         "path": "/rulings",
         "operation_id": "createStandingRuling",
         "summary": "Make an answer to one ask a standing ruling",
-        "description": "Human only. `answer` makes the given answer apply to every later ask with the same title, whoever asks. `not_a_decision` records that the ask should not have reached a human: later asks from the same requester whose title differs only in its numbers are stored as an fyi instead. A newer ruling for the same question replaces the older one.",
+        "description": "Human only. `answer` makes the given answer apply to every later ask with the same title, whoever asks. `not_a_decision` records that the ask should not have reached a human: later asks from the same requester whose title differs only in its numbers are stored as an fyi instead. A newer ruling for the same question replaces the older one. The ask must already be answered or sent back (409 ask_open otherwise), and the caller must be able to read it.",
         "why": "Stop a repeated question from returning to Decide.",
         "input_mode": "json-body",
         "streaming": {
@@ -12166,7 +12204,8 @@ export const commandRegistry = [
             "invalid_request",
             "invalid_token",
             "human_required",
-            "not_found"
+            "not_found",
+            "ask_open"
         ],
         "concepts": [
             "inbox",
@@ -12198,6 +12237,7 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "rulings.applied",
             "rulings.list",
             "rulings.revoke"
         ],
@@ -12231,6 +12271,7 @@ export const commandRegistry = [
         "surface": "canonical",
         "agent_notes": "Any authenticated member. One indexed page; pass include_revoked=true for history.",
         "adjacent_commands": [
+            "rulings.applied",
             "rulings.create",
             "rulings.revoke"
         ],
@@ -12269,6 +12310,7 @@ export const commandRegistry = [
             "ruling_id"
         ],
         "adjacent_commands": [
+            "rulings.applied",
             "rulings.create",
             "rulings.list"
         ],
@@ -16574,6 +16616,9 @@ export class AnxClient {
     }
     reportRender(pathParams, options = {}) {
         return this.invoke("report.render", pathParams, options);
+    }
+    rulingsApplied(pathParams, options = {}) {
+        return this.invoke("rulings.applied", pathParams, options);
     }
     rulingsCreate(options = {}) {
         return this.invoke("rulings.create", {}, options);

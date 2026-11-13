@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `279`
+- Command operations: `280`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `228`
+- Missing recommended examples: `229`
 
 ## Baseline gap counts
 
@@ -310,6 +310,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `refs.resolve` `POST /refs/resolve`
 - `report.preview` `POST /reports/preview`
 - `report.render` `GET /docs/{document_id}/report`
+- `rulings.applied` `POST /rulings/{ruling_id}/applied`
 - `rulings.create` `POST /rulings`
 - `rulings.list` `GET /rulings`
 - `rulings.revoke` `POST /rulings/{ruling_id}/revoke`

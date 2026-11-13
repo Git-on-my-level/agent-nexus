@@ -691,5 +691,10 @@
     "method": "POST",
     "path": "/rulings/{ruling_id}/revoke",
     "reason": "Human-only write: one ruling primary-key read joined to its scoped source ask, one primary-key update."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/applied",
+    "reason": "One ruling primary-key read joined to its scoped source ask, one primary-key counter update."
   }
 ]

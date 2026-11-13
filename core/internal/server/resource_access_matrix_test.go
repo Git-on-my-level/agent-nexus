@@ -447,7 +447,7 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"request_key": "private-retirement", "reason": "stale", "evidence": refs}
 	case "/rulings":
 		return map[string]any{"ask_ref": "event:" + event, "kind": "not_a_decision"}
-	case "/rulings/{ruling_id}/revoke":
+	case "/rulings/{ruling_id}/revoke", "/rulings/{ruling_id}/applied":
 		return map[string]any{}
 	case "/asks/{ask_id}/revise":
 		return map[string]any{"if_revision": 0, "request_key": "private-revision", "presentation": map[string]any{"title": "Attempt?", "details": "card:" + card}}

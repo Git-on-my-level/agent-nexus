@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `279`
+- Commands: `280`
 
 ## `actors.create`
 
@@ -2808,6 +2808,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ document_ref, revision_ref, observed_at, panels }`; every panel includes resolved live/authored provenance and authored review metadata.
 - Agent notes: Both text and structured version 1 visual reports are supported. Authored review metadata is returned for every static panel. Reading a pinned report checks deadlines and durably deduplicates author-only inbox reminders per panel and revision. Each live or series-bound panel is independently materialized with status ok, stale or unavailable, observation time, data and an explicit truncated flag. Never infer zero work from an unavailable or truncated panel. Native work, event and decision candidates are bounded to 200 per request scope, with truncated marking additional candidates. Archived boards and their work are excluded. Private PM events remain private.
 
+## `rulings.applied`
+
+- CLI path: `rulings applied`
+- HTTP: `POST /rulings/{ruling_id}/applied`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Keep a ruling's use count true when a client applied it.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `invalid_token`, `not_found`
+- Output: Returns `{ recorded }`.
+- Agent notes: Any authenticated member who can read the ruling. anx ask calls it for you.
+
 ## `rulings.create`
 
 - CLI path: `rulings create`
@@ -2817,7 +2830,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Stop a repeated question from returning to Decide.
 - Concepts: `inbox`, `write`
-- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`, `not_found`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `human_required`, `not_found`, `ask_open`
 - Output: Returns `{ ruling }`.
 - Agent notes: Human principals only; agents receive human_required.
 

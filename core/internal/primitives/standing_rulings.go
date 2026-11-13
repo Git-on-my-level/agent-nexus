@@ -53,6 +53,10 @@ func (r StandingRuling) JSON() map[string]any {
 	return out
 }
 
+// ErrStandingRulingAskOpen refuses a ruling made from an ask nobody has
+// answered or sent back yet.
+var ErrStandingRulingAskOpen = errors.New("answer or send back the ask before making it a standing ruling")
+
 // RulingAppliedError reports that a standing ruling already covers the ask
 // being filed. Nothing was stored; the caller answers with the ruling.
 type RulingAppliedError struct{ Ruling StandingRuling }
@@ -114,13 +118,26 @@ func (s *Store) CreateStandingRuling(ctx context.Context, actorID, askID, kind, 
 		return StandingRuling{}, err
 	}
 	defer tx.Rollback()
-	var title, requester string
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(json_extract(payload_json,'$.payload.title'),''),COALESCE(NULLIF(trim(json_extract(payload_json,'$.payload.requester_actor_id')),''),actor_id,'') FROM events WHERE id=? AND type='human_attention_requested'`, askID).Scan(&title, &requester)
+	// Resolve through the caller's access scope first: an ask the caller
+	// cannot read is not found, and its title is never copied into a ruling.
+	resolved, err := resolveResourceRef(ctx, tx, ResourceRefInput{Type: "event", Ref: askID})
+	if err != nil {
+		return StandingRuling{}, ErrNotFound
+	}
+	askID = resolved.ID
+	var title, requester, state string
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(json_extract(e.payload_json,'$.payload.title'),''),COALESCE(NULLIF(trim(json_extract(e.payload_json,'$.payload.requester_actor_id')),''),e.actor_id,''),COALESCE((SELECT a.state FROM brief_asks a WHERE a.ask_id=e.id),'open')
+ FROM events e WHERE e.id=? AND e.type='human_attention_requested' AND COALESCE(e.trashed_at,'')=''`, askID).Scan(&title, &requester, &state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return StandingRuling{}, ErrNotFound
 	}
 	if err != nil {
 		return StandingRuling{}, err
+	}
+	// A ruling is made from an ask the human has dealt with. Ruling on one
+	// that is still open would answer later copies while this one waits.
+	if state == "open" {
+		return StandingRuling{}, ErrStandingRulingAskOpen
 	}
 	r := StandingRuling{ID: "ruling_" + strings.ReplaceAll(uuid.NewString(), "-", ""), Kind: kind, Question: strings.TrimSpace(title), Answer: answer, SourceAskID: askID, CreatedBy: actorID, CreatedAt: now.UTC().Format(time.RFC3339)}
 	key := AskTitleKey(title)
@@ -182,8 +199,16 @@ func (s *Store) RevokeStandingRuling(ctx context.Context, actorID, id string, no
 	return r, err
 }
 
-// RecordStandingRulingUse counts one ask the ruling answered.
+// RecordStandingRulingUse counts one ask the ruling answered. The ruling is
+// read through the caller's scope first, so a ruling the caller cannot see is
+// not found and not counted.
 func (s *Store) RecordStandingRulingUse(ctx context.Context, id string, now time.Time) error {
+	id = strings.TrimPrefix(strings.TrimSpace(id), "ruling:")
+	if _, err := scanStandingRuling(s.db.QueryRowContext(ctx, `SELECT `+standingRulingColumns+standingRulingFrom+` WHERE r.id=? AND r.revoked_at IS NULL`, id)); errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	} else if err != nil {
+		return err
+	}
 	_, err := s.db.ExecContext(ctx, `UPDATE standing_rulings SET uses=uses+1,last_used_at=? WHERE id=?`, now.UTC().Format(time.RFC3339), id)
 	return err
 }
