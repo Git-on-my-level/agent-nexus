@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -333,13 +334,28 @@ func TestCompactSQLiteOfflineOnlineDryRun(t *testing.T) {
 	}
 	beforeHash := compactFileHash(t, source)
 
+	var phaseMu sync.Mutex
+	seen := map[CompactPhase]bool{}
 	result, err := CompactSQLiteOffline(context.Background(), source, destination, CompactOptions{
 		ReserveBytes: 1,
 		Verify:       CompactVerifyQuick,
 		OnlineDryRun: true,
+		PhaseObserver: func(phase CompactPhase, _ time.Duration) {
+			phaseMu.Lock()
+			seen[phase] = true
+			phaseMu.Unlock()
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, phase := range []CompactPhase{CompactPhaseVacuumInto, CompactPhaseCheck, CompactPhaseCounts, CompactPhasePMIdentity, CompactPhaseTotal} {
+		if !seen[phase] {
+			t.Fatalf("online dry run did not time phase %s (saw %v)", phase, seen)
+		}
+	}
+	if seen[CompactPhaseExcept] {
+		t.Fatal("online dry run must not run EXCEPT passes")
 	}
 	if !result.DryRun || result.Verified {
 		t.Fatalf("unexpected dry-run result flags: %+v", result)
@@ -506,5 +522,23 @@ func TestCompactSQLiteOfflinePhaseObserverReportsFailedPhase(t *testing.T) {
 	}
 	if _, statErr := os.Stat(destination); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("canceled compaction retained output: %v", statErr)
+	}
+}
+
+func TestSQLiteReadOnlyDSNKeepsModeAndBusyTimeout(t *testing.T) {
+	dsn := sqliteReadOnlyDSN("/data/ws dir/state?.sqlite")
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse %q: %v", dsn, err)
+	}
+	if parsed.Path != "/data/ws dir/state?.sqlite" {
+		t.Fatalf("path = %q", parsed.Path)
+	}
+	q := parsed.Query()
+	if q.Get("mode") != "ro" {
+		t.Fatalf("mode = %q, want ro (dsn %q)", q.Get("mode"), dsn)
+	}
+	if q.Get("_pragma") != "busy_timeout(20000)" {
+		t.Fatalf("_pragma = %q (dsn %q)", q.Get("_pragma"), dsn)
 	}
 }

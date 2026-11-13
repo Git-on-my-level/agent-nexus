@@ -65,9 +65,10 @@ type CompactOptions struct {
 	// Verify selects full or quick verification. Empty selects full.
 	Verify CompactVerifyMode
 	// OnlineDryRun copies a live database read-only without the serving lease
-	// or an exclusive SQLite lock. The output is a disposable snapshot: it is
-	// never compared with the changing source and must not be published. It
-	// requires quick verification.
+	// or an exclusive SQLite lock. The output is a disposable snapshot and must
+	// not be published. The count and PM identity scans still run so the
+	// timings cover the offline quick run, but their mismatches against the
+	// changing source are ignored. It requires quick verification.
 	OnlineDryRun bool
 	// PhaseObserver, when set, receives each completed phase and its elapsed
 	// time. Library callers that leave it nil keep the previous behaviour.
@@ -360,19 +361,30 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 	}
 	phases.end()
 
-	if !options.OnlineDryRun {
+	{
+		// The online dry run executes the same count and PM identity scans so
+		// its phase=total covers every phase of the offline quick run. The live
+		// source keeps changing, so mismatches are expected and ignored there;
+		// SQL errors still fail the run.
+		ignoreMismatch := options.OnlineDryRun
 		phases.begin(CompactPhaseCounts)
+		if !attached {
+			if _, err = conn.ExecContext(ctx, `ATTACH DATABASE ? AS compact_output`, destination); err != nil {
+				return result, err
+			}
+			attached = true
+		}
 		var countTables []string
 		countTables, err = compactTableNames(ctx, conn, "main", true)
 		if err != nil {
 			return result, err
 		}
-		if err = compactCompareCounts(ctx, conn, countTables); err != nil {
+		if err = compactCompareCounts(ctx, conn, countTables, ignoreMismatch); err != nil {
 			return result, err
 		}
 		phases.end()
 
-		if verify == CompactVerifyFull {
+		if verify == CompactVerifyFull && !options.OnlineDryRun {
 			phases.begin(CompactPhaseExcept)
 			var exceptTables []string
 			exceptTables, err = compactTableNames(ctx, conn, "main", false)
@@ -387,7 +399,7 @@ func CompactSQLiteOffline(ctx context.Context, source, destination string, optio
 
 		phases.begin(CompactPhasePMIdentity)
 		if compactTableExists(countTables, "pm_records") {
-			if err = compactComparePMIdentity(ctx, conn, verify == CompactVerifyQuick); err != nil {
+			if err = compactComparePMIdentity(ctx, conn, verify == CompactVerifyQuick, ignoreMismatch); err != nil {
 				return result, err
 			}
 		}
@@ -482,6 +494,7 @@ func sqliteReadOnlyDSN(databasePath string) string {
 	// SQLite rejects VACUUM INTO on a query_only connection.
 	query.Add("mode", "ro")
 	query.Add("_pragma", "busy_timeout(20000)")
+	dsn.RawQuery = query.Encode()
 	return dsn.String()
 }
 
@@ -535,7 +548,11 @@ func compactOutputSettings(ctx context.Context, conn *sql.Conn, pageSize int64) 
 }
 
 func compactConvertOutputAutoVacuum(ctx context.Context, destination string) error {
-	db, err := sql.Open("sqlite", "file:"+destination)
+	dsn := &url.URL{Scheme: "file", Path: destination}
+	query := dsn.Query()
+	query.Add("_pragma", "busy_timeout(20000)")
+	dsn.RawQuery = query.Encode()
+	db, err := sql.Open("sqlite", dsn.String())
 	if err != nil {
 		return err
 	}
@@ -661,7 +678,7 @@ func quoteSQLiteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
-func compactCompareCounts(ctx context.Context, conn *sql.Conn, tables []string) error {
+func compactCompareCounts(ctx context.Context, conn *sql.Conn, tables []string, ignoreMismatch bool) error {
 	for _, table := range tables {
 		quoted := quoteSQLiteIdent(table)
 		query := `SELECT (SELECT count(*) FROM main.` + quoted + `)<>(SELECT count(*) FROM compact_output.` + quoted + `)`
@@ -669,7 +686,7 @@ func compactCompareCounts(ctx context.Context, conn *sql.Conn, tables []string) 
 		if err := conn.QueryRowContext(ctx, query).Scan(&mismatch); err != nil {
 			return err
 		}
-		if mismatch {
+		if mismatch && !ignoreMismatch {
 			return errors.New("compacted file differs from source")
 		}
 	}
@@ -695,7 +712,7 @@ func compactCompareExcept(ctx context.Context, conn *sql.Conn, tables []string) 
 	return nil
 }
 
-func compactComparePMIdentity(ctx context.Context, conn *sql.Conn, bidirectional bool) error {
+func compactComparePMIdentity(ctx context.Context, conn *sql.Conn, bidirectional, ignoreMismatch bool) error {
 	queries := []string{
 		`SELECT EXISTS(SELECT rowid,kind,id FROM main.pm_records EXCEPT SELECT rowid,kind,id FROM compact_output.pm_records)`,
 	}
@@ -707,7 +724,7 @@ func compactComparePMIdentity(ctx context.Context, conn *sql.Conn, bidirectional
 		if err := conn.QueryRowContext(ctx, query).Scan(&mismatch); err != nil {
 			return err
 		}
-		if mismatch {
+		if mismatch && !ignoreMismatch {
 			return errors.New("compaction changed PM cursor identities")
 		}
 	}
