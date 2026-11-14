@@ -108,13 +108,17 @@ limits are not watchdog tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`,
 and are still validated while the watchdog is disabled. An invalid value stops
 workspace initialization rather than silently changing the policy.
 
-A `stage=wal_pinned` warning that persists across watchdog ticks is a live
-reader inside the core process (an open read snapshot, transaction, or
-unclosed result set). Restarting the core drops that reader and lets the new
-process truncate the WAL to the journal size limit. Connection lifetime limits
-only recycle connections that have been returned to the pool; they do not
-release an in-use snapshot. The default open-connection cap is 64 because some
-readers hydrate related records while holding an outer cursor; do not set
+A `stage=wal_pinned` warning that persists across watchdog ticks means some
+reader is holding a snapshot open. It may be inside the core process (an open
+read snapshot, transaction, or unclosed result set) or an out-of-process
+reader such as sqlite3 or backup tooling; SQLite does not identify it.
+Restarting core only helps when the reader is an in-process snapshot, and
+restarting repeatedly will not clear an external reader. A successful
+`wal_checkpoint(TRUNCATE)` truncates the WAL to zero; `journal_size_limit`
+only bounds how large it may grow again. Connection lifetime limits only
+recycle connections that have been returned to the pool; they do not release
+an in-use snapshot. The default open-connection cap is 64 because some readers
+hydrate related records while holding an outer cursor; do not set
 `ANX_SQLITE_MAX_OPEN_CONNS=1` in production.
 
 ### SQLite incremental vacuum
