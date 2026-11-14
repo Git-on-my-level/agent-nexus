@@ -92,7 +92,7 @@ func formatTopicTimeline(body any) string {
 	lines = append(lines, fmt.Sprintf("cards: %d", len(asSlice(root["cards"]))))
 	lines = append(lines, fmt.Sprintf("documents: %d", len(asSlice(root["documents"]))))
 	lines = append(lines, fmt.Sprintf("threads: %d", len(asSlice(root["threads"]))))
-	return strings.Join(lines, "\n")
+	return appendNotesText(strings.Join(lines, "\n"), root, firstNonEmpty(anyString(extractNestedMap(root, "card")["id"]), anyString(extractNestedMap(root, "card")["ref"])))
 }
 
 func formatCardTimeline(body any) string {

@@ -1395,3 +1395,77 @@ func TestHelpWorkContextPointsToLoopVerb(t *testing.T) {
 		}
 	}
 }
+
+func TestRunMetaCommandsDefaultTextStaysUnderToolCutoff(t *testing.T) {
+	t.Parallel()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cli := newTestApp(t)
+	cli.Stdout = stdout
+	cli.Stderr = stderr
+	cli.Stdin = strings.NewReader("")
+	cli.StdinIsTTY = func() bool { return true }
+	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
+	cli.ReadFile = func(path string) ([]byte, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+
+	exitCode := cli.Run([]string{"debug", "meta", "commands"})
+	if exitCode != 0 {
+		t.Fatalf("unexpected exit code: %d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	output := stdout.String()
+	if len(output) >= 12000 {
+		t.Fatalf("default meta commands text is %d chars, want < 12000", len(output))
+	}
+	if !strings.HasPrefix(output, "commands: ") {
+		t.Fatalf("expected concise index header, got %q", output[:min(80, len(output))])
+	}
+	if !strings.Contains(output, "anx debug meta command <id>") || !strings.Contains(output, "--json") || !strings.Contains(output, "--group") {
+		t.Fatalf("expected lookup guidance, got:\n%s", output)
+	}
+	if strings.Contains(output, "fact result.") || strings.Contains(output, "agent_notes") || strings.Contains(output, "adjacent_commands") || strings.Contains(output, "body_schema") {
+		t.Fatalf("default text leaked full registry records:\n%s", output[:min(500, len(output))])
+	}
+
+	jsonOut := runCLIForTest(t, t.TempDir(), nil, nil, []string{"--json", "debug", "meta", "commands"})
+	payload := assertEnvelopeOK(t, jsonOut)
+	data := asMap(payload["result"])
+	commands := asSlice(data["commands"])
+	if len(commands) == 0 {
+		t.Fatalf("JSON should keep full command records: %v", data)
+	}
+	foundFullRecord := false
+	for _, raw := range commands {
+		cmd := asMap(raw)
+		if anyString(cmd["command_id"]) == "" || anyString(cmd["cli_path"]) == "" {
+			continue
+		}
+		if _, ok := cmd["adjacent_commands"]; ok {
+			foundFullRecord = true
+			break
+		}
+		if _, ok := cmd["why"]; ok {
+			foundFullRecord = true
+			break
+		}
+	}
+	if !foundFullRecord {
+		t.Fatalf("JSON command records lost registry metadata: %#v", commands[0])
+	}
+}
+
+func TestRunMetaCommandsGroupFilterStillWorks(t *testing.T) {
+	t.Parallel()
+	text := runCLIForTest(t, t.TempDir(), nil, nil, []string{"debug", "meta", "commands", "--group", "work"})
+	if !strings.Contains(text, "commands:") || !strings.Contains(text, "group=work") {
+		t.Fatalf("group filter missing from index:\n%s", text)
+	}
+	if strings.Contains(text, "\ndebug meta") && !strings.Contains(text, "\nwork ") {
+		t.Fatalf("group=work should list work commands:\n%s", text)
+	}
+	if !strings.Contains(text, "work get") {
+		t.Fatalf("expected work get in group=work index:\n%s", text)
+	}
+}

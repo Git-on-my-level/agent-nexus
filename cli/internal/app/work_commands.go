@@ -432,6 +432,9 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		work := asMap(asMap(commandResultBody(result))["work"])
 		asMap(result.Data)["body"] = map[string]any{"ref": work["ref"], "freshness": work["freshness"], "latest_observation": work["latest_observation"], "refresh": work["refresh"]}
 	}
+	if parsed.name == "work get" || parsed.name == "work context" {
+		a.attachCardNotes(ctx, cfg, parsed.id, commandResultBody(result))
+	}
 	if parsed.name == "pm decisions dispatch" {
 		result.Text = formatPMDispatchText(commandResultBody(result), started, "")
 	} else {
