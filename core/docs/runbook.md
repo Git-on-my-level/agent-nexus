@@ -72,6 +72,10 @@ rollback. Default activation awaits the documented retention decision.
 | Consecutive qualifying runs before one pinned WARN                                                                                                                                | n/a                             | `ANX_SQLITE_WAL_PINNED_RUNS`              | `3`                                                                        |
 | Connection-local busy timeout for conditional TRUNCATE                                                                                                                            | n/a                             | `ANX_SQLITE_WAL_TRUNCATE_BUSY_TIMEOUT`    | `250ms`                                                                    |
 | Per-connection SQLite `journal_size_limit`                                                                                                                                        | n/a                             | `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`     | `67108864` (64 MiB)                                                        |
+| Maximum open workspace SQLite connections | n/a | `ANX_SQLITE_MAX_OPEN_CONNS` | `64`                                                                                                                                                                                                                                                         |
+| Maximum idle workspace SQLite connections | n/a | `ANX_SQLITE_MAX_IDLE_CONNS` | `8`                                                                                                                                                                                                                                                          |
+| Maximum lifetime of a recycled workspace SQLite connection | n/a | `ANX_SQLITE_CONN_MAX_LIFETIME` | `30m`                                                                                                                                                                                                                                    |
+| Maximum idle time of a recycled workspace SQLite connection | n/a | `ANX_SQLITE_CONN_MAX_IDLE_TIME` | `5m`                                                                                                                                                                                                                                   |
 | Enable bounded online incremental vacuum                                                                                                                                          | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM`           | `true`                                                                     |
 | Minimum freelist bytes before incremental vacuum                                                                                                                                  | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_BYTES` | `67108864` (64 MiB)                                               |
 | Minimum freelist share of page count before incremental vacuum                                                                                                                    | n/a                             | `ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT` | `10`                                                              |
@@ -97,11 +101,21 @@ reader finishes or disconnects.
 
 Setting `ANX_SQLITE_WAL_WATCHDOG=false` disables the worker and ignores the
 watchdog tuning values (interval, warn bytes, pinned runs and truncate busy
-timeout), even if they are invalid. The journal size limit is not watchdog
-tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES` still applies to every connection
-through the DSN and is still validated while the watchdog is disabled. An
-invalid journal-limit value stops workspace initialization rather than
-silently changing the policy.
+timeout), even if they are invalid. The journal size limit and connection-pool
+limits are not watchdog tuning: `ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES`,
+`ANX_SQLITE_MAX_OPEN_CONNS`, `ANX_SQLITE_MAX_IDLE_CONNS`,
+`ANX_SQLITE_CONN_MAX_LIFETIME` and `ANX_SQLITE_CONN_MAX_IDLE_TIME` still apply
+and are still validated while the watchdog is disabled. An invalid value stops
+workspace initialization rather than silently changing the policy.
+
+A `stage=wal_pinned` warning that persists across watchdog ticks is a live
+reader inside the core process (an open read snapshot, transaction, or
+unclosed result set). Restarting the core drops that reader and lets the new
+process truncate the WAL to the journal size limit. Connection lifetime limits
+only recycle connections that have been returned to the pool; they do not
+release an in-use snapshot. The default open-connection cap is 64 because some
+readers hydrate related records while holding an outer cursor; do not set
+`ANX_SQLITE_MAX_OPEN_CONNS=1` in production.
 
 ### SQLite incremental vacuum
 

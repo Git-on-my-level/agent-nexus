@@ -138,9 +138,10 @@ func openScopeDatabase(dsn string, lease *scopeProcessLease) (*sql.DB, error) {
 	db := sql.OpenDB(&scopeConnector{registered: d, dsn: dsn, lease: lease})
 	// A physical connection reparses the complete trigger schema. Bound the
 	// idle cache across ticks; database/sql's default two idle connections
-	// caused repeated schema churn. Keep serving concurrency unchanged: some
-	// readers hydrate related records while holding their outer result cursor,
-	// so imposing a shared connection cap here could deadlock nested reads.
+	// caused repeated schema churn. InitializeWorkspace then applies the
+	// configured MaxOpenConns / lifetime limits. The open cap is generous
+	// (default 64) because some readers hydrate related records while holding
+	// their outer result cursor; a cap of 1 would deadlock those nested reads.
 	db.SetMaxIdleConns(8)
 	return db, nil
 }

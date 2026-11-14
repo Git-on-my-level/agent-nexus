@@ -75,6 +75,7 @@ func InitializeWorkspace(ctx context.Context, workspaceRoot string) (*Workspace,
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
+	applyWorkspacePoolLimits(db, maintenanceConfig)
 
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()

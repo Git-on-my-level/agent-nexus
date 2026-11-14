@@ -23,6 +23,10 @@ var sqliteMaintenanceEnv = []string{
 	"ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT",
 	"ANX_SQLITE_INCREMENTAL_VACUUM_PAGES",
 	"ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT",
+	"ANX_SQLITE_MAX_OPEN_CONNS",
+	"ANX_SQLITE_MAX_IDLE_CONNS",
+	"ANX_SQLITE_CONN_MAX_LIFETIME",
+	"ANX_SQLITE_CONN_MAX_IDLE_TIME",
 }
 
 func clearSQLiteMaintenanceEnv(t *testing.T) {
@@ -78,6 +82,18 @@ func TestSQLiteMaintenanceConfigDefaults(t *testing.T) {
 	if config.incrementalVacuum.busyTimeout != 250*time.Millisecond {
 		t.Fatalf("incremental busy timeout = %v", config.incrementalVacuum.busyTimeout)
 	}
+	if config.maxOpenConns != 64 {
+		t.Fatalf("max open conns = %d", config.maxOpenConns)
+	}
+	if config.maxIdleConns != 8 {
+		t.Fatalf("max idle conns = %d", config.maxIdleConns)
+	}
+	if config.connMaxLifetime != 30*time.Minute {
+		t.Fatalf("conn max lifetime = %v", config.connMaxLifetime)
+	}
+	if config.connMaxIdleTime != 5*time.Minute {
+		t.Fatalf("conn max idle time = %v", config.connMaxIdleTime)
+	}
 }
 
 func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
@@ -93,6 +109,10 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_MIN_FREELIST_PERCENT", "25")
 	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_PAGES", "512")
 	t.Setenv("ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", "50ms")
+	t.Setenv("ANX_SQLITE_MAX_OPEN_CONNS", "16")
+	t.Setenv("ANX_SQLITE_MAX_IDLE_CONNS", "4")
+	t.Setenv("ANX_SQLITE_CONN_MAX_LIFETIME", "10m")
+	t.Setenv("ANX_SQLITE_CONN_MAX_IDLE_TIME", "1m")
 	config, err := loadSQLiteMaintenanceConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +130,10 @@ func TestSQLiteMaintenanceConfigOverrides(t *testing.T) {
 		config.incrementalVacuum.pages != 512 ||
 		config.incrementalVacuum.busyTimeout != 50*time.Millisecond {
 		t.Fatalf("unexpected incremental vacuum config: %#v", config.incrementalVacuum)
+	}
+	if config.maxOpenConns != 16 || config.maxIdleConns != 4 ||
+		config.connMaxLifetime != 10*time.Minute || config.connMaxIdleTime != time.Minute {
+		t.Fatalf("unexpected pool config: %#v", config)
 	}
 }
 
@@ -134,6 +158,9 @@ func TestSQLiteMaintenanceConfigDisabledSkipsTuning(t *testing.T) {
 		}
 		if config.journalSizeLimit != 5678 {
 			t.Fatalf("journal size limit = %d, want 5678", config.journalSizeLimit)
+		}
+		if config.maxOpenConns != defaultMaxOpenConns || config.connMaxLifetime != defaultConnMaxLifetime {
+			t.Fatalf("disabled watchdog dropped pool defaults: %#v", config)
 		}
 	})
 
@@ -204,6 +231,17 @@ func TestSQLiteMaintenanceConfigRejectsInvalidValues(t *testing.T) {
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "0s"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "-1ms"},
 		{name: "ANX_SQLITE_INCREMENTAL_VACUUM_BUSY_TIMEOUT", value: "nope"},
+		{name: "ANX_SQLITE_MAX_OPEN_CONNS", value: "0"},
+		{name: "ANX_SQLITE_MAX_OPEN_CONNS", value: "-1"},
+		{name: "ANX_SQLITE_MAX_OPEN_CONNS", value: "nope"},
+		{name: "ANX_SQLITE_MAX_IDLE_CONNS", value: "-1"},
+		{name: "ANX_SQLITE_MAX_IDLE_CONNS", value: "nope"},
+		{name: "ANX_SQLITE_CONN_MAX_LIFETIME", value: "0s"},
+		{name: "ANX_SQLITE_CONN_MAX_LIFETIME", value: "-1s"},
+		{name: "ANX_SQLITE_CONN_MAX_LIFETIME", value: "nope"},
+		{name: "ANX_SQLITE_CONN_MAX_IDLE_TIME", value: "0s"},
+		{name: "ANX_SQLITE_CONN_MAX_IDLE_TIME", value: "-1s"},
+		{name: "ANX_SQLITE_CONN_MAX_IDLE_TIME", value: "nope"},
 	} {
 		t.Run(tc.name+"="+tc.value, func(t *testing.T) {
 			clearSQLiteMaintenanceEnv(t)
@@ -679,5 +717,80 @@ func TestWALWatchdogLifecycleStopsOnClose(t *testing.T) {
 	}
 	if err := ws.Ping(context.Background()); err == nil {
 		t.Fatal("Ping succeeded after Close")
+	}
+}
+
+func TestWorkspacePoolLimitsApplied(t *testing.T) {
+	clearSQLiteMaintenanceEnv(t)
+	t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+	t.Setenv("ANX_SQLITE_MAX_OPEN_CONNS", "12")
+	t.Setenv("ANX_SQLITE_MAX_IDLE_CONNS", "3")
+	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	stats := ws.DB().Stats()
+	if stats.MaxOpenConnections != 12 {
+		t.Fatalf("MaxOpenConnections = %d, want 12", stats.MaxOpenConnections)
+	}
+}
+
+func TestReleasedReadSnapshotAllowsTruncate(t *testing.T) {
+	clearSQLiteMaintenanceEnv(t)
+	t.Setenv("ANX_SQLITE_WAL_WATCHDOG", "false")
+	ws, err := InitializeWorkspace(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	ctx := context.Background()
+	if _, err := ws.DB().ExecContext(ctx, `INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('release-1','Released','[]','2026-11-14T00:00:00Z','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := ws.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM actors`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.DB().ExecContext(ctx, `INSERT INTO actors(id,display_name,tags_json,created_at,metadata_json) VALUES('release-2','Released','[]','2026-11-14T00:00:00Z','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := func() (busy, logFrames, checkpointed int64) {
+		t.Helper()
+		conn, err := ws.DB().Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if err := conn.QueryRowContext(ctx, `PRAGMA wal_checkpoint(PASSIVE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+			t.Fatal(err)
+		}
+		return busy, logFrames, checkpointed
+	}
+	busy, logFrames, checkpointed := checkpoint()
+	if busy != 0 || checkpointed >= logFrames {
+		t.Fatalf("expected an incomplete PASSIVE checkpoint while the reader is held, got busy=%d log=%d checkpointed=%d", busy, logFrames, checkpointed)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	busy, logFrames, checkpointed = checkpoint()
+	if busy != 0 || checkpointed < logFrames {
+		t.Fatalf("expected a complete PASSIVE checkpoint after releasing the reader, got busy=%d log=%d checkpointed=%d", busy, logFrames, checkpointed)
+	}
+	conn, err := ws.DB().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logFrames, &checkpointed); err != nil {
+		t.Fatal(err)
+	}
+	if busy != 0 || logFrames != 0 || checkpointed != 0 {
+		t.Fatalf("expected TRUNCATE to clear the WAL after the reader was released, got busy=%d log=%d checkpointed=%d", busy, logFrames, checkpointed)
 	}
 }
