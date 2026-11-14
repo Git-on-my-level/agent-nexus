@@ -21,6 +21,10 @@ const (
 	defaultWALTruncateBusyTimeout       = 250 * time.Millisecond
 	defaultWALTruncateFloorBytes  int64 = 4 * 1024 * 1024
 	defaultJournalSizeLimit       int64 = 64 * 1024 * 1024
+	defaultMaxOpenConns                 = 64
+	defaultMaxIdleConns                 = 8
+	defaultConnMaxLifetime              = 30 * time.Minute
+	defaultConnMaxIdleTime              = 5 * time.Minute
 )
 
 type sqliteMaintenanceConfig struct {
@@ -30,6 +34,10 @@ type sqliteMaintenanceConfig struct {
 	pinnedRuns          int
 	truncateBusyTimeout time.Duration
 	journalSizeLimit    int64
+	maxOpenConns        int
+	maxIdleConns        int
+	connMaxLifetime     time.Duration
+	connMaxIdleTime     time.Duration
 	incrementalVacuum   incrementalVacuumConfig
 }
 
@@ -41,6 +49,10 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		pinnedRuns:          defaultWALPinnedRuns,
 		truncateBusyTimeout: defaultWALTruncateBusyTimeout,
 		journalSizeLimit:    defaultJournalSizeLimit,
+		maxOpenConns:        defaultMaxOpenConns,
+		maxIdleConns:        defaultMaxIdleConns,
+		connMaxLifetime:     defaultConnMaxLifetime,
+		connMaxIdleTime:     defaultConnMaxIdleTime,
 		incrementalVacuum: incrementalVacuumConfig{
 			enabled:            true,
 			minFreelistBytes:   defaultIncrementalVacuumMinFreelistBytes,
@@ -64,6 +76,37 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 			return config, fmt.Errorf("invalid ANX_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: must be a positive integer")
 		}
 		config.journalSizeLimit = parsed
+	}
+	// Pool limits apply to the workspace *sql.DB even when the watchdog is
+	// disabled. They bound connection growth; they do not close an in-use
+	// leaked or stuck read snapshot.
+	if value, ok := os.LookupEnv("ANX_SQLITE_MAX_OPEN_CONNS"); ok {
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 1 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_MAX_OPEN_CONNS: must be an integer >= 1")
+		}
+		config.maxOpenConns = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_MAX_IDLE_CONNS"); ok {
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_MAX_IDLE_CONNS: must be an integer >= 0")
+		}
+		config.maxIdleConns = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_CONN_MAX_LIFETIME"); ok {
+		parsed, err := time.ParseDuration(strings.TrimSpace(value))
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_CONN_MAX_LIFETIME: must be a positive duration")
+		}
+		config.connMaxLifetime = parsed
+	}
+	if value, ok := os.LookupEnv("ANX_SQLITE_CONN_MAX_IDLE_TIME"); ok {
+		parsed, err := time.ParseDuration(strings.TrimSpace(value))
+		if err != nil || parsed <= 0 {
+			return config, fmt.Errorf("invalid ANX_SQLITE_CONN_MAX_IDLE_TIME: must be a positive duration")
+		}
+		config.connMaxIdleTime = parsed
 	}
 	// Tuning values only matter while the watchdog runs. A disabled watchdog
 	// must not block workspace initialization on an invalid tuning value.
@@ -137,6 +180,13 @@ func loadSQLiteMaintenanceConfig() (sqliteMaintenanceConfig, error) {
 		config.incrementalVacuum.busyTimeout = parsed
 	}
 	return config, nil
+}
+
+func applyWorkspacePoolLimits(db *sql.DB, config sqliteMaintenanceConfig) {
+	db.SetMaxOpenConns(config.maxOpenConns)
+	db.SetMaxIdleConns(config.maxIdleConns)
+	db.SetConnMaxLifetime(config.connMaxLifetime)
+	db.SetConnMaxIdleTime(config.connMaxIdleTime)
 }
 
 type walCheckpointResult struct {

@@ -394,6 +394,7 @@ func handleAttentionVisit(w http.ResponseWriter, r *http.Request, opts handlerOp
 	if !ok {
 		return
 	}
+	defer closeRead()
 	snapshot, _, err := attentionDashboardSnapshot(read, opts, store, scope, now)
 	closeRead()
 	if err == nil {
