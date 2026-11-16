@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"agent-nexus-cli/internal/config"
 )
 
 func TestAwaitKnownAskAcrossSessionsAndReaders(t *testing.T) {
@@ -67,11 +70,30 @@ func TestAwaitKnownAskAcrossSessionsAndReaders(t *testing.T) {
 				_ = runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--as", actor, "version"})
 			}
 			getenv := a.Getenv
+			session := "first-session"
 			a.Getenv = func(key string) string {
 				if key == "ANX_SESSION" {
-					return tc.session
+					return session
 				}
 				return getenv(key)
+			}
+			// File under the original principal/session, then read in another.
+			cfg := config.Resolved{BaseURL: server.URL, As: "worker"}
+			origin, err := a.answerWaitStore(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := origin.recordAsk("event:legacy-ask", "Proceed?", time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			session = tc.session
+			cfg.As = actor
+			reader, err := a.answerWaitStore(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mine, other := reader.origin("event:legacy-ask"); mine || !other {
+				t.Fatal("fixture did not establish another session's ask")
 			}
 			if exit := a.Run([]string{"--json", "--as", actor, "await", "event:legacy-ask", "--timeout", "300ms"}); exit != tc.exit {
 				t.Fatalf("exit=%d want=%d: %s", exit, tc.exit, out.String())
@@ -81,6 +103,9 @@ func TestAwaitKnownAskAcrossSessionsAndReaders(t *testing.T) {
 			}
 			if tc.exit == 0 && asMap(dailyJSON(t, out)["result"])["answer"] != "Recorded answer" {
 				t.Fatalf("lost answer: %s", out.String())
+			}
+			if len(origin.pending()) != 1 || len(reader.pending()) != 0 || origin.loadSeen().Baselined || reader.loadSeen().Baselined {
+				t.Fatal("direct await changed session-scoped answer delivery")
 			}
 		})
 	}
