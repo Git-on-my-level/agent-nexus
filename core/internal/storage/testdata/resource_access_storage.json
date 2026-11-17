@@ -3303,7 +3303,7 @@
     "../server/inbox_ask_handlers.go:type:inboxRespondAnswer": "c4cccb7130259534f2acd32c7ed36673d4b9e74d69e170e489b49f87cff65adf",
     "../server/inbox_ask_handlers.go:type:inboxRespondRequest": "0b461db472916977d5c070484c3fdedd66fa2021f61743a9d09314c3580cf151",
     "../server/inbox_ask_handlers.go:type:inboxRespondRequestCore": "3e6fd92c15ba1812b8fab6e50244c356de310bf948f6285153f1ba6c83b14d2d",
-    "../server/inbox_card_summaries.go:enrichInboxCardSummaries": "b04e22707f3cf31ad3e9d7943c098006354a3000fbc72739518cfee3582106c4",
+    "../server/inbox_card_summaries.go:enrichInboxCardSummaries": "91bddc77acdc225b22268efb5df49692063f5291cb040814b1615fdb1584ea21",
     "../server/inbox_completed_handlers.go:handleGetCompletedInbox": "8c695955b82385bf6add679001f7c2c1dbf5c9a5ce1f77be88f12b993c503522",
     "../server/inbox_completed_handlers.go:handleGetCompletedInboxItem": "8ecb996c3af78a15361992df7acd912fbdd377b027a9a6df810497bfff550761",
     "../server/inbox_completed_handlers.go:resolveHumanAttentionRequestEvent": "3b5be6c8c58f6704aeb97ed9568aaa9ed2fbc6bb0d0bbeaec0fe4daec7a54a3b",
