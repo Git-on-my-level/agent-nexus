@@ -232,45 +232,6 @@ func typedRefEdgeTargets(edgeType string, refs []string) []refEdgeTarget {
 	return targets
 }
 
-func resolvedTypedRefEdgeTargets(ctx context.Context, q queryRower, edgeType string, refs []string) []refEdgeTarget {
-	if len(refs) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(refs))
-	targets := make([]refEdgeTarget, 0, len(refs))
-	for _, raw := range refs {
-		targetType, targetValue, ok := normalizeTypedRef(raw)
-		if !ok {
-			continue
-		}
-		targetID := targetValue
-		publicRef := strings.TrimSpace(raw)
-		if resourceTables[targetType] != "" || targetType == "document_revision" || targetType == "card_revision" {
-			if resolved, err := resolveResourceByTypedValue(ctx, q, targetType, targetValue); err == nil {
-				targetID = resolved.ID
-				publicRef = resolved.CanonicalRef
-			}
-		}
-		key := edgeType + "\x00" + targetType + "\x00" + targetID
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		meta := map[string]any{
-			"target_ref":         publicRef,
-			"resolved_target_id": targetID,
-		}
-		metaJSON, _ := json.Marshal(meta)
-		targets = append(targets, refEdgeTarget{
-			TargetType:   targetType,
-			TargetID:     targetID,
-			EdgeType:     edgeType,
-			MetadataJSON: string(metaJSON),
-		})
-	}
-	return targets
-}
-
 func resolveResourceByTypedValue(ctx context.Context, q queryRower, typ, value string) (ResolvedResourceRef, error) {
 	if typ == "document_revision" || typ == "card_revision" {
 		return resolveRevisionResourceRef(ctx, q, typ, value)

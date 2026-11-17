@@ -326,17 +326,6 @@ func rejectMixedBoardCardPatchAliases(w http.ResponseWriter, patch map[string]an
 	return false
 }
 
-func assigneeStringPtr(v any) *string {
-	if v == nil {
-		return nil
-	}
-	s := strings.TrimSpace(anyString(v))
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 func addBoardCardStoreInput(m addBoardCardMerged) primitives.AddBoardCardInput {
 	return primitives.AddBoardCardInput{
 		Under: m.Under, After: m.After, CreateSurface: m.CreateSurface,

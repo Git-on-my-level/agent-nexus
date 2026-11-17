@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -385,76 +384,6 @@ func filterThreadWorkspaceInboxItems(items []map[string]any, types []string) []m
 	return filtered
 }
 
-func filterWorkspaceEventsByType(events []map[string]any, types []string) []map[string]any {
-	if len(events) == 0 {
-		return []map[string]any{}
-	}
-	allowed := make(map[string]struct{}, len(types))
-	for _, eventType := range types {
-		eventType = strings.TrimSpace(eventType)
-		if eventType == "" {
-			continue
-		}
-		allowed[eventType] = struct{}{}
-	}
-	if len(allowed) == 0 {
-		return cloneWorkspaceMaps(events)
-	}
-
-	filtered := make([]map[string]any, 0, len(events))
-	for _, event := range events {
-		eventType := strings.TrimSpace(anyString(event["type"]))
-		if _, ok := allowed[eventType]; !ok {
-			continue
-		}
-		filtered = append(filtered, cloneWorkspaceMap(event))
-	}
-	return filtered
-}
-
-func workspaceNormalizeEvents(events []map[string]any) []map[string]any {
-	if len(events) == 0 {
-		return []map[string]any{}
-	}
-
-	out := make([]map[string]any, 0, len(events))
-	for _, event := range events {
-		copy := cloneWorkspaceMap(event)
-		if copy == nil {
-			continue
-		}
-		if preview := workspaceEventSummaryPreview(copy); preview != "" && strings.TrimSpace(anyString(copy["summary_preview"])) == "" {
-			copy["summary_preview"] = preview
-		}
-		if _, ok := copy["provenance_sources"]; !ok {
-			provenance, _ := copy["provenance"].(map[string]any)
-			if len(provenance) > 0 {
-				if sources, err := extractStringSlice(provenance["sources"]); err == nil && len(sources) > 0 {
-					copy["provenance_sources"] = sources
-				}
-			}
-		}
-		out = append(out, copy)
-	}
-
-	sort.SliceStable(out, func(i int, j int) bool {
-		leftTS, leftOK := workspaceEventCanonicalTimestamp(out[i])
-		rightTS, rightOK := workspaceEventCanonicalTimestamp(out[j])
-		if leftOK && rightOK {
-			if leftTS.Equal(rightTS) {
-				return strings.TrimSpace(anyString(out[i]["id"])) < strings.TrimSpace(anyString(out[j]["id"]))
-			}
-			return leftTS.Before(rightTS)
-		}
-		if leftOK != rightOK {
-			return leftOK
-		}
-		return false
-	})
-
-	return out
-}
-
 func relatedThreadRefIDs(ctx context.Context, opts handlerOptions, rootThreadID string, value any) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0)
@@ -497,92 +426,6 @@ func collectThreadRefIDs(ctx context.Context, opts handlerOptions, value any, ro
 	}
 }
 
-func annotateWorkspaceEvents(events []map[string]any, thread map[string]any) []map[string]any {
-	if len(events) == 0 {
-		return []map[string]any{}
-	}
-
-	threadID := firstNonEmptyString(thread["thread_id"], thread["id"])
-	threadTitle := strings.TrimSpace(anyString(thread["title"]))
-	out := make([]map[string]any, 0, len(events))
-	for _, event := range events {
-		copy := cloneWorkspaceMap(event)
-		if copy == nil {
-			continue
-		}
-		if threadID != "" {
-			copy["source_thread_id"] = threadID
-		}
-		if threadTitle != "" {
-			copy["source_thread_title"] = threadTitle
-		}
-		out = append(out, copy)
-	}
-	return out
-}
-
-func hydrateWorkspaceEvents(ctx context.Context, opts handlerOptions, threadID string, events []map[string]any) ([]map[string]any, []map[string]any) {
-	if len(events) == 0 {
-		return []map[string]any{}, nil
-	}
-
-	out := make([]map[string]any, 0, len(events))
-	warnings := make([]map[string]any, 0)
-	for _, event := range events {
-		item := cloneWorkspaceMap(event)
-		if item == nil {
-			continue
-		}
-		eventID := strings.TrimSpace(anyString(item["id"]))
-		if eventID == "" {
-			out = append(out, item)
-			continue
-		}
-
-		fullEvent, err := opts.primitiveStore.GetEvent(ctx, eventID)
-		if err != nil {
-			warnings = append(warnings, map[string]any{
-				"thread_id": threadID,
-				"event_id":  eventID,
-				"message":   "kept summary-only related event " + eventID + ": " + err.Error(),
-			})
-			out = append(out, item)
-			continue
-		}
-
-		item["event"] = fullEvent
-		if strings.TrimSpace(anyString(item["summary"])) == "" {
-			item["summary"] = anyString(fullEvent["summary"])
-		}
-		if strings.TrimSpace(anyString(item["summary_preview"])) == "" {
-			if preview := workspaceEventSummaryPreview(fullEvent); preview != "" {
-				item["summary_preview"] = preview
-			}
-		}
-		out = append(out, item)
-	}
-
-	return out, warnings
-}
-
-func hydratedWorkspaceEventCount(events []map[string]any) int {
-	count := 0
-	for _, event := range events {
-		if _, ok := event["event"].(map[string]any); ok {
-			count++
-		}
-	}
-	return count
-}
-
-func asWorkspaceEventSlice(raw any) []map[string]any {
-	events, _ := raw.([]map[string]any)
-	if len(events) == 0 {
-		return []map[string]any{}
-	}
-	return cloneWorkspaceMaps(events)
-}
-
 func cloneWorkspaceMaps(items []map[string]any) []map[string]any {
 	if len(items) == 0 {
 		return []map[string]any{}
@@ -605,93 +448,6 @@ func cloneWorkspaceMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
-}
-
-func workspaceEventCanonicalTimestamp(event map[string]any) (time.Time, bool) {
-	for _, field := range []string{"ts", "created_at"} {
-		raw := strings.TrimSpace(anyString(event[field]))
-		if raw == "" {
-			continue
-		}
-		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-			return ts, true
-		}
-		if ts, err := time.Parse(time.RFC3339, raw); err == nil {
-			return ts, true
-		}
-	}
-	return time.Time{}, false
-}
-
-func workspaceEventSummaryPreview(event map[string]any) string {
-	preview := strings.TrimSpace(anyString(event["summary"]))
-	if preview != "" {
-		return workspaceTruncatePreview(preview)
-	}
-
-	payload, _ := event["payload"].(map[string]any)
-	if payload != nil {
-		for _, key := range []string{"recommendation", "decision", "summary", "statement", "message", "title", "content", "text"} {
-			if value := workspaceCompactPreviewValue(payload[key]); value != "" {
-				return workspaceTruncatePreview(value)
-			}
-		}
-		if encoded, err := json.Marshal(payload); err == nil {
-			if value := strings.TrimSpace(string(encoded)); value != "" && value != "{}" {
-				return workspaceTruncatePreview(value)
-			}
-		}
-	}
-
-	if refs, err := extractStringSlice(event["refs"]); err == nil && len(refs) > 0 {
-		return workspaceTruncatePreview(strings.Join(refs, ", "))
-	}
-
-	return workspaceTruncatePreview(firstNonEmptyString(event["ts"], event["created_at"]))
-}
-
-func workspaceCompactPreviewValue(raw any) string {
-	switch typed := raw.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case []string:
-		return strings.TrimSpace(strings.Join(typed, "; "))
-	case []any:
-		parts := make([]string, 0, len(typed))
-		for _, item := range typed {
-			text := strings.TrimSpace(anyString(item))
-			if text == "" {
-				continue
-			}
-			parts = append(parts, text)
-			if len(parts) >= 3 {
-				break
-			}
-		}
-		return strings.TrimSpace(strings.Join(parts, "; "))
-	default:
-		if raw == nil {
-			return ""
-		}
-		encoded, err := json.Marshal(raw)
-		if err != nil {
-			return strings.TrimSpace(anyString(raw))
-		}
-		return strings.TrimSpace(string(encoded))
-	}
-}
-
-func workspaceTruncatePreview(raw string) string {
-	const maxRunes = 120
-	normalized := strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
-	if normalized == "" {
-		return ""
-	}
-	runes := []rune(normalized)
-	if len(runes) <= maxRunes {
-		return normalized
-	}
-	return strings.TrimSpace(string(runes[:maxRunes])) + "..."
 }
 
 func workspaceIntValue(raw any) int {

@@ -1676,26 +1676,6 @@ func toSortedStrings(raw any) []string {
 	}
 }
 
-func assertEventProvenance(t *testing.T, event map[string]any) {
-	t.Helper()
-
-	eventID, _ := event["id"].(string)
-	if eventID == "" {
-		t.Fatalf("expected event id, got %#v", event["id"])
-	}
-
-	provenance, ok := event["provenance"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected event provenance object, got %#v", event["provenance"])
-	}
-
-	sources := toSortedStrings(provenance["sources"])
-	want := []string{"event:" + eventID}
-	if !reflect.DeepEqual(sources, want) {
-		t.Fatalf("unexpected event provenance: got %#v want %#v", sources, want)
-	}
-}
-
 func countArtifactContentFiles(t *testing.T, dir string) int {
 	t.Helper()
 

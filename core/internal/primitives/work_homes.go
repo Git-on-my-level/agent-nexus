@@ -391,11 +391,6 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	return out, more, nil
 }
 
-func staleHome(c homeCandidate, now time.Time) bool {
-	at, err := time.Parse(time.RFC3339Nano, c.updated)
-	return err == nil && now.Sub(at) > 7*24*time.Hour
-}
-
 func prepareHomeCandidate(c homeCandidate) homeCandidate {
 	var m map[string]any
 	_ = json.Unmarshal([]byte(c.metadata), &m)

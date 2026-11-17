@@ -272,33 +272,3 @@ func filterAccessibleArtifacts(r *http.Request, opts handlerOptions, artifacts [
 	}
 	return out
 }
-
-func filterAccessibleInboxItems(r *http.Request, opts handlerOptions, items []map[string]any, projected []primitives.DerivedInboxItem) []map[string]any {
-	if len(items) != len(projected) {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(items))
-	_, canonical := opts.primitiveStore.(*primitives.Store)
-	_, scoped := resourceaccess.PolicyFrom(r.Context())
-	for i, item := range items {
-		threadID := strings.TrimSpace(projected[i].ThreadID)
-		// The canonical SQL relation already checks indexed inbox provenance,
-		// structural parents and the complete stored body in one snapshot. Do
-		// not rebuild the denial graph for every ordinary row in a collection.
-		// Report reviews retain their additional legacy backing-owner check.
-		if canonical && scoped && anyString(item["kind"]) != "report_review" {
-			if recipient := normalizeRecipientActorID(item["recipient_actor_id"]); recipient != "" {
-				principal, ok := cachedAuthenticatedPrincipal(r)
-				if !ok || principal == nil || normalizeRecipientActorID(principal.ActorID) != recipient {
-					continue
-				}
-			}
-			out = append(out, item)
-			continue
-		}
-		if inboxItemAccessible(r, opts, threadID, item) {
-			out = append(out, item)
-		}
-	}
-	return out
-}

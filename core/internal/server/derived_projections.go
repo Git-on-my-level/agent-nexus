@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -217,81 +216,6 @@ func deriveThreadInboxItems(opts handlerOptions, events []map[string]any, workIt
 	return items, nil
 }
 
-func loadDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string) (primitives.DerivedTopicProjection, error) {
-	projection, err := opts.primitiveStore.GetDerivedTopicProjection(ctx, threadID)
-	if err == nil {
-		return projection, nil
-	}
-	if !errors.Is(err, primitives.ErrNotFound) {
-		return primitives.DerivedTopicProjection{}, err
-	}
-	return defaultDerivedTopicProjection(threadID), nil
-}
-
-func listDerivedTopicProjections(ctx context.Context, opts handlerOptions, threadIDs []string) (map[string]primitives.DerivedTopicProjection, error) {
-	projections, err := opts.primitiveStore.ListDerivedTopicProjections(ctx, threadIDs)
-	if err != nil {
-		return nil, err
-	}
-	for _, threadID := range threadIDs {
-		threadID = strings.TrimSpace(threadID)
-		if threadID == "" {
-			continue
-		}
-		if _, ok := projections[threadID]; !ok {
-			projections[threadID] = defaultDerivedTopicProjection(threadID)
-		}
-	}
-	return projections, nil
-}
-
-func rebuildDerivedProjections(ctx context.Context, opts handlerOptions, now time.Time, actorID string) error {
-	threads, _, err := opts.primitiveStore.ListThreads(ctx, primitives.ThreadListFilter{})
-	if err != nil {
-		return err
-	}
-	for _, thread := range threads {
-		threadID := strings.TrimSpace(anyString(thread["id"]))
-		if threadID == "" {
-			continue
-		}
-		if err := refreshDerivedTopicProjection(ctx, opts, threadID, now, actorID); err != nil {
-			return fmt.Errorf("refresh derived projection for thread %s: %w", threadID, err)
-		}
-	}
-	return nil
-}
-
-func defaultDerivedTopicProjection(threadID string) primitives.DerivedTopicProjection {
-	threadID = strings.TrimSpace(threadID)
-	generatedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	return primitives.DerivedTopicProjection{
-		ThreadID:    threadID,
-		GeneratedAt: generatedAt,
-		Data: map[string]any{
-			"thread_id":                  threadID,
-			"stale":                      false,
-			"inbox_count":                0,
-			"pending_decision_count":     0,
-			"recommendation_count":       0,
-			"decision_request_count":     0,
-			"decision_count":             0,
-			"artifact_count":             0,
-			"open_work_item_count":       0,
-			"at_risk_work_item_count":    0,
-			"due_soon_work_item_count":   0,
-			"overdue_work_item_count":    0,
-			"blocked_work_item_count":    0,
-			"document_count":             0,
-			"last_activity_at":           "",
-			"last_work_item_activity_at": "",
-			"latest_stale_exception_at":  "",
-			"generated_at":               generatedAt,
-			"open_card_count":            0,
-		},
-	}
-}
-
 type threadWorkItemSummary struct {
 	OpenCount    int
 	AtRiskCount  int
@@ -355,14 +279,6 @@ func formatOptionalTime(value time.Time) string {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
-}
-
-func derivedTopicProjectionExpired(projection primitives.DerivedTopicProjection, now time.Time) bool {
-	generatedAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(projection.GeneratedAt))
-	if err != nil {
-		return true
-	}
-	return now.Sub(generatedAt) >= derivedProjectionMaxAge
 }
 
 type topicProjectionState struct {

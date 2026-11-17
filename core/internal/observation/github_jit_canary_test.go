@@ -181,13 +181,6 @@ func TestLiveGeneratedGitHubCanary(t *testing.T) {
 	t.Logf("generated github canary title=%q native=%s revision=%s language=%s", read.Title, read.NativeStatus, version.Revision, GeneratedLanguage)
 }
 
-func envOr(name, fallback string) string {
-	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
-		return v
-	}
-	return fallback
-}
-
 func liveMulticaReader(t *testing.T) (Target, *MulticaCLIReader) {
 	t.Helper()
 	bin := os.Getenv("ANX_MULTICA_BIN")

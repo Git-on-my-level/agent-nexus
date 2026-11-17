@@ -216,18 +216,6 @@ func replaceBoardPinnedRefs(refs []string, values []string) []string {
 	return append(refs, values...)
 }
 
-func removeTypedRefPrefix(refs []string, targetType string) []string {
-	targetType = strings.TrimSpace(targetType)
-	out := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		if _, refTargetType, ok := normalizeTypedRef(ref); ok && refTargetType == targetType {
-			continue
-		}
-		out = append(out, strings.TrimSpace(ref))
-	}
-	return uniqueSortedStrings(out)
-}
-
 func boardDocumentRefsFromRefs(refs []string) []string {
 	out := make([]string, 0)
 	for _, ref := range refs {

@@ -148,19 +148,3 @@ func registrationFromMetadataJSON(metadataJSON string) (*AgentRegistration, erro
 	normalized := normalizeAgentRegistration(registration)
 	return &normalized, nil
 }
-
-func mergeRegistrationMetadataJSON(metadataJSON string, registration AgentRegistration) (string, error) {
-	metadataJSON = strings.TrimSpace(metadataJSON)
-	metadata := map[string]any{}
-	if metadataJSON != "" {
-		if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
-			return "", fmt.Errorf("decode principal metadata: %w", err)
-		}
-	}
-	metadata["wake_registration"] = normalizeAgentRegistration(registration)
-	encoded, err := json.Marshal(metadata)
-	if err != nil {
-		return "", fmt.Errorf("encode principal metadata: %w", err)
-	}
-	return string(encoded), nil
-}

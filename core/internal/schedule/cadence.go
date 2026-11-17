@@ -38,11 +38,6 @@ func NormalizeCadence(value string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 }
 
-func IsReactiveCadence(value string) bool {
-	normalized := NormalizeCadence(value)
-	return normalized == "" || normalized == CadenceReactive
-}
-
 func IsLegacyCadence(value string) bool {
 	switch NormalizeCadence(value) {
 	case CadenceDaily, CadenceWeekly, CadenceMonthly, CadenceCustom:

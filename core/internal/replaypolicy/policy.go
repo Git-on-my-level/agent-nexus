@@ -28,7 +28,5 @@ var policy = func() windows {
 }()
 
 func Retention() time.Duration { return time.Duration(policy.ReceiptRetentionDays) * 24 * time.Hour }
-func AutoRetryMaxAge() time.Duration {
-	return time.Duration(policy.AutoRetryMaxAgeDays) * 24 * time.Hour
-}
+
 func GCBatchSize() int { return policy.GCBatchSize }

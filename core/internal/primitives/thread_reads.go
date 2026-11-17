@@ -242,16 +242,6 @@ func StripThreadPlanningFieldsForAPI(m map[string]any) {
 	delete(m, "next_check_in_at")
 }
 
-func containsThreadRef(refs []string, threadID string) bool {
-	target := "thread:" + threadID
-	for _, ref := range refs {
-		if ref == target {
-			return true
-		}
-	}
-	return false
-}
-
 func firstThreadRefValue(refs []string) string {
 	for _, ref := range refs {
 		prefix, value, ok := splitTypedRef(ref)
