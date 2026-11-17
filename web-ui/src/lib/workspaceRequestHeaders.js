@@ -28,10 +28,6 @@ export function readOrganizationSlugHeader(headers) {
   return String(headers.get(ORGANIZATION_HEADER) ?? "").trim();
 }
 
-export function getOrganizationHeader(headers) {
-  return readOrganizationSlugHeader(headers);
-}
-
 /**
  * Per-workspace localStorage key. The "legacy" name reflects older "project"
  * terminology in persisted keys, not environment variable compatibility.

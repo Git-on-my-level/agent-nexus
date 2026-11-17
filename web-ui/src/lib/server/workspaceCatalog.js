@@ -8,7 +8,7 @@ import {
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
 import { getAuthSessionCookieName } from "$lib/server/authSession";
-import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
+import { resolveWorkspaceEnv } from "$lib/workspaceRequestHeaders";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
 const ANX_WORKSPACES_JSON_EXAMPLE =
