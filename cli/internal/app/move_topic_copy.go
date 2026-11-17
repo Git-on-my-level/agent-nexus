@@ -134,31 +134,3 @@ func (a *App) createMovedDocument(ctx context.Context, sourceCfg, destCfg config
 	}
 	return moveMapGet(ctx, a, destCfg, http.MethodPost, "/docs", request, "document")
 }
-
-func (a *App) createMovedBoard(ctx context.Context, cfg config.Resolved, resource *topicMoveResource, moveID, topicRef, topicURL string, mapping map[string]string) (map[string]any, error) {
-	board := resource.object
-	marker := resource.marker
-	if marker == nil {
-		marker = moveMarker(moveID, "board", resource.sourceRef, resource.sourceURL, cfg.BaseURL, resource.destinationRef, "pending")
-	}
-	refs := moveRewriteRefs(board["refs"], mapping)
-	refs = moveUnique(append(refs, topicRef))
-	boardInput := map[string]any{
-		"id": resource.destinationID, "thread_id": resource.destinationThreadID, "title": board["title"], "summary": board["summary"],
-		// Core derives primary_topic_ref from canonical typed refs. Sending the
-		// projection field alone does not establish a board-topic relationship.
-		"refs":          refs,
-		"document_refs": moveRewriteRefs(board["document_refs"], mapping),
-		"pinned_refs":   moveRewriteRefs(board["pinned_refs"], mapping),
-		"column_schema": board["column_schema"],
-		"provenance":    moveCopyProvenance(board["provenance"]), "workspace_move": marker,
-	}
-	body, err := moveCall(ctx, a, cfg, http.MethodPost, "/boards", map[string]any{"request_key": moveID + ":board:" + resource.sourceRef, "board": boardInput})
-	if err != nil {
-		return nil, err
-	}
-	if created := asMap(body["board"]); created != nil {
-		return created, nil
-	}
-	return map[string]any{"ref": resource.destinationRef, "source_url": topicURL}, nil
-}

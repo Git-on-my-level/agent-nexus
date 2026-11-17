@@ -294,22 +294,6 @@ func (a *App) runActorsCommand(ctx context.Context, args []string, cfg config.Re
 	}
 }
 
-func (a *App) runPacketsCreateCommand(ctx context.Context, resource string, commandID string, args []string, cfg config.Resolved) (*commandResult, string, error) {
-	spec := packetCreateSubcommandSpec(resource)
-	if len(args) == 0 {
-		return nil, resource, spec.requiredError()
-	}
-	if spec.normalize(args[0]) != "create" {
-		return nil, resource, spec.unknownError(args[0])
-	}
-	body, err := a.parseJSONBodyInput(args[1:], resource+" create")
-	if err != nil {
-		return nil, resource + " create", err
-	}
-	result, callErr := a.invokeTypedJSON(ctx, cfg, resource+" create", commandID, nil, nil, body)
-	return result, resource + " create", callErr
-}
-
 func (a *App) runDerivedCommand(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, string, error) {
 	if len(args) == 0 {
 		return nil, "derived", derivedSubcommandSpec.requiredError()
@@ -340,13 +324,6 @@ func uniqueStrings(values []string) []any {
 		out = append(out, value)
 	}
 	return out
-}
-
-func minInt(a int, b int) int {
-	if a <= b {
-		return a
-	}
-	return b
 }
 
 func intValue(raw any) int {

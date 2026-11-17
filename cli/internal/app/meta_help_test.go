@@ -1367,24 +1367,6 @@ func sortedCommandIDs(set map[string]struct{}) []string {
 	return keys
 }
 
-func runHelpCommandAllowExit(t *testing.T, args []string) (string, string, int) {
-	t.Helper()
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	cli := newTestApp(t)
-	cli.Stdout = stdout
-	cli.Stderr = stderr
-	cli.Stdin = strings.NewReader("")
-	cli.StdinIsTTY = func() bool { return true }
-	cli.UserHomeDir = func() (string, error) { return t.TempDir(), nil }
-	cli.ReadFile = func(path string) ([]byte, error) {
-		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
-	}
-
-	exitCode := cli.Run(args)
-	return stdout.String(), stderr.String(), exitCode
-}
-
 func TestHelpWorkContextPointsToLoopVerb(t *testing.T) {
 	for _, verb := range []string{"context", "note", "done"} {
 		args := []string{"--json", "help", "work", verb}

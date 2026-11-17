@@ -130,10 +130,6 @@ func formatTopicWorkspace(body any) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderOpenCardListItem(item map[string]any) string {
-	return renderOpenCardListItemWithMode(item, false)
-}
-
 func renderOpenCardListItemWithMode(item map[string]any, fullID bool) string {
 	return compactSummary(displayCompactIDWithMode(item, fullID), firstNonEmpty(anyString(item["column_key"]), anyString(item["resolution"])), firstNonEmpty(anyString(item["title"]), anyString(item["summary"])))
 }

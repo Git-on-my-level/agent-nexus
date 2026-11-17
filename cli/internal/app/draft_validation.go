@@ -113,56 +113,6 @@ func validateDraftDocsRevision(body map[string]any) []string {
 	return out
 }
 
-func validateThreadFields(thread map[string]any, createMode bool, path string, out *[]string) {
-	stringFields := map[string]bool{
-		"title": true,
-	}
-	stringListFields := map[string]bool{
-		"next_actions": true,
-	}
-	typedRefListFields := map[string]bool{
-		"key_artifacts": true,
-	}
-
-	for field, raw := range thread {
-		full := path + "." + field
-		switch field {
-		case "status", "type", "priority", "cadence", "next_check_in_at", "current_summary", "tags":
-			*out = append(*out, full+" is not supported; lifecycle state is derived from archive/trash timestamps")
-			continue
-		}
-		switch {
-		case stringFields[field]:
-			text, ok := raw.(string)
-			if !ok {
-				*out = append(*out, full+" must be a string")
-				continue
-			}
-			if createMode && strings.TrimSpace(text) == "" {
-				*out = append(*out, full+" must be non-empty")
-			}
-		case stringListFields[field]:
-			if _, ok := asStringList(raw); !ok {
-				*out = append(*out, full+" must be a list of strings")
-			}
-		case typedRefListFields[field]:
-			values, ok := asStringList(raw)
-			if !ok {
-				*out = append(*out, full+" must be a list of strings")
-				continue
-			}
-			validateTypedRefs(values, full, out)
-		case field == "provenance":
-			provenance, ok := raw.(map[string]any)
-			if !ok {
-				*out = append(*out, full+" must be an object")
-				continue
-			}
-			validateProvenance(provenance, full, out)
-		}
-	}
-}
-
 func validateDraftTopicCreate(body map[string]any) []string {
 	out := make([]string, 0)
 	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
@@ -432,42 +382,6 @@ func validateDraftInboxRespond(body map[string]any) []string {
 			out = append(out, askOutcomeUsage)
 		}
 	}
-	return out
-}
-
-func validateDraftReceiptCreate(body map[string]any) []string {
-	return validateDraftPacketCreate(body, "receipt")
-}
-
-func validateDraftReviewCreate(body map[string]any) []string {
-	return validateDraftPacketCreate(body, "review")
-}
-
-func validateDraftPacketCreate(body map[string]any, packetKind string) []string {
-	out := make([]string, 0)
-	validateOptionalNonEmptyString(body, "actor_id", "actor_id", &out)
-	artifact, ok := requiredObjectField(body, "artifact", "artifact", &out)
-	if !ok {
-		return out
-	}
-	packet, ok := requiredObjectField(body, "packet", "packet", &out)
-	if !ok {
-		return out
-	}
-
-	if rawKind, hasKind := artifact["kind"]; hasKind {
-		text, ok := rawKind.(string)
-		if !ok {
-			out = append(out, "artifact.kind must be a string")
-		} else if strings.TrimSpace(text) != packetKind {
-			out = append(out, "artifact.kind must be "+packetKind)
-		}
-	}
-	refs, ok := requiredStringListField(artifact, "refs", "artifact.refs", 0, &out)
-	if ok {
-		validateTypedRefs(refs, "artifact.refs", &out)
-	}
-	validatePacketForKind(packetKind, artifact, packet, "packet", &out)
 	return out
 }
 

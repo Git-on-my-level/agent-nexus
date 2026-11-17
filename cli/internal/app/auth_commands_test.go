@@ -134,5 +134,3 @@ func assertEnvelopeError(t *testing.T, raw string) map[string]any {
 	}
 	return payload
 }
-
-func anyStr(raw any) string { value, _ := raw.(string); return value }
