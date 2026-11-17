@@ -124,8 +124,8 @@ func TestGroupingGroupFoldUnfold(t *testing.T) {
 	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Cleanup"}`, 201)["work"].(map[string]any)
 	url := h.baseURL + "/work/" + asString(c["ref"])
 	group := fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"group"}`, p["ref"])
-	workPostJSON(t, url+"/group", group, 200)
-	workPostJSON(t, url+"/group", group, 200)
+	workPostJSON(t, url+"/move", group, 200)
+	workPostJSON(t, url+"/move", group, 200)
 	fold := fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"fold"}`, p["ref"])
 	workPostJSON(t, url+"/fold", fold, 200)
 	workPostJSON(t, url+"/fold", fold, 200)
@@ -190,7 +190,7 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r := postJSONExpectStatus(t, url+"/group", group, 200)
+			r := postJSONExpectStatus(t, url+"/move", group, 200)
 			r.Body.Close()
 		}()
 	}
@@ -205,7 +205,7 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 	}
 	// Each verb's first send lands, then the same key with another body is
 	// refused.
-	workPostJSON(t, url+"/group", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, other["ref"]), 409)
+	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, other["ref"]), 409)
 	fold := fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, p["ref"])
 	workPostJSON(t, url+"/fold", fold, 200)
 	workPostJSON(t, url+"/fold", fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, other["ref"]), 409)
@@ -261,23 +261,17 @@ func TestInitiativeLifecycleWireReplayAndRefusal(t *testing.T) {
 	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
 	c := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Launch"}`, 201)["work"].(map[string]any)
 	workPostJSON(t, h.baseURL+"/boards", `{"actor_id":"grouper","board":{"title":"Initiatives","role":"initiatives","initiative_target":0}}`, 201)
-	body := `{"actor_id":"grouper","request_key":"promote-once","reason":"New independent outcome"}`
-	first := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
-	again := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/promote", body, 200)
+	body := `{"actor_id":"grouper","request_key":"promote-once","root":true,"reason":"New independent outcome"}`
+	first := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/move", body, 200)
+	again := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/move", body, 200)
 	if first["event"].(map[string]any)["id"] != again["event"].(map[string]any)["id"] || first["over_target"] == nil || first["work"].(map[string]any)["board_ref"] != c["board_ref"] {
 		t.Fatalf("first=%v replay=%v", first, again)
 	}
-	for _, verb := range []string{"group", "fold"} {
-		key := "under"
-		if verb == "fold" {
-			key = "into"
-		}
-		errBody := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/"+verb, fmt.Sprintf(`{"actor_id":"grouper",%q:%q}`, key, c["ref"]), 400)
-		if !strings.Contains(fmt.Sprint(errBody), "anx work move") {
-			t.Fatal(errBody)
-		}
+	errBody := workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/fold", fmt.Sprintf(`{"actor_id":"grouper","into":%q}`, c["ref"]), 400)
+	if !strings.Contains(fmt.Sprint(errBody), "anx work move") {
+		t.Fatal(errBody)
 	}
-	workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/retire", `{"actor_id":"grouper","request_key":"retire-once","reason":"Fold scope"}`, 200)
+	workPostJSON(t, h.baseURL+"/work/"+asString(c["ref"])+"/move", `{"actor_id":"grouper","request_key":"retire-once","unsorted":true,"reason":"Fold scope"}`, 200)
 }
 
 func TestCardsMoveBoardRefIsAtomicAndReplaySafe(t *testing.T) {

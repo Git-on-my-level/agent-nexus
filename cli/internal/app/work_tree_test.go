@@ -282,7 +282,7 @@ func TestWorkMoveAllocatesReplayKey(t *testing.T) {
 }
 
 func TestGroupingErrorsDoNotRecommendDeprecatedInitiativeVerbs(t *testing.T) {
-	for _, command := range []string{"work group", "work fold"} {
+	for _, command := range []string{"work fold"} {
 		err := errnorm.WithDetails(errnorm.Usage("invalid_request", "move this initiative"), map[string]any{
 			"parsed": map[string]any{"error": map[string]any{"details": map[string]any{"initiative_ref": "card:x"}}},
 		})

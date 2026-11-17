@@ -388,12 +388,6 @@ const adapterCommandTable = [
   ["resolveWorkPath", "work.resolve", (path) => ({ options: q({ path }) })],
   ["whereWork", "work.where", (filters) => ({ options: q(filters) })],
   [
-    "groupWork",
-    "work.group",
-    (ref, payload) => pb(pathParams({ card_ref: ref }), payload),
-    true,
-  ],
-  [
     "foldWork",
     "work.fold",
     (ref, payload) => pb(pathParams({ card_ref: ref }), payload),

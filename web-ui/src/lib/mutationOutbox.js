@@ -337,14 +337,14 @@ async function send(entry, lease = null) {
     )
   ) {
     const { ref, body } = entry.request;
+    // Saved work.group intents carry the same under/after/request_key body
+    // that work.move accepts, so they are sent as moves.
     const result =
-      entry.operation === "work.move"
+      entry.operation === "work.move" || entry.operation === "work.group"
         ? await client.moveWork(ref, body)
-        : entry.operation === "work.group"
-          ? await client.groupWork(ref, body)
-          : entry.operation === "work.fold"
-            ? await client.foldWork(ref, body)
-            : await client.unfoldWork(ref, body);
+        : entry.operation === "work.fold"
+          ? await client.foldWork(ref, body)
+          : await client.unfoldWork(ref, body);
     if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
     return result;
   }

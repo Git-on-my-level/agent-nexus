@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `280`
+- Command operations: `277`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `229`
+- Missing recommended examples: `226`
 
 ## Baseline gap counts
 
@@ -277,8 +277,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `inbox.respond` `POST /inbox/{inbox_id}/respond`
 - `inbox.stream` `GET /stream/inbox`
 - `inbox.summary` `GET /inbox/summary`
-- `initiative.promote` `POST /work/{card_ref}/promote`
-- `initiative.retire` `POST /work/{card_ref}/retire`
 - `meta.commands.get` `GET /meta/commands/{command_id}`
 - `meta.commands.list` `GET /meta/commands`
 - `meta.concepts.get` `GET /meta/concepts/{concept_name}`
@@ -351,7 +349,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - `work.create` `POST /work`
 - `work.fold` `POST /work/{card_ref}/fold`
 - `work.get` `GET /work/{card_ref}`
-- `work.group` `POST /work/{card_ref}/group`
 - `work.list` `GET /work`
 - `work.move` `POST /work/{card_ref}/move`
 - `work.observations.list` `GET /work/{card_ref}/observations`

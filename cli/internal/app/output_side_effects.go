@@ -38,7 +38,7 @@ func commandSideEffectClass(command string) string {
 	if command == "pm card" || command == "pm context" {
 		return "read_only"
 	}
-	if command == "work move" || command == "mv" || command == "work group" || command == "work fold" || command == "work unfold" || strings.HasPrefix(command, "initiative ") {
+	if command == "work move" || command == "mv" || command == "work fold" || command == "work unfold" {
 		return "remote_coordination_write"
 	}
 	if command == "work tree" || command == "tree" || command == "work ls" || command == "where" || command == "work ungrouped" {

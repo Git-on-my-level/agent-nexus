@@ -69,7 +69,7 @@ func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.As(err, &grouping) {
 		payload := errorPayload("invalid_request", grouping.Error())
 		payload["details"] = map[string]any{"initiative_ref": grouping.Ref}
-		payload["next_actions"] = []map[string]any{{"command_id": "initiative.retire", "argv": []string{"anx", "initiative", "retire", grouping.Ref, "--reason", "Consolidate initiative scope"}, "mutates": true, "side_effect_class": "remote_coordination_write"}}
+		payload["next_actions"] = []map[string]any{{"command_id": "work.move", "argv": []string{"anx", "work", "move", grouping.Ref, "--unsorted", "--reason", "Consolidate initiative scope"}, "mutates": true, "side_effect_class": "remote_coordination_write"}}
 		writeJSON(w, 400, map[string]any{"error": payload})
 		return
 	}

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `280`
+- Commands: `277`
 
 ## `actors.create`
 
@@ -2214,32 +2214,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
 
-## `initiative.promote`
-
-- CLI path: `initiative promote`
-- HTTP: `POST /work/{card_ref}/promote`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-
-## `initiative.retire`
-
-- CLI path: `initiative retire`
-- HTTP: `POST /work/{card_ref}/retire`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-
 ## `integrations.bind`
 
 - CLI path: `integrations bind`
@@ -3386,19 +3360,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-
-## `work.group`
-
-- CLI path: `work group`
-- HTTP: `POST /work/{card_ref}/group`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns `WorkResponse`.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
 
 ## `work.list`
 

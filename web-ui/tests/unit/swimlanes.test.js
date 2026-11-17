@@ -467,7 +467,7 @@ describe("grouping writes", () => {
     const draft = groupingDraft("group", work, parent);
     parent.title = "Renamed later";
     expect(groupingRequest(draft, "human", "k1")).toEqual({
-      operation: "work.group",
+      operation: "work.move",
       request: {
         ref: "card:a1-f4",
         body: { actor_id: "human", request_key: "k1", under: "card:a1" },

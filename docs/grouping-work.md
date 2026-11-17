@@ -69,9 +69,8 @@ update-your-server/CLI diagnostic rather than an empty tree.
 
 `anx plan` is a power verb for checklists: external steps and legacy card steps
 may retain `after` dependencies. A card step is a reference, never a stored
-parent. Moving a card does not rewrite the checklist. Existing `work group`,
-`initiative promote`, and `initiative retire` remain deprecated compatibility
-commands implemented over moves. Use `work move` for new workflows.
+parent. Moving a card does not rewrite the checklist. `work move` is the only
+verb that changes a card's parent, top-level status or Unsorted placement.
 `top_level` metadata is deprecated on create; `work patch` rejects it. Fold/unfold are separate legacy
 merge operations, outside the ordinary tree workflow.
 

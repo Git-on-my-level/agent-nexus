@@ -270,26 +270,6 @@ func workCardRef(ctx context.Context, tx *accessTx, id string) any {
 
 // ChangeInitiative keeps the promote/retire routes as spellings of MoveWork.
 // Boards no longer decide initiatives; to_board is accepted and ignored.
-func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, toBoard, under string) (map[string]any, error) {
-	reason = strings.TrimSpace(reason)
-	if actor == "" || reason == "" || len([]rune(reason)) > 2000 {
-		return nil, workInvalid("actor and reason (1..2000 characters) are required")
-	}
-	switch verb {
-	case "promote":
-		if toBoard != "" || under != "" {
-			return nil, workInvalid("to_board and under are retire-only")
-		}
-		return s.MoveWork(ctx, actor, id, MoveWorkInput{Root: true, Reason: reason})
-	case "retire":
-		if under == "" {
-			return s.MoveWork(ctx, actor, id, MoveWorkInput{Unsorted: true, Reason: reason})
-		}
-		return s.MoveWork(ctx, actor, id, MoveWorkInput{Under: under, Reason: reason})
-	}
-	return nil, workInvalid("unknown initiative action")
-}
-
 // InitiativeChanges hydrates only scoped canonical events from a fixed routing
 // window. Hidden rows never trigger refill or contribute to returned metadata.
 func (s *Store) InitiativeChanges(ctx context.Context, limit int) (map[string]any, error) {

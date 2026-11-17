@@ -423,7 +423,7 @@ func SupportsIdempotencyKey(id, method string) bool {
 	}
 	if strings.HasPrefix(id, "work.") || strings.HasPrefix(id, "pm.") {
 		switch id {
-		case "work.create", "work.group", "work.fold", "work.unfold", "work.observations.submit", "pm.decisions.create":
+		case "work.create", "work.move", "work.fold", "work.unfold", "work.observations.submit", "pm.decisions.create":
 			return true
 		default:
 			return false
