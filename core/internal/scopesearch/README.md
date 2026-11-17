@@ -11,11 +11,9 @@ before invoking the callback and keep binding checks, candidate keys and bounded
 text hydration in one transaction. It exposes only typed operations; this package
 has no database import, SQL handle or capability factory.
 
-Search indexes current document heads and independent comment resources. `Apply`
-replaces only that resource's postings in the caller's canonical transaction;
-`ApplyCanonical` consumes the frozen `scopes.Change`, conservatively OR-ing
-`After.SourceTruncated`, the existing trusted source-prefix argument and its own
-normalization truncation. Its writer must delete at most 4,096 old postings, insert at most
+Search indexes current document heads and independent comment resources. The
+storage writers installed by migration 82 replace only that resource's postings
+in the caller's canonical transaction; `Prepare` bounds normalization. A writer must delete at most 4,096 old postings, insert at most
 4,096 new postings and advance the scope's search generation atomically. It must
 never load a document's revisions or backing-thread history on a comment change.
 
@@ -59,7 +57,7 @@ are A's opaque allocated IDs.
 
 ## Reader integration
 
-The former uncalled `scopedrepo.SearchCanonicalHook` adapter has been removed.
+The former uncalled `scopedrepo.SearchCanonicalHook` adapter, `Apply`/`ApplyCanonical` and the disabled `Handler` have been removed.
 The live writer is `storage/comment_search.go`; it keeps canonical event
 identity and current `resourceaccess` authority instead of granting new scope
 membership. It captures the first 64 KiB of raw comment input before the shared

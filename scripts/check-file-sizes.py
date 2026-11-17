@@ -26,7 +26,7 @@ SUFFIXES = (".go", ".py", ".js", ".mjs", ".ts", ".svelte")
 # Generated trees the contract generators own; mirrors the prettier and drift
 # exclusions in scripts/git-hooks/checks.py.
 GENERATED_PREFIXES = ("contracts/gen/", "cli/docs/generated/", "web-ui/src/lib/generated/")
-# _gen.go covers sqlc/scopedrepo-gen output; _generated.go covers help and version files.
+# _gen.go covers sqlc output; _generated.go covers help and version files.
 GENERATED_NAMES = ("_test.go", ".test.", ".spec.", "_generated.go", "_gen.go")
 
 

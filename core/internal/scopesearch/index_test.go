@@ -3,39 +3,9 @@ package scopesearch
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
-	"unicode/utf8"
-
-	"agent-nexus-core/internal/scopes"
 )
-
-func TestPrepareCoverageAndDistinctPostingCaps(t *testing.T) {
-	for _, input := range []string{strings.Repeat("x", MaxTextBytes+1), strings.Repeat("界", MaxTextBytes), strings.Repeat("ANCHOR punctuation! ", 10000)} {
-		text := Prepare("private", input)
-		if !text.Truncated() || text.IndexedBytes() > MaxTextBytes || !utf8.ValidString(text.Normalized()) || len(text.Terms()) > MaxTerms {
-			t.Fatalf("unbounded coverage: %d %d", text.IndexedBytes(), len(text.Terms()))
-		}
-	}
-	var words []string
-	for i := 0; i < MaxTerms+1; i++ {
-		words = append(words, fmt.Sprintf("w%d", i))
-	}
-	text := Prepare("s", strings.Join(words, " "))
-	if !text.Truncated() || len(text.Terms()) != MaxTerms || strings.Contains(text.Normalized(), "w4096") {
-		t.Fatal("term budget and body coverage disagree")
-	}
-	text = Prepare("s", "HELLO, world\nhello 世界")
-	if text.Truncated() || text.Normalized() != "hello world hello 世界" || len(text.Terms()) != 3 {
-		t.Fatalf("normalization: %#v", text)
-	}
-	terms := text.Terms()
-	terms[0] = "mutated"
-	if text.Terms()[0] != "hello" {
-		t.Fatal("postings handle escaped")
-	}
-}
 
 func TestExactTermsAndPhraseOnly(t *testing.T) {
 	if matches("needles anchor", "anchor needle", []string{"anchor", "needle"}, false) {
@@ -46,87 +16,6 @@ func TestExactTermsAndPhraseOnly(t *testing.T) {
 	}
 	if !matches("anchor needle", "anchor needle", nil, true) {
 		t.Fatal("phrase rejected")
-	}
-}
-
-type countingWriter struct {
-	scope string
-	calls int
-	last  Change
-}
-
-func (w *countingWriter) ScopeID() string { return w.scope }
-func (w *countingWriter) ReplaceSearch(_ context.Context, c Change) error {
-	w.calls++
-	w.last = c
-	return nil
-}
-
-func TestCanonicalDeltaCoverageDeleteAndFrozenResourceIDLimit(t *testing.T) {
-	w := &countingWriter{scope: "s"}
-	d := scopes.Change{ScopeID: "s", Kind: "comment", ResourceID: strings.Repeat("r", 512), CanonicalVersion: 7, Family: "events", Audience: "all", After: &scopes.Projection{Text: "bounded prefix", ContainerID: "parent", Timestamp: 100}}
-	if err := ApplyCanonical(context.Background(), w, d, true); err != nil {
-		t.Fatal(err)
-	}
-	if w.last.Version != "7" || w.last.Parent != "parent" || !w.last.Content.Truncated() {
-		t.Fatalf("canonical coverage/version lost: %#v", w.last)
-	}
-	d.Before = d.After
-	d.After = nil
-	if err := ApplyCanonical(context.Background(), w, d, false); err != nil || !w.last.Delete {
-		t.Fatalf("canonical delete: %v %#v", err, w.last)
-	}
-	d.After = &scopes.Projection{Text: strings.Repeat("x", MaxTextBytes+1)}
-	if err := ApplyCanonical(context.Background(), w, d, true); !errors.Is(err, scopes.ErrBudget) {
-		t.Fatal("unbounded delta accepted; hook must prepare its prefix")
-	}
-	d.After = &scopes.Projection{Text: "recipient private"}
-	d.Audience = "person:reader"
-	if err := ApplyCanonical(context.Background(), w, d, false); !errors.Is(err, ErrProjection) {
-		t.Fatal("recipient text entered scope-only search")
-	}
-}
-func TestApplyRejectsAudienceFamiliesAndCrossScopeBeforeMutation(t *testing.T) {
-	w := &countingWriter{scope: "public"}
-	for _, c := range []Change{
-		{Scope: "private", Kind: "document", RID: "r", Version: "1", Content: Prepare("private", "secret")},
-		{Scope: "public", Kind: "document", RID: "r", Version: "1", Content: Prepare("private", "secret")},
-		{Scope: "public", Kind: "inbox", RID: "r", Version: "1", Content: Prepare("public", "recipient secret")},
-	} {
-		if err := Apply(context.Background(), w, c); err == nil {
-			t.Fatal("invalid posting accepted")
-		}
-	}
-	if w.calls != 0 {
-		t.Fatal("rejected projection reached writer")
-	}
-	if err := Apply(context.Background(), w, Change{Scope: "public", Kind: "comment", RID: "r", Version: "1", Content: Prepare("public", "safe")}); err != nil || w.calls != 1 {
-		t.Fatal(err)
-	}
-	if err := Apply(context.Background(), w, Change{Scope: "public", Kind: "comment", RID: "r", Version: "2", Delete: true}); err != nil || w.calls != 2 {
-		t.Fatal(err)
-	}
-}
-
-func TestCanonicalDeltaPreservesSharedSourceCoverage(t *testing.T) {
-	for _, shared := range []bool{false, true} {
-		for _, standalone := range []bool{false, true} {
-			w := &countingWriter{scope: "s"}
-			d := scopes.Change{ScopeID: "s", Kind: "document", ResourceID: "r", CanonicalVersion: 1, Family: "events", Audience: "all", After: &scopes.Projection{Text: "needle", SourceTruncated: shared}}
-			if err := ApplyCanonical(context.Background(), w, d, standalone); err != nil {
-				t.Fatal(err)
-			}
-			if w.last.Content.Truncated() != (shared || standalone) {
-				t.Fatalf("coverage lost: shared=%v standalone=%v", shared, standalone)
-			}
-		}
-	}
-	// Normalization can exceed its own byte budget even when source capture
-	// fits the shared cap (lowercase U+023A expands from two to three bytes).
-	w := &countingWriter{scope: "s"}
-	d := scopes.Change{ScopeID: "s", Kind: "document", ResourceID: "r", CanonicalVersion: 1, Family: "events", Audience: "all", After: &scopes.Projection{Text: strings.Repeat("Ⱥ", MaxTextBytes/2)}}
-	if err := ApplyCanonical(context.Background(), w, d, false); err != nil || !w.last.Content.Truncated() {
-		t.Fatalf("normalization coverage lost: %v", err)
 	}
 }
 

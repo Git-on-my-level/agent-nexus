@@ -42,7 +42,6 @@ type Text struct {
 	truncated bool
 }
 
-func (t Text) ScopeID() string    { return t.scope }
 func (t Text) Normalized() string { return t.text }
 func (t Text) Terms() []string    { return append([]string(nil), t.terms...) }
 func (t Text) IndexedBytes() int  { return len(t.text) }
@@ -128,14 +127,4 @@ type Change struct {
 type Writer interface {
 	ScopeID() string
 	ReplaceSearch(context.Context, Change) error
-}
-
-func Apply(ctx context.Context, w Writer, c Change) error {
-	if w == nil || c.Scope == "" || c.Scope != w.ScopeID() || (!c.Delete && c.Content.scope != c.Scope) {
-		return ErrDerivation
-	}
-	if (c.Kind != "document" && c.Kind != "comment") || c.RID == "" || c.Version == "" || c.Recency < 0 || len(c.RID) > maxResourceIDBytes || len(c.Version) > 256 || len(c.Parent) > 512 {
-		return ErrProjection
-	}
-	return w.ReplaceSearch(ctx, c)
 }
