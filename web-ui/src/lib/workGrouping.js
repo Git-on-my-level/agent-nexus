@@ -26,6 +26,14 @@ const GROUPING_OPERATIONS = [
 ];
 export const isGrouping = (entry) =>
   GROUPING_OPERATIONS.includes(entry?.operation);
+/**
+ * A work.group intent saved before that route was removed is sent as a move
+ * under its original replay scope, so a group that already landed replays.
+ */
+export const groupingSendBody = ({ operation, request }) =>
+  operation === "work.group"
+    ? { ...request.body, replay_as: "work.group" }
+    : request.body;
 /** One grouping change per card at a time. */
 const groupingTarget = (ref) => `work:${ref}:grouping`;
 /** Where an Edit from the outbox hands a saved grouping back to the board. */

@@ -137,7 +137,7 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return true
 	}
-	for _, key := range []string{"under", "into", "after", "request_key", "reason", "to_board", "requested_by"} {
+	for _, key := range []string{"under", "into", "after", "request_key", "reason", "to_board", "requested_by", "replay_as"} {
 		if value, exists := raw[key]; exists {
 			if _, ok := value.(string); !ok {
 				writeError(w, 400, "invalid_request", key+" must be a string")
@@ -166,7 +166,16 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 		}
 		raw["reason"] = reason
 	}
-	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "work."+verb+":"+id, actor, anyString(raw["request_key"]), raw, 200, func(ctx context.Context) (map[string]any, error) {
+	scope := "work." + verb + ":" + id
+	if replayAs, ok := raw["replay_as"]; ok {
+		if verb != "move" || replayAs != "work.group" {
+			writeError(w, 400, "invalid_request", "replay_as must be work.group on a move")
+			return true
+		}
+		delete(raw, "replay_as")
+		scope = "work.group:" + id
+	}
+	status, response, err := executeAtomicMutation(r.Context(), opts.primitiveStore, scope, actor, anyString(raw["request_key"]), raw, 200, func(ctx context.Context) (map[string]any, error) {
 		var item map[string]any
 		var err error
 		switch verb {

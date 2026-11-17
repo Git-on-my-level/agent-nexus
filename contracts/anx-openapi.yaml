@@ -11721,6 +11721,7 @@ components:
         unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
         reason: {type: string, minLength: 1, maxLength: 2000, description: Required for root and when moving an initiative under another card.}
         after: {type: string, description: Optional preceding sibling plan step id; never creates a plan step or hierarchy edge. Children remain ordered by creation time.}
+        replay_as: {type: string, enum: [work.group], description: Resend a work.group request saved before that route was removed. The move uses that request's replay scope, so a group that already landed replays its receipt instead of moving again.}
       oneOf:
       - required: [under]
         not: {anyOf: [{required: [root]}, {required: [unsorted]}]}

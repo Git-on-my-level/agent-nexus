@@ -14726,6 +14726,13 @@ export const commandRegistry: CommandSpec[] = [
           "type": "string"
         },
         {
+          "name": "replay_as",
+          "type": "string",
+          "enum_values": [
+            "work.group"
+          ]
+        },
+        {
           "name": "request_key",
           "type": "string"
         },

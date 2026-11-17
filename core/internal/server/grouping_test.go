@@ -206,6 +206,11 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 	// Each verb's first send lands, then the same key with another body is
 	// refused.
 	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, other["ref"]), 409)
+	// A saved legacy group replays under the work.group scope, never as a new move.
+	legacy := fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group","replay_as":"work.group"}`, p["ref"])
+	workPostJSON(t, url+"/move", legacy, 200)
+	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group","replay_as":"work.group"}`, other["ref"]), 409)
+	workPostJSON(t, url+"/move", `{"actor_id":"grouper","unsorted":true,"replay_as":"work.fold"}`, 400)
 	fold := fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, p["ref"])
 	workPostJSON(t, url+"/fold", fold, 200)
 	workPostJSON(t, url+"/fold", fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, other["ref"]), 409)

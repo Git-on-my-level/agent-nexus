@@ -4,6 +4,7 @@ import { createLocalMutationClient } from "$lib/coreClient.js";
 import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
 import { authenticatedAgent } from "$lib/authSession.js";
 import { devActorMode } from "$lib/workspaceContext.js";
+import { groupingSendBody } from "$lib/workGrouping.js";
 import {
   listLocalWork,
   loadLocalWork,
@@ -336,15 +337,13 @@ async function send(entry, lease = null) {
       entry.operation,
     )
   ) {
-    const { ref, body } = entry.request;
-    // Saved work.group intents carry the same under/after/request_key body
-    // that work.move accepts, so they are sent as moves.
-    const result =
-      entry.operation === "work.move" || entry.operation === "work.group"
-        ? await client.moveWork(ref, body)
-        : entry.operation === "work.fold"
-          ? await client.foldWork(ref, body)
-          : await client.unfoldWork(ref, body);
+    const { ref } = entry.request;
+    const body = groupingSendBody(entry);
+    const result = ["work.move", "work.group"].includes(entry.operation)
+      ? await client.moveWork(ref, body)
+      : entry.operation === "work.fold"
+        ? await client.foldWork(ref, body)
+        : await client.unfoldWork(ref, body);
     if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
     return result;
   }
