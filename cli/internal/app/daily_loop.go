@@ -376,7 +376,32 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 	authCfg := cfg
 	cursor := ""
 	backoff := 250 * time.Millisecond
+	// recheck: an event arrived but re-reading the card failed transiently.
+	// The cursor is past that event, so retry the read itself (after the
+	// backoff below) instead of waiting for an event that may never come.
+	recheck := false
 	for waitCtx.Err() == nil {
+		if recheck && targetIsCard {
+			result, done, checkErr := check()
+			if checkErr != nil && !transientAwaitError(checkErr) {
+				return nil, checkErr
+			}
+			if checkErr == nil {
+				recheck = false
+				if done {
+					return &commandResult{Data: result}, nil
+				}
+			} else {
+				select {
+				case <-waitCtx.Done():
+				case <-time.After(backoff):
+				}
+				if backoff < 4*time.Second {
+					backoff *= 2
+				}
+				continue
+			}
+		}
 		var err error
 		authCfg, err = a.cfgWithResolvedAuthToken(waitCtx, authCfg)
 		if err != nil {
@@ -426,8 +451,8 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 				if targetIsCard {
 					result, done, checkErr := check()
 					if checkErr != nil && transientAwaitError(checkErr) {
-						// Re-read the card on the next event or reconnect.
-						continue
+						recheck = true
+						break
 					}
 					if checkErr != nil {
 						resp.Body.Close()

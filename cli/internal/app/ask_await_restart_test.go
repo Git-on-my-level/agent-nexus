@@ -78,3 +78,38 @@ func TestAwaitCardSurvivesServerRestart(t *testing.T) {
 		t.Fatalf("exit=%d want=0 after restart: %s", exit, out.String())
 	}
 }
+
+// A card read that fails after the completion event must be retried even if
+// no further event ever arrives (an idle workspace).
+func TestAwaitCardRetriesReadAfterTransientFailure(t *testing.T) {
+	var gets, opens atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/cards/card:task":
+			switch gets.Add(1) {
+			case 1:
+				fmt.Fprint(w, `{"card":{"ref":"card:task","column_key":"ready"}}`)
+			case 2:
+				w.WriteHeader(http.StatusServiceUnavailable)
+			default:
+				fmt.Fprint(w, `{"card":{"ref":"card:task","column_key":"done"}}`)
+			}
+		case "/stream/events":
+			w.Header().Set("Content-Type", "text/event-stream")
+			if opens.Add(1) == 1 {
+				fmt.Fprint(w, "id: moved\nevent: event\ndata: {\"event\":{\"type\":\"card_moved\"}}\n\n")
+				w.(http.Flusher).Flush()
+			}
+			// Then stay idle: no further events.
+			<-r.Context().Done()
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:task", "--timeout", "10s"}); exit != 0 {
+		t.Fatalf("exit=%d want=0: the card was done after one failed read: %s", exit, out.String())
+	}
+}
