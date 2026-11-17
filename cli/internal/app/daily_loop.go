@@ -368,9 +368,18 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 		return nil, false, nil
 	}
-	if result, done, err := check(); err != nil {
+	type checked struct {
+		result map[string]any
+		done   bool
+	}
+	first, err := retryTransientRead(waitCtx, func() (checked, error) {
+		result, done, err := check()
+		return checked{result, done}, err
+	})
+	if err != nil {
 		return nil, err
-	} else if done {
+	}
+	if result, done := first.result, first.done; done {
 		return &commandResult{Data: result}, nil
 	}
 	authCfg := cfg
@@ -479,6 +488,9 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			}
 			resp.Body.Close()
 		}
+		// The stream does not replay a transition made while it was down
+		// (or before its first cursor), so every reconnect re-reads the card.
+		recheck = targetIsCard
 		select {
 		case <-waitCtx.Done():
 			break
@@ -553,27 +565,39 @@ func inboxAskID(item map[string]any) string {
 // is one bounded read at completion; a failed read leaves the result as before.
 func (a *App) cardResolutionEvidence(ctx context.Context, cfg config.Resolved, card map[string]any) map[string]any {
 	// The card already matched; an await deadline that is about to lapse must
-	// not cost the caller the answer, so the read gets its own short budget.
+	// not cost the caller the answer, so the reads get their own short budget.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
+	// resolution_refs are stored sorted, so order says nothing about which
+	// event is the answer. `cards resolve --body` posts it at resolve time:
+	// take the newest message with text among the first few cited events.
+	var best map[string]any
+	var bestAt time.Time
+	checked := 0
 	for _, raw := range asSlice(card["resolution_refs"]) {
 		ref := anyString(raw)
 		if !strings.HasPrefix(ref, "event:") {
 			continue
 		}
+		if checked++; checked > maxResolutionEvents {
+			break
+		}
 		result, err := a.invokeRawJSON(ctx, cfg, "await resolution", "GET", "/events/"+url.PathEscape(strings.TrimPrefix(ref, "event:")), nil)
 		if err != nil {
-			return nil
+			continue
 		}
 		ev := asMap(commandResultBody(result)["event"])
-		if len(ev) == 0 {
-			return nil
+		text := anyString(asMap(ev["payload"])["text"])
+		if anyString(ev["type"]) != "message_posted" || text == "" {
+			continue
 		}
-		out := map[string]any{"event_ref": ref, "actor_id": anyString(ev["actor_id"]), "text": anyString(asMap(ev["payload"])["text"])}
-		if out["text"] == "" {
-			out["text"] = anyString(ev["summary"])
+		at, _ := time.Parse(time.RFC3339Nano, anyString(ev["ts"]))
+		if best == nil || at.After(bestAt) {
+			best, bestAt = map[string]any{"event_ref": ref, "actor_id": anyString(ev["actor_id"]), "text": text}, at
 		}
-		return out
 	}
-	return nil
+	return best
 }
+
+// maxResolutionEvents bounds the reads one await completion may make.
+const maxResolutionEvents = 5

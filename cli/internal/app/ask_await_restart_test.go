@@ -1,6 +1,7 @@
 package app
 
 import (
+	"agent-nexus-cli/internal/errnorm"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -111,5 +112,112 @@ func TestAwaitCardRetriesReadAfterTransientFailure(t *testing.T) {
 	a, out := dailyTestApp(t, server.URL)
 	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:task", "--timeout", "10s"}); exit != 0 {
 		t.Fatalf("exit=%d want=0: the card was done after one failed read: %s", exit, out.String())
+	}
+}
+
+// resolution_refs are stored sorted: the answer is the newest cited message,
+// not the first ref.
+func TestAwaitCardPicksTheNewestResolutionMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/cards/card:ask":
+			fmt.Fprint(w, `{"card":{"ref":"card:ask","column_key":"done","resolution_refs":["event:aaa-old-evidence","event:zzz-answer"]}}`)
+		case "/events/aaa-old-evidence":
+			fmt.Fprint(w, `{"event":{"type":"message_posted","ts":"2026-11-17T08:00:00Z","actor_id":"actor-other","payload":{"text":"earlier evidence"}}}`)
+		case "/events/zzz-answer":
+			fmt.Fprint(w, `{"event":{"type":"message_posted","ts":"2026-11-17T09:00:00Z","actor_id":"actor-lane","payload":{"text":"ANSWER: yes"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:ask", "--timeout", "5s"}); exit != 0 {
+		t.Fatalf("exit=%d %s", exit, out.String())
+	}
+	if got := asMap(asMap(dailyJSON(t, out)["result"])["resolution"]); got["text"] != "ANSWER: yes" {
+		t.Fatalf("resolution=%#v, want the newest message", got)
+	}
+}
+
+// Awaits started while the server is down wait for it instead of exiting 6.
+func TestAwaitsStartedDuringAnOutageKeepWaiting(t *testing.T) {
+	var cardGets, askGets atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/cards/card:task":
+			if cardGets.Add(1) <= 2 {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			fmt.Fprint(w, `{"card":{"ref":"card:task","column_key":"done"}}`)
+		case r.URL.Path == "/asks/ask-1":
+			if askGets.Add(1) <= 2 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			fmt.Fprint(w, `{"status":"answered","response":{"response_text":"Approve","outcome":"answered","responding_actor_id":"human-1"}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	for _, args := range [][]string{{"await", "card:task"}, {"await", "event:ask-1"}} {
+		a, out := dailyTestApp(t, server.URL)
+		if exit := a.Run(append([]string{"--json", "--as", "worker"}, append(args, "--timeout", "10s")...)); exit != 0 {
+			t.Fatalf("%v exit=%d want=0: %s", args, exit, out.String())
+		}
+	}
+}
+
+// A transition made while the stream was down is not replayed: reconnecting
+// must re-read the card.
+func TestAwaitCardRereadsAfterReconnect(t *testing.T) {
+	var gets, opens atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/cards/card:task":
+			phase := "ready"
+			if gets.Add(1) > 1 {
+				phase = "done" // moved during the outage
+			}
+			fmt.Fprintf(w, `{"card":{"ref":"card:task","column_key":%q}}`, phase)
+		case "/stream/events":
+			if opens.Add(1) == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			<-r.Context().Done() // idle: the move is never replayed
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:task", "--timeout", "10s"}); exit != 0 {
+		t.Fatalf("exit=%d want=0: %s", exit, out.String())
+	}
+}
+
+func TestTransientAwaitErrorRetriesOnlyRecoverableFailures(t *testing.T) {
+	no, yes := false, true
+	cases := []struct {
+		err  error
+		want bool
+	}{
+		{&errnorm.Error{Kind: errnorm.KindNetwork, Code: "network_error", Recoverable: &no}, false}, // tls, canceled
+		{&errnorm.Error{Kind: errnorm.KindNetwork, Code: "network_error", Recoverable: &yes}, true},
+		{&errnorm.Error{Kind: errnorm.KindRemote, Code: "remote_error", Details: map[string]any{"status": 503}}, true},
+		{&errnorm.Error{Kind: errnorm.KindRemote, Code: "remote_error", Details: map[string]any{"status": 429}}, true},
+		{&errnorm.Error{Kind: errnorm.KindRemote, Code: "remote_error", Details: map[string]any{"status": 404}}, false},
+	}
+	for i, c := range cases {
+		if got := transientAwaitError(c.err); got != c.want {
+			t.Errorf("case %d: got %v want %v", i, got, c.want)
+		}
 	}
 }

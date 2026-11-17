@@ -2894,7 +2894,7 @@
     "../primitives/work_summary_attention.go:*Store:enrichSummaryAttention": "99a7cf6ac089ea0618bae9addb41b4494fdc7fd0ed773ef86a9b502e8d44f463",
     "../primitives/work_tracking.go:*Store:fallbackCardTrackingTx": "d2d25ed62dd0ac66f25c37015e48d021e3053ae1cf532eb8b4d7fc672ee09b6c",
     "../primitives/work_tracking.go:*Store:trackingFallbackTx": "69d580bc405bf193b248a301f854de0651bf9893b90db207dee68a28bd84feb2",
-    "../primitives/work_tracking.go:delegatedToOtherActorTx": "1cdf66464171ee938d4cf8d7cef7ae5fc10db4e73f7ea616ed29ec480d2eb666",
+    "../primitives/work_tracking.go:delegatedToOtherActorTx": "8bfb0d012b635bc891a6adbf50f0881c04796cc0933666dae6211bf1379f9d80",
     "../primitives/work_tracking.go:registerCardTrackingTx": "559c462840a3bcf5e14a4c48ef9597feeeff757c5d0b4261e833ea175b281bd2",
     "../primitives/work_tracking.go:trackingActor": "99f4b944e211cde90dd7ed0ec51c6579bcb839a7dc7c97371d6b23628c14a8b2",
     "../primitives/work_tracking.go:trackingActorCanRead": "dd5b73bf3774d9722d285efd658e1701b1535e6000f6e12a8bfe7acfd7708f68",

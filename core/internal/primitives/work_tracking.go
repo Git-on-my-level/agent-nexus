@@ -74,9 +74,19 @@ func delegatedToOtherActorTx(ctx context.Context, tx *accessTx, creator, assigne
 		if actor == creator {
 			return false, nil
 		}
-		if actor != "" {
-			other = true
+		if actor == "" {
+			continue
 		}
+		// Typed agent:<id> assignees are stored as the bare agent id, which
+		// reads back as actor:<agent id>. Match the creator by agent id too.
+		var own bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE id=? AND actor_id=?)`, actor, creator).Scan(&own); err != nil {
+			return false, err
+		}
+		if own {
+			return false, nil
+		}
+		other = true
 	}
 	return other, nil
 }

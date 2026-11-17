@@ -349,6 +349,10 @@ func TestAgentCreateForAnotherActorLeavesTheLeaseToTheAssignee(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// An agent whose id differs from its actor id: the creator itself.
+	if _, err = ws.DB().Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent-asker-2','asker2','asker2','now','now','{"principal_kind":"agent"}')`); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		owner string
 		lease string
@@ -375,6 +379,21 @@ func TestAgentCreateForAnotherActorLeavesTheLeaseToTheAssignee(t *testing.T) {
 		}
 		if c.lease == "held" && lease.Owner != "actor:asker" {
 			t.Errorf("owner=%s lease owner=%s, want actor:asker", c.owner, lease.Owner)
+		}
+	}
+	// A creator whose agent id differs from its actor id still self-assigns
+	// through either form of its agent ref.
+	for _, owner := range []string{"agent:agent-asker-2", "agent-asker-2"} {
+		card, err := s.CreateWork(ctx, "asker2", "", map[string]any{"title": "Self " + owner, "owner": owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		lease, err := s.GetCardLease(ctx, workString(card["id"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lease.State != "held" || lease.Owner != "actor:asker2" {
+			t.Errorf("owner=%s lease=%+v, want held by actor:asker2", owner, lease)
 		}
 	}
 	// The delegated card cannot fall back away from its assignee: nothing expires.

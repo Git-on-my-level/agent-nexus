@@ -6597,7 +6597,7 @@ Local Help: lease acquire
 
 Flags:
   <card>                       Accepted by lease acquire.
-  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --ttl <dur>                  Accepted by lease acquire (60s to 7d).
   --reason <text>              Accepted by lease acquire.
   --if-epoch <n>               Accepted by lease acquire.
@@ -6654,7 +6654,7 @@ Local Help: lease renew
 
 Flags:
   <card>                       Accepted by lease renew.
-  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --ttl <dur>                  Accepted by lease renew.
 
 Global flags:
@@ -6715,7 +6715,7 @@ Local Help: lease release
 
 Flags:
   <card>                       Accepted by lease release.
-  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --reason <text>              Accepted by lease release.
   --handoff-to <id>            Accepted by lease release; moves the lease to this owner with a new epoch in the same transaction.
   --ttl <dur>                  Accepted by lease release only with --handoff-to (60s to 7d).
