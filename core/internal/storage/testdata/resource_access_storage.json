@@ -3715,7 +3715,7 @@
     "../server/webauthn_config.go:requestOrigin": "689b233e8929b3e34949065c2c87c7ed92384f3c4195526bbb2990809a4098c2",
     "../server/work_briefing.go:handleWorkContext": "2c822a27be30b5905e8cb7fa24d5ea26f6c148b2e0f608d3b97e65ebc40dba64",
     "../server/work_grouping.go:groupingWorkResponse": "55c1dc229797fe9ac74f7c5774d98ebdd0ea166ee33d4dd4b700232f22369efe",
-    "../server/work_grouping.go:handleWorkGrouping": "6be40847ff4aed06199eb9d82d7c21caf78ed3196c568d8082db6387e1b5c248",
+    "../server/work_grouping.go:handleWorkGrouping": "972a8d43c6d5eba3be871336488a954538c9821ce5252628000e957dcadfad92",
     "../server/work_grouping.go:withWorkPath": "16f6913dcab260927c8871410fb35f95e0bc65153ffc2b081767f7eba6473e65",
     "../server/work_handlers.go:handleWork": "7a129774b6149dca6c6e16cfa0595257c01e504e72b4de4620cc47cc68bdc7f4",
     "../server/work_handlers.go:logUnmappedWorkError": "ea39d38fae4ab1e6db05a64df898b9365f8130607f2501c8440a5ab8e6b9f053",
