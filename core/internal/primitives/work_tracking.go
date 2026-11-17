@@ -23,7 +23,8 @@ func registerCardTrackingTx(ctx context.Context, tx *accessTx, actor string, car
 	if created.IsZero() {
 		created = now
 	}
-	if strings.TrimSpace(card.Assignee.String) == "" && actor != "" {
+	explicitAssignee := strings.TrimSpace(card.Assignee.String)
+	if explicitAssignee == "" && actor != "" {
 		owner := "actor:" + stripActor(actor)
 		if _, err := tx.ExecContext(ctx, `UPDATE cards SET assignee=? WHERE id=?`, owner, card.CardID); err != nil {
 			return err
@@ -40,6 +41,15 @@ func registerCardTrackingTx(ctx context.Context, tx *accessTx, actor string, car
 	if !agent || plans.HealthDone(card.ColumnKey) || card.ArchivedAt.Valid || card.TrashedAt.Valid {
 		return nil
 	}
+	// A card created for another actor is delegated work: the assignee owns it
+	// and claims the lease when it starts. A creator lease here would make the
+	// creator's release or expiry fall the card back away from its assignee.
+	if explicitAssignee != "" {
+		delegated, err := delegatedToOtherActorTx(ctx, tx, actor, explicitAssignee)
+		if err != nil || delegated {
+			return err
+		}
+	}
 	stamp := cardLeaseStamp(now)
 	owner := "actor:" + stripActor(actor)
 	expires := cardLeaseStamp(now.Add(AutoCardLeaseTTL))
@@ -48,6 +58,27 @@ func registerCardTrackingTx(ctx context.Context, tx *accessTx, actor string, car
 	}
 	_, err := insertCardLeaseEvent(ctx, tx, actor, *card, "card_lease_acquired", "Creating agent acquired the work lease", map[string]any{"owner": owner, "epoch": 1, "ttl_seconds": int64(AutoCardLeaseTTL / time.Second), "expires_at": expires, "source": "create"})
 	return err
+}
+
+// delegatedToOtherActorTx reports whether an explicit assignee names some other
+// actor and never the creator. Opaque labels identify no actor, so a card
+// assigned only to labels keeps the creator lease.
+func delegatedToOtherActorTx(ctx context.Context, tx *accessTx, creator, assignee string) (bool, error) {
+	creator = stripActor(creator)
+	other := false
+	for _, ref := range boardCardAssigneeRefs(assignee) {
+		actor, err := trackingActor(ctx, tx, ref)
+		if err != nil {
+			return false, err
+		}
+		if actor == creator {
+			return false, nil
+		}
+		if actor != "" {
+			other = true
+		}
+	}
+	return other, nil
 }
 
 // Principal labels on leases remain backward compatible. Only actor:/agent:

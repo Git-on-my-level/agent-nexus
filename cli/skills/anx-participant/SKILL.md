@@ -5,7 +5,7 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v42.
+Skill contract: anx.participant.v43.
 
 ## Daily loop
 
@@ -30,7 +30,7 @@ Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults.
 
 `anx ask --template decision` is a fictional narrative. Edit frontmatter; preview `anx ask --from-file ask.md --preview`. Supply `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`. Withdraw stale asks; act on answers or re-ask. `anx orient` lists your upkeep.
 
-After filing, arm `anx await <ask>` or `anx await --answers --deadline <time>`; re-arm on return. Mark only your asks read. Report issues with `anx feedback "<text>"`.
+Arm `anx await <ask|card>` or `anx await --answers --deadline <time>`; re-arm on return; cards return `resolution`. Mark only your asks read. Report issues with `anx feedback "<text>"`.
 
 ## Advanced setup
 

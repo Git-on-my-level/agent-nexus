@@ -344,7 +344,11 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			}
 			phase := anyString(card["column_key"])
 			if phase == strings.TrimPrefix(condition, "state=") {
-				return map[string]any{"target": target, "state": phase}, true, nil
+				result := map[string]any{"target": target, "state": phase}
+				if resolution := a.cardResolutionEvidence(waitCtx, cfg, card); resolution != nil {
+					result["resolution"] = resolution
+				}
+				return result, true, nil
 			}
 			return nil, false, nil
 		}
@@ -392,6 +396,10 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			headers["Last-Event-ID"] = cursor
 		}
 		resp, openErr := client.OpenStream(waitCtx, httpclient.RawRequest{Method: http.MethodGet, Path: path, Headers: headers})
+		if openErr == nil && transientStreamStatus(resp.StatusCode) {
+			resp.Body.Close()
+			openErr = errTransientStream
+		}
 		if openErr == nil {
 			if resp.StatusCode >= 400 {
 				body, _ := io.ReadAll(resp.Body)
@@ -417,6 +425,10 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 				}
 				if targetIsCard {
 					result, done, checkErr := check()
+					if checkErr != nil && transientAwaitError(checkErr) {
+						// Re-read the card on the next event or reconnect.
+						continue
+					}
 					if checkErr != nil {
 						resp.Body.Close()
 						return nil, checkErr
@@ -508,4 +520,35 @@ func inboxAskID(item map[string]any) string {
 		}
 	}
 	return ""
+}
+
+// cardResolutionEvidence returns the first event cited as the card's
+// resolution evidence, so an agent awaiting another agent's answer gets it in
+// the same call: `cards resolve --body` records the answer as that event. It
+// is one bounded read at completion; a failed read leaves the result as before.
+func (a *App) cardResolutionEvidence(ctx context.Context, cfg config.Resolved, card map[string]any) map[string]any {
+	// The card already matched; an await deadline that is about to lapse must
+	// not cost the caller the answer, so the read gets its own short budget.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	for _, raw := range asSlice(card["resolution_refs"]) {
+		ref := anyString(raw)
+		if !strings.HasPrefix(ref, "event:") {
+			continue
+		}
+		result, err := a.invokeRawJSON(ctx, cfg, "await resolution", "GET", "/events/"+url.PathEscape(strings.TrimPrefix(ref, "event:")), nil)
+		if err != nil {
+			return nil
+		}
+		ev := asMap(commandResultBody(result)["event"])
+		if len(ev) == 0 {
+			return nil
+		}
+		out := map[string]any{"event_ref": ref, "actor_id": anyString(ev["actor_id"]), "text": anyString(asMap(ev["payload"])["text"])}
+		if out["text"] == "" {
+			out["text"] = anyString(ev["summary"])
+		}
+		return out
+	}
+	return nil
 }

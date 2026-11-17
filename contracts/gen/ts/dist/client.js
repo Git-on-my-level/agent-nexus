@@ -10411,8 +10411,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Stable owner id for this claim"
+                    "description": "Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "ttl",
@@ -10455,6 +10454,10 @@ export const commandRegistry = [
             {
                 "title": "Claim a card for two hours",
                 "command": "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"
+            },
+            {
+                "title": "Claim a card assigned to you as yourself",
+                "command": "anx lease acquire card:review-request --ttl 30m"
             }
         ],
         "body_schema": {
@@ -10510,8 +10513,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Owner id that holds the lease."
+                    "description": "Owner id that holds the lease. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "reason",
@@ -10612,8 +10614,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Owner id that holds the lease."
+                    "description": "Owner id that holds the lease. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "ttl",

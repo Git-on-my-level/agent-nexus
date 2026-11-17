@@ -2354,6 +2354,10 @@ var CommandRegistry = []CommandSpec{
 				Title:   "Claim a card for two hours",
 				Command: "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'",
 			},
+			{
+				Title:   "Claim a card assigned to you as yourself",
+				Command: "anx lease acquire card:review-request --ttl 30m",
+			},
 		},
 	},
 	{

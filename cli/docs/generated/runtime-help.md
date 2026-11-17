@@ -520,7 +520,7 @@ Daily loop
 2. Use `anx where card:<slug>` to inspect its home before substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx note card:<slug> "What changed and why" --evidence <ref>` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. A note with `--next` or `--evidence` is progress: it starts a card that has not started (backlog or ready) when you own it or nobody does, assigning you if it has no owner (result.started); a card someone else owns stays put with warning note_card_not_started. A parent whose children have started reads in_progress in tree, where and Watch. Notes carry a request_key: rerun the same note after a timeout and it is sent once. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask --from-file ask.md`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
-5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --deadline <RFC3339>` as a background process and re-arm it after each return (the deadline is absolute, so re-arming never extends it; exit 14 deadline_reached means no answer by then): it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
+5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --deadline <RFC3339>` as a background process and re-arm it after each return (the deadline is absolute, so re-arming never extends it; exit 14 deadline_reached means no answer by then): it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected. Ask another agent, on any machine: create a card assigned to it (`anx cards create --board <board> --title "<question>" --body-file q.md --assignee-ref actor:<id>`) and run `anx await card:<handle>`; it returns the answer as `resolution`. To answer one: find it with `anx work list --owner me`, claim it with `anx lease acquire <card> --ttl 30m` (the owner defaults to you), then `anx cards resolve <card> --body "<answer>"`. When it needs a human, file `anx ask --subject-ref <card> --blocks <card>`, move the card to `blocked`, and resolve it with the answer once it arrives.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer to your own ask with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery, and that read state is shared with other sessions of your agent, so it refuses an ask another session filed; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 8. When ANX itself gets in your way (a confusing error, a missing command, a view that disagrees with the CLI), file it with `anx feedback "<what happened>" --evidence <ref>`: it lands on card:anx-feedback for the people who run the workspace and returns a prefilled upstream issue link.
@@ -6567,6 +6567,7 @@ Generated Help: lease acquire
 - Adjacent commands: `lease release`, `lease renew`, `lease show`
 - Examples:
   - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+  - Claim a card assigned to you as yourself: `anx lease acquire card:review-request --ttl 30m`
 
 Inputs:
   Required:
@@ -6580,7 +6581,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Stable owner id for this claim
+  - `--owner`: Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--ttl` required: Lease length as a duration (60s to 7d)
   - `--reason`: Short audit text recorded on the card timeline.
   - `--if-epoch`: Acquire only if the lease epoch still equals this value (0 when never leased).
@@ -6590,13 +6591,13 @@ Local Help: lease acquire
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
-- Quick start: anx lease acquire <card> --owner <id> --ttl <dur>
+- Quick start: anx lease acquire <card> --ttl <dur>
 - Examples:
   - `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'ramp step 3'`
 
 Flags:
   <card>                       Accepted by lease acquire.
-  --owner <id>                 Accepted by lease acquire.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
   --ttl <dur>                  Accepted by lease acquire (60s to 7d).
   --reason <text>              Accepted by lease acquire.
   --if-epoch <n>               Accepted by lease acquire.
@@ -6639,7 +6640,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Owner id that holds the lease.
+  - `--owner`: Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--ttl`: New lease length from now (60s to 7d); defaults to the lease's current TTL.
 
 Local Help: lease renew
@@ -6647,13 +6648,13 @@ Local Help: lease renew
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
-- Quick start: anx lease renew <card> --owner <id>
+- Quick start: anx lease renew <card>
 - Examples:
   - `anx lease renew card:ramp-batch --owner exec-7f3a --ttl 2h`
 
 Flags:
   <card>                       Accepted by lease renew.
-  --owner <id>                 Accepted by lease renew.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
   --ttl <dur>                  Accepted by lease renew.
 
 Global flags:
@@ -6697,7 +6698,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Owner id that holds the lease.
+  - `--owner`: Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--reason`: Short audit text recorded on the card timeline.
   - `--handoff-to`: Owner id that takes the lease under a new epoch in the same transaction.
   - `--ttl`: Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL.
@@ -6707,14 +6708,14 @@ Local Help: lease release
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Give up your lease, or hand it to the next owner with --handoff-to; releasing live work without a hand-off wakes the PM (card_unowned).
-- Quick start: anx lease release <card> --owner <id>
+- Quick start: anx lease release <card>
 - Examples:
   - `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
   - `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h`
 
 Flags:
   <card>                       Accepted by lease release.
-  --owner <id>                 Accepted by lease release.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>). Use an explicit id for a launcher or execution label.
   --reason <text>              Accepted by lease release.
   --handoff-to <id>            Accepted by lease release; moves the lease to this owner with a new epoch in the same transaction.
   --ttl <dur>                  Accepted by lease release only with --handoff-to (60s to 7d).
