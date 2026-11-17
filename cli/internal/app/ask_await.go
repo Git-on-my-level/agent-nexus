@@ -32,7 +32,9 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 	// Terminal state is durable. Read it before creating a write-side subscription
 	// or competing for SSE admission, especially when writers are contending.
 	askPath := "/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:"))
-	current, err := a.invokeRawJSON(awaitCtx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	current, err := retryTransientRead(awaitCtx, func() (*commandResult, error) {
+		return a.invokeRawJSON(awaitCtx, cfg, "await outcome", http.MethodGet, askPath, nil)
+	})
 	if err != nil {
 		if errors.Is(awaitCtx.Err(), context.DeadlineExceeded) {
 			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
@@ -43,7 +45,10 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		return awaitAskOutcomeResult(target, out)
 	}
 	subscription := ""
-	sub, err := a.invokeRawJSON(awaitCtx, cfg, "await subscribe", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/subscriptions", map[string]any{"kind": "await", "label": "live await"})
+	// Subscribing is idempotent per await label, so it may be repeated through an outage.
+	sub, err := retryTransientRead(awaitCtx, func() (*commandResult, error) {
+		return a.invokeRawJSON(awaitCtx, cfg, "await subscribe", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/subscriptions", map[string]any{"kind": "await", "label": "live await"})
+	})
 	if err != nil {
 		if errors.Is(awaitCtx.Err(), context.DeadlineExceeded) {
 			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
@@ -66,6 +71,10 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 			return nil, err
 		}
 		resp, err := client.OpenStream(streamCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/asks/" + url.PathEscape(strings.TrimPrefix(target, "event:")), Headers: map[string]string{"Accept": "text/event-stream"}})
+		if err == nil && transientStreamStatus(resp.StatusCode) {
+			resp.Body.Close()
+			err = errTransientStream
+		}
 		if err == nil {
 			if resp.StatusCode >= 400 {
 				b, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
@@ -156,5 +165,52 @@ func awaitAskOutcomeResult(target string, out map[string]any) (*commandResult, e
 		return nil, errnorm.WithDetails(errnorm.New(errnorm.KindRemote, anyString(out["status"]), "ask ended: "+anyString(out["status"])), out)
 	default:
 		return nil, errnorm.New(errnorm.KindRemote, "invalid_response_outcome", "unknown ask state")
+	}
+}
+
+// errTransientStream marks a stream open that hit a restart or overload; the
+// await loops back off and reconnect instead of ending a long wait.
+var errTransientStream = errors.New("transient stream status")
+
+// transientStreamStatus reports statuses that mean "try again later" (429 and
+// 5xx), as during a server restart, rather than a final answer about the ask.
+func transientStreamStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= 500
+}
+
+// transientAwaitError reports a read that failed for the same reasons, so an
+// await keeps waiting instead of exiting 6 mid-wait.
+func transientAwaitError(err error) bool {
+	var typed *errnorm.Error
+	if !errors.As(err, &typed) {
+		return false
+	}
+	if typed.Kind == errnorm.KindNetwork {
+		// TLS and cancellation are marked unrecoverable; surface them now.
+		return typed.Recoverable == nil || *typed.Recoverable
+	}
+	details, _ := typed.Details.(map[string]any)
+	status, _ := details["status"].(int)
+	return transientStreamStatus(status)
+}
+
+// retryTransientRead repeats an idempotent read through outages (429/5xx,
+// recoverable network errors) with bounded backoff until ctx ends, so an
+// await started while the server restarts waits instead of exiting.
+func retryTransientRead[T any](ctx context.Context, read func() (T, error)) (T, error) {
+	backoff := 250 * time.Millisecond
+	for {
+		out, err := read()
+		if err == nil || !transientAwaitError(err) || ctx.Err() != nil {
+			return out, err
+		}
+		select {
+		case <-ctx.Done():
+			return out, err
+		case <-time.After(backoff):
+		}
+		if backoff < 4*time.Second {
+			backoff *= 2
+		}
 	}
 }

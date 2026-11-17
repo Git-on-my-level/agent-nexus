@@ -5101,7 +5101,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Stable owner id for this claim, such as an execution or session id.}
+        - {name: owner, required: false, description: "Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: ttl, required: true, description: Lease length as a duration (60s to 7d), for example 2h.}
         - {name: reason, description: Short audit text recorded on the card timeline.}
         - {name: if-epoch, description: Acquire only if the lease epoch still equals this value (0 when never leased).}
@@ -5113,6 +5113,7 @@ paths:
       x-anx-agent-notes: "Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock."
       x-anx-examples:
       - {title: Claim a card for two hours, command: "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"}
+      - {title: Claim a card assigned to you as yourself, command: "anx lease acquire card:review-request --ttl 30m"}
       parameters:
         - $ref: '#/components/parameters/CardID'
       requestBody:
@@ -5150,7 +5151,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: owner, required: false, description: "Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: ttl, description: New lease length from now (60s to 7d); defaults to the lease's current TTL.}
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ lease, changed }`."
@@ -5197,7 +5198,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: owner, required: false, description: "Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: reason, description: Short audit text recorded on the card timeline.}
         - {name: handoff-to, description: Owner id that takes the lease under a new epoch in the same transaction.}
         - {name: ttl, description: Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL.}
@@ -12613,7 +12614,7 @@ components:
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "New cards receive a computed source=default promise 12 hours after creation, superseded by explicit promises, cadence or evidence. Agent creators automatically acquire a 24-hour work lease. Digest-only work has state=digest and no repeat alerts. Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (live-owned non-cadence work with nothing promised), digest (unowned/fallback work or a default after its one reminder). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
+      description: "New cards receive a computed source=default promise 12 hours after creation, superseded by explicit promises, cadence or evidence. Agent creators automatically acquire a 24-hour work lease, except on work they assign to another actor, which the assignee claims. Digest-only work has state=digest and no repeat alerts. Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (live-owned non-cadence work with nothing promised), digest (unowned/fallback work or a default after its one reminder). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
         state: {type: string, enum: [past_promise, moving, no_promise, digest, done]}
         reason: {type: string}

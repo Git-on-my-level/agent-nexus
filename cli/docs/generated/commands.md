@@ -2359,6 +2359,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Agent notes: Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock.
 - Examples:
   - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+  - Claim a card assigned to you as yourself: `anx lease acquire card:review-request --ttl 30m`
 
 ## `lease.release`
 

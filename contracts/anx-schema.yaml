@@ -1663,7 +1663,7 @@ work_tracking_defaults:
   rules:
     - Creates remain non-blocking for every creator; the creating actor is the implicit assignee when none was supplied.
     - The computed default is source default, creation plus 12h. It writes no next note and yields to explicit promises, cadence and resolved evidence.
-    - Agent creators acquire a 24h lease in the create transaction. Human creators do not. Normal lease renew, fencing and explicit hand-off semantics remain available.
+    - Agent creators acquire a 24h lease in the create transaction, unless the create names an assignee that resolves to another actor and never to the creator; that delegated work is left for the assignee to claim. Human creators do not. Normal lease renew, fencing and explicit hand-off semantics remain available.
     - Release without hand-off and expiry atomically assign responsibility to the chosen parent initiative owner, then the configured workspace lead, and append an automatic note. A fallback owner gains no read authority. Without a readable configured fallback, existing responsible ownership is retained and digested.
     - Unowned/fallback non-cadence work reads digest, never no_promise or stale. Cadence continues to use receipts and the overdue rule alone.
     - A default lapse records one reminder. Subsequent cycles only include the work in a daily owner digest, with idempotent delivery identities. Renewed explicit promises, evidence, terminal state and assignment changes cancel stale queued work.

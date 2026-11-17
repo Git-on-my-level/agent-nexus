@@ -345,3 +345,26 @@ func TestAwaitCardState(t *testing.T) {
 		t.Fatalf("state missing: %#v", result)
 	}
 }
+
+func TestAwaitCardReturnsResolutionEvidence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/cards/card:ask":
+			fmt.Fprint(w, `{"card":{"ref":"card:ask","column_key":"done","resolution_refs":["artifact:log","event:ev-answer"]}}`)
+		case "/events/ev-answer":
+			fmt.Fprint(w, `{"event":{"id":"ev-answer","type":"message_posted","actor_id":"actor-lane","payload":{"text":"ANSWER: yes, ship it"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	a, out := dailyTestApp(t, server.URL)
+	if exit := a.Run([]string{"--json", "--as", "worker", "await", "card:ask", "--timeout", "1s"}); exit != 0 {
+		t.Fatalf("exit=%d %s", exit, out.String())
+	}
+	resolution := asMap(asMap(dailyJSON(t, out)["result"])["resolution"])
+	if resolution["text"] != "ANSWER: yes, ship it" || resolution["actor_id"] != "actor-lane" || resolution["event_ref"] != "event:ev-answer" {
+		t.Fatalf("resolution evidence missing: %#v", resolution)
+	}
+}
