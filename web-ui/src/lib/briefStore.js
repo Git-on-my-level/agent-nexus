@@ -1,4 +1,3 @@
-import { get } from "svelte/store";
 import { coreClient } from "$lib/coreClient";
 import { normalizeBrief } from "$lib/brief.js";
 import { recoverInboxResponses } from "$lib/inboxResponseQueue.js";
@@ -143,9 +142,4 @@ export function mountBrief() {
 /** Force a refresh, for a confirmed mutation. */
 export function refreshBrief() {
   return briefStore().refresh({ force: true, replace: true });
-}
-
-/** Current snapshot without subscribing. */
-export function currentBrief() {
-  return get(briefStore()).data;
 }

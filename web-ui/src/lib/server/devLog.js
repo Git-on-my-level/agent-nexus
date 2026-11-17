@@ -114,4 +114,3 @@ export function logServerError(event, err, fields = {}) {
 }
 
 // Exported for tests so we don't have to monkey-patch process.env globally.
-export const __testing__ = { isDev };

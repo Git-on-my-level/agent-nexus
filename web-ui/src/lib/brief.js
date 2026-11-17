@@ -517,7 +517,7 @@ export function sortDecisions(decisions) {
 }
 
 /** Watch list order: state, then worst first inside each state. */
-export function compareInitiatives(a, b) {
+function compareInitiatives(a, b) {
   const s = WATCH_STATES.indexOf(a.state) - WATCH_STATES.indexOf(b.state);
   if (s) return s;
   if (a.state === "past_promise" && a.pastPromiseFor !== b.pastPromiseFor)
@@ -547,15 +547,8 @@ export function compareInitiatives(a, b) {
  * rest. Finished loops fold away under Done.
  */
 export const LOOP_SILENT_SECONDS = 3 * 86_400;
-export const LOOP_GROUPS = [
-  "waiting",
-  "failing",
-  "silent",
-  "flat",
-  "moving",
-  "done",
-];
-export const LOOP_GROUP_LABELS = {
+const LOOP_GROUPS = ["waiting", "failing", "silent", "flat", "moving", "done"];
+const LOOP_GROUP_LABELS = {
   waiting: "Waiting on you",
   failing: "Failing",
   silent: "Silent too long",

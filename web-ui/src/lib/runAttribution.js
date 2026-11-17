@@ -61,8 +61,3 @@ export function runAttributionLabel(attribution, run = null) {
   if (label) return label;
   return String(attribution?.runId ?? "").slice(0, 8);
 }
-
-/** Test hook. */
-export function resetAttributedRuns() {
-  runs.clear();
-}

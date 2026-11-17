@@ -5,7 +5,7 @@ import { PANEL_FIT_TIERS, panelFit, widerTier } from "./panelFit.js";
  * two: the question a reader has on a laptop is never "why only two columns",
  * it is "why is this plan graph cut in half".
  */
-export const DEFAULT_GRID_COLUMNS = 2;
+const DEFAULT_GRID_COLUMNS = 2;
 
 /** Layout helpers operate only on validated, data-only report nodes. */
 export function layoutPanelIds(node, result = new Set()) {
@@ -210,7 +210,7 @@ export function gridPlacement(node, children, panelsById) {
  * the type decides. `primary` stays open everywhere; `secondary` (activity)
  * and `context` (explanations) fold to their header line on a phone.
  */
-export const PANEL_ROLES = ["primary", "secondary", "context"];
+const PANEL_ROLES = ["primary", "secondary", "context"];
 const CONTEXT_TYPES = new Set([
   "explanation",
   "callout",

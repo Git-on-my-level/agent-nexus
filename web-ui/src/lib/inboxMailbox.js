@@ -24,12 +24,6 @@ import {
 } from "./work/presentation.js";
 import { workSummaryModel } from "./workSummary.js";
 
-export const INBOX_MAILBOXES = [
-  ["needs-you", "Needs you"],
-  ["watching", "Watching"],
-  ["handled", "Handled"],
-];
-
 // Decision status once the action receipt is joined in: an answered decision
 // reads as its action's state until that state is final.
 const WATCHING_DECISION_STATUSES = new Set([
@@ -70,7 +64,7 @@ export function proposalVoidReason(decision, work = null) {
   return "";
 }
 
-export function decisionRowStatus(
+function decisionRowStatus(
   decision,
   actions = [],
   { receiptsUnavailable = false, work = null, currentActorId = "" } = {},
@@ -165,7 +159,7 @@ function taskIsBlocked(row) {
  * Handled tab a second, worse copy of the task list and made "Handled" mean
  * "we never looked at it".
  */
-export function classifyInboxRow(row, now = Date.now()) {
+function classifyInboxRow(row, now = Date.now()) {
   if (row.kind === "decision") {
     // A decision addressed to someone else is not this reader's work; it is
     // visible under Watching so the workspace stays legible, never under
@@ -440,7 +434,7 @@ function waitStartMinute(row) {
 }
 
 /** Explicit asks and decisions precede blocked tasks; priority precedes age. */
-export function compareNeedsYou(a, b) {
+function compareNeedsYou(a, b) {
   const task = Number(a.kind === "task") - Number(b.kind === "task");
   if (task) return task;
   const stale = Number(Boolean(a.stale)) - Number(Boolean(b.stale));

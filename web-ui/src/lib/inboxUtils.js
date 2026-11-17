@@ -1,18 +1,7 @@
 import { parseTimestampMs } from "./dateUtils.js";
 import { formatTime } from "./time/format.js";
 
-export const INBOX_CATEGORY_ORDER = ["escalate", "ask", "review"];
-
-export const INBOX_CATEGORY_LABELS = {
-  ask: "Ask",
-  review: "Review",
-  escalate: "Escalation",
-  report_review: "Review due",
-};
-
-export const INBOX_URGENCY_LEVELS = ["immediate", "high", "normal"];
-
-export const INBOX_URGENCY_LABELS = {
+const INBOX_URGENCY_LABELS = {
   immediate: "Immediate",
   high: "High",
   normal: "Normal",
@@ -32,7 +21,7 @@ const INBOX_SUBJECT_LABELS = {
   thread: "Thread",
 };
 
-export function normalizeInboxKind(itemOrKind) {
+function normalizeInboxKind(itemOrKind) {
   if (typeof itemOrKind === "object" && itemOrKind !== null) {
     return String(itemOrKind.kind ?? itemOrKind.category ?? "unknown").trim();
   }
@@ -51,7 +40,7 @@ export function splitTypedRef(refValue) {
   };
 }
 
-export function normalizeTypedRef(refValue) {
+function normalizeTypedRef(refValue) {
   const { prefix, id } = splitTypedRef(refValue);
   if (!prefix || !id) {
     return "";
@@ -158,7 +147,7 @@ export function getInboxUrgencyLabel(level) {
   );
 }
 
-export function readSourceEventTime(item) {
+function readSourceEventTime(item) {
   return (
     item?.source_event_time ??
     item?.source_event_ts ??
@@ -263,16 +252,4 @@ export function summarizeInboxUrgency(items = [], options = {}) {
     },
     { immediate: 0, high: 0, normal: 0 },
   );
-}
-
-export function summarizeInboxByCategory(items = []) {
-  const counts = {};
-  for (const category of INBOX_CATEGORY_ORDER) {
-    counts[category] = 0;
-  }
-  for (const item of items) {
-    const category = normalizeInboxKind(item);
-    counts[category] = (counts[category] ?? 0) + 1;
-  }
-  return counts;
 }

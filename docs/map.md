@@ -146,7 +146,6 @@ Where things live. Generated; never hand-edited.
 | web-ui/src/lib/components                                                    | (undocumented) |
 | web-ui/src/lib/components/access                                             | (undocumented) |
 | web-ui/src/lib/components/agents                                             | (undocumented) |
-| web-ui/src/lib/components/attention                                          | (undocumented) |
 | web-ui/src/lib/components/collection                                         | (undocumented) |
 | web-ui/src/lib/components/decide                                             | (undocumented) |
 | web-ui/src/lib/components/document-detail                                    | (undocumented) |
@@ -219,8 +218,8 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1594  | cli/dogfood/pi/seed/kids-lemonade-stand-chapters.mjs                               |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
 | 1547  | web-ui/src/lib/anxCoreClient.js                                                    |
-| 1542  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1527  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
+| 1459  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1451  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
 | 1397  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
 | 1348  | core/internal/primitives/brief.go                                                  |
@@ -228,8 +227,8 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1320  | web-ui/src/lib/components/work/SwimlaneBoard.svelte                                |
 | 1319  | web-ui/src/lib/components/CommandPalette.svelte                                    |
 | 1315  | core/internal/primitives/topics_store.go                                           |
-| 1282  | web-ui/src/lib/inboxResponseQueue.js                                               |
-| 1266  | web-ui/src/lib/server/authSession.js                                               |
+| 1271  | web-ui/src/lib/inboxResponseQueue.js                                               |
+| 1251  | web-ui/src/lib/server/authSession.js                                               |
 | 1249  | core/internal/storage/migrations.go                                                |
 | 1240  | core/internal/auth/hosts.go                                                        |
 | 1197  | core/internal/primitives/derived_store.go                                          |
@@ -249,10 +248,10 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 892   | mcp/executor/executor.go                                                           |
 | 891   | cli/internal/errnorm/enrich.go                                                     |
 | 887   | web-ui/src/lib/visualReports.js                                                    |
-| 884   | web-ui/src/lib/brief.js                                                            |
 | 884   | web-ui/src/lib/workSummary.js                                                      |
 | 881   | web-ui/src/lib/components/work/WorkViews.svelte                                    |
 | 879   | cli/internal/app/resource_messages.go                                              |
+| 877   | web-ui/src/lib/brief.js                                                            |
 | 834   | core/internal/server/report_handlers.go                                            |
 | 832   | core/internal/primitives/card_leases.go                                            |
 | 824   | web-ui/src/lib/components/reports/LiveReportPanel.svelte                           |

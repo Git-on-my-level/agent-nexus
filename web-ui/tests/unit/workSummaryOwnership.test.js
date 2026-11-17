@@ -406,14 +406,6 @@ describe("card status is rendered in one component", () => {
       "labels the board's phase columns, which group cards rather than state them",
     ],
     [
-      "src/lib/components/decide/DecisionPanel.svelte",
-      "names the phase a proposal would write, and the read-back of that write",
-    ],
-    [
-      "src/lib/components/WorkSummaryCard.svelte",
-      "mirrors the summary's own state onto the card shell, for the grid's sort border",
-    ],
-    [
       "src/lib/components/PlanView.svelte",
       "marks a plan step's status (done/active/blocked/not_started), a different vocabulary",
     ],

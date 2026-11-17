@@ -81,7 +81,7 @@ export function shortActorName(label) {
  *   takes a count ("moved {n} tasks to review"). `key` groups events that
  *   the digest can count together.
  */
-export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
+function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
   const type = text(event?.type);
   const payload =
     event?.payload && typeof event.payload === "object" ? event.payload : {};
@@ -243,7 +243,7 @@ export function describeUpdateEvent(event, { titleFor = () => "" } = {}) {
 }
 
 /** A single described event as a sentence fragment, without the actor. */
-export function eventPhrase(described) {
+function eventPhrase(described) {
   const verb = String(described?.verb ?? "");
   const title = text(described?.objectTitle);
   if (verb.includes("{object}")) {

@@ -1,5 +1,5 @@
 /** @param {unknown} row @param {string} key */
-export function formatRevisionFieldPlain(row, key) {
+function formatRevisionFieldPlain(row, key) {
   if (!row || typeof row !== "object") return "";
   const v = /** @type {Record<string, unknown>} */ (row)[key];
   if (Array.isArray(v)) {
@@ -12,7 +12,7 @@ export function formatRevisionFieldPlain(row, key) {
   return String(v).trim();
 }
 
-export const CARD_REVISION_DIFF_FIELD_KEYS = [
+const CARD_REVISION_DIFF_FIELD_KEYS = [
   "title",
   "summary",
   "definition_of_done",
@@ -27,7 +27,7 @@ export const CARD_REVISION_DIFF_FIELD_KEYS = [
 ];
 
 /** @param {string} before @param {string} after @param {number} maxLines */
-export function summarizeLineTextDelta(before, after, maxLines = 8) {
+function summarizeLineTextDelta(before, after, maxLines = 8) {
   const a = String(before ?? "")
     .replace(/\r\n/g, "\n")
     .split("\n");

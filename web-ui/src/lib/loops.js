@@ -6,13 +6,7 @@
  * a condition itself.
  */
 
-export const LOOP_CONDITIONS = [
-  "failing",
-  "overdue",
-  "stalled",
-  "healthy",
-  "unknown",
-];
+const LOOP_CONDITIONS = ["failing", "overdue", "stalled", "healthy", "unknown"];
 
 /** The words each computed condition is shown as, and its tone. */
 export const LOOP_CONDITION_TEXT = {
@@ -23,7 +17,7 @@ export const LOOP_CONDITION_TEXT = {
   unknown: { text: "No runs yet", tone: "neutral" },
 };
 
-export const RUN_OUTCOMES = ["acted", "measured", "no_op", "infra_error"];
+const RUN_OUTCOMES = ["acted", "measured", "no_op", "infra_error"];
 
 export const RUN_OUTCOME_TEXT = {
   acted: "acted",

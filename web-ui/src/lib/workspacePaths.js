@@ -2,7 +2,6 @@ import { base } from "$app/paths";
 import { normalizeAppPath, normalizeBasePath } from "./pathUtils.js";
 
 export const WORKSPACE_HEADER = "x-anx-workspace-slug";
-export { normalizeAppPath, normalizeBasePath };
 
 export function normalizeWorkspaceSlug(value) {
   return String(value ?? "")

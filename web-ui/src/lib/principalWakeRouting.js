@@ -64,7 +64,7 @@ export async function enrichPrincipalsWithWakeRouting(principalList) {
  * @param {object | null | undefined} principal
  * @returns {string}
  */
-export function taggableWakeHandleForPrincipal(principal) {
+function taggableWakeHandleForPrincipal(principal) {
   if (
     !principal ||
     principal.revoked ||

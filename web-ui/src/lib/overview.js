@@ -17,7 +17,6 @@ import {
   workFreshness,
   workKey,
 } from "$lib/work/presentation.js";
-import { resourceRouteSegment } from "$lib/resourceIdentity.js";
 import {
   parseVisualReport,
   visualReportContentText,
@@ -27,7 +26,7 @@ import {
 export const WORK_PAGE_LIMIT = 200;
 export const WORK_ROW_CAP = 2000;
 /** Full `human=1` rescans follow live events at most this often. */
-export const HUMAN_LIVE_REFRESH_MS = 10_000;
+const HUMAN_LIVE_REFRESH_MS = 10_000;
 
 /**
  * Delay before the next full human-filter rescan. `0` means run now.
@@ -46,7 +45,7 @@ export function humanLiveRefreshDelay(
 }
 /** Most recently updated documents considered for a visual report. */
 export const DOC_SCAN_CAP = 20;
-export const PREVIEW_LIMIT = 5;
+const PREVIEW_LIMIT = 5;
 
 const SOURCE_ORDER = [
   "nexus",
@@ -68,20 +67,6 @@ const DASHBOARD_TITLE = /^(?:fleet dashboard|dashboard)\b/i;
 
 export function isPreferredDashboardTitle(title) {
   return DASHBOARD_TITLE.test(String(title ?? "").trim());
-}
-
-export function sectionMessage(error, fallback) {
-  const raw = error instanceof Error ? error.message : String(error ?? "");
-  const message = raw.replace(/\s+/g, " ").trim();
-  if (!message) return fallback;
-  return message.length > 180 ? `${message.slice(0, 177)}…` : message;
-}
-
-export function unavailableSection(error, fallback = "This did not load.") {
-  return {
-    status: "unavailable",
-    message: sectionMessage(error, fallback),
-  };
 }
 
 /**
@@ -336,23 +321,6 @@ export function needsYouFromSources(
   };
 }
 
-async function mapPool(items, limit, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    async () => {
-      while (next < items.length) {
-        const index = next;
-        next += 1;
-        out[index] = await fn(items[index], index);
-      }
-    },
-  );
-  await Promise.all(workers);
-  return out;
-}
-
 /**
  * Preferred dashboard titles first, then newest. The inline view reads in
  * this order and stops at the first valid report.
@@ -368,30 +336,6 @@ export function orderDocumentsForReportScan(documents = []) {
     if (aTime !== bTime) return bTime - aTime;
     return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
   });
-}
-
-async function readReportDocument(client, doc) {
-  const id = String(doc?.id ?? "").trim();
-  if (!id) return { error: new Error("Document has no id.") };
-  try {
-    const got = await client.getDocument(id);
-    const content = got?.revision?.content;
-    const parsed = parseReportDocumentContent(content);
-    const document = got?.document ?? doc;
-    return {
-      id,
-      title: String(document?.title ?? doc?.title ?? ""),
-      updated_at: document?.updated_at || doc?.updated_at || "",
-      segment:
-        resourceRouteSegment(document, "document") ||
-        resourceRouteSegment(doc, "document") ||
-        id,
-      report: parsed.report,
-      revision_ref: String(got?.revision?.ref ?? ""),
-    };
-  } catch (error) {
-    return { error };
-  }
 }
 
 export function parseReportDocumentContent(content) {
@@ -429,26 +373,6 @@ export async function collectVisualReports(documents, read) {
     reports: found ? [found] : [],
     pending,
     scanned,
-    failures,
-  };
-}
-
-/** Read the documents skipped on the first paint, once the selector opens. */
-export async function loadPendingReports(client, pending = [], existing = []) {
-  const reads = await mapPool(Array.isArray(pending) ? pending : [], 6, (doc) =>
-    readReportDocument(client, doc),
-  );
-  let failures = 0;
-  const found = [];
-  for (const entry of reads) {
-    if (entry?.error) failures += 1;
-    else if (entry?.report) found.push(entry);
-  }
-  return {
-    reports: selectVisualReports([
-      ...(Array.isArray(existing) ? existing : []),
-      ...found,
-    ]),
     failures,
   };
 }

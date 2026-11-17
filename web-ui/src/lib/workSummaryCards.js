@@ -28,7 +28,7 @@ const asText = (value) => String(value ?? "").trim();
  * Finished and planless cards are real but are not what a dashboard is for,
  * so they collapse at the bottom instead of pushing live work down.
  */
-export const CARD_GROUPS = Object.freeze({
+const CARD_GROUPS = Object.freeze({
   ATTENTION: "attention",
   DONE: "done",
   NO_PLAN: "no_plan",

@@ -68,7 +68,7 @@ export function isWorkspaceUnavailableError(error) {
 }
 
 /** @param {unknown} error */
-export function isWorkspaceNotFoundError(error) {
+function isWorkspaceNotFoundError(error) {
   return (
     error instanceof WorkspaceNotFoundError ||
     /** @type {any} */ (error)?.code === "workspace_not_found"

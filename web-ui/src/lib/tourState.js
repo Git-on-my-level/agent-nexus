@@ -27,7 +27,7 @@ export function markWorkspaceTourSeen(workspaceSlug) {
 // --- Workspace activation milestones (used by the cold-start banner) ---
 
 /** @param {string} workspaceSlug */
-export function workspaceTourArrivalKey(workspaceSlug) {
+function workspaceTourArrivalKey(workspaceSlug) {
   return `workspaceTourArrival.${workspaceSlug}`;
 }
 
@@ -60,8 +60,3 @@ export function isWorkspaceTourArrived(workspaceSlug) {
  * increments. Plain in-memory store (the replay command is per-tab).
  */
 export const replayTourSignal = writable(0);
-
-/** Trigger a workspace-tour replay. */
-export function replayWorkspaceTour() {
-  replayTourSignal.update((n) => n + 1);
-}

@@ -106,7 +106,7 @@ export function childrenLine(rollup) {
  * letters-and-number code reads in capitals as people write it. A label,
  * not an identity, so repeats fold into one with a count.
  */
-export const CODE_PREVIEW = 4;
+const CODE_PREVIEW = 4;
 export function shortCodes(rollup) {
   const counts = new Map();
   for (const child of rollup?.children ?? []) {
@@ -133,7 +133,7 @@ const STATE_ORDER = [
   "cancelled",
 ];
 /** Parts a kid row's state summary shows; the rest are in its title. */
-export const STATE_PARTS = 2;
+const STATE_PARTS = 2;
 
 /**
  * A workstream's children by state, from its own rollup: "1 needs you ·
@@ -219,7 +219,7 @@ export function kidPromise(kid, now = Date.now()) {
  * own rollup; one it did not expand (or a single card) says its own phase
  * and promise.
  */
-export const KID_PREVIEW = 8;
+const KID_PREVIEW = 8;
 export function kidRows(rollup, now = Date.now()) {
   const streams = rollup?.workstreams ?? [];
   const source = streams.length ? streams : (rollup?.children ?? []);

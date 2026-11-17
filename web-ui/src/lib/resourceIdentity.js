@@ -11,17 +11,17 @@ export function isInternalUuid(value) {
   return UUID_RE.test(asText(value));
 }
 
-export function resourceHandle(resource) {
+function resourceHandle(resource) {
   return asText(resource?.handle);
 }
 
-export function resourceRef(resource, kind = "") {
+function resourceRef(resource, kind = "") {
   const ref = asText(resource?.ref);
   if (!kind || ref.startsWith(`${kind}:`)) return ref;
   return "";
 }
 
-export function refValue(refValue, expectedKind = "") {
+function refValue(refValue, expectedKind = "") {
   const parsed = parseRef(refValue);
   const prefix = asText(parsed.prefix);
   const value = asText(parsed.value);

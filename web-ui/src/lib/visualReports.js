@@ -10,8 +10,8 @@ import {
 
 // A presentation-only format carried in existing core document revisions.
 // Never interpret report strings as markup, code, component names, or fetch URLs.
-export const VISUAL_REPORT_KIND = "anx.visual-report";
-export const VISUAL_REPORT_VERSION = 1;
+const VISUAL_REPORT_KIND = "anx.visual-report";
+const VISUAL_REPORT_VERSION = 1;
 export const VISUAL_REPORT_TYPES = Object.freeze([
   "explanation",
   "evidence-table",
@@ -217,7 +217,7 @@ export function reviewDeadlineMillis(value, authoredAt) {
 }
 
 /** An authored instant in nanoseconds, for comparing against a deadline. */
-export function authoredNanos(value) {
+function authoredNanos(value) {
   return rfc3339Nanos(value);
 }
 

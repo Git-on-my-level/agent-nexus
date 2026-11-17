@@ -7,7 +7,7 @@ import {
   workTargetRevision,
 } from "./work/presentation.js";
 
-export function phaseRequestKey(work, phase) {
+function phaseRequestKey(work, phase) {
   // The revision is part of the key: a request made after the work moved is
   // a new request, not a replay of the stale one.
   return `task-phase:${workKey(work)}:${phase}:${workTargetRevision(work)}`;

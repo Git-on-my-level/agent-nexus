@@ -42,7 +42,7 @@ export function applyPinOp(refs, { op, ref }) {
 }
 
 /** Saved order: the client order key, then the outbox key for a tie. */
-export const comparePinEdits = (a, b) =>
+const comparePinEdits = (a, b) =>
   a.request.order - b.request.order ||
   (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
@@ -50,7 +50,7 @@ export const comparePinEdits = (a, b) =>
  * Pin edits that may still reach core, oldest first. A definitive failure
  * (attention) is left out: the reader sees core's set and the failure.
  */
-export const pendingPinEdits = (rows) =>
+const pendingPinEdits = (rows) =>
   (rows ?? [])
     .filter(
       (row) =>

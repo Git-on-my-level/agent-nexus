@@ -3,7 +3,7 @@
  * OSS-safe — lives in $lib; hosted/ may import this module.
  */
 
-export const AVATAR_PALETTE = [
+const AVATAR_PALETTE = [
   { bg: "bg-accent-soft", fg: "text-accent-text" },
   { bg: "bg-ok-soft", fg: "text-ok-text" },
   { bg: "bg-warn-soft", fg: "text-warn-text" },

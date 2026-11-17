@@ -39,7 +39,7 @@ export const CALLBACK_CODES_UNKNOWN_COPY = new Set([
 ]);
 
 /** Canonical BFF codes that use the Surface-3 layout (headings/body from the plan). */
-export const CALLBACK_UI_CODES = new Set([
+const CALLBACK_UI_CODES = new Set([
   "exchange_expired",
   "exchange_invalid",
   "session_exchange_unreachable",

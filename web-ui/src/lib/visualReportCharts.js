@@ -1,6 +1,6 @@
 // A deliberately bounded, data-only ECharts vocabulary. Never forward a report
 // option object to the renderer: validate it, then construct owned options below.
-export const REPORT_CHART_TYPES = Object.freeze([
+const REPORT_CHART_TYPES = Object.freeze([
   "line",
   "bar",
   "scatter",

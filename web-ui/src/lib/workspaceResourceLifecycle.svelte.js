@@ -13,7 +13,7 @@ function normalizeId(id) {
 }
 
 /** @param {Iterable<unknown>} ids */
-export function normalizeResourceIds(ids) {
+function normalizeResourceIds(ids) {
   return [...ids].map((id) => normalizeId(id)).filter(Boolean);
 }
 
