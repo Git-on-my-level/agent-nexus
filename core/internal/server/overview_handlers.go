@@ -135,14 +135,6 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	}
 	visitWork, _ := payload["_visit_work"].([]map[string]any)
 	delete(payload, "_visit_work")
-	/*
-	 * The morning brief rides along on the rows this handler already loads: the
-	 * visit snapshot, the needs_you rows below, the digest and the roster. It
-	 * adds no query, so it costs one pass over data already in memory and can
-	 * never see past the filters that produced it. `overview_brief.go` has the
-	 * ranking and the reasons.
-	 */
-	brief := briefInputs{now: now, work: visitWork, workAvailable: scoped, signals: map[string]briefSignal{}, dependents: briefDependents(visitWork)}
 	if scoped {
 		stage = time.Now()
 		digest, e := visitStore.OverviewChanges(r.Context(), overviewPrincipal(r), visitWork, payload["work"].(map[string]any)["truncated"] == true, planVisibility(r, opts), now)
@@ -154,14 +146,9 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 			return
 		}
 		payload["since_you_last_looked"] = digest
-		brief.since, brief.changes, brief.changesTruncated, brief.priorPhases = digest.Since, digest.Items, digest.Truncated, digest.PriorPhases
 		addServerTiming(w, "changes", stage)
 	}
 	work := payload["work"].(map[string]any)
-	brief.workTruncated = work["truncated"] == true
-	if initiatives, ok := payload["initiatives"].(map[string]any); ok {
-		brief.initiatives, _ = initiatives["items"].([]map[string]any)
-	}
 	items := work["items"].([]map[string]any)
 	public := make([]map[string]any, 0, len(items))
 	for _, item := range items {
@@ -190,7 +177,6 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	needs := payload["needs_you"].(map[string]any)
 	needs["truncated"] = work["truncated"] == true
 	rows := needs["rows"].([]map[string]any)
-	brief.recordWorkSignals(visitWork)
 	stage = time.Now()
 	inbox, inboxPartial, err := loadOverviewInboxItems(r, opts)
 	addServerTiming(w, "inbox", stage)
@@ -199,10 +185,8 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		needs["status"] = "unavailable"
 		needs["message"] = "Needs you could not be loaded."
 	} else {
-		brief.newAsks = inbox
 		for _, item := range inbox {
 			id := "inbox:" + anyString(item["id"])
-			brief.signals[id] = briefSignal{Kind: "ask", At: firstNonEmptyString(item["created_at"], item["updated_at"]), Priority: anyString(item["severity"])}
 			rows = append([]map[string]any{{"id": id, "title": firstNonEmptyString(anyString(item["title"]), "Request"), "source": anyString(item["requester_label"]), "waiting_since": firstNonEmptyString(item["trigger_at"], item["created_at"]), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)}}, rows...)
 		}
 	}
@@ -271,7 +255,6 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 					}
 					if actionable {
 						id := "decision:" + d.ID
-						brief.signals[id] = briefSignal{Kind: "decision", At: d.CreatedAt.Format(time.RFC3339Nano), Blocks: brief.dependents[d.WorkRef]}
 						rows = append(rows, map[string]any{"id": id, "title": firstNonEmptyString(d.Instruction, "Decision"), "source": "Decision", "waiting_since": d.CreatedAt.UTC().Format(time.RFC3339Nano), "href": "/inbox?mailbox=needs-you&item=" + url.QueryEscape(id)})
 					}
 				}
@@ -282,7 +265,6 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 	sortNeedsByWaiting(rows)
 	needs["rows"] = rows
 	needs["count"] = len(rows)
-	brief.needsRows, brief.needsOK, brief.needsTruncated = rows, needs["status"] == "ok", needs["truncated"] == true
 	payload["agents"] = map[string]any{"status": "unavailable", "message": "Agents could not be loaded."}
 	stage = time.Now()
 	if opts.runStore != nil {
@@ -290,15 +272,11 @@ func handleGetOverview(w http.ResponseWriter, r *http.Request, opts handlerOptio
 		if e == nil {
 			roster = rosterForReader(r.Context(), roster)
 			payload["agents"] = map[string]any{"status": "ok", "items": roster, "truncated": partial}
-			brief.roster, brief.rosterOK, brief.rosterTruncated = roster, true, partial
 		}
 	}
 	addServerTiming(w, "roster", stage)
 	closeRead()
 	r = writeRequest
-	stage = time.Now()
-	payload["brief"] = buildOverviewBrief(brief)
-	addServerTiming(w, "brief", stage)
 	if scoped && r.URL.Path == "/overview" {
 		stage = time.Now()
 		if err = visitStore.RecordOverviewVisit(r.Context(), overviewPrincipal(r), visitWork, now); err != nil {
