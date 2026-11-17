@@ -348,6 +348,10 @@ func jsonSchemaForField(field Field) map[string]any {
 	if len(field.EnumValues) > 0 {
 		values := make([]any, 0, len(field.EnumValues))
 		for _, value := range field.EnumValues {
+			if schema["type"] == "boolean" {
+				values = append(values, value == "true")
+				continue
+			}
 			values = append(values, value)
 		}
 		schema["enum"] = values
