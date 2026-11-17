@@ -186,9 +186,6 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	case "notifications":
 		result, name, err := a.runNotificationsCommand(ctx, args[1:], cfg)
 		return name, result, err
-	case "import":
-		result, name, err := a.runImportCommand(ctx, args[1:], cfg)
-		return name, result, err
 	case "sync":
 		result, name, err := a.runFileSync(ctx, args[1:], cfg)
 		return name, result, err

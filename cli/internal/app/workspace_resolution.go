@@ -36,8 +36,6 @@ func workspaceIndependentCommand(args []string) bool {
 			return true
 		}
 		return false
-	case "import":
-		return isConfigLenientImportCommand(args[1:])
 	case "bridge":
 		return len(args) > 1 && args[1] != "add" && args[1] != "remove"
 	}

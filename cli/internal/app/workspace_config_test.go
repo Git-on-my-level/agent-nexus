@@ -248,8 +248,6 @@ func TestHelpFlagValuesNeverBypassWorkspaceResolution(t *testing.T) {
 		{"topics", "message", "topic:test", "--body", "-h"},
 		{"topics", "message", "topic:test", "--body", "help"},
 		{"topics", "message", "topic:test", "--body=--help"},
-		{"import", "apply", "--plan", "--help", "--execute"},
-		{"import", "apply", "--plan", "fixture.json", "--execute=false", "--execute=true"},
 	} {
 		t.Run(strings.Join(commandArgs, " "), func(t *testing.T) {
 			a, stdout := workspaceTestApp(t, home, home, map[string]string{"ANX_ACCESS_TOKEN": "fixture"})

@@ -1101,7 +1101,6 @@ Core Commands:
   bridge        Register agents and operate one optional host bridge service
   auth          Inspect enrolled host and derived-agent identity
   config        Inspect effective CLI config (base URL and derived agent)
-  import        Bootstrap a precision-first workspace import and run local import helpers
   install       Install local ANX helper artifacts, including the opinionated agent skill
   draft         Stage write requests locally and commit them later
   ask|review|escalate  Request operator attention
@@ -1275,9 +1274,6 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	}
 	if topic == "ask" || topic == "review" || topic == "escalate" {
 		return humanUsageText() + "\n", true
-	}
-	if topic == "import" {
-		return importUsageText() + "\n", true
 	}
 	if topic == "integrations" || strings.HasPrefix(topic, "integrations ") {
 		if topic == "integrations" {

@@ -336,8 +336,6 @@ func preflightKnownCommandShape(args []string) error {
 		}
 	case "notifications":
 		return preflightSubcommand(args[1:], notificationsSubcommandSpec)
-	case "import":
-		return preflightSubcommand(args[1:], importSubcommandSpec)
 	case "skills":
 		return preflightSkillsArgs(args[1:])
 	case "install":
@@ -512,7 +510,7 @@ func preflightInferredCommandName(args []string) string {
 func preflightRootCommands() map[string]struct{} {
 	return map[string]struct{}{
 		"version": {}, "doctor": {}, "update": {}, "bridge": {}, "auth": {}, "host": {}, "runs": {}, "config": {}, "debug": {}, "notifications": {},
-		"import": {}, "install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "feedback": {}, "tell": {}, "rulings": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
+		"install": {}, "skills": {}, "draft": {}, "provenance": {}, "orient": {}, "note": {}, "feedback": {}, "tell": {}, "rulings": {}, "done": {}, "context": {}, "ask": {}, "review": {}, "escalate": {}, "await": {}, "secret": {}, "workspace": {}, "overview": {}, "attention": {}, "read": {}, "url": {}, "link": {}, "concepts": {}, "primitives": {},
 		"topics": {}, "cards": {}, "artifacts": {}, "boards": {}, "docs": {},
 		"api": {}, "report": {}, "inbox": {}, "move": {}, "help": {}, "--help": {}, "-h": {},
 	}

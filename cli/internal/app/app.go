@@ -181,7 +181,6 @@ func (a *App) Run(args []string) int {
 	legacyBridge := cmdPeek == "bridge" && subPeek == "run" && (overrides.As != nil || strings.TrimSpace(a.Getenv("ANX_AS")) != "" || len(remaining) > 2)
 	configLenient := cmdPeek == "version" || cmdPeek == "help" || cmdPeek == "--help" || cmdPeek == "-h" || cmdPeek == "debug" && subPeek == "meta" && workspaceIndependentCommand(remaining) || cmdPeek == "host" && subPeek == "discover" || cmdPeek == "update" || cmdPeek == "bridge" && !legacyBridge && workspaceIndependentCommand(remaining) || cmdPeek == "install" || cmdPeek == "skills" || cmdPeek == "concepts" || cmdPeek == "primitives" ||
 		(cmdPeek == "report" && subPeek != "publish" && subPeek != "render") ||
-		(cmdPeek == "import" && isConfigLenientImportCommand(remaining[1:])) ||
 		isAPICallHelpOnly(remaining) ||
 		isTrailingHelpOnlyInvocation(remaining) ||
 		isWorkCommandGroup(strings.Join(remaining, " "))
@@ -737,17 +736,6 @@ func parseLongOptionToken(token string) (name string, value string, hasValue boo
 		return strings.TrimSpace(token[:idx]), token[idx+1:], true, true
 	}
 	return strings.TrimSpace(token), "", false, true
-}
-
-func isConfigLenientImportCommand(args []string) bool {
-	if len(args) == 0 {
-		return true
-	}
-	if importSubcommandSpec.normalize(args[0]) != "apply" {
-		return true
-	}
-	flags, err := parseImportApplyFlags(args[1:])
-	return err == nil && !flags.execute.value
 }
 
 func commandWorkspace(result *commandResult) any {

@@ -200,12 +200,6 @@ func commandSideEffectClass(command string) string {
 			return "read_only"
 		}
 	}
-	if parts[0] == "import" {
-		if len(parts) > 1 && parts[1] == "apply" {
-			return "remote_coordination_write"
-		}
-		return "local_operational_write"
-	}
 	if parts[0] == "draft" && len(parts) > 1 && parts[1] == "commit" {
 		return "remote_coordination_write"
 	}

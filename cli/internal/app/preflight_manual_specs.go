@@ -81,28 +81,6 @@ func manualPreflightFlagSpecs() map[string]map[string]preflightFlagSpec {
 		"secret exec": {
 			"secret": valueFlag,
 		},
-		"import scan": {
-			"input":                valueFlag,
-			"out":                  valueFlag,
-			"max-preview-bytes":    valueFlag,
-			"max-text-cache-bytes": valueFlag,
-		},
-		"import dedupe": {
-			"inventory": valueFlag,
-			"out":       valueFlag,
-		},
-		"import plan": {
-			"inventory":           valueFlag,
-			"dedupe":              valueFlag,
-			"out":                 valueFlag,
-			"source-name":         valueFlag,
-			"collector-threshold": valueFlag,
-		},
-		"import apply": {
-			"plan":    valueFlag,
-			"out":     valueFlag,
-			"execute": boolFlag,
-		},
 		"install skill": {
 			"path":       valueFlag,
 			"write-file": valueFlag,
