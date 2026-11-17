@@ -306,7 +306,7 @@ func TestUpdateTarHiddenMetadataCountsTowardEntryLimit(t *testing.T) {
 	_, _ = gz.Write(bytes.Repeat(entry, releaseEntryLimit+1))
 	_, _ = gz.Write(raw.Bytes())
 	_ = gz.Close()
-	if _, _, err := extractReleaseBinary("anx.tar.gz", compressed.Bytes()); err == nil || !strings.Contains(err.Error(), "too many") {
+	if _, _, err := extractReleaseBinaryContext(context.Background(), "anx.tar.gz", compressed.Bytes()); err == nil || !strings.Contains(err.Error(), "too many") {
 		t.Fatalf("hidden metadata escaped entry limit: %v", err)
 	}
 }

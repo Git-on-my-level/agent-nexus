@@ -306,9 +306,6 @@ func (a *App) consumeRegisteredWakes(ctx context.Context, cfg config.Resolved, d
 	}
 	return ctx.Err()
 }
-func runRegisteredAnswer(ctx context.Context, entry askResumeRegistration, raw []byte, out map[string]any) error {
-	return runRegisteredAnswerFor(ctx, entry, raw, out, config.Resolved{})
-}
 func runRegisteredAnswerFor(ctx context.Context, entry askResumeRegistration, raw []byte, out map[string]any, cfg config.Resolved) error {
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", entry.Command)
 	configureAnswerCommand(cmd)
