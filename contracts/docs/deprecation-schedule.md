@@ -8,7 +8,7 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 
 | Surface | Owner | Reason | Removal gate | References |
 |--------|-------|--------|--------------|------------|
-| ~~`compat_aliases.go` old command shapes~~ | CLI | Transitional command mapping | **Removed** (pre-user batch) | `cli/internal/app/compat_aliases.go` |
+| ~~`compat_aliases.go` old command shapes~~ | CLI | Transitional command mapping | **Removed** (pre-user batch); the empty alias table and rewrite hook are gone too | — |
 | ~~`--reconnect` on stream commands~~ | CLI | Older follow semantics | **Removed** (pre-user batch) | stream command handlers in `cli/internal/app/` |
 | ~~`anx bridge workspace-id --document-id agentreg.<handle>`~~ | CLI | Superseded handle flag | **Removed** (pre-user batch) | `cli/internal/app/bridge_commands.go` |
 | ~~Nested `{"move":{...}}` body on board card move HTTP API~~ | Core HTTP + contract | Clients sent nested envelope before flat body was canonical | **Removed** — `MoveCardRequest` is flat; core decodes JSON directly | `core/internal/server/boards_handlers.go`, `contracts/anx-openapi.yaml` (`MoveCardRequest`) |
@@ -18,8 +18,8 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 
 | Surface | Owner | Reason | Removal gate | References |
 |--------|-------|--------|--------------|------------|
-| ~~`ANX_PROJECTS` / `ANX_DEFAULT_PROJECT` env fallbacks~~ | Web UI config | Project-era env names for workspace catalog | **Removed** (pre-user) — use only `ANX_WORKSPACES` / `ANX_DEFAULT_WORKSPACE` | `web-ui/src/lib/compat/workspaceCompat.js` |
-| Legacy project-slug request header (superseded) | Web UI + core proxy | Older clients sent alternate workspace slug header | **Removed** — set `x-anx-workspace-slug` | `web-ui` hooks / proxy, workspace compat layer |
+| ~~`ANX_PROJECTS` / `ANX_DEFAULT_PROJECT` env fallbacks~~ | Web UI config | Project-era env names for workspace catalog | **Removed** (pre-user) — use only `ANX_WORKSPACES` / `ANX_DEFAULT_WORKSPACE` | `web-ui/src/lib/workspaceRequestHeaders.js` |
+| Legacy project-slug request header (superseded) | Web UI + core proxy | Older clients sent alternate workspace slug header | **Removed** — set `x-anx-workspace-slug` | `web-ui` hooks / proxy, `web-ui/src/lib/workspaceRequestHeaders.js` |
 | Thread URL → topic route canonicalization | Web UI routes | Backing threads may still be bookmarked at `/threads/...` while product is topic-first | Remove when telemetry shows negligible traffic to legacy thread entry paths for topic-backed threads | `web-ui/src/lib/server/threadTopicRouteRedirect.js` (`resolveLegacyThreadCanonicalAppPath`), `web-ui/src/routes/o/[organization]/w/[workspace]/threads/+page.server.js`, `web-ui/src/lib/topicRouteUtils.js` |
 | ~~Legacy `topic_type` on topics~~ | Web UI + contract | Topic classification was metadata-only and removed for launch | **Removed** | — |
 | `auth_method` dual-accept `control_plane` + `external_grant` | Web UI session | Migration window for hosted human grants (see `DECISIONS.md`) | Remove `control_plane` accept path once older sessions and docs fully converge on `external_grant` | `web-ui/src/lib/authSession.js` |
