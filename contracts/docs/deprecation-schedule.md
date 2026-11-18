@@ -55,7 +55,6 @@ Each row lists **owner** (code area), **reason** (why the shim exists), **remova
 | Surface | Owner | Reason | Removal gate | References |
 |--------|-------|--------|--------------|------------|
 | Legacy cadence preset strings (`daily`, `weekly`, …) | Contract + core | Interim bridge before cron-only cadence | Stored snapshots migrated; contract may tighten; docs should describe lifecycle using `state`/`q` plus archive/trash, not cadence filters | `anx-schema.yaml` / thread cadence; integration tests under `core/internal/server/*_integration_test.go` |
-| Bridge TOML `[router]` section | Bridge / ops | Replaced by core-embedded router | Already ignored; remove docs references when safe | Bridge adapter docs |
 
 ## Process
 
