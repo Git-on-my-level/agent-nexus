@@ -24,7 +24,7 @@ vi.mock("$lib/coreRouteCatalog", () => ({
   isProxyableCommand: coreRouteCatalogMocks.isProxyableCommand,
 }));
 
-vi.mock("$lib/compat/workspaceCompat", () => ({
+vi.mock("$lib/workspaceRequestHeaders", () => ({
   getWorkspaceHeader: vi.fn(() => "ops"),
 }));
 

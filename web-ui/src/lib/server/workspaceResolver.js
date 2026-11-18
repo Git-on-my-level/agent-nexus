@@ -1,9 +1,8 @@
 import { env as privateEnv } from "$env/dynamic/private";
 import {
-  getOrganizationHeader,
   getWorkspaceHeader,
   readOrganizationSlugHeader,
-} from "../compat/workspaceCompat.js";
+} from "../workspaceRequestHeaders.js";
 import { normalizeBaseUrl } from "../config.js";
 import {
   WORKSPACE_HEADER,
@@ -400,7 +399,7 @@ export async function resolveProxyWorkspaceTarget({ workspaceSlug, event }) {
   }
 
   const orgSlug = event?.request
-    ? getOrganizationHeader(event.request.headers)
+    ? readOrganizationSlugHeader(event.request.headers)
     : "";
   const trimmedOrg =
     String(orgSlug ?? "").trim() ||

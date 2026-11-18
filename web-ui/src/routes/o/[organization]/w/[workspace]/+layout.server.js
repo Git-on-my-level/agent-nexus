@@ -6,7 +6,7 @@ import {
   createAnxCoreClient,
   verifyCoreSchemaVersion,
 } from "$lib/anxCoreClient";
-import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/workspaceRequestHeaders";
 import {
   sameOriginAppPath,
   sanitizeReturnPath,

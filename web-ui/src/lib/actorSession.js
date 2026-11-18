@@ -5,7 +5,7 @@ import {
   currentWorkspaceSlug,
 } from "./workspaceContext.js";
 import { buildWorkspaceStorageKey } from "./workspacePaths.js";
-import { buildLegacyProjectStorageKey } from "./compat/workspaceCompat.js";
+import { buildLegacyProjectStorageKey } from "./workspaceRequestHeaders.js";
 import {
   isReservedSystemActorId,
   SYSTEM_ACTOR_DISPLAY_LABEL,

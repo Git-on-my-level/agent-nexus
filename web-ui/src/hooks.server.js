@@ -4,7 +4,7 @@ import { env as privateEnv } from "$env/dynamic/private";
 import { AuthErrorCode } from "$lib/authErrorCodes.js";
 import { normalizeBaseUrl } from "$lib/config.js";
 import { isProxyableCommand } from "$lib/coreRouteCatalog";
-import { getWorkspaceHeader } from "$lib/compat/workspaceCompat";
+import { getWorkspaceHeader } from "$lib/workspaceRequestHeaders";
 import { CURRENT_VERSION } from "$lib/generated/version";
 import { stripBasePath } from "$lib/workspacePaths";
 import {

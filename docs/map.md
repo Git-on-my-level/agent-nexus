@@ -34,7 +34,7 @@ Where things live. Generated; never hand-edited.
 | ------------------------------------------ | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | cli/cmd/anx                                | 2     | anx is the Agent Nexus command-line runtime for agents and automation                                                                                                                                                                                                 |
 | cli/cmd/anx-docs-gen                       | 2     | anx-docs-gen writes the CLI's runtime help markdown into docs/generated so the committed documentation stays in sync with the built command surface.                                                                                                                  |
-| cli/internal/app                           | 187   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
+| cli/internal/app                           | 186   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
 | cli/internal/authcli                       | 2     | Package authcli defines the result and payload types shared by the CLI's authentication and auth-admin commands (invites, principals, audit events, bootstrap status) so their handlers and output envelopes keep one shape.                                          |
 | cli/internal/bridge                        | 7     | Package bridge owns the single OS-user host service, local registration and migration state.                                                                                                                                                                          |
 | cli/internal/buildinfo                     | 1     | (undocumented)                                                                                                                                                                                                                                                        |
@@ -141,7 +141,6 @@ Where things live. Generated; never hand-edited.
 | ---------------------------------------------------------------------------- | -------------- |
 | web-ui/src/lib                                                               | (undocumented) |
 | web-ui/src/lib/actions                                                       | (undocumented) |
-| web-ui/src/lib/compat                                                        | (undocumented) |
 | web-ui/src/lib/components                                                    | (undocumented) |
 | web-ui/src/lib/components/access                                             | (undocumented) |
 | web-ui/src/lib/components/agents                                             | (undocumented) |
