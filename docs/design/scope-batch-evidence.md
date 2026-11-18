@@ -1,5 +1,10 @@
 # Disabled batch admission evidence
 
+> Status: the disabled Stream B foundation this note relies on (`internal/scopedrepo`,
+> `internal/scopemigrate`, `internal/scopestream`, `internal/scopes`) was removed
+> from `core`; recover it from Git history if the cutover resumes. The commands
+> and paths below are kept as history and no longer run at HEAD.
+
 The batch repository passes its bounded admission tests, but the request path
 still fails the unchanged 500 ms gate. Readers remain disabled. These measurements
 are diagnostic preparation probes, not production HTTP or parity acceptance.

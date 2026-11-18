@@ -4,7 +4,6 @@
 package scopesearch
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"unicode"
@@ -28,7 +27,6 @@ var (
 	ErrBudget      = errors.New("search request exceeds budget")
 	ErrCursor      = errors.New("invalid search continuation")
 	ErrRestart     = errors.New("search generation changed; restart required")
-	ErrDerivation  = errors.New("search projection must stay in its source scope")
 	ErrProjection  = errors.New("invalid search projection")
 	ErrUnavailable = errors.New("scope search unavailable")
 )
@@ -110,21 +108,4 @@ func Prepare(scope, input string) Text {
 	}
 	t.text = out.String()
 	return t
-}
-
-// Change is the bounded search portion of the transaction-local canonical
-// change. A's hook maps the canonical delta to it; no history loader is needed.
-type Change struct {
-	Scope, Kind, RID, Version, Parent string
-	Recency                           int64
-	Content                           Text
-	Delete                            bool
-}
-
-// Writer is pinned to one scope and one canonical write transaction. Replace
-// removes at most MaxTerms old postings, writes at most MaxTerms new postings,
-// and bumps that scope's search generation before the transaction commits.
-type Writer interface {
-	ScopeID() string
-	ReplaceSearch(context.Context, Change) error
 }

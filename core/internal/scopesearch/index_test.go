@@ -3,10 +3,37 @@ package scopesearch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
+func TestPrepareCoverageAndDistinctPostingCaps(t *testing.T) {
+	for _, input := range []string{strings.Repeat("x", MaxTextBytes+1), strings.Repeat("界", MaxTextBytes), strings.Repeat("ANCHOR punctuation! ", 10000)} {
+		text := Prepare("private", input)
+		if !text.Truncated() || text.IndexedBytes() > MaxTextBytes || !utf8.ValidString(text.Normalized()) || len(text.Terms()) > MaxTerms {
+			t.Fatalf("unbounded coverage: %d %d", text.IndexedBytes(), len(text.Terms()))
+		}
+	}
+	var words []string
+	for i := 0; i < MaxTerms+1; i++ {
+		words = append(words, fmt.Sprintf("w%d", i))
+	}
+	text := Prepare("s", strings.Join(words, " "))
+	if !text.Truncated() || len(text.Terms()) != MaxTerms || strings.Contains(text.Normalized(), "w4096") {
+		t.Fatal("term budget and body coverage disagree")
+	}
+	text = Prepare("s", "HELLO, world\nhello 世界")
+	if text.Truncated() || text.Normalized() != "hello world hello 世界" || len(text.Terms()) != 3 {
+		t.Fatalf("normalization: %#v", text)
+	}
+	terms := text.Terms()
+	terms[0] = "mutated"
+	if text.Terms()[0] != "hello" {
+		t.Fatal("postings handle escaped")
+	}
+}
 func TestExactTermsAndPhraseOnly(t *testing.T) {
 	if matches("needles anchor", "anchor needle", []string{"anchor", "needle"}, false) {
 		t.Fatal("prefix search accidentally enabled")
