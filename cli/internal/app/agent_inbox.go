@@ -177,35 +177,6 @@ func (a *App) fetchOwnAsksPageForActor(ctx context.Context, cfg config.Resolved,
 	return items, next, nil
 }
 
-// loadOwnInboxAsksForActor accumulates at most ownAsksLoadBound pages.
-// Callers that need everything must paginate explicitly; no CLI read path
-// loops over the ask history without a bound.
-func (a *App) loadOwnInboxAsksForActor(ctx context.Context, cfg config.Resolved, actorID string) ([]map[string]any, error) {
-	actorID = strings.TrimSpace(actorID)
-	if actorID == "" {
-		return nil, errnorm.Usage("identity_unresolved", "active agent has no actor id")
-	}
-	items := make([]map[string]any, 0)
-	cursor := ""
-	seenCursors := map[string]bool{}
-	for page := 0; page < ownAsksLoadBound; page++ {
-		batch, next, err := a.fetchOwnAsksPageForActor(ctx, cfg, actorID, cursor, 200)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, batch...)
-		if next == "" {
-			break
-		}
-		if seenCursors[next] || next == cursor {
-			return nil, errnorm.New(errnorm.KindInternal, "invalid_pagination", "agent inbox pagination returned a repeated cursor")
-		}
-		seenCursors[next] = true
-		cursor = next
-	}
-	return items, nil
-}
-
 func (a *App) runAgentInboxRead(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
 	leading, rest := splitLeadingPositionals(args)
 	fs := newSilentFlagSet("inbox read")

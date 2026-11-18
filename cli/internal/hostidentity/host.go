@@ -25,7 +25,6 @@ type Host struct {
 	PrivateKeyPath string `json:"private_key_path"`
 }
 
-func Root(home string) string        { return RootAt(filepath.Join(home, ".config", "anx")) }
 func RootAt(configDir string) string { return filepath.Join(configDir, "hosts") }
 
 func WorkspaceKey(workspaceID, baseURL string) string {
@@ -36,9 +35,6 @@ func WorkspaceKey(workspaceID, baseURL string) string {
 	return hex.EncodeToString(sum[:12])
 }
 
-func Dir(home, workspaceID, baseURL string) string {
-	return DirAt(filepath.Join(home, ".config", "anx"), workspaceID, baseURL)
-}
 func DirAt(configDir, workspaceID, baseURL string) string {
 	return filepath.Join(RootAt(configDir), WorkspaceKey(workspaceID, baseURL))
 }

@@ -133,11 +133,6 @@ func TestAskBatchDryRunSendsNothing(t *testing.T) {
 	}
 }
 
-func anyMap(value any) map[string]any {
-	m, _ := value.(map[string]any)
-	return m
-}
-
 func TestAskBatchRejectsUnderSizedBatchBeforeNetwork(t *testing.T) {
 	t.Parallel()
 

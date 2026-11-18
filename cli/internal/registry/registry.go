@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -180,24 +179,6 @@ func CommandSpecs() []contractsclient.CommandSpec {
 	return out
 }
 
-func EmbeddedCommandsJSON() []byte {
-	out := make([]byte, len(embeddedCommandsJSON))
-	copy(out, embeddedCommandsJSON)
-	return out
-}
-
-func EmbeddedConceptsJSON() []byte {
-	out := make([]byte, len(embeddedConceptsJSON))
-	copy(out, embeddedConceptsJSON)
-	return out
-}
-
-func EmbeddedHelpJSON() []byte {
-	out := make([]byte, len(embeddedHelpJSON))
-	copy(out, embeddedHelpJSON)
-	return out
-}
-
 func LoadEmbedded() (MetaRegistry, error) {
 	return parseMeta(embeddedCommandsJSON)
 }
@@ -210,32 +191,12 @@ func LoadEmbeddedHelp() (HelpRegistry, error) {
 	return parseHelp(embeddedHelpJSON)
 }
 
-func EmbeddedEventRefRulesJSON() []byte {
-	out := make([]byte, len(embeddedEventRefRulesJSON))
-	copy(out, embeddedEventRefRulesJSON)
-	return out
-}
-
-func EmbeddedTaxonomyJSON() []byte {
-	out := make([]byte, len(embeddedTaxonomyJSON))
-	copy(out, embeddedTaxonomyJSON)
-	return out
-}
-
 func LoadEmbeddedEventRefRules() (EventRefRulesRegistry, error) {
 	return parseEventRefRules(embeddedEventRefRulesJSON)
 }
 
 func LoadEmbeddedTaxonomy() (TaxonomyRegistry, error) {
 	return parseTaxonomy(embeddedTaxonomyJSON)
-}
-
-func LoadEventRefRulesFromFile(path string) (EventRefRulesRegistry, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return EventRefRulesRegistry{}, fmt.Errorf("read event ref rules file: %w", err)
-	}
-	return parseEventRefRules(content)
 }
 
 func parseEventRefRules(content []byte) (EventRefRulesRegistry, error) {
@@ -263,14 +224,6 @@ func parseTaxonomy(content []byte) (TaxonomyRegistry, error) {
 func (r EventRefRulesRegistry) RuleForEventType(eventType string) (EventRefRule, bool) {
 	rule, ok := r.Rules[eventType]
 	return rule, ok
-}
-
-func LoadFromFile(path string) (MetaRegistry, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return MetaRegistry{}, fmt.Errorf("read registry file: %w", err)
-	}
-	return parseMeta(content)
 }
 
 func parseMeta(content []byte) (MetaRegistry, error) {

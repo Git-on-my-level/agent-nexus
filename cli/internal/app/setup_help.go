@@ -70,10 +70,6 @@ remain manual without their jobs. Await/batch and direct commands need no bridge
 `,
 }
 
-func setupJobNames() []string {
-	return []string{"enroll", "tokens", "secrets", "adapters", "pm", "bridge"}
-}
-
 // setupJobHelp returns the how-to for a setup job. For jobs that share a name
 // with a command group the group's own help follows the how-to.
 func setupJobHelp(topic string, groupHelp func(string) (string, bool)) (string, bool) {
