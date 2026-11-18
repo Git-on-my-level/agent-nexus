@@ -29,7 +29,7 @@ func TestRegisteredAnswerUsesDataNotShell(t *testing.T) {
 	out := map[string]any{"subject_ref": "card:task", "response": map[string]any{"outcome": "needs_context", "response_text": "$(touch injected); `touch injected`", "response_event_id": "answer"}, "command": "touch injected"}
 	raw, _ := json.Marshal(out)
 	e := askResumeRegistration{AskID: "event:ask", Dir: dir, Command: `cat > answer.json; printf '%s' "$ANX_ASK_ID|$ANX_CARD_REF|$ANX_OUTCOME|$ANX_RESPONSE_EVENT_ID" > ids`}
-	if err := runRegisteredAnswer(context.Background(), e, raw, out); err != nil {
+	if err := runRegisteredAnswerFor(context.Background(), e, raw, out, config.Resolved{}); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "answer.json"))
@@ -66,7 +66,7 @@ func TestRegisteredAnswerUsesDataNotShell(t *testing.T) {
 	}
 	e.Command = shellSingleQuote(executable) + " -test.run=^TestRegisteredAnswerChildHandshake$ -- " + shellSingleQuote(listener.Addr().String()) + " & wait"
 	finished := make(chan error, 1)
-	go func() { finished <- runRegisteredAnswer(ctx, e, nil, out) }()
+	go func() { finished <- runRegisteredAnswerFor(ctx, e, nil, out, config.Resolved{}) }()
 	defer func() {
 		cancel()
 		if err := <-finished; err == nil {
