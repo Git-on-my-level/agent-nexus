@@ -68,8 +68,7 @@ func enrichInboxCardSummaries(r *http.Request, opts handlerOptions, items []map[
 		facts[preview.Ref] = plans.Fact{Known: preview.Resolvable, Status: firstNonEmptyString(preview.Phase, preview.Status)}
 	}
 	// The key is emitted only for asks the resolver actually evaluated: an
-	// ask over no workflow-bearing source says nothing either way, and the
-	// scoped readmodel hydration this enrichment mirrors must stay byte-equal.
+	// ask over no workflow-bearing source says nothing either way.
 	for _, item := range items {
 		delete(item, "possibly_moot")
 	}

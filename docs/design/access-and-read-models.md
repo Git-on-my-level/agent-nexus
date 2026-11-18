@@ -310,7 +310,8 @@ Keep canonical aliases, owner tombstones and recorded ownership evidence through
 SQLite has no native row-level security. A helper that developers may forget is
 insufficient. Make database access a closed boundary:
 
-1. Only `internal/scopedrepo` and migration/maintenance packages may import
+1. Only the scoped repository package (planned as `internal/scopedrepo`, not
+   present in `core` today) and migration/maintenance packages may import
    `database/sql`, obtain raw connections or prepare statements. Existing generic
    `QueryContext(string)` APIs disappear from business packages after porting.
    A Go analyzer rejects raw imports, raw-handle escapes, arbitrary SQL, alternate
