@@ -98,26 +98,6 @@ func (r *Runtime) Tick(ctx context.Context) []RuntimeResult {
 	return results
 }
 
-// Run polls manual/scheduled work. It does not launch source mutations or agents.
-// Caller owns the goroutine and shutdown context; each Tick completes before next.
-func (r *Runtime) Run(ctx context.Context, pollInterval time.Duration, onResults func([]RuntimeResult)) error {
-	if pollInterval < time.Second || pollInterval > time.Minute {
-		return failure(ErrConfiguration, "runtime poll interval must be 1s..1m")
-	}
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-	for {
-		results := r.Tick(ctx)
-		if onResults != nil {
-			onResults(results)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
 func (r *Runtime) collect(ctx context.Context, entry Registration) RuntimeResult {
 	out := RuntimeResult{CardRef: entry.CardRef}
 	ctx, cancel := context.WithTimeout(ctx, entry.Policy.Timeout+10*time.Second)

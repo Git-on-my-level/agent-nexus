@@ -216,16 +216,6 @@ func TestTopicWorkspaceResolvesResourcesThatPointAtTopic(t *testing.T) {
 	}
 }
 
-func asStringFromTypedRef(ref string) string {
-	if ref == "" {
-		return ""
-	}
-	if _, id, err := schema.SplitTypedRef(ref); err == nil {
-		return id
-	}
-	return ""
-}
-
 func containsResourceID(items []map[string]any, id string) bool {
 	for _, item := range items {
 		if asString(item["id"]) == id {

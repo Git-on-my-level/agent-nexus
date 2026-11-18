@@ -193,23 +193,6 @@ func authTestMinimalTopic(title string) map[string]any {
 	}
 }
 
-func authTestThreadUpdatedBy(t *testing.T, serverURL, accessToken string, topic map[string]any) string {
-	t.Helper()
-	threadID := topicPrimaryThreadID(topic)
-	if threadID == "" {
-		t.Fatalf("topic missing primary thread: %#v", topic)
-	}
-	resp := getJSONExpectStatusWithAuth(t, serverURL+"/threads/"+threadID, accessToken, http.StatusOK)
-	defer resp.Body.Close()
-	var payload struct {
-		Thread map[string]any `json:"thread"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode thread: %v", err)
-	}
-	return asString(payload.Thread["updated_by"])
-}
-
 func TestFirstPasskeyRegistrationWithBootstrapToken(t *testing.T) {
 	requireIntegrationTest(t)
 	t.Parallel()
@@ -845,12 +828,6 @@ func getBootstrapStatus(t *testing.T, serverURL string) struct {
 	}
 }
 
-func createInviteToken(t *testing.T, serverURL string, accessToken string, payload map[string]any) string {
-	t.Helper()
-	_, token := createInvite(t, serverURL, accessToken, payload)
-	return token
-}
-
 func createInvite(t *testing.T, serverURL string, accessToken string, payload map[string]any) (map[string]any, string) {
 	t.Helper()
 	resp := postJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", payload, accessToken, http.StatusCreated)
@@ -867,64 +844,6 @@ func createInvite(t *testing.T, serverURL string, accessToken string, payload ma
 		t.Fatalf("expected create invite response to include token: %#v", decoded)
 	}
 	return decoded.Invite, decoded.Token
-}
-
-func listInvites(t *testing.T, serverURL string, accessToken string) []map[string]any {
-	t.Helper()
-	resp := getJSONExpectStatusWithAuth(t, serverURL+"/auth/invites", accessToken, http.StatusOK)
-	defer resp.Body.Close()
-
-	var payload struct {
-		Invites []map[string]any `json:"invites"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode invites list response: %v", err)
-	}
-	return payload.Invites
-}
-
-func listAuthPrincipalsPage(t *testing.T, serverURL string, accessToken string, limit int, cursor string) struct {
-	Principals []map[string]any `json:"principals"`
-	NextCursor string           `json:"next_cursor"`
-} {
-	t.Helper()
-	url := fmt.Sprintf("%s/auth/principals?limit=%d", serverURL, limit)
-	if strings.TrimSpace(cursor) != "" {
-		url += "&cursor=" + cursor
-	}
-	resp := getJSONExpectStatusWithAuth(t, url, accessToken, http.StatusOK)
-	defer resp.Body.Close()
-
-	var payload struct {
-		Principals []map[string]any `json:"principals"`
-		NextCursor string           `json:"next_cursor"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode auth principals response: %v", err)
-	}
-	return payload
-}
-
-func listAuthAuditPage(t *testing.T, serverURL string, accessToken string, limit int, cursor string) struct {
-	Events     []map[string]any `json:"events"`
-	NextCursor string           `json:"next_cursor"`
-} {
-	t.Helper()
-	url := fmt.Sprintf("%s/auth/audit?limit=%d", serverURL, limit)
-	if strings.TrimSpace(cursor) != "" {
-		url += "&cursor=" + cursor
-	}
-	resp := getJSONExpectStatusWithAuth(t, url, accessToken, http.StatusOK)
-	defer resp.Body.Close()
-
-	var payload struct {
-		Events     []map[string]any `json:"events"`
-		NextCursor string           `json:"next_cursor"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode auth audit response: %v", err)
-	}
-	return payload
 }
 
 type lockoutPrincipalSeed struct {
@@ -1384,12 +1303,6 @@ func (f *workspaceHumanGrantTestFixture) setJWKSStatusCode(status int) {
 	f.jwksStateMu.Unlock()
 }
 
-func mustGeneratePublicKey(t *testing.T) string {
-	t.Helper()
-	publicKey, _ := generateKeyPair(t)
-	return publicKey
-}
-
 func generateKeyPair(t *testing.T) (string, ed25519.PrivateKey) {
 	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
@@ -1397,26 +1310,6 @@ func generateKeyPair(t *testing.T) (string, ed25519.PrivateKey) {
 		t.Fatalf("generate ed25519 key pair: %v", err)
 	}
 	return base64.StdEncoding.EncodeToString(publicKey), privateKey
-}
-
-func signAssertion(t *testing.T, privateKey ed25519.PrivateKey, agentID string, keyID string, signedAt string) string {
-	t.Helper()
-	message := auth.BuildAssertionMessage(agentID, keyID, signedAt)
-	signature := ed25519.Sign(privateKey, []byte(message))
-	return base64.StdEncoding.EncodeToString(signature)
-}
-
-func mapValue(raw any, key string) any {
-	decoded, _ := raw.(map[string]any)
-	if decoded == nil {
-		return nil
-	}
-	return decoded[key]
-}
-
-func asBool(raw any) bool {
-	value, _ := raw.(bool)
-	return value
 }
 
 func postJSONExpectStatusWithAuth(t *testing.T, url string, payload any, accessToken string, expectedStatus int) *http.Response {

@@ -244,9 +244,6 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		parsed, err := parseWorkCommand(args)
 		return parsed.name, err
 	}
-	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
-		args = rewritten
-	}
 	if err := preflightKnownCommandShape(args); err != nil {
 		return preflightShapeCommandName(args), err
 	}

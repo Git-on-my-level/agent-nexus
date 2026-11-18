@@ -505,30 +505,6 @@ func topicPrimaryThreadID(topic map[string]any) string {
 	return ""
 }
 
-func topicRefIDs(topic map[string]any, field string, prefix string) []string {
-	if topic == nil {
-		return nil
-	}
-	refs, err := extractStringSlice(topic[field])
-	if err != nil {
-		return nil
-	}
-	out := make([]string, 0, len(refs))
-	needle := prefix + ":"
-	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if ref == "" || !strings.HasPrefix(ref, needle) {
-			continue
-		}
-		value := strings.TrimSpace(strings.TrimPrefix(ref, needle))
-		if value == "" {
-			continue
-		}
-		out = append(out, value)
-	}
-	return out
-}
-
 func topicListDebugErrors() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("ANX_DEBUG_TOPIC_LIST_ERRORS"))) {
 	case "1", "true", "yes", "on":

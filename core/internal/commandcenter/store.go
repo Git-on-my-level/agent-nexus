@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
+
 	"github.com/google/uuid"
 )
 
@@ -431,18 +432,7 @@ func (s *Store) PatchPresence(ctx context.Context, agentID string, p PresencePat
 	}
 	return Presence{agentID, ptr(card), ptr(note), at}, nil
 }
-func (s *Store) Presence(ctx context.Context, agentID string) (Presence, error) {
-	var p Presence
-	var card, note sql.NullString
-	e := resourceaccess.NewDB(s.DB).QueryRowContext(ctx, "SELECT current_card_ref,note,observed_at FROM agent_presence WHERE agent_id=?", agentID).Scan(&card, &note, &p.ObservedAt)
-	if errors.Is(e, sql.ErrNoRows) {
-		return p, ErrNotFound
-	}
-	p.AgentID = agentID
-	p.CurrentCardRef = ptr(card)
-	p.Note = ptr(note)
-	return p, e
-}
+
 func (s *Store) Identity(ctx context.Context, id string) (Identity, error) {
 	if s.Identities == nil {
 		return Identity{}, fmt.Errorf("identity source unavailable")

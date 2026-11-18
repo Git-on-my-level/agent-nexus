@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// The cohort is a hard admission bound, shared by create hints, the ungrouped
-// tray and orient. Explicit related parents are admitted separately by identity.
-const homeCandidateLimit = 200
-
 type LikelyHome struct {
 	Ref     string   `json:"ref"`
 	Title   string   `json:"title"`
@@ -389,11 +385,6 @@ func (s *Store) UngroupedWork(ctx context.Context, limit int) ([]map[string]any,
 	}
 
 	return out, more, nil
-}
-
-func staleHome(c homeCandidate, now time.Time) bool {
-	at, err := time.Parse(time.RFC3339Nano, c.updated)
-	return err == nil && now.Sub(at) > 7*24*time.Hour
 }
 
 func prepareHomeCandidate(c homeCandidate) homeCandidate {

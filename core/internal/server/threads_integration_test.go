@@ -964,19 +964,6 @@ func containsAnyWithPrefix(values []any, prefix string) bool {
 	return false
 }
 
-func anyListToSortedStrings(values []any) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		text, ok := value.(string)
-		if !ok {
-			continue
-		}
-		out = append(out, text)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func assertTimelineStableOrder(t *testing.T, events []map[string]any) {
 	t.Helper()
 

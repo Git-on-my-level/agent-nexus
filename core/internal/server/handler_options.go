@@ -197,12 +197,6 @@ func WithAllowLoopbackVerificationReads(allow bool) HandlerOption {
 	}
 }
 
-func WithInboxRiskHorizon(horizon time.Duration) HandlerOption {
-	return func(opts *handlerOptions) {
-		opts.inboxRiskHorizon = horizon
-	}
-}
-
 func WithCoreVersion(version string) HandlerOption {
 	return func(opts *handlerOptions) {
 		opts.coreVersion = strings.TrimSpace(version)

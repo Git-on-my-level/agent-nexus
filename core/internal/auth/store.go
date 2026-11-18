@@ -120,30 +120,6 @@ func NewStore(db *sql.DB, options ...Option) *Store {
 	return store
 }
 
-func WithAccessTokenTTL(ttl time.Duration) Option {
-	return func(store *Store) {
-		if ttl > 0 {
-			store.accessTokenTTL = ttl
-		}
-	}
-}
-
-func WithRefreshTokenTTL(ttl time.Duration) Option {
-	return func(store *Store) {
-		if ttl > 0 {
-			store.refreshTokenTTL = ttl
-		}
-	}
-}
-
-func WithAssertionSkew(skew time.Duration) Option {
-	return func(store *Store) {
-		if skew > 0 {
-			store.maxAssertionSkew = skew
-		}
-	}
-}
-
 func WithBootstrapToken(token string) Option {
 	return func(store *Store) {
 		token = strings.TrimSpace(token)

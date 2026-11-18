@@ -197,18 +197,3 @@ func (s *Store) PreloadDocumentContentForReplay(ctx context.Context, content any
 	next[hash] = struct{}{}
 	return context.WithValue(ctx, replayPreloadKey{}, next), p.discardUnlessCommitted, nil
 }
-
-// promoteStagedBlobs promotes a batch's staged writes inside its write
-// transaction, a few at a time, so a large batch on a remote backend holds the
-// write lock for a handful of round trips rather than one per member.
-func promoteStagedBlobs(writes []blob.StagedWrite) error {
-	g := new(errgroup.Group)
-	g.SetLimit(blobTransferConcurrency)
-	for _, write := range writes {
-		if write == nil {
-			continue
-		}
-		g.Go(write.Promote)
-	}
-	return g.Wait()
-}

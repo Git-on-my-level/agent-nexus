@@ -87,31 +87,6 @@ func eventBackedInboxRelatedRefs(eventRefs []string, threadID string) []string {
 	return mergeUniqueSortedRefs(merged...)
 }
 
-func workItemRiskInboxRelatedRefs(card map[string]any, threadID string) []string {
-	threadID = strings.TrimSpace(threadID)
-	var merged []string
-	if rr, err := extractStringSlice(card["related_refs"]); err == nil {
-		for _, r := range rr {
-			merged = append(merged, strings.TrimSpace(r))
-		}
-	}
-	if rfs, err := extractStringSlice(card["refs"]); err == nil {
-		for _, r := range rfs {
-			merged = append(merged, strings.TrimSpace(r))
-		}
-	}
-	if bid := strings.TrimSpace(anyString(card["board_id"])); bid != "" {
-		merged = append(merged, "board:"+bid)
-	}
-	if threadID != "" {
-		merged = append(merged, "thread:"+threadID)
-	}
-	if doc := pinnedDocumentIDFromCard(card); doc != "" {
-		merged = append(merged, "document:"+strings.TrimSpace(doc))
-	}
-	return mergeUniqueSortedRefs(merged...)
-}
-
 func typedRefStringsToAnyList(refs []string) []any {
 	out := make([]any, len(refs))
 	for i, r := range refs {

@@ -56,9 +56,6 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], nil, errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
 	}
-	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
-		args = rewritten
-	}
 	if len(args) >= 2 && isHelpToken(args[len(args)-1]) {
 		topic := strings.Join(args[:len(args)-1], " ")
 		if text, ok := helpTopicText(topic); ok {

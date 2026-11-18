@@ -101,9 +101,9 @@ contract):
 - `POST /boards`, `GET /boards`, `GET /boards/{board_id}`,
   `PATCH /boards/{board_id}`, `GET /boards/{board_id}/workspace`
 - `POST /boards/{board_id}/cards`, `GET /boards/{board_id}/cards`,
-  `PATCH /boards/{board_id}/cards/{thread_id}`,
-  `POST /boards/{board_id}/cards/{thread_id}/move`,
-  `POST /boards/{board_id}/cards/{thread_id}/remove`
+  `GET /boards/{board_id}/cards/{card_id}`,
+  `POST /boards/{board_id}/cards/{card_id}/archive|trash`; card patch and
+  move go through `/cards/{card_id}`
 - `POST /docs`, `GET /docs`, `GET /docs/{document_id}`,
   `PATCH /docs/{document_id}`, `GET /docs/{document_id}/history`
 - `POST /artifacts`, `GET /artifacts`, `GET /artifacts/{artifact_id}`,

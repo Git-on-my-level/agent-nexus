@@ -650,15 +650,6 @@ func assertStreamDocLifecycleEvent(t *testing.T, data map[string]any, threadID, 
 	}
 }
 
-func containsSSERef(values []any, expected string) bool {
-	for _, value := range values {
-		if asString(value) == expected {
-			return true
-		}
-	}
-	return false
-}
-
 func containsSSERefPrefix(values []any, prefix string) bool {
 	for _, value := range values {
 		if strings.HasPrefix(asString(value), prefix) {

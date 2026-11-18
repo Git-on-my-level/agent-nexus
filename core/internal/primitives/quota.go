@@ -491,19 +491,3 @@ func (s *Store) databaseUsageBytes() (int64, error) {
 	}
 	return total, nil
 }
-
-func isQuotaViolationCode(err error, code string) bool {
-	var violation *QuotaViolation
-	if !errors.As(err, &violation) || violation == nil {
-		return false
-	}
-	return violation.Code == code
-}
-
-func quotaViolationDetails(err error) (QuotaViolation, bool) {
-	var violation *QuotaViolation
-	if !errors.As(err, &violation) || violation == nil {
-		return QuotaViolation{}, false
-	}
-	return *violation, true
-}

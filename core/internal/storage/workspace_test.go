@@ -236,51 +236,6 @@ func assertHealthOK(t *testing.T, workspace *storage.Workspace) {
 	}
 }
 
-func assertColumnPresent(t *testing.T, db *sql.DB, tableName string, columnName string) {
-	t.Helper()
-	if !columnExists(t, db, tableName, columnName) {
-		t.Fatalf("expected column %s.%s to exist", tableName, columnName)
-	}
-}
-
-func assertColumnAbsent(t *testing.T, db *sql.DB, tableName string, columnName string) {
-	t.Helper()
-	if columnExists(t, db, tableName, columnName) {
-		t.Fatalf("expected column %s.%s to be absent", tableName, columnName)
-	}
-}
-
-func columnExists(t *testing.T, db *sql.DB, tableName string, columnName string) bool {
-	t.Helper()
-
-	rows, err := db.QueryContext(context.Background(), "PRAGMA table_info("+tableName+")")
-	if err != nil {
-		t.Fatalf("describe table %s: %v", tableName, err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var (
-			cid        int
-			name       string
-			dataType   string
-			notNull    int
-			defaultVal sql.NullString
-			pk         int
-		)
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultVal, &pk); err != nil {
-			t.Fatalf("scan table info %s: %v", tableName, err)
-		}
-		if name == columnName {
-			return true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate table info %s: %v", tableName, err)
-	}
-	return false
-}
-
 func assertDirExists(t *testing.T, path string) {
 	t.Helper()
 

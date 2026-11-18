@@ -391,17 +391,6 @@ func nullableBoardString(value string) any {
 	return value
 }
 
-func normalizeNullableString(raw any) *string {
-	if raw == nil {
-		return nil
-	}
-	value := strings.TrimSpace(anyStringValue(raw))
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
 func normalizeBoardOptionalPointer(raw *string) *string {
 	if raw == nil {
 		return nil

@@ -1,4 +1,4 @@
-import { WORKSPACE_HEADER_CONSTANTS } from "$lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "$lib/workspaceRequestHeaders";
 import { WORKSPACE_HEADER } from "$lib/workspacePaths";
 
 /**
