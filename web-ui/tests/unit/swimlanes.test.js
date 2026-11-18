@@ -20,7 +20,11 @@ import {
   trayActions,
   trayRows,
 } from "../../src/lib/swimlanes.js";
-import { removeGroupedStep, sendTopLevel } from "../../src/lib/groupingPlan.js";
+import {
+  groupingSendBody,
+  removeGroupedStep,
+  sendTopLevel,
+} from "../../src/lib/groupingPlan.js";
 import {
   enqueueFailureMessage,
   groupingDraft,
@@ -467,7 +471,7 @@ describe("grouping writes", () => {
     const draft = groupingDraft("group", work, parent);
     parent.title = "Renamed later";
     expect(groupingRequest(draft, "human", "k1")).toEqual({
-      operation: "work.group",
+      operation: "work.move",
       request: {
         ref: "card:a1-f4",
         body: { actor_id: "human", request_key: "k1", under: "card:a1" },
@@ -728,5 +732,22 @@ describe("initiative moves and legacy outbox recovery", () => {
       }),
     ).rejects.toThrow(/incomplete/);
     expect(client.moveWork).not.toHaveBeenCalled();
+  });
+});
+
+describe("saved work.group intents", () => {
+  it("send as a move replayed under the original group scope", () => {
+    const body = { actor_id: "h", request_key: "k1", under: "card:parent" };
+    expect(
+      groupingSendBody({ operation: "work.group", request: { body } }),
+    ).toEqual({ ...body, replay_as: "work.group" });
+    expect(body).not.toHaveProperty("replay_as");
+  });
+
+  it("leave every other grouping body untouched", () => {
+    const body = { actor_id: "h", request_key: "k2", under: "card:parent" };
+    for (const operation of ["work.move", "work.fold", "work.unfold"]) {
+      expect(groupingSendBody({ operation, request: { body } })).toBe(body);
+    }
   });
 });

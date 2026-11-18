@@ -137,8 +137,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
-- `initiative promote` (command): <card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-- `initiative retire` (command): <card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
 - `pm context` (command): Read Decide context: visible cards, open decisions and recent activity.
 - `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
 - `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
@@ -158,7 +156,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work create` (command): Create under a named parent, or --initiative for top level. Without either the card enters Unsorted.
 - `work fold` (command): <card> --into <parent> [--request-key key]: transfer references, carry the promise and archive.
 - `work get` (command): Read one work card, source authority, executions and current evidence.
-- `work group` (command): <card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
 - `work presence` (command): Set the current derived agent's card and progress note.
@@ -4251,92 +4248,6 @@ Global flags:
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
 ```
 
-## `initiative promote`
-
-<card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-
-```text
-Generated Help: initiative promote
-
-- Command ID: `initiative.promote`
-- CLI path: `initiative promote`
-- HTTP: `POST /work/{card_ref}/promote`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns initiative membership, work and advisory facts.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `initiative retire`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  - body `to_board` (string)
-  - body `under` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-
-Usage: anx initiative promote <ref> (or --card-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `initiative retire`
-
-<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
-
-```text
-Generated Help: initiative retire
-
-- Command ID: `initiative.retire`
-- CLI path: `initiative retire`
-- HTTP: `POST /work/{card_ref}/retire`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns initiative membership, work and advisory facts.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `initiative promote`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  - body `to_board` (string)
-  - body `under` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
-
-Usage: anx initiative retire <ref> (or --card-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
 ## `pm context`
 
 Read Decide context: visible cards, open decisions and recent activity.
@@ -4844,7 +4755,7 @@ Generated Help: work briefing
 - Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
-- Adjacent commands: `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -4879,7 +4790,7 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4910,7 +4821,7 @@ Generated Help: work checkpoint
 - Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
-- Adjacent commands: `work briefing`, `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -4957,7 +4868,7 @@ Generated Help: work create
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Board placement is layout only. under names the stored parent; initiative true explicitly creates an initiative. Without either, needs_home is true. Paths are input aliases resolved before creation; stored references remain canonical card refs.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5042,7 +4953,7 @@ Generated Help: work fold
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5084,7 +4995,7 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5095,48 +5006,6 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Read one work card, source authority, executions and current evidence.
 
 Usage: anx work get <ref> (or --work-id <ref>)
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work group`
-
-<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
-
-```text
-Generated Help: work group
-
-- Command ID: `work.group`
-- CLI path: `work group`
-- HTTP: `POST /work/{card_ref}/group`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns `WorkResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `under` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `after` (string)
-  - body `request_key` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
-
-Usage: anx work group <ref> (or --work-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5161,7 +5030,7 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5200,7 +5069,7 @@ Generated Help: work patch
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5258,7 +5127,7 @@ Generated Help: work presence
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
 - Concepts: `agents`, `cards`, `runs`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Optional:
@@ -5296,7 +5165,7 @@ Generated Help: work resolve
 - Error codes: `invalid_request`, `not_found`, `conflict`
 - Concepts: `cards`
 - Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5328,7 +5197,7 @@ Generated Help: work unfold
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5368,7 +5237,7 @@ Generated Help: work ungrouped
 - Error codes: `invalid_request`, `work_unavailable`
 - Concepts: `cards`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5400,7 +5269,7 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5437,7 +5306,7 @@ Generated Help: work observations submit
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5500,7 +5369,7 @@ Generated Help: work participants list
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5537,7 +5406,7 @@ Generated Help: work participants register
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`, `quota_exceeded`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5578,7 +5447,7 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5613,7 +5482,7 @@ Generated Help: work refresh request
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:

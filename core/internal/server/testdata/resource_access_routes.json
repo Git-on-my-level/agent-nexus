@@ -1250,11 +1250,6 @@
     "policy": "record"
   },
   {
-    "method": "POST",
-    "path": "/work/{card_ref}/group",
-    "policy": "record"
-  },
-  {
     "method": "GET",
     "path": "/work/{card_ref}/observations",
     "policy": "record"
@@ -1313,18 +1308,6 @@
     "method": "POST",
     "path": "/asks/{ask_id}/retire",
     "policy": "reference-write"
-  },
-  {
-    "method": "POST",
-    "path": "/work/{card_ref}/promote",
-    "policy": "record",
-    "reason": "Scoped card and destination boards; atomic membership and auditable event."
-  },
-  {
-    "method": "POST",
-    "path": "/work/{card_ref}/retire",
-    "policy": "record",
-    "reason": "Scoped card and destination boards; atomic membership and auditable event."
   },
   {
     "method": "GET",

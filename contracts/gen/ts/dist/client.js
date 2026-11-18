@@ -789,7 +789,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -9976,130 +9975,6 @@ export const commandRegistry = [
         "ts_method": "inboxSummary"
     },
     {
-        "command_id": "initiative.promote",
-        "cli_path": "initiative promote",
-        "group": "initiative",
-        "method": "POST",
-        "path": "/work/{card_ref}/promote",
-        "operation_id": "initiativePromote",
-        "summary": "Deprecated; use work move with root true",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns initiative membership, work and advisory facts.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                },
-                {
-                    "name": "to_board",
-                    "type": "string"
-                },
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "initiative.retire"
-        ],
-        "go_method": "InitiativePromote",
-        "ts_method": "initiativePromote"
-    },
-    {
-        "command_id": "initiative.retire",
-        "cli_path": "initiative retire",
-        "group": "initiative",
-        "method": "POST",
-        "path": "/work/{card_ref}/retire",
-        "operation_id": "initiativeRetire",
-        "summary": "Deprecated; use work move with under",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns initiative membership, work and advisory facts.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                },
-                {
-                    "name": "to_board",
-                    "type": "string"
-                },
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "initiative.promote"
-        ],
-        "go_method": "InitiativeRetire",
-        "ts_method": "initiativeRetire"
-    },
-    {
         "command_id": "integrations.bind",
         "cli_path": "integrations bind",
         "group": "integrations",
@@ -14161,7 +14036,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14213,7 +14087,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14304,7 +14177,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14563,7 +14435,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14640,7 +14511,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.create",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14695,7 +14565,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.create",
             "work.fold",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14713,83 +14582,6 @@ export const commandRegistry = [
         ],
         "go_method": "WorkGet",
         "ts_method": "workGet"
-    },
-    {
-        "command_id": "work.group",
-        "cli_path": "work group",
-        "group": "work",
-        "method": "POST",
-        "path": "/work/{card_ref}/group",
-        "operation_id": "workGroup",
-        "summary": "Deprecated; use work move with under",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `WorkResponse`.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "after",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "work.briefing",
-            "work.capabilities",
-            "work.checkpoint",
-            "work.create",
-            "work.fold",
-            "work.get",
-            "work.list",
-            "work.move",
-            "work.observations.list",
-            "work.observations.submit",
-            "work.participants.list",
-            "work.participants.register",
-            "work.patch",
-            "agents.me.presence",
-            "work.refresh.get",
-            "work.refresh.request",
-            "work.resolve",
-            "work.tree",
-            "work.unfold",
-            "work.ungrouped"
-        ],
-        "go_method": "WorkGroup",
-        "ts_method": "workGroup"
     },
     {
         "command_id": "work.list",
@@ -14826,7 +14618,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.move",
             "work.observations.list",
             "work.observations.submit",
@@ -14852,7 +14643,7 @@ export const commandRegistry = [
         "path": "/work/{card_ref}/move",
         "operation_id": "workMove",
         "summary": "Move a card under a parent, to top level or to Unsorted",
-        "why": "Move a card under a parent, to top level or to Unsorted",
+        "why": "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -14882,6 +14673,13 @@ export const commandRegistry = [
                 {
                     "name": "reason",
                     "type": "string"
+                },
+                {
+                    "name": "replay_as",
+                    "type": "string",
+                    "enum_values": [
+                        "work.group"
+                    ]
                 },
                 {
                     "name": "request_key",
@@ -14921,7 +14719,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.observations.list",
             "work.observations.submit",
@@ -14976,7 +14773,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.submit",
@@ -15135,7 +14931,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15194,7 +14989,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15274,7 +15068,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15418,7 +15211,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15473,7 +15265,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15537,7 +15328,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15587,7 +15377,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15637,7 +15426,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15704,7 +15492,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15753,7 +15540,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -16504,12 +16290,6 @@ export class AnxClient {
     inboxSummary(options = {}) {
         return this.invoke("inbox.summary", {}, options);
     }
-    initiativePromote(pathParams, options = {}) {
-        return this.invoke("initiative.promote", pathParams, options);
-    }
-    initiativeRetire(pathParams, options = {}) {
-        return this.invoke("initiative.retire", pathParams, options);
-    }
     leaseAcquire(pathParams, options = {}) {
         return this.invoke("lease.acquire", pathParams, options);
     }
@@ -16743,9 +16523,6 @@ export class AnxClient {
     }
     workGet(pathParams, options = {}) {
         return this.invoke("work.get", pathParams, options);
-    }
-    workGroup(pathParams, options = {}) {
-        return this.invoke("work.group", pathParams, options);
     }
     workList(options = {}) {
         return this.invoke("work.list", {}, options);

@@ -212,8 +212,6 @@ export declare class AnxClient {
     inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxSummary(options?: RequestOptions): Promise<InvokeResult>;
-    initiativePromote(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    initiativeRetire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseAcquire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseRelease(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     leaseRenew(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -292,7 +290,6 @@ export declare class AnxClient {
     workCreate(options?: RequestOptions): Promise<InvokeResult>;
     workFold(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
-    workGroup(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workList(options?: RequestOptions): Promise<InvokeResult>;
     workMove(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     workObservationsList(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

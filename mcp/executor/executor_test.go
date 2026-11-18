@@ -801,7 +801,7 @@ func TestUnifiedPMDoesNotInventRequestKeysForCASActions(t *testing.T) {
 
 func TestGroupingToolsAdvertiseReplayAndCreateSurface(t *testing.T) {
 	cat := generatedTestCatalog(t, catalog.DefaultAllowedClassifications())
-	for _, id := range []string{"work.create", "work.group", "work.fold", "work.unfold"} {
+	for _, id := range []string{"work.create", "work.move", "work.fold", "work.unfold"} {
 		tool, ok := cat.Lookup(catalog.ToolName(id))
 		if !ok {
 			t.Fatalf("missing %s", id)

@@ -39,7 +39,11 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
-import { removeGroupedStep, sendTopLevel } from "$lib/groupingPlan.js";
+import {
+  groupingSendBody,
+  removeGroupedStep,
+  sendTopLevel,
+} from "$lib/groupingPlan.js";
 import { sendStandingMutation } from "$lib/standingRulingSend.js";
 
 export const mutationOutbox = writable([]);
@@ -336,15 +340,13 @@ async function send(entry, lease = null) {
       entry.operation,
     )
   ) {
-    const { ref, body } = entry.request;
-    const result =
-      entry.operation === "work.move"
-        ? await client.moveWork(ref, body)
-        : entry.operation === "work.group"
-          ? await client.groupWork(ref, body)
-          : entry.operation === "work.fold"
-            ? await client.foldWork(ref, body)
-            : await client.unfoldWork(ref, body);
+    const { ref } = entry.request;
+    const body = groupingSendBody(entry);
+    const result = ["work.move", "work.group"].includes(entry.operation)
+      ? await client.moveWork(ref, body)
+      : entry.operation === "work.fold"
+        ? await client.foldWork(ref, body)
+        : await client.unfoldWork(ref, body);
     if (!result.work?.ref) throw new Error("Grouping receipt is incomplete.");
     return result;
   }

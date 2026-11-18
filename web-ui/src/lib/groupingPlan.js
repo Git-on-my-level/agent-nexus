@@ -9,6 +9,15 @@ import {
  */
 
 /**
+ * A work.group intent saved before that route was removed is sent as a move
+ * under its original replay scope, so a group that already landed replays.
+ */
+export const groupingSendBody = ({ operation, request }) =>
+  operation === "work.group"
+    ? { ...request.body, replay_as: "work.group" }
+    : request.body;
+
+/**
  * The parent plan without the step that grouped `ref`, or `changed: false`
  * when there is nothing of this group's left to remove.
  *

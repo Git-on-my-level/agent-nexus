@@ -1684,7 +1684,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.move
       x-anx-cli-path: work move
-      x-anx-why: Move a card under a parent, to top level or to Unsorted
+      x-anx-why: "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason."
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns WorkResponse.
@@ -1802,102 +1802,6 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/promote:
-    post:
-      operationId: initiativePromote
-      deprecated: true
-      summary: Deprecated; use work move with root true
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: initiative.promote
-      x-anx-cli-path: initiative promote
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
-      responses:
-        '200':
-          description: Membership and audit event committed together
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/retire:
-    post:
-      operationId: initiativeRetire
-      deprecated: true
-      summary: Deprecated; use work move with under
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: initiative.retire
-      x-anx-cli-path: initiative retire
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
-      responses:
-        '200':
-          description: Membership and audit event committed together
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/group:
-    post:
-      operationId: workGroup
-      deprecated: true
-      summary: Deprecated; use work move with under
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: work.group
-      x-anx-cli-path: work group
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `WorkResponse`.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/WorkGroupRequest'}
-      responses:
-        '200':
-          description: Move an existing card under a stored parent
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/WorkResponse'}
         '409':
           $ref: '#/components/responses/ErrorResponse'
   /work/{card_ref}/fold:
@@ -11817,6 +11721,7 @@ components:
         unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
         reason: {type: string, minLength: 1, maxLength: 2000, description: Required for root and when moving an initiative under another card.}
         after: {type: string, description: Optional preceding sibling plan step id; never creates a plan step or hierarchy edge. Children remain ordered by creation time.}
+        replay_as: {type: string, enum: [work.group], description: Resend a work.group request saved before that route was removed. The move uses that request's replay scope, so a group that already landed replays its receipt instead of moving again.}
       oneOf:
       - required: [under]
         not: {anyOf: [{required: [root]}, {required: [unsorted]}]}
@@ -11888,14 +11793,6 @@ components:
             required: [argv]
             properties:
               argv: {type: array, items: {type: string}}
-    WorkGroupRequest:
-      type: object
-      properties:
-        actor_id: {type: string}
-        request_key: {type: string, maxLength: 256}
-        under: {type: string, description: Visible open parent card ref.}
-        after: {type: string, description: Optional preceding plan step id.}
-      required: [under]
     WorkFoldRequest:
       type: object
       properties:
@@ -13237,23 +13134,6 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
-    InitiativeMutationRequest:
-      type: object
-      required: [reason]
-      properties:
-        actor_id: {type: string}
-        request_key: {type: string, description: Retain the key and original body until confirmed.}
-        reason: {type: string, minLength: 1, maxLength: 2000}
-        to_board: {type: string, description: Retire destination; defaults to oldest active non-initiatives board or creates Tasks.}
-        under: {type: string, description: Retire only; move under a visible open parent card without changing plan steps.}
-    InitiativeMutationResponse:
-      type: object
-      required: [work, event, initiative_budget]
-      properties:
-        work: {$ref: '#/components/schemas/Work'}
-        event: {type: object, additionalProperties: true}
-        initiative_budget: {type: object, additionalProperties: true}
-        over_target: {$ref: '#/components/schemas/InitiativeOverTarget'}
     InitiativeOverTarget:
       type: object
       required: [count, target, truncated, next_actions]

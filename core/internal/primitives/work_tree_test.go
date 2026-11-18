@@ -159,10 +159,10 @@ func TestWorkTreeMoveRules(t *testing.T) {
 		t.Fatalf("ungroup: parent=%q tray=%v", parent, tray)
 	}
 	// Promote/retire routes are spellings of move, and need no initiatives board.
-	if _, err = s.ChangeInitiative(ctx, "writer", workString(task["ref"]), "promote", "Own outcome", "", ""); err != nil {
+	if _, err = s.MoveWork(ctx, "writer", workString(task["ref"]), MoveWorkInput{Root: true, Reason: "Own outcome"}); err != nil {
 		t.Fatalf("promote without an initiatives board: %v", err)
 	}
-	if _, err = s.ChangeInitiative(ctx, "writer", workString(task["ref"]), "retire", "Folded back", "", workString(root["ref"])); err != nil {
+	if _, err = s.MoveWork(ctx, "writer", workString(task["ref"]), MoveWorkInput{Under: workString(root["ref"]), Reason: "Folded back"}); err != nil {
 		t.Fatal(err)
 	}
 	if parent, _, _ := workTreeFacts(t, s, ctx, workString(task["ref"])); parent != workString(root["ref"]) {
