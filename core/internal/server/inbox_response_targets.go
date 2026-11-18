@@ -1,21 +1,17 @@
 // Shared plumbing around inbox responses: response authorization, replay
 // writes for already-answered items, resolving which ask or agent notification
-// a response targets, response summaries, the best-effort agent wake, and the
-// delivery-mode lookup for asks whose projection predates delivery fields.
+// a response targets, response summaries, and the delivery-mode lookup for asks whose projection predates delivery fields.
 
 package server
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"agent-nexus-core/internal/auth"
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-core/internal/router"
 )
 
 // Authorization precedes replay and claim lookups so an inaccessible request
@@ -215,28 +211,6 @@ func normalizeStringSlice(values []string) []string {
 	return out
 }
 
-func resolveOptionalBool(value *bool, fallback bool) bool {
-	if value == nil {
-		return fallback
-	}
-	return *value
-}
-
-func buildAskResponseSummary(queryText, answer string) string {
-	queryText = strings.TrimSpace(queryText)
-	answer = strings.TrimSpace(answer)
-	if queryText == "" {
-		return "Answered agent ask"
-	}
-	if len(queryText) > 72 {
-		queryText = strings.TrimSpace(queryText[:72]) + "…"
-	}
-	if answer == "" {
-		return "Answered: " + queryText
-	}
-	return "Answered: " + queryText
-}
-
 func buildHumanAttentionResponseSummary(kind string, itemPayload map[string]any, responseText string) string {
 	title := strings.TrimSpace(anyString(itemPayload["title"]))
 	if title == "" {
@@ -249,99 +223,6 @@ func buildHumanAttentionResponseSummary(kind string, itemPayload map[string]any,
 		title = strings.TrimSpace(title[:72]) + "..."
 	}
 	return "Human response recorded: " + title
-}
-
-func sendHumanAttentionResponseWakeBestEffort(
-	ctx context.Context,
-	opts handlerOptions,
-	actorID string,
-	threadID string,
-	subjectRef string,
-	targetActorID string,
-	targetHandle string,
-	triggerText string,
-	triggerEventID string,
-	triggerCreatedAt string,
-) (bool, string) {
-	targetActorID = strings.TrimSpace(targetActorID)
-	if targetActorID == "" {
-		return false, "Response recorded without notification target."
-	}
-	workspaceID := strings.TrimSpace(opts.workspaceID)
-	if workspaceID == "" {
-		workspaceID = "ws_main"
-	}
-	targetHandle = strings.TrimSpace(targetHandle)
-	if targetHandle == "" {
-		targetHandle = "agent"
-	}
-	online := false
-	if opts.authStore != nil {
-		principal, found, err := findAgentPrincipalByActorID(ctx, opts.authStore, targetActorID)
-		if err == nil && found {
-			if strings.TrimSpace(principal.Username) != "" {
-				targetHandle = strings.TrimSpace(principal.Username)
-			}
-			status := auth.DescribeWakeRouting(principal, workspaceID, time.Now().UTC())
-			online = status.Online
-		}
-	}
-
-	if triggerEventID == "" {
-		triggerEventID = fmt.Sprintf("ask-response:%d", time.Now().UTC().UnixNano())
-	}
-	if triggerCreatedAt == "" {
-		triggerCreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-
-	wakeupID := router.WakeupArtifactID(workspaceID, threadID, triggerEventID, targetActorID)
-	wakeRefs := append(router.WakeArtifactRefs(threadID, triggerEventID, subjectRef), "artifact:"+wakeupID)
-
-	_, artifactErr := opts.primitiveStore.CreateArtifact(ctx, actorID, map[string]any{
-		"id":              wakeupID,
-		"kind":            router.WakeArtifactKind,
-		"summary":         "Wake packet for @" + targetHandle,
-		"refs":            router.WakeArtifactRefs(threadID, triggerEventID, subjectRef),
-		"target_handle":   targetHandle,
-		"target_actor_id": targetActorID,
-		"workspace_id":    workspaceID,
-		"thread_id":       threadID,
-	}, map[string]any{
-		"version":            router.WakePacketVersion,
-		"wakeup_id":          wakeupID,
-		"target_handle":      targetHandle,
-		"target_actor_id":    targetActorID,
-		"workspace_id":       workspaceID,
-		"thread_id":          threadID,
-		"trigger_event_id":   triggerEventID,
-		"trigger_created_at": triggerCreatedAt,
-		"trigger_text":       triggerText,
-		"subject_ref":        subjectRef,
-	}, "structured")
-	if artifactErr != nil && !errors.Is(artifactErr, primitives.ErrConflict) {
-		// Continue: queue metadata still carries enough wake metadata for delivery.
-	}
-
-	_, wakeErr := opts.primitiveStore.UpsertAgentWakeup(ctx, primitives.AgentWakeup{
-		WakeupID:         wakeupID,
-		Status:           primitives.AgentWakeupStatusRequested,
-		TargetHandle:     targetHandle,
-		TargetActorID:    targetActorID,
-		WorkspaceID:      workspaceID,
-		ThreadID:         threadID,
-		TriggerEventID:   triggerEventID,
-		TriggerCreatedAt: triggerCreatedAt,
-		TriggerText:      triggerText,
-		Refs:             wakeRefs,
-	})
-	if wakeErr != nil && !errors.Is(wakeErr, primitives.ErrConflict) {
-		return true, "Queued — will deliver when agent reconnects."
-	}
-
-	if online {
-		return false, "Delivered to asking agent."
-	}
-	return true, "Queued — will deliver when agent reconnects."
 }
 
 func findAgentPrincipalByActorID(ctx context.Context, authStore *auth.Store, actorID string) (auth.AuthPrincipalSummary, bool, error) {

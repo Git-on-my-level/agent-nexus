@@ -48,29 +48,6 @@ func payloadFromDerivedInboxItem(item primitives.DerivedInboxItem) map[string]an
 	return m
 }
 
-func payloadFromLocalDerivedInboxItem(item derivedInboxItem) map[string]any {
-	m := cloneWorkspaceMap(item.Data)
-	if m == nil {
-		m = map[string]any{}
-	}
-	if !item.TriggerAt.IsZero() {
-		trigger := item.TriggerAt.Format(time.RFC3339Nano)
-		if _, ok := m["source_event_time"]; !ok {
-			m["source_event_time"] = trigger
-		}
-		if _, ok := m["trigger_at"]; !ok {
-			m["trigger_at"] = trigger
-		}
-	}
-	applyInboxContractShape(m, inboxContractHint{
-		ThreadID:      strings.TrimSpace(anyString(m["thread_id"])),
-		Category:      strings.TrimSpace(item.Category),
-		SourceEventID: strings.TrimSpace(anyString(m["source_event_id"])),
-		SourceCardID:  strings.TrimSpace(anyString(m["card_id"])),
-	})
-	return m
-}
-
 func handleGetInbox(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 	if opts.primitiveStore == nil {
 		writeError(w, http.StatusServiceUnavailable, "primitives_unavailable", "primitives store is not configured")

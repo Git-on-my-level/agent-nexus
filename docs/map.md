@@ -88,7 +88,7 @@ Where things live. Generated; never hand-edited.
 | core/internal/loopstats                    | 1     | Package loopstats records bounded, numeric-only maintenance diagnostics.                                                                                                                                                                                              |
 | core/internal/observation                  | 17    | Package observation collects source evidence without granting upstream write authority.                                                                                                                                                                               |
 | core/internal/plans                        | 6     | Package plans validates initiative graphs and derives reproducible read state.                                                                                                                                                                                        |
-| core/internal/primitives                   | 184   | Package primitives is core's canonical domain layer                                                                                                                                                                                                                   |
+| core/internal/primitives                   | 183   | Package primitives is core's canonical domain layer                                                                                                                                                                                                                   |
 | core/internal/readmodel                    | 8     | Package readmodel contains bounded projection algorithms.                                                                                                                                                                                                             |
 | core/internal/replaypolicy                 | 1     | Package replaypolicy owns the receipt/recovery window shared with the web UI.                                                                                                                                                                                         |
 | core/internal/resourceaccess               | 16    | Package resourceaccess applies the request's record policy at database reads and writes without coupling auxiliary stores to the canonical primitive store.                                                                                                           |
@@ -232,9 +232,9 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1240  | core/internal/auth/hosts.go                                                        |
 | 1197  | core/internal/primitives/derived_store.go                                          |
 | 1074  | web-ui/src/lib/visualReportCharts.js                                               |
-| 1039  | core/internal/auth/store.go                                                        |
 | 1039  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/+page.svelte                 |
 | 1016  | web-ui/scripts/game-dev-studio-seed-data.mjs                                       |
+| 1015  | core/internal/auth/store.go                                                        |
 | 959   | core/internal/server/stream_handlers.go                                            |
 | 942   | cli/internal/app/loop_tier.go                                                      |
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |

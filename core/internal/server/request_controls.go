@@ -518,14 +518,6 @@ func parseForwardedFor(raw string) string {
 	return raw
 }
 
-func routeRateLimitBucketForRequest(path string, method string, requirement routeAccessRequirement) string {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
-		return ""
-	}
-	return routeRateLimitBucketForPath(path, requirement)
-}
-
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return decodeJSONBodySyntax(w, r, dst) && authorizeResourceValues(w, r, dst)
 }

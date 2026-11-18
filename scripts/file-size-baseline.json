@@ -9,7 +9,7 @@
   "core/cmd/anx-core/main.go": 895,
   "core/cmd/contract-gen/main.go": 2432,
   "core/internal/auth/hosts.go": 1240,
-  "core/internal/auth/store.go": 1039,
+  "core/internal/auth/store.go": 1015,
   "core/internal/primitives/brief.go": 1348,
   "core/internal/primitives/card_leases.go": 832,
   "core/internal/primitives/curation_store.go": 813,

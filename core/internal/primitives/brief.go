@@ -151,14 +151,12 @@ func nonNilMaps(v []map[string]any) []map[string]any {
 }
 
 type briefBuild struct {
-	s                *Store
-	ctx              context.Context
-	reader           BriefReader
-	now              time.Time
-	actors           map[string]bool
-	display          map[string]map[string]any
-	topLevelIDs      []string
-	allCardsAreRoots bool
+	s       *Store
+	ctx     context.Context
+	reader  BriefReader
+	now     time.Time
+	actors  map[string]bool
+	display map[string]map[string]any
 }
 
 // Legacy in-process brief callers use Visible for the PM-private rule. Apply

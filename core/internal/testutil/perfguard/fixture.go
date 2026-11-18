@@ -131,13 +131,6 @@ func seedRows(ctx context.Context, db *sql.DB, contentDir, owner string, seriesA
 
 }
 
-// Validate checks the generated namespace, independent of additional point fixtures.
-// Every consumer runs this after construction, avoiding another expensive copy
-// solely for an integrity test in the performance job.
-func Validate(ctx context.Context, db *sql.DB) error {
-	return validateRows(ctx, db, Rows, PMRows)
-}
-
 func validateRows(ctx context.Context, db *sql.DB, rows, pmRows int) error {
 	for _, spec := range []struct{ table, key, prefix string }{
 		{"cards", "id", "scale-card-"}, {"documents", "id", "scale-doc-"},

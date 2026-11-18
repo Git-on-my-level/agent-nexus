@@ -407,10 +407,6 @@ func (s *Store) RevokeInvite(ctx context.Context, inviteID string, revokedBy Pri
 	return invite, nil
 }
 
-func (s *Store) getInviteByID(ctx context.Context, inviteID string) (Invite, error) {
-	return getInviteByIDWithQuerier(ctx, resourceaccess.NewDB(s.db), inviteID)
-}
-
 type inviteQueryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
