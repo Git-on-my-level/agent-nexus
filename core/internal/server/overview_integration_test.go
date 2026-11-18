@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"agent-nexus-core/internal/primitives"
-	"agent-nexus-visualreport"
+	visualreport "agent-nexus-visualreport"
 )
 
 func TestDashboardEndpointsPreserveHeadRevisionIdentity(t *testing.T) {
@@ -260,113 +260,4 @@ func TestOverviewArchivePinAndInitiativeProjection(t *testing.T) {
 			}
 		}
 	}
-}
-
-/*
-The morning brief, through the route that serves it.
-
-The unit tests in overview_brief_test.go cover the ranking and the reasons.
-What only the handler can prove is that the brief is assembled from the
-sections this request actually produced: a decision it ranks is a needs_you
-row the caller was already given, and a planless initiative arrives at the
-client saying so instead of reporting on_track.
-*/
-func TestOverviewBriefRanksOnlyAuthorizedRowsAndTellsTheTruthAboutPlans(t *testing.T) {
-	t.Parallel()
-	requireIntegrationTest(t)
-	h := newPrimitivesTestServer(t)
-	postJSONExpectStatus(t, h.baseURL+"/actors", `{"actor":{"id":"executive","display_name":"Alex","created_at":"2026-10-04T12:00:00Z","tags":["human"]}}`, 201).Body.Close()
-	ctx := context.Background()
-	store := h.primitiveStore.(*primitives.Store)
-	board, err := store.CreateBoard(ctx, "executive", map[string]any{"title": "Initiatives"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = store.UpdateBoard(ctx, "executive", anyString(board["id"]), map[string]any{"role": "initiatives"}, nil); err != nil {
-		t.Fatal(err)
-	}
-	gate, err := store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": "Approve the pricing change", "next_actor": "human", "next_action": "Pick a price", "priority": "p1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, title := range []string{"Build the page", "Wire the API"} {
-		if _, err = store.CreateWork(ctx, "executive", anyString(board["id"]), map[string]any{"title": title, "relations": []any{map[string]any{"kind": "depends_on", "ref": anyString(gate["ref"])}}}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	resp, err := http.Get(h.baseURL + "/overview")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload map[string]any
-	err = json.NewDecoder(resp.Body).Decode(&payload)
-	resp.Body.Close()
-	if err != nil || resp.StatusCode != 200 {
-		t.Fatalf("status=%d error=%v", resp.StatusCode, err)
-	}
-	brief, ok := payload["brief"].(map[string]any)
-	if !ok {
-		t.Fatalf("overview has no brief: %v", payload)
-	}
-
-	// Every ranked decision is a row the caller was already handed. A brief
-	// row with no needs_you row behind it would be a row the caller was not
-	// authorized to see.
-	authorized := map[string]bool{}
-	for _, raw := range payload["needs_you"].(map[string]any)["rows"].([]any) {
-		authorized[anyString(raw.(map[string]any)["id"])] = true
-	}
-	decisions := brief["decisions"].(map[string]any)["items"].([]any)
-	if len(decisions) == 0 {
-		t.Fatalf("brief ranked nothing from %d needs_you rows", len(authorized))
-	}
-	for _, raw := range decisions {
-		item := raw.(map[string]any)
-		if !authorized[anyString(item["id"])] {
-			t.Fatalf("brief invented a decision row: %v", item)
-		}
-	}
-	top := decisions[0].(map[string]any)
-	if !strings.Contains(anyString(top["reason"]), "blocks 2 cards") {
-		t.Fatalf("the row two cards wait on did not rank first with its reason: %v", top)
-	}
-
-	// New undated initiatives receive the computed 12-hour default.
-	for _, raw := range payload["initiatives"].(map[string]any)["items"].([]any) {
-		item := raw.(map[string]any)
-		if item["health"] != nil || anyString(item["plan_health"].(map[string]any)["state"]) != "moving" {
-			t.Fatalf("initiative health is not the promise state: %v", item)
-		}
-	}
-	byState := brief["initiatives"].(map[string]any)["by_state"].(map[string]any)
-	if byState["moving"] == nil || byState["no_promise"] != nil {
-		t.Fatalf("brief does not count the default promises: %v", byState)
-	}
-	machine := brief["machine"].(map[string]any)
-	if anyString(machine["status"]) != "ok" || machine["finished_24h"] == nil {
-		t.Fatalf("machine section is incomplete: %v", machine)
-	}
-
-	/*
-	 * The brief gets its own Server-Timing phase, beside projection, roster,
-	 * changes, inbox, decisions and visit. Hosted reads these per request, so
-	 * a section that never reports its own cost is a section nobody can hold
-	 * to the "no new per-request work" claim this change makes.
-	 */
-	phases := map[string]bool{}
-	for _, value := range resp.Header.Values("Server-Timing") {
-		for _, entry := range strings.Split(value, ",") {
-			name, _, _ := strings.Cut(strings.TrimSpace(entry), ";")
-			phases[name] = true
-		}
-	}
-	if !phases["brief"] {
-		t.Fatalf("no brief phase in Server-Timing: %v", resp.Header.Values("Server-Timing"))
-	}
-	for _, name := range []string{"projection", "roster", "changes", "inbox", "decisions"} {
-		if !phases[name] {
-			t.Fatalf("brief timing replaced the existing %s phase: %v", name, resp.Header.Values("Server-Timing"))
-		}
-	}
-	t.Logf("Server-Timing: %v", resp.Header.Values("Server-Timing"))
 }

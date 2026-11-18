@@ -609,8 +609,8 @@ Agent Nexus web UI v0 is complete when it can:
 ### Executive Overview
 
 Overview reads the core `/overview` projection shared with agents: Initiatives,
-Recent changes and Dashboard, then a collapsed More detail fold (the morning
-brief, what is waiting on you, work counts, freshness and agent presence). The
+Recent changes and Dashboard, then a collapsed More detail fold (what is
+waiting on you, work counts, freshness and agent presence). The
 cross-workspace ask read behind that fold runs when the fold is opened, not on
 every visit. Initiatives use the same live-initiatives renderer and projection
 as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist

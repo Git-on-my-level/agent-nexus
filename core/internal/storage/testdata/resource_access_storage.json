@@ -3508,7 +3508,7 @@
     "../server/observation_runtime.go:type:observationConfig": "2187bf97877570d47d1c2855356a17c95c1e1b53a09788ec552bfe86e1396ee5",
     "../server/overview_changes_handlers.go:appendOverviewDecisions": "96243aa217516b1d2b9b0fa2746a040e659412b387ecf6b713e3cba8751a4a16",
     "../server/overview_changes_handlers.go:handleOverviewChanges": "53d8ed8cfb99d92c8fb9748ff93bb51d27f6be521a5b414d20c613cb51e73849",
-    "../server/overview_handlers.go:handleGetOverview": "cdbceec7d5ab90b23e2bc086e4f40015f5d1f6f53152f59aa728025b37034dbf",
+    "../server/overview_handlers.go:handleGetOverview": "f50276f16b9c2bbeda859f680c85d95bfcd33fc9e76f180bb3d3910ec6d785e8",
     "../server/overview_handlers.go:handleListWorkspaceDashboardReports": "255edfaf9d98c3ebe64d78aa2d69ae7ea1e25674b3b7bd5f0125f823eada36ce",
     "../server/overview_handlers.go:handleSetWorkspaceDashboard": "6bb12edc276c5f0f4ef71551da2f763280194746e2d054e6d50441f77d7c8c91",
     "../server/plans_handlers.go:cardMutationEchoView": "c31f26a9310bc20e473fc983eca6af143facde086a773234e1a2649773c87e77",
