@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-// The cohort is a hard admission bound, shared by create hints, the ungrouped
-// tray and orient. Explicit related parents are admitted separately by identity.
-const homeCandidateLimit = 200
-
 type LikelyHome struct {
 	Ref     string   `json:"ref"`
 	Title   string   `json:"title"`

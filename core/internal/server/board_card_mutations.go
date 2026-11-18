@@ -1,5 +1,4 @@
-// HTTP handlers that mutate an existing board card: update, move, remove,
-// archive, and trash.
+// HTTP handlers that mutate an existing card: move, archive, and trash.
 
 package server
 

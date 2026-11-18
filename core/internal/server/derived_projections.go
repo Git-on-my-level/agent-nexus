@@ -10,8 +10,6 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
-const derivedProjectionMaxAge = time.Minute
-
 func refreshDerivedTopicProjection(ctx context.Context, opts handlerOptions, threadID string, now time.Time, actorID string, startedGeneration ...int64) error {
 	ctx = primitives.CanonicalMaintenanceContext(ctx)
 	if opts.primitiveStore == nil {

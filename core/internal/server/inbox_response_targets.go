@@ -1,7 +1,6 @@
 // Shared plumbing around inbox responses: response authorization, replay
 // writes for already-answered items, resolving which ask or agent notification
-// a response targets, response summaries, the best-effort agent wake, and the
-// delivery-mode lookup for asks whose projection predates delivery fields.
+// a response targets, response summaries, and the delivery-mode lookup for asks whose projection predates delivery fields.
 
 package server
 

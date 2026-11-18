@@ -68,7 +68,7 @@ Each endpoint is classified with an `x-anx-surface` extension indicating its rol
   - Body: `{ "actor_id": "...", "patch": { <fields...> }, "if_updated_at": "..." }` (`if_updated_at` required; optimistic lock on the **card** row, not the board)
   - Response: `{ "card": <card> }`
 
-- Board-scoped card lifecycle (create, patch, move, remove) is exposed under `POST|PATCH /boards/{board_id}/cards` and related paths; see `/contracts/anx-openapi.yaml`.
+- Board-scoped card routes cover create, list, get, archive and trash (`/boards/{board_id}/cards`); patch and move go through `/cards/{card_id}`. See `/contracts/anx-openapi.yaml`.
 
 ### Threads (read-only backing inspection)
 
