@@ -94,13 +94,6 @@ func New(resolved config.Resolved) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Generated() *contractsclient.Client {
-	if c == nil {
-		return nil
-	}
-	return c.generated
-}
-
 func (c *Client) RawCall(ctx context.Context, req RawRequest) (RawResponse, error) {
 	if c == nil {
 		return RawResponse{}, fmt.Errorf("client is nil")

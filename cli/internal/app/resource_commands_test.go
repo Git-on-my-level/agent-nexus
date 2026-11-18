@@ -5641,35 +5641,6 @@ func proposalIDFromEnvelope(t *testing.T, payload map[string]any) string {
 	return proposalID
 }
 
-func normalizeProposalEnvelopeForGolden(t *testing.T, raw string) string {
-	t.Helper()
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		t.Fatalf("decode proposal envelope json: %v raw=%s", err, raw)
-	}
-	data, _ := payload["result"].(map[string]any)
-	if data == nil {
-		return raw
-	}
-	proposalID := strings.TrimSpace(anyStringValue(data["proposal_id"]))
-	if proposalID == "" {
-		return raw
-	}
-	data["proposal_id"] = "draft-PLACEHOLDER"
-	if path := strings.TrimSpace(anyStringValue(data["proposal_path"])); path != "" {
-		data["proposal_path"] = filepath.Join("/tmp", "draft-PLACEHOLDER.json")
-	}
-	if applyCommand := strings.TrimSpace(anyStringValue(data["apply_command"])); applyCommand != "" {
-		data["apply_command"] = strings.ReplaceAll(applyCommand, proposalID, "draft-PLACEHOLDER")
-	}
-	payload["result"] = data
-	encoded, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		t.Fatalf("encode normalized proposal envelope: %v payload=%#v", err, payload)
-	}
-	return string(encoded) + "\n"
-}
-
 func TestInboxTailReconnect(t *testing.T) {
 	t.Parallel()
 
@@ -6170,11 +6141,6 @@ func writeDerivedAgentFixture(t *testing.T, home string, agent string, fixtureJS
 	if err := os.WriteFile(fixturePath, []byte(fixtureJSON), 0o600); err != nil {
 		t.Fatalf("write derived-agent fixture: %v", err)
 	}
-}
-
-func anyBoolValue(raw any) bool {
-	value, _ := raw.(bool)
-	return value
 }
 
 func TestEnsureEmptyListDefaults(t *testing.T) {

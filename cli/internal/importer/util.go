@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 )
@@ -155,15 +154,6 @@ func firstN[T any](items []T, n int) []T {
 	return items[:n]
 }
 
-func sortedKeys(m map[string]int) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func anyString(value any) string {
 	switch typed := value.(type) {
 	case string:
@@ -178,25 +168,6 @@ func anyString(value any) string {
 func asMap(value any) map[string]any {
 	mapped, _ := value.(map[string]any)
 	return mapped
-}
-
-func asStringSlice(value any) ([]string, bool) {
-	raw, ok := value.([]any)
-	if !ok {
-		if typed, ok := value.([]string); ok {
-			return append([]string(nil), typed...), true
-		}
-		return nil, false
-	}
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		text, ok := item.(string)
-		if !ok {
-			return nil, false
-		}
-		out = append(out, text)
-	}
-	return out, true
 }
 
 func cloneValue(value any) any {

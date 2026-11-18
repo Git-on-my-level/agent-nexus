@@ -37,7 +37,6 @@ Where things live. Generated; never hand-edited.
 | cli/internal/app                           | 187   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
 | cli/internal/authcli                       | 2     | Package authcli defines the result and payload types shared by the CLI's authentication and auth-admin commands (invites, principals, audit events, bootstrap status) so their handlers and output envelopes keep one shape.                                          |
 | cli/internal/bridge                        | 7     | Package bridge owns the single OS-user host service, local registration and migration state.                                                                                                                                                                          |
-| cli/internal/bridgeconfig                  | 2     | Package bridgeconfig loads the host bridge's TOML configuration and owns its on-disk root directory layout.                                                                                                                                                           |
 | cli/internal/buildinfo                     | 1     | (undocumented)                                                                                                                                                                                                                                                        |
 | cli/internal/config                        | 2     | Package config resolves CLI runtime settings                                                                                                                                                                                                                          |
 | cli/internal/errnorm                       | 5     | Package errnorm normalizes transport and API errors into the CLI's stable error kinds, exit codes and machine-readable metadata, so scripts and orchestrators branch on classified behavior instead of message text.                                                  |
@@ -134,7 +133,7 @@ Where things live. Generated; never hand-edited.
 | tools/anx-http-record/internal/recorder    | 2     | Package recorder writes the JSONL exchange log                                                                                                                                                                                                                        |
 | tools/anx-http-record/internal/replay      | 2     | Package replay sends a compiled run against a target core and resolves the runtime ID bindings the run produced.                                                                                                                                                      |
 
-1 of 101 packages are undocumented.
+1 of 100 packages are undocumented.
 
 ## web-ui areas
 

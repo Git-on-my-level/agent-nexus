@@ -9,19 +9,6 @@ type cliEnvironmentVariable struct {
 	Example   string
 }
 
-func cliEnvironmentVariables() []cliEnvironmentVariable {
-	return []cliEnvironmentVariable{
-		{Name: "ANX_AS", Overrides: "derived agent name", Summary: "Select an adapter or persona for this process.", Example: "ANX_AS=<your-agent-name>"},
-		{Name: "ANX_WORKSPACE", Overrides: "workspace alias", Summary: "Select a configured workspace alias.", Example: "ANX_WORKSPACE=<workspace-alias>"},
-		{Name: "ANX_BASE_URL", Overrides: "core API base URL", Summary: "Select the enrolled workspace core.", Example: "ANX_BASE_URL=<workspace-core-url>"},
-		{Name: "ANX_CONFIG_DIR", Overrides: "local host config root", Summary: "Absolute directory containing workspace preferences, enrolled hosts and callback logs.", Example: "ANX_CONFIG_DIR=<absolute-config-directory>"},
-		{Name: "ANX_TIMEOUT", Overrides: "request timeout", Summary: "Set request timeout as a Go duration.", Example: "ANX_TIMEOUT=30s"},
-		{Name: "ANX_UPDATE_POLICY", Overrides: "automatic CLI release policy", Summary: "Override saved update policy with auto, notify, or off.", Example: "ANX_UPDATE_POLICY=off"},
-		{Name: "ANX_JSON", Overrides: "JSON output mode", Summary: "Emit JSON envelopes.", Example: "ANX_JSON=true"},
-		{Name: "ANX_ACCESS_TOKEN", Overrides: "explicit bearer", Summary: "Use a caller supplied bearer in a human or test context.", Example: "ANX_ACCESS_TOKEN=<token>"},
-	}
-}
-
 func envDocText() string {
 	return strings.TrimSpace(`ANX environment variables
 

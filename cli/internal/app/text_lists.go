@@ -10,59 +10,6 @@ import (
 
 const textListScanTailRunes = 10
 
-func listKindIDPrefixes(kind string) []string {
-	switch strings.TrimSpace(kind) {
-	case "board":
-		return []string{"bd-", "board-"}
-	case "thread":
-		return []string{"thread-", "thread_"}
-	case "document":
-		return []string{"dc-", "document-", "document_", "doc-", "doc_"}
-	case "artifact":
-		return []string{"rc-", "rv-", "rce-", "rve-", "artifact-", "artifact_"}
-	case "topic":
-		return []string{"tp-", "topic-", "topic_"}
-	case "card":
-		return []string{"cd-", "card-", "card_"}
-	case "event":
-		return []string{"ev-", "event-", "event_"}
-	default:
-		return nil
-	}
-}
-
-func stripListKindPrefix(kind, id string) (tail string, ok bool) {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return "", false
-	}
-	for _, prefix := range listKindIDPrefixes(kind) {
-		if prefix != "" && strings.HasPrefix(id, prefix) {
-			t := strings.TrimPrefix(id, prefix)
-			if t != "" {
-				return t, true
-			}
-		}
-	}
-	return "", false
-}
-
-func truncateFirstRunes(s string, n int) string {
-	if n <= 0 || s == "" {
-		return ""
-	}
-	var b strings.Builder
-	count := 0
-	for _, r := range s {
-		b.WriteRune(r)
-		count++
-		if count >= n {
-			break
-		}
-	}
-	return b.String()
-}
-
 func listItemIdentityForScan(item map[string]any, kind string) map[string]any {
 	if item == nil {
 		return nil

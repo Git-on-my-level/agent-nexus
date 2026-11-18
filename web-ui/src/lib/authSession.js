@@ -625,3 +625,12 @@ if (browser && typeof globalThis.BroadcastChannel === "function") {
   accountChannel = new BroadcastChannel("anx-session-changed");
   accountChannel.onmessage = () => invalidateWorkspaceSessions();
 }
+
+/**
+ * Invalidate flights immediately; logout must not wait for old network calls.
+ * Kept for the hosted SaaS UI, which calls it on sign-out.
+ */
+export async function clearAllWorkspaceAuthSessions() {
+  invalidateWorkspaceSessions();
+  accountChannel?.postMessage("changed");
+}
