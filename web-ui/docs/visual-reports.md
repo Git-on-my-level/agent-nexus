@@ -216,8 +216,7 @@ anx docs create --topic topic:YOUR-TOPIC --title "Dashboard" --body-file dashboa
 
 The JS validator and core query parser run the same accepted/rejected fixtures in
 `contracts/fixtures/visual-reports/queries.json`. The publishing validator in
-SCA-597 can reuse these fixtures for CLI validation. `LiveInitiatives.svelte` is
-the shared display component for report rows and SCA-595’s Overview initiatives.
+SCA-597 can reuse these fixtures for CLI validation.
 
 ## Version 1 shape
 
@@ -711,8 +710,7 @@ surrounding page does not already print it. Project filters, counts, freshness
 controls and provenance details are available through its **Open document**
 link. One control chooses, pins and unpins the dashboard — a menu listing every
 report, loaded the first time it opens — and a report's choices are never read
-before then. The reusable `LiveInitiatives.svelte` expects the shared
-`progress.done/total` and `needs[]` projection for the Overview initiatives section.
+before then.
 
 Freshness is stated once per panel, on its provenance chip. Neither the report
 nor the embedding page adds a second claim of its own, and a panel's eyebrow is
