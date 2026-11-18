@@ -71,7 +71,7 @@ function walk(q, t, preferWordStart) {
 }
 
 /** Best score of a command against the query, over its label and keywords. */
-export function commandScore(command, query) {
+function commandScore(command, query) {
   const label = fuzzyScore(query, command?.label);
   const keywords = (Array.isArray(command?.keywords) ? command.keywords : [])
     .map((word) => fuzzyScore(query, word))

@@ -112,6 +112,3 @@ export function logServerError(event, err, fields = {}) {
     console.error(stack);
   }
 }
-
-// Exported for tests so we don't have to monkey-patch process.env globally.
-export const __testing__ = { isDev };

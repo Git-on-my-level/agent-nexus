@@ -8,10 +8,6 @@
  * from quietly becoming the easy way to skip the other's confirmation.
  */
 
-/** Outcomes `POST /inbox/{id}/respond` accepts for an access-backed item. */
-export const ACCESS_APPROVE_OUTCOME = "approved";
-export const ACCESS_DENY_OUTCOME = "rejected";
-
 function text(value) {
   return String(value ?? "").trim();
 }

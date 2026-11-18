@@ -24,7 +24,7 @@ export function trendRange(params) {
 const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
 
 /** "previous 30 days", "previous week". */
-export function previousPeriod(days) {
+function previousPeriod(days) {
   return days === 7 ? "previous week" : `previous ${days} days`;
 }
 

@@ -248,20 +248,6 @@ export function loadWorkspaceCatalog(
   });
 }
 
-export function getWorkspaceBySlug(
-  workspaceSlug,
-  env = privateEnv,
-  organizationSlug = "",
-) {
-  const catalog = loadWorkspaceCatalog(env);
-  const org = normalizeOrganizationSlug(organizationSlug);
-  if (!org) {
-    return null;
-  }
-  const key = workspaceCompositeKey(org, workspaceSlug);
-  return catalog.workspaceByComposite.get(key) ?? null;
-}
-
 /**
  * @param {object} catalog
  * @param {{ hasSession?: (organizationSlug: string, workspaceSlug: string) => boolean }} [options]

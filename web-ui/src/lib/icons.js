@@ -100,7 +100,7 @@ export const ICONS = {
  * and rendered at 16px. Every destination gets a distinct silhouette: two of
  * these used to share a path, so Integrations and Audit were the same icon.
  */
-export const NAV_ICONS = {
+const NAV_ICONS = {
   search: "M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z",
   overview: "M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z",
   inbox:

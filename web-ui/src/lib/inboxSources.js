@@ -251,7 +251,7 @@ export function mergeInboxItems(openItems = [], completedItems = []) {
 
 /** Home pages can split one group. Merge event identities without inflating its
  * count when a live write or repeated page overlaps an earlier snapshot. */
-export function mergeHomeUnreadGroups(groups) {
+function mergeHomeUnreadGroups(groups) {
   const merged = new Map();
   for (const group of groups) {
     const key = group.group_ref;

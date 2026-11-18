@@ -237,10 +237,6 @@ async function requestJSON(
   return payload;
 }
 
-export function getAccessToken(workspaceSlug = getCurrentWorkspaceSlug()) {
-  return ensureAuthState(workspaceSlug).accessToken;
-}
-
 export function getAuthenticatedAgent(
   workspaceSlug = getCurrentWorkspaceSlug(),
 ) {
@@ -591,21 +587,6 @@ export async function logoutAuthSession({
   }
 }
 
-export function createAuthTokenProvider() {
-  return {
-    getAccessToken() {
-      return "";
-    },
-    hasRefreshToken() {
-      return false;
-    },
-    async refreshAccessToken() {
-      return "";
-    },
-    async handleRefreshFailure() {},
-  };
-}
-
 /** Revalidate visited sessions without blocking navigation. Tokens never enter JS. */
 export function startWorkspaceSessionMaintenance({ intervalMs = 60_000 } = {}) {
   const refresh = () => {
@@ -645,7 +626,10 @@ if (browser && typeof globalThis.BroadcastChannel === "function") {
   accountChannel.onmessage = () => invalidateWorkspaceSessions();
 }
 
-/** Invalidate flights immediately; logout must not wait for old network calls. */
+/**
+ * Invalidate flights immediately; logout must not wait for old network calls.
+ * Kept for the hosted SaaS UI, which calls it on sign-out.
+ */
 export async function clearAllWorkspaceAuthSessions() {
   invalidateWorkspaceSessions();
   accountChannel?.postMessage("changed");

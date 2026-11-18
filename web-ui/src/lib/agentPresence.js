@@ -30,7 +30,7 @@ import { formatWait } from "$lib/inboxMailbox.js";
  */
 
 /** Derived states in roster order (core precedence, then our split). */
-export const AGENT_STATES = [
+const AGENT_STATES = [
   { key: "waiting_on_human", label: "Waiting on you", short: "Waiting" },
   { key: "working", label: "Working", short: "Working" },
   { key: "idle", label: "Idle", short: "Idle" },
@@ -141,7 +141,7 @@ export function formatDurationSeconds(seconds) {
 }
 
 /** Age of a timestamp in the same units, or "" when unknown. */
-export function formatAge(iso, now = Date.now()) {
+function formatAge(iso, now = Date.now()) {
   const at = time(iso);
   if (!Number.isFinite(at)) return "";
   return formatWait(Math.max(0, now - at));
@@ -181,7 +181,7 @@ export function inboxAskPath(ask) {
  * is the signal "in progress" means here — the roster does not carry the
  * card's phase, and asking for it per row would be an N+1 on a presence page.
  */
-export function agentHoldsWork(agent) {
+function agentHoldsWork(agent) {
   return Boolean(agent?.active_run || text(agent?.current_card_ref));
 }
 

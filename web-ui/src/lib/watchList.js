@@ -12,7 +12,7 @@ import { formatAgo } from "$lib/time/format.js";
 import { buildLanes } from "$lib/swimlanes.js";
 
 /** No evidence for this long reads as stale. */
-export const STALE_DAYS = 7;
+const STALE_DAYS = 7;
 const STALE_SECONDS = STALE_DAYS * 86_400;
 
 /** Recent changes look back this far. */
@@ -23,7 +23,7 @@ export const CHANGES_PREVIEW = 5;
  * One section per initiative, in reading order; the first rule that matches
  * wins. Done folds away under the list.
  */
-export const SECTIONS = [
+const SECTIONS = [
   { key: "needs_you", label: "Needs you", word: "need you", tone: "warn" },
   { key: "lagging", label: "Lagging", word: "lagging", tone: "danger" },
   { key: "blocked", label: "Blocked", word: "blocked", tone: "danger" },
@@ -61,7 +61,7 @@ export function isLagging(row) {
 }
 
 /** Children in the blocked phase. */
-export function blockedChildren(row) {
+function blockedChildren(row) {
   return Math.max(0, Number(row.rollup?.byState?.blocked) || 0);
 }
 

@@ -4,7 +4,7 @@ import { messageEventHrefFromEvent } from "$lib/deepLinkTargets";
 // Operators see the same projection as Watching in Inbox and on Audit filters.
 export const HOME_FEED_PRESET = "home_feed";
 
-export const HOME_FEED_EVENT_TYPES = new Set([
+const HOME_FEED_EVENT_TYPES = new Set([
   "message_posted",
   "card_created",
   "card_moved",

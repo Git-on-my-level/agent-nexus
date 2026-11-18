@@ -1,4 +1,4 @@
-export const KNOWN_REF_PREFIXES = new Set([
+const KNOWN_REF_PREFIXES = new Set([
   "artifact",
   "card",
   "event",
@@ -59,18 +59,4 @@ export function serializeListInput(items) {
     .map((item) => String(item).trim())
     .filter(Boolean)
     .join("\n");
-}
-
-export function validateTypedRefs(refs = []) {
-  const invalidRefs = [];
-  refs.forEach((refValue) => {
-    const parsed = parseRef(refValue);
-    if (!parsed.prefix || !parsed.value) {
-      invalidRefs.push(refValue);
-    }
-  });
-  return {
-    valid: invalidRefs.length === 0,
-    invalidRefs,
-  };
 }

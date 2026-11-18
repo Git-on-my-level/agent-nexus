@@ -83,7 +83,7 @@ export function timelineTargetFromHash(hash) {
   return { kind: "", id: "", legacy: false };
 }
 
-export function findVerticalScrollport(startEl) {
+function findVerticalScrollport(startEl) {
   for (
     let el = startEl instanceof HTMLElement ? startEl : null;
     el;

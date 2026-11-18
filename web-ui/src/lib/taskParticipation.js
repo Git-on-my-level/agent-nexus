@@ -1,5 +1,5 @@
 /** Task-scoped, read-only participation. Never fetch or retain private sessions. */
-export const PARTICIPATION_TASK_LIMIT = 8;
+const PARTICIPATION_TASK_LIMIT = 8;
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 3;
 const CONCURRENCY = 3;

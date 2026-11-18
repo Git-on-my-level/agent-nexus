@@ -1,5 +1,3 @@
-import { modSymbol } from "$lib/keyboardHints.js";
-
 /**
  * Inbox triage keys. Both Inbox surfaces (the pane and the standalone item
  * page) map keys through here, so a key means the same thing everywhere.
@@ -7,23 +5,6 @@ import { modSymbol } from "$lib/keyboardHints.js";
  * Single-letter keys never fire while the reader is typing, while a modifier
  * other than Shift is held, or while another dialog is open.
  */
-
-/** Rows for the `?` help dialog, with the platform's modifier. */
-export function inboxShortcutList() {
-  const mod = modSymbol();
-  return [
-    ["Next item", ["J"]],
-    ["Previous item", ["K"]],
-    ["Select a suggested response, press again to send", ["1", "–", "5"]],
-    ["Write a reply", ["R"]],
-    ["Send the reply", [mod, "Enter"]],
-    ["Acknowledge, or mark read", ["E"]],
-    ["Open the initiative or doc", ["O"]],
-    ["Undo the last response", [mod, "Z"]],
-    ["Shortcut help", ["?"]],
-    ["Clear the selection, or close this help", ["Esc"]],
-  ];
-}
 
 export function isTextEntryTarget(target) {
   if (!target || typeof target !== "object") return false;

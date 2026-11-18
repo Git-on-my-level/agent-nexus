@@ -594,64 +594,6 @@ export function enqueueAuthoring({ operation, body, id = "", ...options }) {
   });
 }
 
-export function inboxControlLabel(action) {
-  return (
-    {
-      read: "Mark read",
-      archive: "Archive initiative",
-      dispatch: "Deliver approved instruction",
-      reconcile: "Check source receipt",
-      acknowledge: "Acknowledge delivery",
-    }[action] || "Inbox action"
-  );
-}
-
-export function enqueueInboxControls({ draft, ...options }) {
-  if (!draft?.items?.length || draft.items.length > 100)
-    throw new Error("Select at most 100 inbox controls.");
-  const items = draft.items.map((item) => {
-    if (
-      !item.id ||
-      !["read", "archive", "dispatch", "reconcile", "acknowledge"].includes(
-        item.action,
-      )
-    )
-      throw new Error("Review the saved inbox control.");
-    const body = { ...item.body, request_key: randomUUID() };
-    if (
-      item.action === "read"
-        ? body.group_ref !== item.id ||
-          !body.expected_newest_event_cursor?.id ||
-          !body.expected_newest_event_cursor?.ts
-        : item.action === "archive"
-          ? !Number.isInteger(body.if_version) ||
-            body.if_version < 0 ||
-            !body.if_lifecycle ||
-            !("archived_at" in body.if_lifecycle) ||
-            !("trashed_at" in body.if_lifecycle) ||
-            typeof body.if_latest_observation_id !== "string"
-          : !Number.isInteger(body.if_revision) ||
-            body.if_revision < 1 ||
-            (item.action === "dispatch" &&
-              (!Number.isInteger(body.if_action_revision) ||
-                body.if_action_revision < 1))
-    )
-      throw new Error("Load the current inbox item before saving this action.");
-    return { ...item, body };
-  });
-  return enqueueLocalMutation({
-    ...options,
-    key: randomUUID(),
-    operation: "inbox.controls",
-    request: { items },
-    draft,
-    title: "Inbox request",
-    preview: items
-      .map((item) => `${inboxControlLabel(item.action)}: ${item.title}`)
-      .join("\n"),
-  });
-}
-
 export function enqueueEventLifecycle({ draft, ...options }) {
   const actor_id = JSON.parse(get(localWorkScope))[3];
   const events = snapshot(draft.events);
@@ -1320,31 +1262,6 @@ export async function recoverMutations() {
     running = false;
     if (requested) requestRecovery();
   }
-}
-
-/**
- * Retire a saved mutation after its replacement is already persisted.
- * The record stays as `superseded` so a crash cannot drop the only copy
- * before the new intent is durable.
- */
-export async function supersedeLocalMutation(
-  key,
-  { replacementKey = "" } = {},
-) {
-  const entry = get(mutationOutbox).find((row) => row.key === key);
-  if (!entry || !active(entry) || entry.state === "superseded") return false;
-  const saved = {
-    ...snapshot(entry),
-    state: "superseded",
-    ...(replacementKey ? { replacementKey } : {}),
-  };
-  await persist(saved);
-  volatile.delete(key);
-  mutationOutbox.update((rows) =>
-    rows.filter((row) => row.key !== key || row.scope !== entry.scope),
-  );
-  requestRecovery();
-  return true;
 }
 
 export async function retryMutation(key, { asNew = false } = {}) {

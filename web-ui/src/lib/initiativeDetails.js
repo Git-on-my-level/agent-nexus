@@ -17,7 +17,7 @@ import { columnFor, LANE_COLUMNS, progressSegments } from "$lib/swimlanes.js";
 /** Children listed before the rest become a count. */
 export const CHILD_PREVIEW = 5;
 /** Ready plan steps listed before the rest become a count. */
-export const STEP_PREVIEW = 3;
+const STEP_PREVIEW = 3;
 
 const text = (value) => String(value ?? "").trim();
 

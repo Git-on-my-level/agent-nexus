@@ -19,21 +19,21 @@
  */
 
 /** Step statuses, in the order a reader scans them. */
-export const PLAN_STEP_STATUSES = Object.freeze([
+const PLAN_STEP_STATUSES = Object.freeze([
   "done",
   "active",
   "blocked",
   "not_started",
 ]);
 
-export const PLAN_SHAPES = Object.freeze(["chain", "dag", "lanes"]);
+const PLAN_SHAPES = Object.freeze(["chain", "dag", "lanes"]);
 
 /**
  * The caps the plan contract states (`initiative_plan.max_steps`,
  * `max_dependencies_per_step`). Matching them matters in both directions: a
  * lower cap here would silently drop dependencies the server accepted.
  */
-export const PLAN_LIMITS = Object.freeze({ steps: 200, afterPerStep: 50 });
+const PLAN_LIMITS = Object.freeze({ steps: 200, afterPerStep: 50 });
 
 /**
  * How many finished steps it takes before folding them is worth it.

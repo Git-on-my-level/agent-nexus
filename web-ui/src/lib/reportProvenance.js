@@ -32,7 +32,7 @@ import { formatAbsoluteDateTime } from "./formatDate.js";
 import { isLivePanel } from "./liveReports.js";
 import { reviewDeadlineMillis } from "./visualReports.js";
 
-export const PROVENANCE_CLASSES = Object.freeze(["live", "authored"]);
+const PROVENANCE_CLASSES = Object.freeze(["live", "authored"]);
 
 /**
  * How long an authored panel is trusted when it does not say.
@@ -46,7 +46,7 @@ export const PROVENANCE_CLASSES = Object.freeze(["live", "authored"]);
 export const DEFAULT_REVIEW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** What the rendered report resolves, and this module reads back. */
-export const PROVENANCE_PANEL_FIELDS = Object.freeze([
+const PROVENANCE_PANEL_FIELDS = Object.freeze([
   "provenance_class",
   "authored_at",
   "review_by",

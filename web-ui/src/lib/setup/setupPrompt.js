@@ -26,7 +26,7 @@ export const DEFAULT_CLI_INSTALL_COMMAND =
   "curl -sSfL https://raw.githubusercontent.com/Git-on-my-level/agent-nexus/main/scripts/install-anx.sh | sh";
 
 /** Lifetime of the enrollment token a setup prompt carries. */
-export const SETUP_TOKEN_LIFETIME_MS = 30 * 60_000;
+const SETUP_TOKEN_LIFETIME_MS = 30 * 60_000;
 
 /**
  * The same lifetime as core measures it.

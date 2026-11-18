@@ -22,10 +22,10 @@ import { formatAgo } from "$lib/time/format.js";
 import { withUnit } from "$lib/loops.js";
 
 /** Five tones every collection shares; types only label them. */
-export const TONES = ["attention", "warning", "quiet", "neutral", "good"];
+const TONES = ["attention", "warning", "quiet", "neutral", "good"];
 
 const DAY_MS = 86_400_000;
-export const ACTIVITY_DAYS = 14;
+const ACTIVITY_DAYS = 14;
 
 function text(value) {
   return String(value ?? "").trim();
@@ -103,7 +103,7 @@ export function collectionFromDailyDigest(cards, { href } = {}) {
 // ---------------------------------------------------------------------------
 // Loops (brief.v1 `initiatives.loop`)
 
-export const LOOP_STATES = [
+const LOOP_STATES = [
   { key: "waiting", label: "Waiting on you", tone: "attention" },
   { key: "failing", label: "Failing", tone: "attention" },
   { key: "silent", label: "Stopped reporting", tone: "quiet" },

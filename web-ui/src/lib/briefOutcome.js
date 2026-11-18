@@ -103,7 +103,7 @@ export function formatMeasureValue(value, unit = "") {
 }
 
 /** Whole units of the largest fitting span: 90s → "1m", 4 days → "4d". */
-export function formatShortSpan(seconds) {
+function formatShortSpan(seconds) {
   const s = Math.max(0, Number(seconds) || 0);
   if (s >= 86_400) return `${Math.floor(s / 86_400)}d`;
   if (s >= 3_600) return `${Math.floor(s / 3_600)}h`;

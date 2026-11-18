@@ -9,7 +9,6 @@ import {
 } from "$lib/localWorkStore.js";
 
 export const localWorkScope = readerScope;
-export const localWorkScopeKey = () => get(readerScope);
 export function canUseLocalWorkScope(scope) {
   return Boolean(
     localWorkPrincipal(scope) && (get(authenticatedAgent) || get(devActorMode)),

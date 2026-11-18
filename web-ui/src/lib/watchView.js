@@ -12,7 +12,7 @@
  * - `/initiatives?view=lanes` redirects here as `?view=lanes`.
  */
 
-export const WATCH_TABS = Object.freeze([
+const WATCH_TABS = Object.freeze([
   "initiatives",
   "loops",
   "trends",
@@ -20,7 +20,7 @@ export const WATCH_TABS = Object.freeze([
 ]);
 
 /** The non-list layout each tab offers. */
-export const WATCH_BOARD = Object.freeze({
+const WATCH_BOARD = Object.freeze({
   initiatives: "lanes",
   loops: "board",
 });

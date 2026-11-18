@@ -22,11 +22,6 @@ export function onWorkspaceViewsDenied(scope, listener) {
 
 export const workspaceViewRevision = () => revision;
 
-export function onWorkspaceViewChanged(listener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
 /** Confirmed mutations invalidate reads started before the confirmation. */
 export function reviseWorkspaceView(key, transform) {
   const previous = readWorkspaceView(key);
