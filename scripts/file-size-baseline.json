@@ -38,7 +38,7 @@
   "web-ui/src/lib/devWorkspaceFixtures.js": 2838,
   "web-ui/src/lib/inboxResponseQueue.js": 1271,
   "web-ui/src/lib/localWorkStore.js": 805,
-  "web-ui/src/lib/mutationOutbox.js": 1458,
+  "web-ui/src/lib/mutationOutbox.js": 1461,
   "web-ui/src/lib/server/authSession.js": 1251,
   "web-ui/src/lib/visualReportCharts.js": 1074,
   "web-ui/src/lib/visualReports.js": 887,

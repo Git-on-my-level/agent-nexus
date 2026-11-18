@@ -14694,7 +14694,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/work/{card_ref}/move",
     "operation_id": "workMove",
     "summary": "Move a card under a parent, to top level or to Unsorted",
-    "why": "Move a card under a parent, to top level or to Unsorted",
+    "why": "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason.",
     "input_mode": "json-body",
     "streaming": {
       "mode": "none"

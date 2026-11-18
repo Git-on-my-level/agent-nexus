@@ -168,8 +168,8 @@ func handleWorkGrouping(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	}
 	scope := "work." + verb + ":" + id
 	if replayAs, ok := raw["replay_as"]; ok {
-		if verb != "move" || replayAs != "work.group" {
-			writeError(w, 400, "invalid_request", "replay_as must be work.group on a move")
+		if verb != "move" || replayAs != "work.group" || anyString(raw["under"]) == "" || raw["root"] == true || raw["unsorted"] == true {
+			writeError(w, 400, "invalid_request", "replay_as must be work.group on a move under a parent")
 			return true
 		}
 		delete(raw, "replay_as")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -208,9 +209,23 @@ func TestGroupingReplayIsExactAndChangedBodiesConflict(t *testing.T) {
 	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group"}`, other["ref"]), 409)
 	// A saved legacy group replays under the work.group scope, never as a new move.
 	legacy := fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group","replay_as":"work.group"}`, p["ref"])
-	workPostJSON(t, url+"/move", legacy, 200)
+	landed := workPostJSON(t, url+"/move", legacy, 200)
 	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"tray-group","replay_as":"work.group"}`, other["ref"]), 409)
+	// After the card moves on, resending the saved group returns its original
+	// receipt and leaves the card where the later move put it.
+	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"moved-on"}`, other["ref"]), 200)
+	if replayed := workPostJSON(t, url+"/move", legacy, 200); !reflect.DeepEqual(replayed, landed) {
+		t.Fatalf("saved group did not replay its receipt:\n got %#v\nwant %#v", replayed, landed)
+	}
+	if read := workGetJSON(t, url, 200)["work"].(map[string]any); read["parent_ref"] != other["ref"] {
+		t.Fatalf("replayed group moved the card again: %#v", read)
+	}
 	workPostJSON(t, url+"/move", `{"actor_id":"grouper","unsorted":true,"replay_as":"work.fold"}`, 400)
+	workPostJSON(t, url+"/move", `{"actor_id":"grouper","unsorted":true,"replay_as":"work.group","request_key":"no-parent"}`, 400)
+	workPostJSON(t, url+"/move", fmt.Sprintf(`{"actor_id":"grouper","under":%q,"root":true,"replay_as":"work.group","request_key":"root-group"}`, p["ref"]), 400)
+	for _, removed := range []string{"group", "promote", "retire"} {
+		workPostJSON(t, url+"/"+removed, `{"actor_id":"grouper","request_key":"removed-`+removed+`"}`, 404)
+	}
 	fold := fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, p["ref"])
 	workPostJSON(t, url+"/fold", fold, 200)
 	workPostJSON(t, url+"/fold", fmt.Sprintf(`{"actor_id":"grouper","into":%q,"request_key":"tray-fold"}`, other["ref"]), 409)
@@ -406,5 +421,25 @@ func TestWorkTreeMoveWireReplayAndPaths(t *testing.T) {
 	promoted := workPostJSON(t, url+"/move", `{"actor_id":"grouper","root":true,"reason":"Independent outcome","request_key":"tree-promote-once"}`, 200)
 	if promoted["event"].(map[string]any)["type"] != "initiative_promoted" || promoted["work"].(map[string]any)["path"] != "initiatives/retry" {
 		t.Fatal(promoted)
+	}
+}
+
+// Grouping an initiative under a parent without a reason keeps the repair
+// action the removed group route returned.
+func TestGroupingInitiativeUnderParentNeedsReason(t *testing.T) {
+	h := newProjectionMaintenanceTestServer(t)
+	workPostJSON(t, h.baseURL+"/actors", `{"actor":{"id":"grouper","display_name":"Grouper","created_at":"2026-10-01T00:00:00Z"}}`, 201)
+	goal := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Goal","top_level":true}`, 201)["work"].(map[string]any)
+	parent := workPostJSON(t, h.baseURL+"/work", `{"actor_id":"grouper","title":"Parent"}`, 201)["work"].(map[string]any)
+	url := h.baseURL + "/work/" + asString(goal["ref"]) + "/move"
+	refused := workPostJSON(t, url, fmt.Sprintf(`{"actor_id":"grouper","under":%q,"request_key":"no-reason"}`, parent["ref"]), 400)["error"].(map[string]any)
+	details, _ := refused["details"].(map[string]any)
+	actions, _ := refused["next_actions"].([]any)
+	if details["initiative_ref"] != goal["ref"] || len(actions) != 1 {
+		t.Fatalf("initiative grouping lost its repair: %#v", refused)
+	}
+	moved := workPostJSON(t, url, fmt.Sprintf(`{"actor_id":"grouper","under":%q,"reason":"Fold into parent","request_key":"with-reason"}`, parent["ref"]), 200)["work"].(map[string]any)
+	if moved["parent_ref"] != parent["ref"] {
+		t.Fatalf("reasoned move did not land: %#v", moved)
 	}
 }

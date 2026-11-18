@@ -4,7 +4,6 @@ import { createLocalMutationClient } from "$lib/coreClient.js";
 import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
 import { authenticatedAgent } from "$lib/authSession.js";
 import { devActorMode } from "$lib/workspaceContext.js";
-import { groupingSendBody } from "$lib/workGrouping.js";
 import {
   listLocalWork,
   loadLocalWork,
@@ -40,7 +39,11 @@ import {
   autoApplyStageKey,
   randomUUID,
 } from "$lib/replayPolicy.js";
-import { removeGroupedStep, sendTopLevel } from "$lib/groupingPlan.js";
+import {
+  groupingSendBody,
+  removeGroupedStep,
+  sendTopLevel,
+} from "$lib/groupingPlan.js";
 import { sendStandingMutation } from "$lib/standingRulingSend.js";
 
 export const mutationOutbox = writable([]);

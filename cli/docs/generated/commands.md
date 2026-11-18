@@ -3381,7 +3381,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Move a card under a parent, to top level or to Unsorted
+- Why: Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason.
 - Concepts: `cards`
 - Error codes: `invalid_request`, `not_found`, `conflict`
 - Output: Returns WorkResponse.

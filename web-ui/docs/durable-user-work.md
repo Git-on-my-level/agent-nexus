@@ -38,7 +38,10 @@ as body `request_key`, scoped to the submitting actor. Core atomically stores
 the mutation and original receipt, so retries confirm the original intent even
 if the card has since moved again. Already queued `work.top_level` intents
 translate to root or Unsorted moves with their saved identity and a reason
-(`sendTopLevel` in `groupingPlan.js`). New promotions have an editable reason.
+(`sendTopLevel` in `groupingPlan.js`). Already queued `work.group` intents are
+sent as moves under their parent with `replay_as: "work.group"`, so core
+replays them under the original `work.group` receipt scope (`groupingSendBody`
+in `groupingPlan.js`). New promotions have an editable reason.
 `tests/e2e/decide.spec.js` covers
 one-tap answers, undo and drafts across the list and the permalink.
 

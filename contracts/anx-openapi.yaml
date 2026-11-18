@@ -1684,7 +1684,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.move
       x-anx-cli-path: work move
-      x-anx-why: Move a card under a parent, to top level or to Unsorted
+      x-anx-why: "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason."
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns WorkResponse.

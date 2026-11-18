@@ -192,6 +192,9 @@ func (s *Store) MoveWork(ctx context.Context, actor, id string, in MoveWorkInput
 		if err = tx.QueryRowContext(ctx, `SELECT `+workIsInitiativeSQL("c")+`,c.parent_card_id FROM main.cards c WHERE c.id=?`, c.CardID).Scan(&wasInitiative, &oldParent); err != nil {
 			return err
 		}
+		if wasInitiative && !in.Root && in.Reason == "" {
+			return &InitiativeGroupingError{Ref: "card:" + firstNonEmptyString(c.Handle.String, c.CardID)}
+		}
 		if in.Root != wasInitiative && in.Reason == "" {
 			return workInvalid("a reason is required to promote or retire an initiative")
 		}
@@ -268,8 +271,6 @@ func workCardRef(ctx context.Context, tx *accessTx, id string) any {
 	return ref
 }
 
-// ChangeInitiative keeps the promote/retire routes as spellings of MoveWork.
-// Boards no longer decide initiatives; to_board is accepted and ignored.
 // InitiativeChanges hydrates only scoped canonical events from a fixed routing
 // window. Hidden rows never trigger refill or contribute to returned metadata.
 func (s *Store) InitiativeChanges(ctx context.Context, limit int) (map[string]any, error) {
