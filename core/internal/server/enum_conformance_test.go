@@ -6,8 +6,8 @@ import (
 	contractenums "agent-nexus-contracts-go-client/enums"
 )
 
-// TestContractEnumConformance checks core's board column validators and
-// priority naming against the generated schema enums.
+// TestContractEnumConformance checks core's board column validators against
+// the generated schema enums.
 // scripts/check-enum-conformance.mjs runs it beside the CLI and web-ui checks.
 func TestContractEnumConformance(t *testing.T) {
 	for _, column := range contractenums.BoardColumnKeyValues {
