@@ -89,4 +89,10 @@ var recentMigrations = []migration{
 	// Outcome facts for Watch and Decide: authored versus automatic notes,
 	// fyi notes and standing rulings. One backfill statement over brief_notes.
 	{Version: 148, AfterApply: installOutcomeFacts},
+	{Version: 149, Statements: []string{
+		`ALTER TABLE agent_wakeups ADD COLUMN handoff_sender_actor_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agent_wakeups ADD COLUMN handoff_expires_at TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agent_wakeups ADD COLUMN handoff_acknowledged_at TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agent_wakeups ADD COLUMN handoff_blocked_ref_index INTEGER NOT NULL DEFAULT 0`,
+	}},
 }

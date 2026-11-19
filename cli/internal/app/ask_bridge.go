@@ -105,10 +105,18 @@ func (a *App) consumeRegisteredWakes(ctx context.Context, cfg config.Resolved, d
 	if err != nil {
 		return err
 	}
-	cursor, _ := os.ReadFile(filepath.Join(dir, "cursor"))
+	streamPath, cursorName := "/stream/agent-wakeups", "cursor"
+	if runtime != nil {
+		// The legacy cursor may already have advanced past handoffs that an
+		// older bridge did not request. Canonical receipts dedupe the snapshot.
+		streamPath += "?handoffs=1"
+		cursorName = "cursor-handoffs-v1"
+	}
+	cursorPath := filepath.Join(dir, cursorName)
+	cursor, _ := os.ReadFile(cursorPath)
 	streamCtx, stopStream := context.WithTimeout(ctx, 30*time.Second)
 	defer stopStream()
-	resp, err := client.OpenStream(streamCtx, httpclient.RawRequest{Method: http.MethodGet, Path: "/stream/agent-wakeups", Headers: map[string]string{"Accept": "text/event-stream", "Last-Event-ID": strings.TrimSpace(string(cursor))}})
+	resp, err := client.OpenStream(streamCtx, httpclient.RawRequest{Method: http.MethodGet, Path: streamPath, Headers: map[string]string{"Accept": "text/event-stream", "Last-Event-ID": strings.TrimSpace(string(cursor))}})
 	if err != nil {
 		return err
 	}
@@ -120,7 +128,7 @@ func (a *App) consumeRegisteredWakes(ctx context.Context, cfg config.Resolved, d
 	nextCursor := ""
 	for ctx.Err() == nil {
 		if nextCursor != "" {
-			if err = os.WriteFile(filepath.Join(dir, "cursor"), []byte(nextCursor), 0600); err != nil {
+			if err = os.WriteFile(cursorPath, []byte(nextCursor), 0600); err != nil {
 				return err
 			}
 		}

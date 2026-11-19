@@ -1171,9 +1171,9 @@ Global Flags:
 }
 
 func helpTopicText(topic string) (string, bool) {
-	text, ok := setupJobHelp(topic, helpTopicTextRaw)
+	text, ok := setupJobHelp(topic, helpTopicWithAgentHandoffs)
 	if !ok {
-		text, ok = helpTopicTextRaw(topic)
+		text, ok = helpTopicWithAgentHandoffs(topic)
 	}
 	if !ok {
 		return "", false

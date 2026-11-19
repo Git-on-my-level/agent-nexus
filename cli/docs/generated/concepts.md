@@ -15,8 +15,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `21`
+- Commands: `24`
 - Command IDs:
+  - `agent.handoffs.ack`
+  - `agent.handoffs.get`
+  - `agent.handoffs.send`
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
   - `agent.notification-receipts.stream`

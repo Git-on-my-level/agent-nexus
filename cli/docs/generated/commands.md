@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `277`
+- Commands: `280`
 
 ## `actors.create`
 
@@ -96,6 +96,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `series_capacity`
 - Output: Returns JSON with provenance and explicit freshness.
 - Agent notes: Explicit declared push source; core never fetches external data.
+
+## `agent.handoffs.ack`
+
+- CLI path: `agent handoffs ack`
+- HTTP: `POST /agent-handoffs/{handoff_id}/ack`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Attest that the recipient checked every reference, or record the first inaccessible reference.
+- Concepts: `agents`
+- Error codes: `agent_required`, `invalid_request`, `not_found`, `conflict`, `ref_unavailable`
+- Output: Returns the current handoff receipt.
+- Agent notes: Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup.
+
+## `agent.handoffs.get`
+
+- CLI path: `agent handoffs get`
+- HTTP: `GET /agent-handoffs/{handoff_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read transport delivery and recipient pickup independently.
+- Concepts: `agents`
+- Error codes: `agent_required`, `not_found`
+- Output: Returns the current handoff receipt.
+- Agent notes: Only the sender and recipient can read a receipt. Delivery and pickup do not change task state.
+
+## `agent.handoffs.send`
+
+- CLI path: `agent handoffs send`
+- HTTP: `POST /agent-handoffs`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Address a workspace agent by actor identity with portable references.
+- Concepts: `agents`
+- Error codes: `agent_required`, `invalid_request`, `not_found`, `ref_unavailable`
+- Output: Returns the current handoff receipt.
+- Agent notes: Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:<id>, multica:issue:<uuid>, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record.
 
 ## `agent.inbox.answers.read`
 

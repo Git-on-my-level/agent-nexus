@@ -62,6 +62,9 @@ export declare class AnxClient {
     adaptersList(options?: RequestOptions): Promise<InvokeResult>;
     adaptersRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     adaptersToken(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    agentHandoffsAck(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    agentHandoffsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    agentHandoffsSend(options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAnswersRead(options?: RequestOptions): Promise<InvokeResult>;
     agentInboxAsksList(options?: RequestOptions): Promise<InvokeResult>;
     agentInboxSubscribe(options?: RequestOptions): Promise<InvokeResult>;
