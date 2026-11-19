@@ -66,6 +66,15 @@ func (a *App) deliverRuntimeWake(ctx context.Context, cfg config.Resolved, dir s
 		receipt.Instance += "-" + hex.EncodeToString(token)
 	}
 	if receipt.State == "executing" || receipt.State == "uncertain" {
+		if addressed {
+			// The command may have acted before the bridge stopped. Retain its
+			// claim for reconciliation and let the stream advance past it.
+			if receipt.State == "executing" {
+				receipt.State = "uncertain"
+				return integrations.PrivateWrite(path, integrations.JSON(receipt))
+			}
+			return nil
+		}
 		return fmt.Errorf("runtime outcome uncertain; inspect retained runtime receipt")
 	}
 	instance = receipt.Instance
@@ -276,14 +285,14 @@ func (b *bridgeControlOutput) Write(p []byte) (int, error) {
 func (b *bridgeControlOutput) Len() int      { return b.buffer.Len() }
 func (b *bridgeControlOutput) Bytes() []byte { return b.buffer.Bytes() }
 
-// A killed/timeout child may have committed external effects. Keep this lane
-// visibly unready until the owner reconciles its outcome; other jobs keep running.
+// Uncertain addressed callbacks are fenced individually during delivery.
+// Legacy runtime receipts still stop dispatch, and doctor reports uncertainty.
 func checkRuntimeReceipts(dir string) error {
-	_, err := inspectRuntimeReceipts(dir, false)
+	_, err := inspectRuntimeReceipts(dir, false, true)
 	return err
 }
 
-func inspectRuntimeReceipts(dir string, live bool) (inProgress bool, err error) {
+func inspectRuntimeReceipts(dir string, live, dispatch bool) (inProgress bool, err error) {
 	dir = filepath.Join(dir, "runtime-receipts")
 	files, e := os.ReadDir(dir)
 	if os.IsNotExist(e) {
@@ -306,6 +315,10 @@ func inspectRuntimeReceipts(dir string, live bool) (inProgress bool, err error) 
 		var r runtimeWakeReceipt
 		if e = json.Unmarshal(raw, &r); e != nil {
 			return false, e
+		}
+		if dispatch && strings.HasPrefix(r.Wake, "handoff-") &&
+			(r.State == "executing" || r.State == "uncertain") {
+			continue
 		}
 		switch r.State {
 		case "prepared", "delivered", "failed", "acknowledged":
