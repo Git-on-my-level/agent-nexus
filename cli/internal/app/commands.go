@@ -129,6 +129,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err
 	}
+	if len(args) >= 2 && args[0] == "agent" && args[1] == "handoffs" {
+		return a.runAgentHandoffCommand(ctx, args[2:], cfg)
+	}
 	switch args[0] {
 	case "series", "adapters":
 		return a.runSeriesCommand(ctx, args, cfg)

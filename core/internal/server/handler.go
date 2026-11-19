@@ -2098,7 +2098,7 @@ func NewHandler(schemaVersion string, options ...HandlerOption) http.Handler {
 		}
 		handleAskOutcome(w, r, opts, false)
 	})
-	registerStreamRoute("agent-wakeups", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleAskWakeStream(w, r, opts) })
+	registerAgentWakeRoutes(registerRoute, registerStreamRoute, opts)
 	registerStreamRoute("asks/{ask_id}", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
 		handleAskOutcome(w, r, opts, true)
 	})

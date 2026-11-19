@@ -366,6 +366,165 @@ export const commandRegistry: CommandSpec[] = [
     "ts_method": "adaptersToken"
   },
   {
+    "command_id": "agent.handoffs.ack",
+    "cli_path": "agent handoffs ack",
+    "group": "agent",
+    "method": "POST",
+    "path": "/agent-handoffs/{handoff_id}/ack",
+    "operation_id": "acknowledgeAgentHandoff",
+    "summary": "Record recipient pickup",
+    "why": "Attest that the recipient checked every reference, or record the first inaccessible reference.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current handoff receipt.",
+    "error_codes": [
+      "agent_required",
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "ref_unavailable"
+    ],
+    "concepts": [
+      "agents"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "outcome",
+          "type": "string",
+          "enum_values": [
+            "ref_blocked",
+            "refs_verified"
+          ]
+        }
+      ],
+      "optional": [
+        {
+          "name": "blocked_ref",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "handoff_id"
+    ],
+    "adjacent_commands": [
+      "agent.handoffs.get",
+      "agent.handoffs.send",
+      "agent.inbox.answers.read",
+      "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
+      "agent.notifications.dismiss",
+      "agent.notifications.list",
+      "agent.notifications.read",
+      "agent.wakeups.stream"
+    ],
+    "go_method": "AgentHandoffsAck",
+    "ts_method": "agentHandoffsAck"
+  },
+  {
+    "command_id": "agent.handoffs.get",
+    "cli_path": "agent handoffs get",
+    "group": "agent",
+    "method": "GET",
+    "path": "/agent-handoffs/{handoff_id}",
+    "operation_id": "getAgentHandoff",
+    "summary": "Read a handoff receipt",
+    "why": "Read transport delivery and recipient pickup independently.",
+    "input_mode": "none",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current handoff receipt.",
+    "error_codes": [
+      "agent_required",
+      "not_found"
+    ],
+    "concepts": [
+      "agents"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Only the sender and recipient can read a receipt. Delivery and pickup do not change task state.",
+    "path_params": [
+      "handoff_id"
+    ],
+    "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.send",
+      "agent.inbox.answers.read",
+      "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
+      "agent.notifications.dismiss",
+      "agent.notifications.list",
+      "agent.notifications.read",
+      "agent.wakeups.stream"
+    ],
+    "go_method": "AgentHandoffsGet",
+    "ts_method": "agentHandoffsGet"
+  },
+  {
+    "command_id": "agent.handoffs.send",
+    "cli_path": "agent handoffs send",
+    "group": "agent",
+    "method": "POST",
+    "path": "/agent-handoffs",
+    "operation_id": "queueAgentHandoff",
+    "summary": "Queue a handoff for a registered agent",
+    "why": "Address a workspace agent by actor identity with portable references.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns the current handoff receipt.",
+    "error_codes": [
+      "agent_required",
+      "invalid_request",
+      "not_found",
+      "ref_unavailable"
+    ],
+    "concepts": [
+      "agents"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:\u003cid\u003e, multica:issue:\u003cuuid\u003e, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "expires_at",
+          "type": "datetime"
+        },
+        {
+          "name": "recipient_actor_id",
+          "type": "string"
+        },
+        {
+          "name": "refs",
+          "type": "list\u003cstring\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.inbox.answers.read",
+      "agent.inbox.asks.list",
+      "agent.inbox.subscribe",
+      "agent.notifications.dismiss",
+      "agent.notifications.list",
+      "agent.notifications.read",
+      "agent.wakeups.stream"
+    ],
+    "go_method": "AgentHandoffsSend",
+    "ts_method": "agentHandoffsSend"
+  },
+  {
     "command_id": "agent.inbox.answers.read",
     "cli_path": "agent inbox answers read",
     "group": "agent",
@@ -402,6 +561,9 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.asks.list",
       "agent.inbox.subscribe",
       "agent.notifications.dismiss",
@@ -439,6 +601,9 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "projection",
     "agent_notes": "Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.",
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.subscribe",
       "agent.notifications.dismiss",
@@ -500,6 +665,9 @@ export const commandRegistry: CommandSpec[] = [
       ]
     },
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
       "agent.notifications.dismiss",
@@ -565,6 +733,9 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "projection",
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
       "agent.inbox.subscribe",
@@ -600,6 +771,9 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "projection",
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
       "agent.inbox.subscribe",
@@ -638,6 +812,9 @@ export const commandRegistry: CommandSpec[] = [
     "stability": "beta",
     "surface": "projection",
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
       "agent.inbox.subscribe",
@@ -673,6 +850,9 @@ export const commandRegistry: CommandSpec[] = [
     "surface": "canonical",
     "agent_notes": "Current resource access applies on every poll.",
     "adjacent_commands": [
+      "agent.handoffs.ack",
+      "agent.handoffs.get",
+      "agent.handoffs.send",
       "agent.inbox.answers.read",
       "agent.inbox.asks.list",
       "agent.inbox.subscribe",
@@ -15904,6 +16084,18 @@ export class AnxClient {
 
   adaptersToken(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("adapters.token", pathParams, options);
+  }
+
+  agentHandoffsAck(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.handoffs.ack", pathParams, options);
+  }
+
+  agentHandoffsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.handoffs.get", pathParams, options);
+  }
+
+  agentHandoffsSend(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("agent.handoffs.send", {}, options);
   }
 
   agentInboxAnswersRead(options: RequestOptions = {}): Promise<InvokeResult> {

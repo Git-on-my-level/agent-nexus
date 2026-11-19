@@ -7242,6 +7242,8 @@ paths:
       x-anx-stability: beta
       x-anx-output-envelope: SSE notification_receipt contains the authorized wake.
       x-anx-error-codes: [not_found, auth_required]
+      parameters:
+        - {name: handoffs, in: query, schema: {type: string, enum: ['1']}, description: Opt in to addressed handoffs on the existing bridge stream.}
       responses:
         '200':
           description: SSE outcome and keepalive messages.
@@ -9267,6 +9269,104 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /agent-handoffs:
+    post:
+      operationId: queueAgentHandoff
+      summary: Queue a handoff for a registered agent
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.send
+      x-anx-cli-path: agent handoffs send
+      x-anx-why: Address a workspace agent by actor identity with portable references.
+      x-anx-agent-notes: "Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:<id>, multica:issue:<uuid>, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record."
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, invalid_request, not_found, ref_unavailable]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [recipient_actor_id, refs, expires_at]
+              properties:
+                recipient_actor_id: {type: string}
+                refs:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items: {type: string, maxLength: 300}
+                expires_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: The queued record or its current state on semantic replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
+  /agent-handoffs/{handoff_id}:
+    parameters:
+      - {name: handoff_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getAgentHandoff
+      summary: Read a handoff receipt
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.get
+      x-anx-cli-path: agent handoffs get
+      x-anx-why: Read transport delivery and recipient pickup independently.
+      x-anx-agent-notes: "Only the sender and recipient can read a receipt. Delivery and pickup do not change task state."
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, not_found]
+      responses:
+        '200':
+          description: Receipt visible to the sender and intended recipient.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
+  /agent-handoffs/{handoff_id}/ack:
+    parameters:
+      - {name: handoff_id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: acknowledgeAgentHandoff
+      summary: Record recipient pickup
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.ack
+      x-anx-cli-path: agent handoffs ack
+      x-anx-why: Attest that the recipient checked every reference, or record the first inaccessible reference.
+      x-anx-agent-notes: "Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup."
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, invalid_request, not_found, conflict, ref_unavailable]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome]
+              properties:
+                outcome: {type: string, enum: [refs_verified, ref_blocked]}
+                blocked_ref: {type: string, description: Required for ref_blocked and must be a ref from the handoff.}
+      responses:
+        '200':
+          description: The first recorded pickup or an identical replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
 
   /agent-notifications:
     get:
@@ -14463,6 +14563,22 @@ components:
             items: { $ref: '#/components/schemas/AgentNotificationReceipt' }
       required: [thread, events, artifacts, topics, cards, documents]
 
+    AgentHandoff:
+      type: object
+      required: [handoff_id, sender_actor_id, recipient_actor_id, refs, queued_at, expires_at, delivery_status, pickup_status]
+      properties:
+        handoff_id: {type: string}
+        sender_actor_id: {type: string}
+        recipient_actor_id: {type: string}
+        refs: {type: array, items: {type: string}}
+        queued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        delivery_status: {type: string, enum: [queued, claimed, bridge_delivered, failed, expired]}
+        bridge_delivered_at: {type: string, format: date-time}
+        pickup_status: {type: string, enum: [pending, acknowledged, expired]}
+        acknowledged_at: {type: string, format: date-time}
+        outcome: {type: string, enum: [refs_verified, ref_blocked]}
+        blocked_ref: {type: string}
     AgentNotificationReceipt:
       type: object
       description: Sender/operator-visible projection of an agent wake notification.

@@ -248,7 +248,7 @@ func authenticateAgentWakeupTarget(w http.ResponseWriter, r *http.Request, opts 
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to verify wakeup target")
 		return nil, req, false
 	}
-	if !owns {
+	if !owns || (primitives.IsAgentHandoffID(wakeup.WakeupID) && wakeup.WorkspaceID != effectiveWorkspaceID(opts.workspaceID)) {
 		writeError(w, http.StatusNotFound, "not_found", "wakeup not found")
 		return nil, req, false
 	}
@@ -350,6 +350,9 @@ func deriveAgentNotifications(ctx context.Context, opts handlerOptions, actorID 
 	}
 	items := make([]map[string]any, 0, len(wakeups))
 	for _, wakeup := range wakeups {
+		if primitives.IsAgentHandoffID(wakeup.WakeupID) {
+			continue
+		}
 		item := agentNotificationFromWakeup(wakeup)
 		if item.TriggerText == "" || item.ThreadTitle == "" {
 			hydrateAgentNotificationFromArtifact(ctx, opts, item)

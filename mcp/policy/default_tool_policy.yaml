@@ -153,6 +153,15 @@ commands:
   "integrations.run":
     classification: unsupported_shell_shaped
     reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "agent.handoffs.ack":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
+  "agent.handoffs.get":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
+  "agent.handoffs.send":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
   "agent.inbox.subscribe":
     classification: unsupported_other
     reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"

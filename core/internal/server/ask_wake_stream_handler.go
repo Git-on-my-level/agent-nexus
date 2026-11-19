@@ -33,6 +33,7 @@ func handleAskWakeStream(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		return
 	}
 	snapshot := r.Header.Get("Last-Event-ID") == ""
+	includeHandoffs := r.URL.Query().Get("handoffs") == "1"
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -61,6 +62,9 @@ func handleAskWakeStream(w http.ResponseWriter, r *http.Request, opts handlerOpt
 		}
 		cursor = page.Cursor
 		for _, wake := range page.Wakeups {
+			if primitives.IsAgentHandoffID(wake.WakeupID) && (!includeHandoffs || wake.WorkspaceID != effectiveWorkspaceID(opts.workspaceID)) {
+				continue
+			}
 			b, _ := json.Marshal(map[string]any{"receipt": agentNotificationFromWakeup(wake).toMap()})
 			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if token := page.Tokens[wake.WakeupID]; token != "" {

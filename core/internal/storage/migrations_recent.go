@@ -1,5 +1,11 @@
 package storage
 
+import (
+	"context"
+	"database/sql"
+	"fmt"
+)
+
 // recentMigrations continue the migrations list; migrations.go is at its size
 // cap, so new versions are appended here in order.
 var recentMigrations = []migration{
@@ -89,4 +95,27 @@ var recentMigrations = []migration{
 	// Outcome facts for Watch and Decide: authored versus automatic notes,
 	// fyi notes and standing rulings. One backfill statement over brief_notes.
 	{Version: 148, AfterApply: installOutcomeFacts},
+	{Version: 149, AfterApply: installAgentHandoffColumns},
+}
+
+func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {
+	for _, column := range []struct {
+		name, definition string
+	}{
+		{"handoff_sender_actor_id", "TEXT NOT NULL DEFAULT ''"},
+		{"handoff_expires_at", "TEXT NOT NULL DEFAULT ''"},
+		{"handoff_acknowledged_at", "TEXT NOT NULL DEFAULT ''"},
+		{"handoff_blocked_ref_index", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		exists, err := sqliteTableHasColumn(ctx, tx, "agent_wakeups", column.name)
+		if err != nil {
+			return fmt.Errorf("inspect wakeup column %s: %w", column.name, err)
+		}
+		if !exists {
+			if _, err := tx.ExecContext(ctx, `ALTER TABLE agent_wakeups ADD COLUMN `+column.name+" "+column.definition); err != nil {
+				return fmt.Errorf("add wakeup column %s: %w", column.name, err)
+			}
+		}
+	}
+	return nil
 }

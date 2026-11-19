@@ -26,6 +26,16 @@
   },
   {
     "method": "POST",
+    "path": "/agent-handoffs",
+    "reason": "Queues one addressed wake after checking the bounded reference list."
+  },
+  {
+    "method": "POST",
+    "path": "/agent-handoffs/{handoff_id}/ack",
+    "reason": "Records the intended recipient pickup result on one existing wake."
+  },
+  {
+    "method": "POST",
     "path": "/agent-inbox/answers/read",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },

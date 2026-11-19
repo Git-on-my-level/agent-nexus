@@ -243,7 +243,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 		t.Fatal(err)
 	}
 	seedStreamPrivacyInbox(t, store, threadID, streamPrivacyInboxItem(threadID, "scale-target-inbox", "Scale target"))
-	seedReceiptStreamWakeup(t, store, primitives.AgentWakeup{WakeupID: "scale-target-wakeup", ThreadID: threadID, TargetActorID: owner.ActorID, TargetHandle: owner.Username, Status: primitives.AgentWakeupStatusRequested, TriggerText: "Scale target", Refs: []string{"card:" + cardID}})
+	handoffID := seedPerformanceWakeups(t, store, owner, agent, threadID, cardID)
 	if err := perfguard.Seed(ctx, db, env.workspace.Layout().ArtifactContentDir, owner.ActorID, time.Now().UTC().Truncate(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func newPerformanceEnv(t *testing.T) performanceEnv {
 	var configured *handlerOptions
 	handler := NewHandler("scale-test", WithPrimitiveStore(ps), WithAuthStore(as), WithSecretsStore(secretStore), WithActorRegistry(actors.NewStore(observed)), WithSchemaContract(contract), WithHealthCheck(env.workspace.Ping), WithDecideRuntime(runtime), WithSeriesStore(&series.Store{DB: observed, Auth: as}), WithRunStore(commandcenter.NewStore(observed, commandcenter.SQLIdentities{DB: observed})), WithStreamPollInterval(5*time.Millisecond), func(o *handlerOptions) { configured = o })
 	result := performanceEnv{store: store, workspace: env.workspace, agent: agent, handler: handler, db: db, capture: capture, principals: []lockoutPrincipalSeed{owner, stranger}, hub: configured.agentChanges, documentRevision: anyString(doc["head_revision_id"]), replace: strings.NewReplacer(
-		"{ask_id}", "scale-task-ask", "{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
+		"{handoff_id}", handoffID, "{ask_id}", "scale-task-ask", "{secret_id}", secret.ID, "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{document_id}", anyString(doc["id"]), "{revision_id}", strings.TrimPrefix(anyString(card.Card["head_revision_ref"]), "card_revision:"), "{event_id}", anyString(event["id"]), "{artifact_id}", anyString(artifact["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{inbox_id}", "scale-target-inbox", "{host_id}", "scale-host", "{agent_id}", "scale-owner", "{decision_id}", "scale-target-decision", "{action_id}", "scale-target-action", "{name}", "scale.series", "{command_id}", "work.list", "{concept_name}", "cards", "{session_id}", session.SessionID, "{enrollment_id}", "scale-target-enrollment", "{run_id}", "scale-target-run")}
 	result.fresh = func(t *testing.T) (http.Handler, *perfguard.Capture, *agentChangeHub, func()) {
 		t.Helper()
 		pool, capture, err := perfguard.Open("file:" + env.workspace.Layout().DatabasePath + "?_pragma=busy_timeout(20000)&_pragma=journal_mode(WAL)&_txlock=immediate")

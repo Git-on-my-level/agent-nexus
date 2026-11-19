@@ -120,6 +120,41 @@ var CommandRegistry = []CommandSpec{
 		Adjacent:   []string{"adapters.declare", "adapters.delete", "adapters.list", "adapters.revoke"},
 	},
 	{
+		CommandID:  "agent.handoffs.ack",
+		CLIPath:    "agent handoffs ack",
+		Group:      "agent",
+		Method:     "POST",
+		Path:       "/agent-handoffs/{handoff_id}/ack",
+		PathParams: []string{"handoff_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"agents"},
+		Adjacent:   []string{"agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+	},
+	{
+		CommandID:  "agent.handoffs.get",
+		CLIPath:    "agent handoffs get",
+		Group:      "agent",
+		Method:     "GET",
+		Path:       "/agent-handoffs/{handoff_id}",
+		PathParams: []string{"handoff_id"},
+		InputMode:  "none",
+		Stability:  "beta",
+		Concepts:   []string{"agents"},
+		Adjacent:   []string{"agent.handoffs.ack", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+	},
+	{
+		CommandID: "agent.handoffs.send",
+		CLIPath:   "agent handoffs send",
+		Group:     "agent",
+		Method:    "POST",
+		Path:      "/agent-handoffs",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"agents"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+	},
+	{
 		CommandID: "agent.inbox.answers.read",
 		CLIPath:   "agent inbox answers read",
 		Group:     "agent",
@@ -128,7 +163,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "inbox", "write"},
-		Adjacent:  []string{"agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.inbox.asks.list",
@@ -139,7 +174,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "inbox"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.inbox.subscribe",
@@ -150,7 +185,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notification-receipts.stream",
@@ -170,7 +205,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.list", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notifications.list",
@@ -181,7 +216,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.read", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.read", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.notifications.read",
@@ -192,7 +227,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"agents", "notifications", "write"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.wakeups.stream"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.wakeups.stream"},
 	},
 	{
 		CommandID: "agent.wakeups.stream",
@@ -203,7 +238,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
+		Adjacent:  []string{"agent.handoffs.ack", "agent.handoffs.get", "agent.handoffs.send", "agent.inbox.answers.read", "agent.inbox.asks.list", "agent.inbox.subscribe", "agent.notifications.dismiss", "agent.notifications.list", "agent.notifications.read"},
 	},
 	{
 		CommandID:  "agents.get",
@@ -3671,6 +3706,18 @@ func (c *Client) AdaptersRevoke(ctx context.Context, pathParams map[string]strin
 
 func (c *Client) AdaptersToken(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "adapters.token", pathParams, opts)
+}
+
+func (c *Client) AgentHandoffsAck(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.handoffs.ack", pathParams, opts)
+}
+
+func (c *Client) AgentHandoffsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.handoffs.get", pathParams, opts)
+}
+
+func (c *Client) AgentHandoffsSend(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "agent.handoffs.send", nil, opts)
 }
 
 func (c *Client) AgentInboxAnswersRead(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

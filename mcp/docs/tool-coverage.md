@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 277
+- Command count: 280
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -12,7 +12,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | actors | 2 |
 | adapters | 5 |
-| agent | 8 |
+| agent | 11 |
 | agents | 4 |
 | artifacts | 10 |
 | ask | 4 |
@@ -68,7 +68,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 13 |
-| unsupported_other | 15 |
+| unsupported_other | 18 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
@@ -80,7 +80,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 69 | not represented as direct MCP tools in v1 |
+| unsupported | 72 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -93,6 +93,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | adapters.list | adapters | GET | /adapters | gated_admin | Inspect explicitly declared series grants; administration is required by core. |
 | adapters.revoke | adapters | POST | /adapters/{name}/revoke | gated_admin | Withdraw a series grant; requires current workspace administration. |
 | adapters.token | adapters | POST | /adapters/{name}/token | gated_sensitive | Return a short-lived credential for the owning enrolled agent; never expose by default. |
+| agent.handoffs.ack | agent | POST | /agent-handoffs/{handoff_id}/ack | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
+| agent.handoffs.get | agent | GET | /agent-handoffs/{handoff_id} | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
+| agent.handoffs.send | agent | POST | /agent-handoffs | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
 | agent.inbox.answers.read | agent | POST | /agent-inbox/answers/read | exposed_write | ordinary authenticated agent per-answer read state write |
 | agent.inbox.asks.list | agent | GET | /agent-inbox/asks | exposed_read | requester-scoped, keyset-paginated human attention inbox projection |
 | agent.inbox.subscribe | agent | POST | /agent-inbox/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
