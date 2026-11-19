@@ -44,6 +44,8 @@ type AgentWakeup struct {
 	ReadAt             string
 	DismissedAt        string
 	UpdatedAt          string
+	handoffSenderID    string
+	handoffExpiresAt   string
 }
 
 type AgentWakeupListFilter struct {
@@ -87,14 +89,15 @@ func upsertAgentWakeupTx(ctx context.Context, tx eventExec, wakeup AgentWakeup) 
 			workspace_id, workspace_name, thread_id, thread_title, trigger_event_id,
 			trigger_created_at, trigger_text, refs_json,
 			bridge_instance_id, failure_reason, created_at, claimed_at, completed_at,
-			failed_at, read_at, dismissed_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			failed_at, read_at, dismissed_at, updated_at, handoff_sender_actor_id, handoff_expires_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(wakeup_id) DO NOTHING`,
 		wakeup.WakeupID, wakeup.Status, wakeup.NotificationStatus, wakeup.TargetHandle, wakeup.TargetActorID,
 		wakeup.WorkspaceID, wakeup.WorkspaceName, wakeup.ThreadID, wakeup.ThreadTitle, wakeup.TriggerEventID,
 		wakeup.TriggerCreatedAt, wakeup.TriggerText, string(refsJSON),
 		wakeup.BridgeInstanceID, wakeup.FailureReason, wakeup.CreatedAt, nullEmpty(wakeup.ClaimedAt), nullEmpty(wakeup.CompletedAt),
 		nullEmpty(wakeup.FailedAt), nullEmpty(wakeup.ReadAt), nullEmpty(wakeup.DismissedAt), wakeup.UpdatedAt,
+		wakeup.handoffSenderID, wakeup.handoffExpiresAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert agent wakeup: %w", err)

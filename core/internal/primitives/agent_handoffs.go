@@ -44,19 +44,17 @@ func AgentHandoffID(workspaceID, senderID, recipientID, expiresAt string, refs [
 }
 
 func (s *Store) CreateAgentHandoff(ctx context.Context, handoff AgentHandoff, targetHandle string) (AgentHandoff, error) {
-	refs, err := json.Marshal(handoff.Refs)
-	if err != nil {
-		return AgentHandoff{}, err
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	// The existing wake and delivery triggers publish the row and its queue
-	// position atomically. A handoff has no source thread or human inbox event.
-	_, err = s.db.ExecContext(ctx, `INSERT INTO agent_wakeups
-		(wakeup_id, status, target_actor_id, target_handle, workspace_id, refs_json,
-		 created_at, updated_at, handoff_sender_actor_id, handoff_expires_at)
-		VALUES (?, 'requested', ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(wakeup_id) DO NOTHING`, handoff.ID, handoff.RecipientActorID,
-		targetHandle, handoff.WorkspaceID, string(refs), now, now, handoff.SenderActorID, handoff.ExpiresAt)
+	// Addressed handoffs use the same wake insert and delivery triggers as
+	// answer wakes. No source thread or human inbox event is needed.
+	err := upsertAgentWakeupTx(ctx, s.db, AgentWakeup{
+		WakeupID:         handoff.ID,
+		TargetActorID:    handoff.RecipientActorID,
+		TargetHandle:     targetHandle,
+		WorkspaceID:      handoff.WorkspaceID,
+		Refs:             handoff.Refs,
+		handoffSenderID:  handoff.SenderActorID,
+		handoffExpiresAt: handoff.ExpiresAt,
+	})
 	if err != nil {
 		return AgentHandoff{}, err
 	}
