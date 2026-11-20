@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"agent-nexus-cli/internal/config"
@@ -42,7 +43,7 @@ func (a *App) runMeta(ctx context.Context, args []string, cfg config.Resolved) (
 		result, name, err := a.runMetaOps(ctx, cfg, args[1:])
 		return result, name, err
 	case "commands":
-		result, err := a.runMetaCommands(args[1:])
+		result, err := a.runMetaCommands(args[1:], cfg)
 		return result, "meta commands", err
 	case "command":
 		result, err := a.runMetaCommand(args[1:])
@@ -111,7 +112,7 @@ func (a *App) runMetaOps(ctx context.Context, cfg config.Resolved, args []string
 	}
 }
 
-func (a *App) runMetaCommands(args []string) (*commandResult, error) {
+func (a *App) runMetaCommands(args []string, cfg config.Resolved) (*commandResult, error) {
 	fs := newSilentFlagSet("meta commands")
 	var groupFlag trackedString
 	fs.Var(&groupFlag, "group", "Filter by top-level runtime command group")
@@ -160,8 +161,40 @@ func (a *App) runMetaCommands(args []string) (*commandResult, error) {
 		"group_filter":       strings.TrimSpace(groupFlag.value),
 		"full_command_count": fullCount,
 	}
-	text := fmt.Sprintf("Generated commands: %d", len(commands))
-	return &commandResult{Text: text, Data: data}, nil
+	index := formatMetaCommandsIndex(commands, strings.TrimSpace(groupFlag.value))
+	result := &commandResult{Text: index, Data: data}
+	if !cfg.JSON && !cfg.Verbose && !cfg.Headers {
+		out := index
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		a.writeOutput(a.Stdout, out)
+		result.RawWritten = true
+	}
+	return result, nil
+}
+
+func formatMetaCommandsIndex(commands []registry.Command, groupFilter string) string {
+	entries := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		path := strings.TrimSpace(cmd.CLIPath)
+		id := strings.TrimSpace(cmd.CommandID)
+		if path == "" && id == "" {
+			continue
+		}
+		if path == "" {
+			path = id
+		}
+		entries = append(entries, path+"\t"+id)
+	}
+	sort.Strings(entries)
+	lines := []string{fmt.Sprintf("commands: %d", len(commands))}
+	if groupFilter != "" {
+		lines[0] += " group=" + groupFilter
+	}
+	lines = append(lines, entries...)
+	lines = append(lines, "Filter with --group, inspect one command with `anx debug meta command <id>`, or use --json for full records.")
+	return strings.Join(lines, "\n")
 }
 
 func (a *App) runMetaCommand(args []string) (*commandResult, error) {
