@@ -1,5 +1,19 @@
 # CLI runbook
 
+## Read a known ask across sessions
+
+`anx await event:<id> --workspace <alias> --timeout 1s` reads that ask's durable
+state regardless of the local session that filed it. Any reader already allowed
+to read the ask may use this command. A terminal ask returns immediately; a
+pending ask streams until it ends or the timeout expires (exit 8). Unknown or
+inaccessible asks return not found (exit 3).
+
+Subscriptions and delivery receipts remain requester-only. When a visible ask's
+subscription returns not found for another reader, await uses the independently
+authorized outcome stream without a delivery receipt. It never grants access or
+acknowledges the requester's delivery. `await --answers` retains its session-scoped
+delivery rules; direct lookup does not change its local cursor.
+
 ## Host enrollment and identity
 
 Set `ANX_BASE_URL` to the workspace core URL. A human auth-admin must bootstrap the workspace before a host can enroll.
