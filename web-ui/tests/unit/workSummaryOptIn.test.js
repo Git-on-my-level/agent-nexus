@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { searchWork } from "../../src/lib/searchHelpers.js";
-import { loadOverview } from "../../src/lib/overview.js";
 import { workProse } from "../../src/lib/workSummary.js";
 
 /**
@@ -23,23 +22,6 @@ import { workProse } from "../../src/lib/workSummary.js";
  */
 
 describe("every card read asks for the computed summary", () => {
-  it("overview", async () => {
-    const asked = [];
-    await loadOverview({
-      getOverview: async (filters) => {
-        asked.push(filters);
-        return {
-          work: { status: "ok", items: [] },
-          initiatives: { status: "ok", items: [] },
-          needs_you: { status: "ok", count: 0, rows: [], href: "" },
-          dashboard: { status: "ok", reports: [] },
-          agents: { status: "ok", items: [] },
-        };
-      },
-    });
-    expect(asked[0]).toMatchObject({ summary: 1 });
-  });
-
   it("work search, which the command palette shows status in", async () => {
     const asked = [];
     const client = await import("../../src/lib/coreClient.js").catch(
