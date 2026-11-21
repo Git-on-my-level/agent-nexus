@@ -17,19 +17,27 @@ Migration 150 runs once at startup, before serving. It:
    job table were previously installed at open, not by a numbered migration;
    the migration now makes that dependency explicit for fresh and upgraded
    workspaces.
-2. Completes an interrupted compact backfill from the legacy ledger. A
-   certified ledger (`resource_access_compact_job.done=1`) is never overwritten.
+2. Completes an interrupted compact backfill from the legacy ledger in bounded
+   batches. A certified ledger (`resource_access_compact_job.done=1`) is never
+   overwritten.
 3. Verifies the compact ledger against the legacy ledger and independently
    hashed raw edges in both `EXCEPT` directions, and rejects orphan compact
    rows. Any divergence aborts the upgrade; the migration never repairs or
    guesses.
-4. Stabilizes raw edge identities, rebuilds the compact-origin admission links,
-   drops the legacy tables, and reinstalls the writers and readers that
-   referenced them.
+4. Stabilizes raw edge identities in bounded batches, verifies both admission
+   ledgers against the compact ledger, rebuilds only a mismatched ledger, drops
+   the legacy tables, and reinstalls the writers and readers that referenced
+   them.
 5. Narrows the admission link indexes to their actual users:
    `idx_access_admission_child` and `idx_access_admission_parent` are partial on
    the `comment` and `document_comment` origins, and `idx_access_admission_via`
    is partial on the five origins that delete by key.
+
+Each phase commits its own transaction and the runner checkpoints the WAL
+between phases. Peak WAL is therefore bounded by one batch or one index build,
+not by the database size. The peak additional disk requirement is approximately
+one times the current `state.sqlite` size for the raw-edge staging copy and
+verification temp b-trees, plus WAL headroom for one bounded phase.
 
 A workspace whose compact ledger diverges fails to open with a migration error.
 Restore the verified backup, let the previous release finish certification, and

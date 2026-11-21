@@ -3,9 +3,12 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
 )
@@ -16,12 +19,172 @@ import (
 // with the legacy ledger and the raw edge table in both EXCEPT directions. Any
 // divergence aborts the upgrade; the migration never repairs or guesses.
 //
-// The compact capability is installed at open today, not by a numbered
-// migration. This migration makes that dependency explicit so a fresh workspace
-// and an upgraded workspace reach the same schema.
-func retireLegacyAccessLedger(ctx context.Context, tx *sql.Tx) error {
+// The migration is split into bounded, resumable phases. Each phase commits its
+// own transaction and the runner checkpoints the WAL between phases, so a large
+// workspace never accumulates the whole migration in one WAL. The phase cursor
+// lives in resource_access_retirement_state until the final phase drops it.
+const (
+	retirePhaseInstall = iota
+	retirePhaseExactDelete
+	retirePhaseExactInsert
+	retirePhaseCompactDelete
+	retirePhaseCompactInsert
+	retirePhaseCompactDone
+	retirePhaseStableCreate
+	retirePhaseStableCopy
+	retirePhaseStableFinalize
+	retirePhaseVerifyExact
+	retirePhaseVerifyLedger1
+	retirePhaseLedger1Delete
+	retirePhaseLedger1Insert
+	retirePhaseVerifyLedger2
+	retirePhaseLedger2Delete
+	retirePhaseLedger2Insert
+	retirePhaseDropTables
+	retirePhaseReinstallTriggers
+	retirePhaseIndexChild
+	retirePhaseIndexParent
+	retirePhaseIndexVia
+	retirePhaseFinalize
+)
+
+const (
+	retireBatch      = 5000
+	retireStateTable = `CREATE TABLE IF NOT EXISTS resource_access_retirement_state(singleton INTEGER PRIMARY KEY CHECK(singleton=1), phase INTEGER NOT NULL, cursor INTEGER)`
+)
+
+// retireLegacyAccessLedgerChunk executes one bounded phase. The runner commits
+// it, checkpoints the WAL, and calls again until the final phase returns done.
+func retireLegacyAccessLedgerChunk(ctx context.Context, tx *sql.Tx) (bool, error) {
+	if _, err := tx.ExecContext(ctx, retireStateTable); err != nil {
+		return false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_retirement_state(singleton,phase,cursor) VALUES(1,?,NULL) ON CONFLICT DO NOTHING`, retirePhaseInstall); err != nil {
+		return false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	var phase int
+	var cursor sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT phase,cursor FROM resource_access_retirement_state WHERE singleton=1`).Scan(&phase, &cursor); err != nil {
+		return false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	next, nextCursor, done, err := runRetirementPhase(ctx, tx, phase, cursor)
+	if err != nil {
+		return false, err
+	}
+	if done {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE resource_access_retirement_state`); err != nil {
+			return false, fmt.Errorf("retire legacy access ledger: %w", err)
+		}
+		return true, nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE resource_access_retirement_state SET phase=?,cursor=? WHERE singleton=1`, next, nextCursor); err != nil {
+		return false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	return false, nil
+}
+
+func runRetirementPhase(ctx context.Context, tx *sql.Tx, phase int, cursor sql.NullInt64) (int, sql.NullInt64, bool, error) {
+	switch phase {
+	case retirePhaseInstall:
+		return retireInstall(ctx, tx)
+	case retirePhaseExactDelete:
+		return retireDeleteAll(ctx, tx, "resource_access_exact_edges", phase, retirePhaseExactInsert)
+	case retirePhaseExactInsert:
+		return retireInsertExact(ctx, tx, cursor)
+	case retirePhaseCompactDelete:
+		return retireDeleteAll(ctx, tx, "resource_access_compact_edges", phase, retirePhaseCompactInsert)
+	case retirePhaseCompactInsert:
+		return retireInsertCompact(ctx, tx, cursor)
+	case retirePhaseCompactDone:
+		return retireCompactDone(ctx, tx)
+	case retirePhaseStableCreate:
+		return retireStableCreate(ctx, tx)
+	case retirePhaseStableCopy:
+		return retireStableCopy(ctx, tx, cursor)
+	case retirePhaseStableFinalize:
+		return retireStableFinalize(ctx, tx)
+	case retirePhaseVerifyExact:
+		if err := verifyLegacyExactLedgerEquivalent(ctx, tx); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseVerifyLedger1, sql.NullInt64{}, false, nil
+	case retirePhaseVerifyLedger1:
+		ok, err := admissionLedgerMatches(ctx, tx, "exact", 1)
+		if err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		if ok {
+			return retirePhaseVerifyLedger2, sql.NullInt64{}, false, nil
+		}
+		return retirePhaseLedger1Delete, sql.NullInt64{}, false, nil
+	case retirePhaseLedger1Delete:
+		return retireDeleteAdmissionLedger(ctx, tx, "exact", phase, retirePhaseLedger1Insert)
+	case retirePhaseLedger1Insert:
+		return retireInsertAdmissionLedger(ctx, tx, "exact", 1, phase, retirePhaseVerifyLedger2, cursor)
+	case retirePhaseVerifyLedger2:
+		ok, err := admissionLedgerMatches(ctx, tx, "compact", 2)
+		if err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		if ok {
+			return retirePhaseDropTables, sql.NullInt64{}, false, nil
+		}
+		return retirePhaseLedger2Delete, sql.NullInt64{}, false, nil
+	case retirePhaseLedger2Delete:
+		return retireDeleteAdmissionLedger(ctx, tx, "compact", phase, retirePhaseLedger2Insert)
+	case retirePhaseLedger2Insert:
+		return retireInsertAdmissionLedger(ctx, tx, "compact", 2, phase, retirePhaseDropTables, cursor)
+	case retirePhaseDropTables:
+		for _, q := range []string{
+			`DROP TABLE IF EXISTS resource_access_admission_compact_atoms`,
+			`DROP TABLE IF EXISTS resource_access_exact_edges`,
+		} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
+			}
+		}
+		return retirePhaseReinstallTriggers, sql.NullInt64{}, false, nil
+	case retirePhaseReinstallTriggers:
+		if err := reinstallRetiredAccessWriters(ctx, tx); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseIndexChild, sql.NullInt64{}, false, nil
+	case retirePhaseIndexChild:
+		if err := createAdmissionLinkIndex(ctx, tx, "idx_access_admission_child"); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseIndexParent, sql.NullInt64{}, false, nil
+	case retirePhaseIndexParent:
+		if err := createAdmissionLinkIndex(ctx, tx, "idx_access_admission_parent"); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseIndexVia, sql.NullInt64{}, false, nil
+	case retirePhaseIndexVia:
+		if err := createAdmissionLinkIndex(ctx, tx, "idx_access_admission_via"); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseFinalize, sql.NullInt64{}, false, nil
+	case retirePhaseFinalize:
+		if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET reader=1,stable=1,force_legacy=0 WHERE singleton=1`); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_job SET done=1 WHERE singleton=1`); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		if err := verifyRetiredAccessLedger(ctx, tx); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return 0, sql.NullInt64{}, true, nil
+	default:
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: unknown phase %d", phase)
+	}
+}
+
+// retireInstall installs the compact capability, stops the legacy writers, and
+// chooses the first bounded phase. A certified compact ledger skips the rebuild.
+func retireInstall(ctx context.Context, tx *sql.Tx) (int, sql.NullInt64, bool, error) {
 	if err := ensureCompactAccessLedger(ctx, tx); err != nil {
-		return err
+		return 0, sql.NullInt64{}, false, err
 	}
 	// Stop the legacy writers before the tables they reference disappear. This
 	// also prevents an interrupted compact backfill from replaying admission
@@ -52,56 +215,276 @@ func retireLegacyAccessLedger(ctx context.Context, tx *sql.Tx) error {
 		`DROP TRIGGER IF EXISTS access_mention_edge_delete`,
 	} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
-			return fmt.Errorf("retire legacy access ledger: %w", err)
+			return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
 		}
 	}
-	if err := completeCompactAccessLedger(ctx, tx); err != nil {
-		return err
+	exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges")
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
 	}
-	if err := requireStableAccessEdges(ctx, tx); err != nil {
-		return err
+	var done bool
+	if err := tx.QueryRowContext(ctx, `SELECT done FROM resource_access_compact_job WHERE singleton=1`).Scan(&done); err != nil {
+		return 0, sql.NullInt64{}, false, err
 	}
-	if err := verifyLegacyExactLedgerEquivalent(ctx, tx); err != nil {
-		return err
+	if !exact && !done {
+		// Migration 61 always creates the legacy ledger. Its absence with an
+		// uncertified compact job means the workspace is corrupt; never mark an
+		// incomplete compact ledger as certified.
+		return 0, sql.NullInt64{}, false, errors.New("legacy exact ledger is missing before compact certification")
 	}
-	if err := rebuildCompactAdmissionLinks(ctx, tx); err != nil {
-		return err
+	if exact && !done {
+		return retirePhaseExactDelete, sql.NullInt64{}, false, nil
 	}
-	for _, q := range []string{
-		`DROP TABLE IF EXISTS resource_access_admission_compact_atoms`,
-		`DROP TABLE IF EXISTS resource_access_exact_edges`,
-	} {
-		if _, err := tx.ExecContext(ctx, q); err != nil {
-			return fmt.Errorf("retire legacy access ledger: %w", err)
-		}
+	var stable bool
+	if err := tx.QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
+		return 0, sql.NullInt64{}, false, err
 	}
-	if err := reinstallMentionEdgeWriters(ctx, tx); err != nil {
-		return err
+	if !stable {
+		return retirePhaseStableCreate, sql.NullInt64{}, false, nil
 	}
-	if err := reinstallAdmissionLedgerTriggers(ctx, tx); err != nil {
-		return err
+	return retirePhaseVerifyExact, sql.NullInt64{}, false, nil
+}
+
+// retireDeleteAll removes one bounded batch from a derived ledger. Both tables
+// have an INTEGER PRIMARY KEY, so rowid is the edge id.
+func retireDeleteAll(ctx context.Context, tx *sql.Tx, table string, phase, next int) (int, sql.NullInt64, bool, error) {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE rowid IN (SELECT rowid FROM `+table+` LIMIT ?)`, retireBatch); err != nil {
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
 	}
-	// Reapply the update-program narrowing that migrations 116 and 117 installed
-	// on the retired trigger bodies. The new bodies reference the same inputs.
-	if err := restrictAdmissionUpdates(ctx, tx); err != nil {
-		return err
+	var remaining bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM `+table+`)`).Scan(&remaining); err != nil {
+		return 0, sql.NullInt64{}, false, err
 	}
-	if err := restrictAdmissionUpdatePrograms(ctx, tx); err != nil {
-		return err
+	if remaining {
+		return phase, sql.NullInt64{}, false, nil
 	}
-	if err := reinstallReceiptAccessTriggers(ctx, tx); err != nil {
-		return err
+	return next, sql.NullInt64{}, false, nil
+}
+
+// retireBatchMax returns the last key of the next keyset batch. A NULL cursor
+// starts before the minimum signed key, so imported negative edge ids are not
+// skipped.
+func retireBatchMax(ctx context.Context, tx *sql.Tx, table, column string, cursor sql.NullInt64) (sql.NullInt64, error) {
+	q := `SELECT max(` + column + `) FROM (SELECT ` + column + ` FROM ` + table + ` ORDER BY ` + column + ` LIMIT ?)`
+	args := []any{retireBatch}
+	if cursor.Valid {
+		q = `SELECT max(` + column + `) FROM (SELECT ` + column + ` FROM ` + table + ` WHERE ` + column + ` > ? ORDER BY ` + column + ` LIMIT ?)`
+		args = []any{cursor.Int64, retireBatch}
 	}
-	if err := installAdmissionLinkIndexes(ctx, tx); err != nil {
-		return err
+	var max sql.NullInt64
+	if err := tx.QueryRowContext(ctx, q, args...).Scan(&max); err != nil {
+		return sql.NullInt64{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET reader=1,stable=1,force_legacy=0 WHERE singleton=1`); err != nil {
-		return err
+	return max, nil
+}
+
+func retireInsertExact(ctx context.Context, tx *sql.Tx, cursor sql.NullInt64) (int, sql.NullInt64, bool, error) {
+	max, err := retireBatchMax(ctx, tx, "resource_access_edges", "rowid", cursor)
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
 	}
+	if !max.Valid {
+		return retirePhaseCompactDelete, sql.NullInt64{}, false, nil
+	}
+	q := `INSERT INTO resource_access_exact_edges SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges WHERE rowid <= ? ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_key=excluded.target_key`
+	args := []any{max.Int64}
+	if cursor.Valid {
+		q = `INSERT INTO resource_access_exact_edges SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges WHERE rowid > ? AND rowid <= ? ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_key=excluded.target_key`
+		args = []any{cursor.Int64, max.Int64}
+	}
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	return retirePhaseExactInsert, max, false, nil
+}
+
+func retireInsertCompact(ctx context.Context, tx *sql.Tx, cursor sql.NullInt64) (int, sql.NullInt64, bool, error) {
+	max, err := retireBatchMax(ctx, tx, "resource_access_exact_edges", "edge_id", cursor)
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if !max.Valid {
+		return retirePhaseCompactDone, sql.NullInt64{}, false, nil
+	}
+	q := `INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE edge_id <= ? ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`
+	args := []any{max.Int64}
+	if cursor.Valid {
+		q = `INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE edge_id > ? AND edge_id <= ? ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`
+		args = []any{cursor.Int64, max.Int64}
+	}
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	return retirePhaseCompactInsert, max, false, nil
+}
+
+func retireCompactDone(ctx context.Context, tx *sql.Tx) (int, sql.NullInt64, bool, error) {
 	if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_job SET done=1 WHERE singleton=1`); err != nil {
-		return err
+		return 0, sql.NullInt64{}, false, err
 	}
-	return verifyRetiredAccessLedger(ctx, tx)
+	var stable bool
+	if err := tx.QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if !stable {
+		return retirePhaseStableCreate, sql.NullInt64{}, false, nil
+	}
+	return retirePhaseVerifyExact, sql.NullInt64{}, false, nil
+}
+
+func retireStableCreate(ctx context.Context, tx *sql.Tx) (int, sql.NullInt64, bool, error) {
+	var stable bool
+	if err := tx.QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if stable {
+		return retirePhaseVerifyExact, sql.NullInt64{}, false, nil
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS resource_access_stable_edges(edge_id INTEGER PRIMARY KEY,source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,UNIQUE(source_kind,source_id,target_ref))`); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	return retirePhaseStableCopy, sql.NullInt64{}, false, nil
+}
+
+func retireStableCopy(ctx context.Context, tx *sql.Tx, cursor sql.NullInt64) (int, sql.NullInt64, bool, error) {
+	var rawDone bool
+	if err := tx.QueryRowContext(ctx, `SELECT raw_done FROM resource_access_compact_control WHERE singleton=1`).Scan(&rawDone); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if rawDone {
+		return retirePhaseStableFinalize, sql.NullInt64{}, false, nil
+	}
+	max, err := retireBatchMax(ctx, tx, "resource_access_edges", "rowid", cursor)
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if !max.Valid {
+		if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET raw_done=1 WHERE singleton=1`); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		return retirePhaseStableFinalize, sql.NullInt64{}, false, nil
+	}
+	q := `INSERT INTO resource_access_stable_edges SELECT rowid,source_kind,source_id,target_ref FROM resource_access_edges WHERE rowid <= ? ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_ref=excluded.target_ref`
+	args := []any{max.Int64}
+	if cursor.Valid {
+		q = `INSERT INTO resource_access_stable_edges SELECT rowid,source_kind,source_id,target_ref FROM resource_access_edges WHERE rowid > ? AND rowid <= ? ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_ref=excluded.target_ref`
+		args = []any{cursor.Int64, max.Int64}
+	}
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET raw_cursor=? WHERE singleton=1`, max.Int64); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	return retirePhaseStableCopy, max, false, nil
+}
+
+func retireStableFinalize(ctx context.Context, tx *sql.Tx) (int, sql.NullInt64, bool, error) {
+	old := `SELECT rowid,source_kind,source_id,CAST(target_ref AS BLOB) FROM resource_access_edges`
+	staged := `SELECT edge_id,source_kind,source_id,CAST(target_ref AS BLOB) FROM resource_access_stable_edges`
+	for _, q := range []string{`SELECT EXISTS(` + old + ` EXCEPT ` + staged + `)`, `SELECT EXISTS(` + staged + ` EXCEPT ` + old + `)`} {
+		var mismatch bool
+		if err := tx.QueryRowContext(ctx, q).Scan(&mismatch); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+		if mismatch {
+			return 0, sql.NullInt64{}, false, errors.New("staged raw edge identities differ from the live table")
+		}
+	}
+	if err := stabilizeAccessEdgesTx(ctx, tx); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	// A fresh workspace's retired table is empty; drop it now so idle
+	// maintenance never needs a writer just to discover there is nothing to do.
+	var empty bool
+	if err := tx.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM resource_access_unstable_edges)`).Scan(&empty); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if empty {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE resource_access_unstable_edges`); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET stable=1 WHERE singleton=1`); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	return retirePhaseVerifyExact, sql.NullInt64{}, false, nil
+}
+
+// admissionLedgerMatches compares one admission ledger with the rows derived
+// from the verified compact ledger. It is read-only and builds only temp
+// b-trees, so it never forces a graph/reach recomputation.
+func admissionLedgerMatches(ctx context.Context, tx *sql.Tx, origin string, ledger int) (bool, error) {
+	publication := `('work_metadata','work_observation','work_evidence_record','work_evidence_alias')`
+	expected := `SELECT '` + origin + `',CAST(e.rowid AS TEXT),k.key_id,k.kind,k.id,e.source_kind,e.source_id,` + strconv.Itoa(ledger) + `
+FROM resource_access_compact_edges c
+JOIN resource_access_edges e ON e.rowid=c.edge_id
+JOIN resource_access_admission_keys k ON k.atom=c.target_key
+WHERE k.published=0 OR e.source_kind NOT IN ` + publication
+	actual := `SELECT origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger FROM resource_access_admission_links WHERE origin='` + origin + `'`
+	for _, q := range []string{
+		`SELECT EXISTS(` + actual + ` EXCEPT ` + expected + `)`,
+		`SELECT EXISTS(` + expected + ` EXCEPT ` + actual + `)`,
+	} {
+		var mismatch bool
+		if err := tx.QueryRowContext(ctx, q).Scan(&mismatch); err != nil {
+			return false, err
+		}
+		if mismatch {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func retireDeleteAdmissionLedger(ctx context.Context, tx *sql.Tx, origin string, phase, next int) (int, sql.NullInt64, bool, error) {
+	result, err := tx.ExecContext(ctx, `DELETE FROM resource_access_admission_links
+WHERE origin=? AND (origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger) IN (
+  SELECT origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger
+  FROM resource_access_admission_links WHERE origin=? LIMIT ?
+)`, origin, origin, retireBatch)
+	if err != nil {
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if n > 0 {
+		return phase, sql.NullInt64{}, false, nil
+	}
+	return next, sql.NullInt64{}, false, nil
+}
+
+func retireInsertAdmissionLedger(ctx context.Context, tx *sql.Tx, origin string, ledger, phase, next int, cursor sql.NullInt64) (int, sql.NullInt64, bool, error) {
+	max, err := retireBatchMax(ctx, tx, "resource_access_compact_edges", "edge_id", cursor)
+	if err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
+	if !max.Valid {
+		return next, sql.NullInt64{}, false, nil
+	}
+	publication := `('work_metadata','work_observation','work_evidence_record','work_evidence_alias')`
+	q := `INSERT OR IGNORE INTO resource_access_admission_links(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)
+SELECT ?,CAST(e.rowid AS TEXT),k.key_id,k.kind,k.id,e.source_kind,e.source_id,?
+FROM resource_access_compact_edges c
+JOIN resource_access_edges e ON e.rowid=c.edge_id
+JOIN resource_access_admission_keys k ON k.atom=c.target_key
+WHERE c.edge_id <= ? AND (k.published=0 OR e.source_kind NOT IN ` + publication + `)`
+	args := []any{origin, ledger, max.Int64}
+	if cursor.Valid {
+		q = `INSERT OR IGNORE INTO resource_access_admission_links(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)
+SELECT ?,CAST(e.rowid AS TEXT),k.key_id,k.kind,k.id,e.source_kind,e.source_id,?
+FROM resource_access_compact_edges c
+JOIN resource_access_edges e ON e.rowid=c.edge_id
+JOIN resource_access_admission_keys k ON k.atom=c.target_key
+WHERE c.edge_id > ? AND c.edge_id <= ? AND (k.published=0 OR e.source_kind NOT IN ` + publication + `)`
+		args = []any{origin, ledger, cursor.Int64, max.Int64}
+	}
+	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: %w", err)
+	}
+	return phase, max, false, nil
 }
 
 // ensureCompactAccessLedger installs the compact capability that admission now
@@ -136,87 +519,6 @@ func ensureCompactAccessLedger(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// completeCompactAccessLedger finishes an interrupted compact backfill from the
-// legacy ledger before verification. A completed ledger is never overwritten:
-// the job's done flag distinguishes a certified snapshot from partial progress.
-func completeCompactAccessLedger(ctx context.Context, tx *sql.Tx) error {
-	exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges")
-	if err != nil || !exact {
-		return err
-	}
-	var done bool
-	if err := tx.QueryRowContext(ctx, `SELECT done FROM resource_access_compact_job WHERE singleton=1`).Scan(&done); err != nil {
-		return err
-	}
-	if done {
-		return nil
-	}
-	// An uncertified ledger may contain partial or stale rows from an earlier
-	// build. The raw edge table is canonical until certification, so rebuild the
-	// derived exact and compact ledgers exactly rather than merging into them.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM resource_access_exact_edges`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_exact_edges SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_key=excluded.target_key`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM resource_access_compact_edges`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`); err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `UPDATE resource_access_compact_job SET done=1 WHERE singleton=1`)
-	return err
-}
-
-// requireStableAccessEdges completes the raw-edge identity cutover when the
-// online worker has not done so. The staged table is populated from the raw
-// table, verified in both directions, then renamed into place. The retired
-// unstable table is drained by the existing maintenance worker.
-func requireStableAccessEdges(ctx context.Context, tx *sql.Tx) error {
-	var stable bool
-	if err := tx.QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
-		return err
-	}
-	if stable {
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS resource_access_stable_edges(edge_id INTEGER PRIMARY KEY,source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_ref TEXT NOT NULL COLLATE NOCASE,UNIQUE(source_kind,source_id,target_ref))`); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO resource_access_stable_edges SELECT rowid,source_kind,source_id,target_ref FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET source_kind=excluded.source_kind,source_id=excluded.source_id,target_ref=excluded.target_ref`); err != nil {
-		return err
-	}
-	old := `SELECT rowid,source_kind,source_id,CAST(target_ref AS BLOB) FROM resource_access_edges`
-	staged := `SELECT edge_id,source_kind,source_id,CAST(target_ref AS BLOB) FROM resource_access_stable_edges`
-	for _, q := range []string{`SELECT EXISTS(` + old + ` EXCEPT ` + staged + `)`, `SELECT EXISTS(` + staged + ` EXCEPT ` + old + `)`} {
-		var mismatch bool
-		if err := tx.QueryRowContext(ctx, q).Scan(&mismatch); err != nil {
-			return err
-		}
-		if mismatch {
-			return errors.New("staged raw edge identities differ from the live table")
-		}
-	}
-	if err := stabilizeAccessEdgesTx(ctx, tx); err != nil {
-		return err
-	}
-	// A fresh workspace's retired table is empty; drop it now so idle
-	// maintenance never needs a writer just to discover there is nothing to do.
-	var empty bool
-	if err := tx.QueryRowContext(ctx, `SELECT NOT EXISTS(SELECT 1 FROM resource_access_unstable_edges)`).Scan(&empty); err != nil {
-		return err
-	}
-	if empty {
-		if _, err := tx.ExecContext(ctx, `DROP TABLE resource_access_unstable_edges`); err != nil {
-			return err
-		}
-	}
-	_, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET stable=1 WHERE singleton=1`)
-	return err
-}
-
 // verifyLegacyExactLedgerEquivalent reuses the compact migration's both-way
 // EXCEPT checks. It also compares the legacy ledger with independently hashed
 // raw edges, so an equally corrupt old/new pair is not accepted.
@@ -249,23 +551,33 @@ func verifyLegacyExactLedgerEquivalent(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// rebuildCompactAdmissionLinks replaces the compact-origin links with rows
-// derived from the verified compact ledger. An interrupted compact backfill can
-// leave ledger 2 incomplete even though ledger 1 is complete; the graph, reach
-// and owner triggers remain installed and update those ledgers as links change.
-func rebuildCompactAdmissionLinks(ctx context.Context, tx *sql.Tx) error {
-	publication := `('work_metadata','work_observation','work_evidence_record','work_evidence_alias')`
+// reinstallRetiredAccessWriters replaces the retired exact/compact writers with
+// the compact-ledger source and narrows the admission link indexes.
+func reinstallRetiredAccessWriters(ctx context.Context, tx *sql.Tx) error {
+	if err := reinstallMentionEdgeWriters(ctx, tx); err != nil {
+		return err
+	}
+	if err := reinstallAdmissionLedgerTriggers(ctx, tx); err != nil {
+		return err
+	}
+	// Reapply the update-program narrowing that migrations 116 and 117 installed
+	// on the retired trigger bodies. The new bodies reference the same inputs.
+	if err := restrictAdmissionUpdates(ctx, tx); err != nil {
+		return err
+	}
+	if err := restrictAdmissionUpdatePrograms(ctx, tx); err != nil {
+		return err
+	}
+	if err := reinstallReceiptAccessTriggers(ctx, tx); err != nil {
+		return err
+	}
 	for _, q := range []string{
-		`DELETE FROM resource_access_admission_links WHERE origin='compact'`,
-		`INSERT OR IGNORE INTO resource_access_admission_links(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)
-SELECT 'compact',e.rowid,k.key_id,k.kind,k.id,e.source_kind,e.source_id,2
-FROM resource_access_compact_edges c
-JOIN resource_access_edges e ON e.rowid=c.edge_id
-JOIN resource_access_admission_keys k ON k.atom=c.target_key
-WHERE k.published=0 OR e.source_kind NOT IN ` + publication,
+		`DROP INDEX IF EXISTS idx_access_admission_child`,
+		`DROP INDEX IF EXISTS idx_access_admission_parent`,
+		`DROP INDEX IF EXISTS idx_access_admission_via`,
 	} {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
-			return fmt.Errorf("rebuild compact admission links: %w", err)
+			return fmt.Errorf("install admission link indexes: %w", err)
 		}
 	}
 	return nil
@@ -330,7 +642,10 @@ func reinstallAdmissionLedgerTriggers(ctx context.Context, tx *sql.Tx) error {
 	}
 	for _, spec := range []struct{ name, ledger string }{{"exact", "1"}, {"compact", "2"}} {
 		insert := func(p string) string {
-			return links + `SELECT '` + spec.name + `',` + p + `edge_id,k.key_id,k.kind,k.id,e.source_kind,e.source_id,` + spec.ledger + ` FROM resource_access_compact_edges c JOIN resource_access_edges e ON e.rowid=c.edge_id JOIN resource_access_admission_keys k ON k.atom=c.target_key WHERE c.edge_id=` + p + `edge_id AND (k.published=0 OR e.source_kind NOT IN ` + publication + `);`
+			// Reference NEW.target_key directly so the update-program narrowing
+			// includes target_key in its UPDATE OF/WHEN inputs. Joining through
+			// the table alias would hide the changed column from that analysis.
+			return links + `SELECT '` + spec.name + `',` + p + `edge_id,k.key_id,k.kind,k.id,e.source_kind,e.source_id,` + spec.ledger + ` FROM resource_access_edges e JOIN resource_access_admission_keys k ON k.atom=` + p + `target_key WHERE e.rowid=` + p + `edge_id AND (k.published=0 OR e.source_kind NOT IN ` + publication + `);`
 		}
 		clear := `DELETE FROM resource_access_admission_links WHERE origin='` + spec.name + `' AND origin_id=CAST(OLD.edge_id AS TEXT);`
 		queries = append(queries,
@@ -385,21 +700,22 @@ func reinstallReceiptAccessTriggers(ctx context.Context, tx *sql.Tx) error {
 	return installReceiptStreamAccess(ctx, tx)
 }
 
-// installAdmissionLinkIndexes narrows the three admission link indexes to the
-// only statements that read them. The child/parent indexes serve the four
-// comment/document cleanup triggers; the via index serves key deletion.
-func installAdmissionLinkIndexes(ctx context.Context, tx *sql.Tx) error {
-	for _, q := range []string{
-		`DROP INDEX IF EXISTS idx_access_admission_child`,
-		`DROP INDEX IF EXISTS idx_access_admission_parent`,
-		`DROP INDEX IF EXISTS idx_access_admission_via`,
-		`CREATE INDEX idx_access_admission_child ON resource_access_admission_links(child_kind,child_id,ledger,parent_kind,parent_id) WHERE origin='comment'`,
-		`CREATE INDEX idx_access_admission_parent ON resource_access_admission_links(parent_kind,parent_id,child_kind,child_id) WHERE origin='document_comment'`,
-		`CREATE INDEX idx_access_admission_via ON resource_access_admission_links(origin,via_id) WHERE origin IN ('exact','compact','external','ref','project')`,
-	} {
-		if _, err := tx.ExecContext(ctx, q); err != nil {
-			return fmt.Errorf("install admission link indexes: %w", err)
-		}
+// createAdmissionLinkIndex creates one narrowed index in its own phase so the
+// WAL for a large index build is checkpointed before the next one starts.
+func createAdmissionLinkIndex(ctx context.Context, tx *sql.Tx, name string) error {
+	var q string
+	switch name {
+	case "idx_access_admission_child":
+		q = `CREATE INDEX IF NOT EXISTS idx_access_admission_child ON resource_access_admission_links(child_kind,child_id,ledger,parent_kind,parent_id) WHERE origin='comment'`
+	case "idx_access_admission_parent":
+		q = `CREATE INDEX IF NOT EXISTS idx_access_admission_parent ON resource_access_admission_links(parent_kind,parent_id,child_kind,child_id) WHERE origin='document_comment'`
+	case "idx_access_admission_via":
+		q = `CREATE INDEX IF NOT EXISTS idx_access_admission_via ON resource_access_admission_links(origin,via_id) WHERE origin IN ('exact','compact','external','ref','project')`
+	default:
+		return fmt.Errorf("unknown admission link index %s", name)
+	}
+	if _, err := tx.ExecContext(ctx, q); err != nil {
+		return fmt.Errorf("install admission link index %s: %w", name, err)
 	}
 	return nil
 }
@@ -424,12 +740,69 @@ func verifyRetiredAccessLedger(ctx context.Context, tx *sql.Tx) error {
 			return fmt.Errorf("admission index is not partial: %s", index)
 		}
 	}
-	var reader, stable int
-	if err := tx.QueryRowContext(ctx, `SELECT reader,stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&reader, &stable); err != nil {
+	for _, trigger := range []string{
+		"access_mention_edge_conflict_insert",
+		"access_mention_edge_conflict_update",
+		"access_mention_edge_insert",
+		"access_mention_edge_update",
+		"access_mention_edge_delete",
+		"admission_key_insert",
+		"admission_key_delete",
+		"admission_exact_insert",
+		"admission_exact_update",
+		"admission_exact_delete",
+		"admission_compact_insert",
+		"admission_compact_update",
+		"admission_compact_delete",
+		"admission_compact_source_insert",
+		"admission_compact_source_update",
+		"admission_compact_source_delete",
+	} {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name=?)`, trigger).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("retired access trigger missing: %s", trigger)
+		}
+	}
+	var reader, stable, forceLegacy int
+	if err := tx.QueryRowContext(ctx, `SELECT reader,stable,force_legacy FROM resource_access_compact_control WHERE singleton=1`).Scan(&reader, &stable, &forceLegacy); err != nil {
 		return err
 	}
-	if reader != 1 || stable != 1 {
-		return fmt.Errorf("compact access is not the only reader: reader=%d stable=%d", reader, stable)
+	if reader != 1 || stable != 1 || forceLegacy != 0 {
+		return fmt.Errorf("compact access is not the only reader: reader=%d stable=%d force_legacy=%d", reader, stable, forceLegacy)
 	}
 	return nil
+}
+
+// checkpointMigrationWAL bounds migration WAL growth. Migration 150 commits
+// bounded phases; this truncates the WAL between them so a large workspace
+// never accumulates the whole migration in one WAL.
+func checkpointMigrationWAL(ctx context.Context, db *sql.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	// Discard this connection on exit: the zero busy timeout is for the
+	// checkpoint only and must not leak into serving requests.
+	defer conn.Raw(func(any) error { return driver.ErrBadConn })
+	if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
+		return err
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		var busy, logPages, checkpointed int
+		if err := conn.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logPages, &checkpointed); err != nil {
+			return err
+		}
+		if busy == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return errors.New("WAL checkpoint remained busy during migration")
 }

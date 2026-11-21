@@ -85,6 +85,11 @@ func applyMigrationToLedger(ctx context.Context, db *sql.DB, m migration, ledger
 		if done {
 			return nil
 		}
+		if m.BetweenChunks != nil {
+			if err := m.BetweenChunks(ctx, db); err != nil {
+				return fmt.Errorf("migration %d: %w", m.Version, err)
+			}
+		}
 	}
 }
 

@@ -100,7 +100,7 @@ var recentMigrations = []migration{
 	// ledger and the admission compact-atom mirror are verified equivalent to
 	// the compact ledger in both directions, then dropped. A mismatch aborts the
 	// upgrade instead of repairing or guessing.
-	{Version: 150, AfterApply: retireLegacyAccessLedger, Verify: verifyRetiredAccessLedger},
+	{Version: 150, ApplyChunk: retireLegacyAccessLedgerChunk, BetweenChunks: checkpointMigrationWAL, Verify: verifyRetiredAccessLedger},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

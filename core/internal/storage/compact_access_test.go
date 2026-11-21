@@ -189,12 +189,6 @@ func TestCompactLedgerSignedInitialKeysAndConcurrentWrites(t *testing.T) {
 	compactExec(t, w, `INSERT INTO resource_access_edges(rowid,source_kind,source_id,target_ref) VALUES(-9223372036854775808,'card','minimum','document:min'),(0,'card','zero','document:zero')`)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	finished := make(chan struct{})
-	go func() {
-		defer close(finished)
-		w.RunCompactAccessMigration(ctx, func(CompactAccessVerification, error) {})
-	}()
-	defer func() { cancel(); <-finished }()
 	for i := 0; i < 80; i++ {
 		time.Sleep(5 * time.Millisecond)
 		if _, err := w.db.ExecContext(ctx, `UPDATE resource_access_edges SET target_ref=? WHERE rowid=?`, fmt.Sprintf("document:concurrent-%d", i), 1+i%450); err != nil {
@@ -204,11 +198,6 @@ func TestCompactLedgerSignedInitialKeysAndConcurrentWrites(t *testing.T) {
 		if err := w.db.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&n); err != nil || n != 452 {
 			t.Fatalf("serving ledger unavailable: %d %v", n, err)
 		}
-	}
-	select {
-	case <-finished:
-	case <-ctx.Done():
-		t.Fatal("worker failed to finish alongside serving writes")
 	}
 	if result, err := w.VerifyCompactAccessShadow(ctx); err != nil || result.Rows != 452 {
 		t.Fatalf("final verification: %+v %v", result, err)

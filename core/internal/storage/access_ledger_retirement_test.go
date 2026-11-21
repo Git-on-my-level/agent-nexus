@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -274,6 +275,145 @@ func TestMeasureLegacyAccessLedgerReduction(t *testing.T) {
 		edges, exactBytes, atomBytes, before, after, info.Size(), before-info.Size())
 	if info.Size() >= before {
 		t.Fatal("reclamation did not reduce the file")
+	}
+}
+
+// TestMigration150DenseFixtureWALBound runs the real bounded migration over a
+// 100k-edge fixture and records the peak WAL. The migration checkpoints between
+// phases, so peak WAL is bounded by one batch/index build, not the database.
+func TestMigration150DenseFixtureWALBound(t *testing.T) {
+	if testing.Short() {
+		t.Skip("dense migration fixture")
+	}
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	const edges = 100000
+	if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
+		INSERT INTO resource_access_edges(source_kind,source_id,target_ref)
+		SELECT 'card','source-'||i,'document:target-'||(i%97) FROM n`, edges); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Start from a clean WAL so the measurement covers the migration, not the
+	// fixture's bulk insert.
+	if err := checkpointMigrationWAL(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	walPath := NewLayout(root).DatabasePath + "-wal"
+	var peakWAL int64
+	var peakPhase int
+	record := func(phase int) {
+		if info, err := os.Stat(walPath); err == nil && info.Size() > peakWAL {
+			peakWAL, peakPhase = info.Size(), phase
+		}
+	}
+	m := migration{
+		Version:    150,
+		ApplyChunk: retireLegacyAccessLedgerChunk,
+		Verify:     verifyRetiredAccessLedger,
+		BetweenChunks: func(ctx context.Context, db *sql.DB) error {
+			var phase int
+			_ = db.QueryRowContext(ctx, `SELECT phase FROM resource_access_retirement_state WHERE singleton=1`).Scan(&phase)
+			record(phase)
+			return checkpointMigrationWAL(ctx, db)
+		},
+	}
+	if err := applyMigrationToLedger(ctx, db, m, "schema_migrations"); err != nil {
+		t.Fatal(err)
+	}
+	record(-1)
+	if err := checkpointMigrationWAL(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(NewLayout(root).DatabasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("edges=%d db_bytes=%d peak_wal_bytes=%d peak_phase=%d", edges, info.Size(), peakWAL, peakPhase)
+	if peakWAL > 32<<20 {
+		t.Fatalf("peak WAL %d exceeds the 32 MiB bound", peakWAL)
+	}
+	if peakWAL > info.Size() {
+		t.Fatalf("peak WAL %d exceeds the database size %d", peakWAL, info.Size())
+	}
+	var recorded int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=150`).Scan(&recorded); err != nil {
+		t.Fatal(err)
+	}
+	if recorded != 1 {
+		t.Fatal("migration 150 was not recorded")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestMigration150ResumesAfterCrash aborts between committed phases, then
+// reopens and resumes. The version is never recorded by the crashed attempt,
+// the legacy ledger is not dropped before verification, and the resumed run
+// reaches the same final schema.
+func TestMigration150ResumesAfterCrash(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	if _, err := db.ExecContext(ctx, `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('card','a','document:b'),('card','c','document:d')`); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	chunks := 0
+	crash := migration{
+		Version:    150,
+		ApplyChunk: retireLegacyAccessLedgerChunk,
+		Verify:     verifyRetiredAccessLedger,
+		BetweenChunks: func(ctx context.Context, db *sql.DB) error {
+			chunks++
+			if chunks == 2 {
+				return errors.New("simulated crash")
+			}
+			return checkpointMigrationWAL(ctx, db)
+		},
+	}
+	if err := applyMigrationToLedger(ctx, db, crash, "schema_migrations"); err == nil {
+		t.Fatal("simulated crash did not abort the migration")
+	}
+	var recorded int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=150`).Scan(&recorded); err != nil {
+		t.Fatal(err)
+	}
+	if recorded != 0 {
+		t.Fatal("crashed migration was recorded")
+	}
+	var exactExists bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&exactExists); err != nil {
+		t.Fatal(err)
+	}
+	if !exactExists {
+		t.Fatal("crash dropped the legacy ledger before verification")
+	}
+	if err := applyMigration(ctx, db, migration{Version: 150, ApplyChunk: retireLegacyAccessLedgerChunk, BetweenChunks: checkpointMigrationWAL, Verify: verifyRetiredAccessLedger}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=150`).Scan(&recorded); err != nil {
+		t.Fatal(err)
+	}
+	if recorded != 1 {
+		t.Fatal("resumed migration was not recorded")
+	}
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&exactExists); err != nil {
+		t.Fatal(err)
+	}
+	if exactExists {
+		t.Fatal("resumed migration retained the legacy ledger")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

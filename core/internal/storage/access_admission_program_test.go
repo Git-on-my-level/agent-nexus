@@ -117,7 +117,7 @@ func TestAdmissionUpdateProgramsRetainRowIDAliases(t *testing.T) {
 	scopeMust(t, err)
 	defer w.Close()
 	for _, q := range []string{
-		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('rowid-secret','now','owner','{"pm_actor_id":"owner"}')`,
+		`INSERT INTO threads(id,updated_at,updated_by,body_json) VALUES('rowid-secret','now','owner','{"pm_actor_id":"owner"}'),('rowid-other','now','owner','{"pm_actor_id":"owner"}')`,
 		`INSERT INTO cards(id,handle,title,summary,column_key,created_at,created_by,updated_at,updated_by) VALUES('rowid-card','rowid-card','Public','','ready','now','owner','now','owner')`,
 		`INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('card','rowid-card','thread:rowid-secret')`,
 	} {
@@ -128,12 +128,32 @@ func TestAdmissionUpdateProgramsRetainRowIDAliases(t *testing.T) {
 	// changes, including through the declared INTEGER PRIMARY KEY alias.
 	var edge int64
 	scopeMust(t, w.DB().QueryRow(`SELECT c.edge_id FROM resource_access_compact_edges c JOIN resource_access_edges r ON r.rowid=c.edge_id WHERE r.source_kind='card' AND r.source_id='rowid-card' AND r.target_ref='thread:rowid-secret'`).Scan(&edge))
-	var before int
-	scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, edge).Scan(&before))
-	if before == 0 {
+	countLinks := func(atom string) int {
+		t.Helper()
+		var n int
+		scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links l WHERE l.origin='exact' AND l.origin_id=CAST(? AS TEXT) AND l.via_id IN (SELECT key_id FROM resource_access_admission_keys WHERE atom=unhex(anx_resource_atom_key(CAST(? AS BLOB))))`, edge, atom).Scan(&n))
+		return n
+	}
+	oldBefore, newBefore := countLinks("thread:rowid-secret"), countLinks("thread:rowid-other")
+	if oldBefore == 0 {
 		t.Fatal("missing compact-edge contribution before update")
 	}
-	scopeMust(t, execAdmissionProgramSQL(w.DB(), `UPDATE resource_access_compact_edges SET target_key=unhex(anx_resource_atom_key(CAST('thread:rowid-secret' AS BLOB))) WHERE edge_id=?`, edge))
+	if newBefore != 0 {
+		t.Fatalf("unexpected contribution to the new atom before update: %d", newBefore)
+	}
+	scopeMust(t, execAdmissionProgramSQL(w.DB(), `UPDATE resource_access_compact_edges SET target_key=unhex(anx_resource_atom_key(CAST('thread:rowid-other' AS BLOB))) WHERE edge_id=?`, edge))
+	oldAfter, newAfter := countLinks("thread:rowid-secret"), countLinks("thread:rowid-other")
+	if oldAfter != 0 {
+		t.Fatalf("stale exact links remain on the old atom: %d", oldAfter)
+	}
+	if newAfter == 0 {
+		t.Fatal("exact links did not move to the new atom")
+	}
+	var total int
+	scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, edge).Scan(&total))
+	if total != newAfter {
+		t.Fatalf("exact links did not move cleanly: total=%d new=%d", total, newAfter)
+	}
 	// Also cover a body spelled as NEW.rowid while the statement uses its
 	// declared INTEGER PRIMARY KEY name. This needs schema alias discovery.
 	tx, err := w.DB().BeginTx(context.Background(), nil)

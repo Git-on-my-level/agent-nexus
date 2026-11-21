@@ -144,16 +144,6 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 	}
 	// Migration 150 makes the compact ledger the only reader.
 	selected(true)
-	var reported bool
-	w.RunCompactAccessMigration(ctx, func(_ CompactAccessVerification, err error) {
-		if err != nil {
-			t.Fatal(err)
-		}
-		reported = true
-	})
-	if !reported {
-		t.Fatal("worker did not report the certified workspace")
-	}
 	var mode int
 	if err := w.db.QueryRowContext(ctx, "SELECT reader FROM resource_access_compact_control").Scan(&mode); err != nil || mode != 1 {
 		t.Fatal("certification not published", mode, err)

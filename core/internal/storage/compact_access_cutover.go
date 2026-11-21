@@ -232,7 +232,13 @@ func stabilizeAccessEdgesTx(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table=ON`); err != nil {
 		return err
 	}
-	defer tx.ExecContext(ctx, `PRAGMA legacy_alter_table=OFF`)
+	// Reset on a context that survives cancellation: a canceled migration must
+	// not leave the connection's legacy rename setting enabled for later work.
+	defer func() {
+		resetCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_, _ = tx.ExecContext(resetCtx, `PRAGMA legacy_alter_table=OFF`)
+	}()
 	// Capture before any rename. Source writers use explicit columns so the
 	// added INTEGER PRIMARY KEY does not alter their INSERT contracts.
 	rows, err := tx.QueryContext(ctx, `SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND (tbl_name='resource_access_edges' OR sql LIKE '%INSERT INTO resource_access_edges VALUES%' OR sql LIKE '%INSERT INTO resource_access_edges SELECT%') ORDER BY name`)
