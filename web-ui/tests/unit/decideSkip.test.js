@@ -216,6 +216,17 @@ describe("sending a skip", () => {
     ).resolves.toEqual({ skipped: false, closed: true });
   });
 
+  it("treats a grouped batch that was already answered as done", async () => {
+    const client = {
+      respondInboxItem: vi.fn(async () => {
+        throw conflict("conflict", "this ask batch has already been answered");
+      }),
+    };
+    await expect(
+      sendStandingMutation(client, { operation: SKIP, request }),
+    ).resolves.toEqual({ skipped: false, closed: true });
+  });
+
   it("records without a wake, under its own key, when the requester is unreachable", async () => {
     const client = {
       respondInboxItem: vi

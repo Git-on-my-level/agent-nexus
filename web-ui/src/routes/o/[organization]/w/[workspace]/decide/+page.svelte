@@ -307,8 +307,12 @@
   }
 
   function onUndo() {
-    // The newest of the two undo windows: a skip, else an answer.
-    const unskipped = undoSkip();
+    // Undo the newer of the two waiting actions: a skip or an answer.
+    const answer = $inboxResponseToast;
+    const answerNewer =
+      answer?.state === "pending" &&
+      (!$pendingSkip || answer.deadline > $pendingSkip.deadline);
+    const unskipped = answerNewer ? null : undoSkip();
     if (unskipped) {
       selectedId = unskipped[0] ?? selectedId;
       return;

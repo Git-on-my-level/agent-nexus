@@ -23,10 +23,14 @@ export const RULING_REVOKE = "rulings.revoke";
 export const SKIP = "inbox.skip";
 
 /** Core's conflict for an ask that closed some other way: nothing to skip. */
+const CLOSED_MESSAGES = [
+  "Ask is no longer open",
+  "this ask batch has already been answered",
+];
 const closedElsewhere = (error) =>
   error?.status === 409 &&
   error?.body?.error?.code === "conflict" &&
-  error?.body?.error?.message === "Ask is no longer open";
+  CLOSED_MESSAGES.includes(error?.body?.error?.message);
 
 /**
  * A skip tells the requester when it can be told. When core says the
