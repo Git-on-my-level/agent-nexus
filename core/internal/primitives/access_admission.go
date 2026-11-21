@@ -25,7 +25,9 @@ func admissionLedgerCTE(scope AccessScope) string {
 }
 
 // admissionLedgerSQL selects the usable admission ledger; below 1 fails closed.
-const admissionLedgerSQL = `CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN CASE WHEN EXISTS(SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name='resource_access_compact_edges') THEN 2 ELSE -2 END WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END`
+// Migration 150 makes resource_access_compact_edges a required table, so the
+// selection no longer probes sqlite_schema on every statement.
+const admissionLedgerSQL = `CASE WHEN ` + resourceaccess.CompactReaderSQL + ` THEN 2 WHEN NOT (` + resourceaccess.CompactReaderSQL + `) THEN 1 ELSE -1 END`
 
 // Candidate admission seeks the persisted root set, then current root owners.
 // A guarded request-local proof retains the unchanged warm membership budget.
@@ -36,7 +38,7 @@ func candidateVisibleSQL(scope AccessScope, kind, id string, proofs ...*denialSn
 		actor := `'` + strings.ReplaceAll(scope.ActorID, `'`, `''`) + `'`
 		denied += ` OR EXISTS(SELECT 1` + base + ` AND r.unconditional=0 AND r.owner<` + actor + ` LIMIT 1) OR EXISTS(SELECT 1` + base + ` AND r.unconditional=0 AND r.owner>` + actor + ` LIMIT 1)`
 	}
-	canonical := `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 WHEN (SELECT ledger FROM _anx_admission_ledger)=-2 THEN 0 ELSE NOT (` + denied + `) END`
+	canonical := `CASE WHEN (SELECT active FROM _anx_admission_ledger)=0 THEN 1 ELSE NOT (` + denied + `) END`
 	if len(proofs) == 0 || proofs[0] == nil || (proofs[0].inventory && (proofs[0].candidateComplete == nil || proofs[0].candidateAllPublic)) || proofs[0].pointToken == 0 || proofs[0].epoch < 0 {
 		return canonical
 	}

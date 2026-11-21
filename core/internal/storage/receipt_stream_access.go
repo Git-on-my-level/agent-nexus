@@ -37,7 +37,10 @@ func installReceiptStreamAccess(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	if indexed, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+	// The compact ledger is the only exact-edge ledger after migration 150.
+	// Migration 69 runs before that capability exists on a fresh workspace, so
+	// it returns early; migration 150 calls this again once the ledger exists.
+	if indexed, err := sqliteTableExists(ctx, tx, "resource_access_compact_edges"); err != nil {
 		return err
 	} else if !indexed {
 		return nil
@@ -85,7 +88,7 @@ func installReceiptStreamAccess(ctx context.Context, tx *sql.Tx) error {
 				if op == "DELETE" {
 					row = "OLD"
 				}
-				when = " WHEN " + row + ".source_kind<>'wakeup' OR EXISTS (SELECT 1 FROM resource_access_exact_edges WHERE target_key IN (anx_resource_atom_key(CAST(" + row + ".source_id AS BLOB)),anx_resource_atom_key(CAST(('wakeup:'||" + row + ".source_id) AS BLOB)))) OR EXISTS (SELECT 1 FROM resource_access_identities i WHERE " + receiptWakeupIdentityMatch(row+".target_ref") + ")"
+				when = " WHEN " + row + ".source_kind<>'wakeup' OR EXISTS (SELECT 1 FROM resource_access_compact_edges WHERE target_key IN (unhex(anx_resource_atom_key(CAST(" + row + ".source_id AS BLOB))),unhex(anx_resource_atom_key(CAST(('wakeup:'||" + row + ".source_id) AS BLOB))))) OR EXISTS (SELECT 1 FROM resource_access_identities i WHERE " + receiptWakeupIdentityMatch(row+".target_ref") + ")"
 				when += " OR EXISTS (SELECT 1 FROM ref_edges WHERE target_type='wakeup' AND target_id=" + row + ".source_id COLLATE NOCASE)"
 				when += " OR EXISTS (SELECT 1 FROM resource_access_identities i JOIN resource_access_mentions m ON m.identity_id=i.identity_id WHERE i.kind='wakeup' AND i.resource_id=" + row + ".source_id)"
 				if op == "UPDATE" {
@@ -97,7 +100,7 @@ func installReceiptStreamAccess(ctx context.Context, tx *sql.Tx) error {
 				if op == "DELETE" {
 					row = "OLD"
 				}
-				when = " WHEN " + row + ".kind<>'wakeup' OR EXISTS (SELECT 1 FROM resource_access_exact_edges WHERE target_key IN (anx_resource_atom_key(CAST(" + row + ".ref AS BLOB)),anx_resource_atom_key(CAST(('wakeup:'||" + row + ".ref) AS BLOB)))) OR EXISTS (SELECT 1 FROM resource_access_mention_buckets b JOIN resource_access_edges e ON e.rowid=b.edge_id WHERE b.bucket=" + row + ".bucket AND " + resourceaccess.TextReferenceMatchSQL("e.target_ref", "('wakeup:'||"+row+".ref)") + ")"
+				when = " WHEN " + row + ".kind<>'wakeup' OR EXISTS (SELECT 1 FROM resource_access_compact_edges WHERE target_key IN (unhex(anx_resource_atom_key(CAST(" + row + ".ref AS BLOB))),unhex(anx_resource_atom_key(CAST(('wakeup:'||" + row + ".ref) AS BLOB))))) OR EXISTS (SELECT 1 FROM resource_access_mention_buckets b JOIN resource_access_edges e ON e.rowid=b.edge_id WHERE b.bucket=" + row + ".bucket AND " + resourceaccess.TextReferenceMatchSQL("e.target_ref", "('wakeup:'||"+row+".ref)") + ")"
 				when += " OR EXISTS (SELECT 1 FROM ref_edges WHERE target_type='wakeup' AND target_id=" + row + ".ref COLLATE NOCASE)"
 				if op == "UPDATE" {
 					when = ""
@@ -122,7 +125,7 @@ func installReceiptStreamAccess(ctx context.Context, tx *sql.Tx) error {
 		// Preserve full closure invalidation in both directions, including a
 		// previously unresolved bare ID, rather than promoting stale authority.
 		`CREATE TRIGGER IF NOT EXISTS receipt_access_wakeup_insert AFTER INSERT ON agent_wakeups WHEN
-		 EXISTS (SELECT 1 FROM resource_access_exact_edges WHERE target_key IN (anx_resource_atom_key(CAST(NEW.wakeup_id AS BLOB)),anx_resource_atom_key(CAST(('wakeup:'||NEW.wakeup_id) AS BLOB))))
+		 EXISTS (SELECT 1 FROM resource_access_compact_edges WHERE target_key IN (unhex(anx_resource_atom_key(CAST(NEW.wakeup_id AS BLOB))),unhex(anx_resource_atom_key(CAST(('wakeup:'||NEW.wakeup_id) AS BLOB)))))
 		 OR EXISTS (SELECT 1 FROM ref_edges WHERE target_type='wakeup' AND target_id=NEW.wakeup_id COLLATE NOCASE)
 		 OR EXISTS (SELECT 1 FROM json_each(anx_resource_json_refs(CAST(json_array(json(NEW.refs_json),NEW.trigger_text,NEW.thread_title,NEW.failure_reason) AS BLOB))) j
 		 CROSS JOIN resource_access_identities i WHERE ` + receiptWakeupIdentityMatch("j.value") + `)

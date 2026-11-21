@@ -33,7 +33,9 @@ func TestEvidenceUpgradePreservesUnrelatedAuthorizationIndexes(t *testing.T) {
 	if _, err = db.Exec(`CREATE TABLE upgrade_index_touches(name TEXT NOT NULL, operation TEXT NOT NULL)`); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"resource_access_edges", "resource_access_identities", "resource_access_exact_edges", "resource_access_mentions", "resource_access_mention_buckets"} {
+	// The legacy exact ledger is retired by migration 150; its one-time rebuild
+	// is part of the contraction, not an unrelated authorization index.
+	for _, table := range []string{"resource_access_edges", "resource_access_identities", "resource_access_mentions", "resource_access_mention_buckets"} {
 		for _, op := range []string{"INSERT", "UPDATE", "DELETE"} {
 			q := `CREATE TRIGGER upgrade_audit_` + table + `_` + op + ` AFTER ` + op + ` ON ` + table + ` BEGIN INSERT INTO upgrade_index_touches VALUES('` + table + `','` + op + `'); END`
 			if _, err = db.Exec(q); err != nil {
@@ -118,8 +120,8 @@ func TestEvidenceUpgradeBackfillsChangedSourcesAcrossBatches(t *testing.T) {
 		if err = ws.DB().QueryRow(`SELECT count(*) FROM resource_access_edges WHERE source_kind=? AND target_ref='document:private-doc'`, source.kind).Scan(&got); err != nil || got != source.want {
 			t.Fatalf("%s backfill rows=%d want=%d err=%v", source.kind, got, source.want, err)
 		}
-		if err = ws.DB().QueryRow(`SELECT count(*) FROM resource_access_exact_edges WHERE source_kind=? AND target_key=anx_resource_atom_key(CAST('document:private-doc' AS BLOB))`, source.kind).Scan(&got); err != nil || got != source.want {
-			t.Fatalf("%s exact index rows=%d want=%d err=%v", source.kind, got, source.want, err)
+		if err = ws.DB().QueryRow(`SELECT count(*) FROM resource_access_compact_edges c JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE e.source_kind=? AND c.target_key=unhex(anx_resource_atom_key(CAST('document:private-doc' AS BLOB)))`, source.kind).Scan(&got); err != nil || got != source.want {
+			t.Fatalf("%s compact index rows=%d want=%d err=%v", source.kind, got, source.want, err)
 		}
 	}
 	var got int

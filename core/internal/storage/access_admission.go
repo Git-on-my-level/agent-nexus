@@ -67,9 +67,12 @@ func installAccessAdmission(ctx context.Context, tx *sql.Tx) error {
 		`CREATE TABLE resource_access_admission_compact_atoms(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL)`,
 		`CREATE INDEX idx_admission_compact_atom ON resource_access_admission_compact_atoms(target_key)`,
 		`CREATE TABLE resource_access_admission_links(origin TEXT NOT NULL,origin_id TEXT NOT NULL,via_id INTEGER NOT NULL DEFAULT 0,parent_kind TEXT NOT NULL,parent_id TEXT NOT NULL,child_kind TEXT NOT NULL,child_id TEXT NOT NULL,ledger INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)) WITHOUT ROWID`,
-		`CREATE INDEX idx_access_admission_child ON resource_access_admission_links(child_kind,child_id,ledger,parent_kind,parent_id)`,
-		`CREATE INDEX idx_access_admission_parent ON resource_access_admission_links(parent_kind,parent_id,child_kind,child_id)`,
-		`CREATE INDEX idx_access_admission_via ON resource_access_admission_links(origin,via_id)`,
+		// Only the four comment/document cleanup triggers read the child/parent
+		// indexes, and only key deletion reads the via index. Partial indexes keep
+		// the write cost proportional to those origins instead of every link.
+		`CREATE INDEX idx_access_admission_child ON resource_access_admission_links(child_kind,child_id,ledger,parent_kind,parent_id) WHERE origin='comment'`,
+		`CREATE INDEX idx_access_admission_parent ON resource_access_admission_links(parent_kind,parent_id,child_kind,child_id) WHERE origin='document_comment'`,
+		`CREATE INDEX idx_access_admission_via ON resource_access_admission_links(origin,via_id) WHERE origin IN ('exact','compact','external','ref','project')`,
 		`CREATE TABLE resource_access_admission_keys(key_id INTEGER PRIMARY KEY,origin TEXT NOT NULL,origin_id TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,ref TEXT NOT NULL,navigation INTEGER NOT NULL,atom BLOB NOT NULL,published INTEGER NOT NULL,UNIQUE(origin,origin_id,kind,id,ref,navigation,atom,published))`,
 		`CREATE INDEX idx_access_admission_atom ON resource_access_admission_keys(atom,kind,id,published)`,
 		`CREATE INDEX idx_access_admission_name ON resource_access_admission_keys(kind,ref COLLATE NOCASE,navigation,id)`,

@@ -163,11 +163,9 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 					return strings.ReplaceAll(scopeRead(WithAccessScope(ctx, scope), q), resourceaccess.CompactReaderSQL, "1")
 				},
 			})
-			legacy := resourceaccess.WithPolicy(WithAccessScope(ctx, scope), resourceaccess.Policy{
-				Read: func(q string) string {
-					return strings.ReplaceAll(scopeRead(WithAccessScope(ctx, scope), q), resourceaccess.CompactReaderSQL, "0")
-				},
-			})
+			// The legacy exact ledger is retired. Compare the forced compact arm
+			// with the real selected policy, which also reads the compact ledger.
+			legacy := WithAccessScope(ctx, scope)
 			// Compare the complete denial closure once per principal/round. Every
 			// relation predicate uses this same closure; the remaining ordered-query
 			// matrix checks the original pinned and point-reader policies below.
@@ -241,8 +239,8 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var legacyResult, compactResult string
-		if err = tx.QueryRowContext(ctx, strings.ReplaceAll(query, resourceaccess.CompactReaderSQL, "0")).Scan(&legacyResult); err != nil {
+		var selectedResult, compactResult string
+		if err = tx.QueryRowContext(ctx, query).Scan(&selectedResult); err != nil {
 			tx.Rollback()
 			t.Fatal(err)
 		}
@@ -251,8 +249,8 @@ func TestResourceReadSnapshotRandomizedDifferential(t *testing.T) {
 			t.Fatal(err)
 		}
 		tx.Rollback()
-		if legacyResult != compactResult {
-			t.Fatal("concurrent old/compact authorization divergence")
+		if selectedResult != compactResult {
+			t.Fatal("concurrent selected/compact authorization divergence")
 		}
 		comparisons++
 	}

@@ -79,6 +79,9 @@ type Point struct {
 type Store struct {
 	DB   *sql.DB
 	Auth *auth.Store
+	// workspace is set by test fixtures that own the serving lease. Production
+	// callers close the workspace through their own lifecycle.
+	workspace *storage.Workspace
 }
 
 // Durations extend Go duration syntax with whole days for query windows.

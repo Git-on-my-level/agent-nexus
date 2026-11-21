@@ -55,6 +55,7 @@ func TestResourceAccessReadIndexMigration62(t *testing.T) {
 	if _, err = ws.DB().Exec(`INSERT INTO derived_inbox_items(id,thread_id,category,trigger_at,generated_at,data_json) VALUES('migration-inbox',?,'ask','now','now',?)`, public["thread_id"], body); err != nil {
 		t.Fatal(err)
 	}
+	resetLegacyAccessLedgerForFixture(t, ws.DB())
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +118,7 @@ func TestResourceAccessProfileMigration63(t *testing.T) {
 	if _, err = ws.DB().Exec(`INSERT INTO hosts(id,slug,display_name,os_user,hostname,discovered_adapters_json,created_at) VALUES('migration-host','migration-host',?,'user','machine','[]','now')`, "See **"+private["ref"].(string)+"**"); err != nil {
 		t.Fatal(err)
 	}
+	resetLegacyAccessLedgerForFixture(t, ws.DB())
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
 	}

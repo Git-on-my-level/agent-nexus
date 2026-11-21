@@ -1,99 +1,47 @@
-# Compact access migration and reclamation
+# Compact access ledger and reclamation
 
-The migration serves indexed compact authorization reads after verifying both
-ledgers and stabilizing raw edge identities. On the checked-in dense fixture,
-reclamation reduced the database file from **304,500,736 to 246,775,808 bytes**
-(**57,724,928 bytes saved, 18.96%**), while retaining the original exact ledger
-for immediate reader rollback. No HTTP routes or canonical API contracts change.
+Migration 150 completes the compact-access contraction (SCA-774). The compact
+ledger (`resource_access_compact_edges`) is now the only exact-edge ledger.
+The legacy `resource_access_exact_edges` table, its target index, and the
+duplicate `resource_access_admission_compact_atoms` mirror are gone. Admission's
+`exact` and `compact` origins both read the compact ledger, and the mention
+triggers write it directly.
 
-## Activation and rollback window
+No HTTP routes or canonical API contracts change.
 
-`ANX_COMPACT_ACCESS_MIGRATION` / `--compact-access-migration` defaults to **true**.
-The background worker certifies each workspace before publishing compact reader
-mode; uncertified workspaces automatically use the legacy ledger. Empty metadata
-is installed before serving; historical copying and verification stay off the
-readiness path. A failed certification leaves the current reader unchanged.
+## Migration safety
 
-`ANX_COMPACT_ACCESS_LEGACY_READS=true` / `--compact-access-legacy-reads=true`
-forces legacy authorization reads, including on an already certified workspace.
-The setting applies **before requests are served on process startup**; environment
-changes require a restart. Removing it restores compact reads only if the workspace
-is certified and has no durable operator rollback. Flag values override the env.
-This switch is independent of the migration worker: certification may complete
-while the switch is held, but cannot override it. Each changed selection bumps
-the authorization epoch so warm caches fall back within the consuming SQL snapshot.
+Migration 150 runs once at startup, before serving. It:
 
-The accepted policy is expand, then contract: keep legacy writes current through
-the instant-rollback window. Stop them atomically with legacy-table removal in a
-later release, after production certification and an explicit release decision.
-No legacy data is dropped by this release. The contraction acceptance criteria are
-tracked in SCA-774 and summarized in the production reclamation runbook.
+1. Ensures the compact capability exists. The control row, compact ledger and
+   job table were previously installed at open, not by a numbered migration;
+   the migration now makes that dependency explicit for fresh and upgraded
+   workspaces.
+2. Completes an interrupted compact backfill from the legacy ledger. A
+   certified ledger (`resource_access_compact_job.done=1`) is never overwritten.
+3. Verifies the compact ledger against the legacy ledger and independently
+   hashed raw edges in both `EXCEPT` directions, and rejects orphan compact
+   rows. Any divergence aborts the upgrade; the migration never repairs or
+   guesses.
+4. Stabilizes raw edge identities, rebuilds the compact-origin admission links,
+   drops the legacy tables, and reinstalls the writers and readers that
+   referenced them.
+5. Narrows the admission link indexes to their actual users:
+   `idx_access_admission_child` and `idx_access_admission_parent` are partial on
+   the `comment` and `document_comment` origins, and `idx_access_admission_via`
+   is partial on the five origins that delete by key.
 
-## Online migration
+A workspace whose compact ledger diverges fails to open with a migration error.
+Restore the verified backup, let the previous release finish certification, and
+retry the upgrade.
 
-1. Atomically install dual-write triggers, a compact binary-digest ledger and a
-   raw-edge staging table with `edge_id INTEGER PRIMARY KEY`. The original raw
-   table and exact ledger continue serving throughout backfill.
-2. Copy each ledger in resumable keyset batches of at most 200 rows. Each cursor
-   commits with its rows. The existing adaptive 100 ms maintenance deadline
-   reduces oversized batches; contention yields immediately to serving writers.
-   The worker waits 100 ms between attempts. Signed and reused keys are supported.
-3. Verify all exact columns against both the reconstructed compact relation and
-   independently hashed raw edges, in both EXCEPT directions. Verify the staged
-   raw IDs and bytes in that same read snapshot. Reject incomplete backfills,
-   extra/missing/orphan rows and equally corrupt old/new ledgers.
-4. Take a nonblocking writer lease and require the authorization epoch **and**
-   ledger-write generation to match the verification snapshot. A stale proof
-   retries verification. Atomically replace the raw table with the certified
-   explicit-ID table, reinstall its triggers, remove its redundant target index,
-   publish compact reader mode, and advance the authorization epoch. The DDL
-   phase has a ten-second deadline; the measured dense-fixture commit took 78 ms.
+## Rollback
 
-The serving OS lease is retained after stabilization, including across open
-connections, and reacquired before migrations on restart. Old binaries are not
-supported after this format transition; reader rollback uses the current binary.
-
-The compact target index stores 32-byte digest BLOBs. Each authorization probe
-uses that index followed by the raw integer primary key. Legacy and compact SQL
-arms are separately indexed and gated by the persisted mode inside the same
-statement: a recursive closure reads the mode once at its root and carries it
-on every vertex, so the inactive arm is skipped before its probe. Request
-denial captures go further and compile only the ledger last observed (per
-pool, else the process's latest); the capturing statement returns the live mode
-from its own snapshot, and a capture built for the other ledger is discarded
-and recomputed with both gated arms before it is used or cached.
-Cached denial snapshots retain their existing epoch check/fallback.
-Receipt ancestry reads use the same selected ledger. Overview's public storage
-interface and policy remain unchanged.
-
-The cutover repairs raw REPLACE handling with indexed conflict-key cleanup,
-including SQLite's implicit deletes when recursive triggers are disabled.
-Malformed digests abort writes. Corruption found before certification stops the
-migration without changing the active reader; it is not silently repaired.
-
-## Pause and instant reader rollback
-
-Disabling the migration flag pauses the worker; it does not undo a committed
-cutover. Use the separate legacy-read kill switch to change readers. Installed
-mirrors remain transactional with canonical writes.
-
-For **immediate fallback in an already running process**, without waiting for a
-restart or copying rows, an operator can execute this durable rollback transaction
-with a local SQLite connection. It is stronger than the process setting and
-survives restart:
-
-```sql
-PRAGMA busy_timeout=5000;
-BEGIN IMMEDIATE;
-UPDATE resource_access_compact_control SET reader=2 WHERE singleton=1;
-UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1;
-COMMIT;
-```
-
-Mode 2 prevents the worker or a cleared env kill switch from undoing the rollback. Explicit raw IDs stay
-stable. Re-certification/re-enablement requires deliberately resetting mode to
-0 and restarting the enabled worker. No authorization data is copied during the
-reader switch. Never manually switch to mode 1 without verification.
+The legacy exact ledger is retired, so the historical instant reader rollback
+and `ANX_COMPACT_ACCESS_LEGACY_READS` switch no longer select a physical ledger.
+The control columns remain for compatibility, but the compact ledger is always
+the reader. Roll back a bad release by restoring the verified pre-upgrade
+backup; do not attempt to recreate the legacy table by hand.
 
 ## Reclaim file space in a maintenance window
 
@@ -101,12 +49,12 @@ For the precise hosted maintenance window and self-host procedure, see
 [production reclamation](../../deploy/compact-access-reclamation.md). Reclamation
 is **operator-run and offline**, never invoked by startup or the updater.
 
-Cutover frees pages; it does not shrink an `auto_vacuum=NONE` file. Keep the core
-stopped for **all** of the following steps. Disable supervisor restarts first.
+Dropping the legacy tables frees pages; it does not shrink an
+`auto_vacuum=NONE` file. Keep the core stopped for **all** of the following
+steps. Disable supervisor restarts first.
 
 1. Back up the workspace and record the stopped source's size. Budget disk space
-   for both the old file and the new copy; migration itself temporarily stores
-   the full staged raw table and its unique index.
+   for both the old file and the new copy.
 2. Build/run the offline helper, supplying the actual source and a new output:
 
    ```sh
@@ -116,7 +64,7 @@ stopped for **all** of the following steps. Disable supervisor restarts first.
    ```
 
    The helper acquires the serving OS lease and an exclusive SQLite connection,
-   requires certified explicit raw IDs, and uses `VACUUM INTO`. It never overwrites
+   requires certified stable raw IDs, and uses `VACUUM INTO`. It never overwrites
    an existing destination or replaces the source. Before reporting success it
    checks output integrity and all table contents in both directions, plus counts
    and PM rowid-based cursor identities, then fsyncs the new file. A failed copy
@@ -138,6 +86,41 @@ stopped for **all** of the following steps. Disable supervisor restarts first.
 Do not copy/swap a file while writers continue: later commits could be lost.
 Do not apply unverified VACUUM output. In particular, the helper rejects a SQLite
 build that changes implicit PM cursor IDs even though access-edge IDs are stable.
+
+## Measuring the reduction
+
+The checked-in dense fixture is the reproducible measurement. Run the
+performance tier and record the logged `db_file_before`, `after_reclamation` and
+`saved_bytes` values:
+
+```sh
+cd core
+GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/storage \
+  -run '^TestPerformanceCompactAccessShadow$' -count=1 -v -timeout=30m
+```
+
+The test seeds the dense fixture, verifies the compact ledger, runs the offline
+reclamation helper, and asserts the reclaimed file is smaller. The legacy
+exact-ledger and admission-mirror bytes are no longer present after migration
+150, so the remaining saving is the physical reclamation of freed pages. For a
+read-only component comparison on a disposable copy, use
+`core/dev/measure_compact_access.py`.
+
+`TestMeasureLegacyAccessLedgerReduction` is the bounded, laptop-friendly
+measurement. On a 20,000-edge synthetic corpus it records:
+
+| Component / phase | Bytes |
+| --- | ---: |
+| Legacy exact table + target index | 3,989,504 |
+| Admission compact mirror + index | 1,691,648 |
+| Database before migration | 27,856,896 |
+| Database after migration (pages freed, not reclaimed) | 27,856,896 |
+| Database after `VACUUM INTO` reclamation | 21,086,208 |
+| Saved by reclamation | 6,770,688 (24.3%) |
+
+The exact-ledger and mirror bytes are already gone from the live schema after
+migration 150; the reclamation step is what returns those freed pages to the
+filesystem.
 
 ## Document revision edges
 
@@ -161,61 +144,18 @@ SELECT count(*) FROM resource_access_edges
  WHERE source_kind IN ('artifact','document_revision');
 ```
 
-To estimate the saving before upgrading, compare per-revision edges with the
-distinct targets per document (read-only):
-
-```sql
-SELECT document_id, count(*) AS edges, count(DISTINCT lower(target_ref)) AS targets FROM (
-  SELECT r.document_id, e.target_ref FROM document_revisions r JOIN resource_access_edges e
-    ON e.source_kind='artifact' AND e.source_id=r.artifact_id
-  UNION ALL
-  SELECT r.document_id, e.target_ref FROM document_revisions r JOIN resource_access_edges e
-    ON e.source_kind='document_revision' AND e.source_id=r.revision_id
-) GROUP BY document_id ORDER BY edges DESC LIMIT 10;
-```
-
 Freed pages are reused by later writes; the file does not shrink on its own
 (`auto_vacuum=NONE`). After `done=1`, shrink it with the offline reclamation
 procedure above. Never run a full `VACUUM` against a serving core.
 
 ## Evidence and cost
 
-The disposable 4,096-resource-per-family fixture contains **243,770 exact edges**.
-It differs from the original proposal's 943,778-edge fixture.
+The compact ledger stores 32-byte digest BLOBs. Each authorization probe uses
+`idx_access_compact_target` followed by the raw integer primary key. The
+admission link indexes are partial, so writes only maintain the entries the
+comment/document cleanup triggers and key deletion actually read.
 
-| Phase / component                                    |       Bytes |
-| ---------------------------------------------------- | ----------: |
-| Before migration (empty capability metadata present) | 304,500,736 |
-| After cutover, before physical reclamation           | 421,027,840 |
-| After verified reclamation                           | 246,775,808 |
-| Original exact table + index, retained for rollback  |  51,048,448 |
-| Compact table + target index                         |  21,204,992 |
-| Redundant raw-edge target index removed              |  69,095,424 |
-
-Backfill selects O(log N + B) keys and performs O(B log N) index work, B <= 200.
-Full snapshot verification and offline reclamation are O(N) maintenance work;
-EXCEPT uses temporary space and WAL snapshots can retain pages. Cutover never
-runs on a request path. Ordinary post-installation writes update the current rollback
-ledger and compact mirror plus a constant-size generation counter.
-
-A 4,096-edge target fanout used one SQL statement, 4,096 returned rows and 28,750
-VM steps, with no full scan, sort or automatic index. Adding 8,192 unrelated
-edges changed this to 28,751 VM steps. Ordered old/compact authorization results
-also match across concurrent grants/revokes, private human/agent ownership and
-HTTP credential expiry/revocation. The existing common HTTP read performance
-gate runs in both legacy and certified compact modes with identical budgets.
-
-Reproduce the primary gates (complete commands, outputs and exit codes are
-attached to SCA-766):
-
-```sh
-cd core
-GOMAXPROCS=2 ANX_PERFORMANCE_TEST=1 go test ./internal/storage \
-  ./internal/primitives ./internal/server \
-  -run '^TestCompact|^TestResourceReadSnapshotRandomizedDifferential$|^TestResourcePageSnapshotAuthenticationAndSingleConnection$|^TestResourceAccessCommonReadPerformance$|^TestPerformanceCompactAccessShadow$' \
-  -count=1 -v -timeout=15m
-```
-
-A later release may stop old-ledger writes atomically with old-ledger removal,
-ending instant reader rollback and yielding additional savings. That destructive
-finalization is intentionally not available in this release.
+Backfill and verification are one-time maintenance work; they never run on a
+request path. Ordinary post-migration writes update the compact ledger, the
+mention buckets and the admission ledgers transactionally. The existing common
+HTTP read performance gate runs in the final schema with the same budgets.

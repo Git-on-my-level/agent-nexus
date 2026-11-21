@@ -1,9 +1,12 @@
 # Compact access: production reclamation
 
-Certification and compact readers activate online by default. File reclamation
-is a separate **operator-run offline maintenance operation**. Neither core
-startup nor the packed-host updater invokes it. Keep legacy writes enabled
-through this release's instant-reader-rollback window.
+Migration 150 retires the legacy exact-edge ledger and the admission compact
+mirror. The compact ledger is the only exact-edge ledger, and the compact reader
+is always selected. File reclamation is a separate **operator-run offline
+maintenance operation**. Neither core startup nor the packed-host updater
+invokes it. Roll back a bad release by restoring the verified pre-upgrade
+backup; the historical instant reader rollback no longer selects a physical
+ledger.
 
 ## When hosted operators run it
 
@@ -119,15 +122,17 @@ Run as the workspace owner and keep the supervisor stopped until the verified
 copy is published. If downtime or spare disk is unavailable, defer reclamation;
 the certified compact reader remains usable and free pages can be reused.
 
-## Later release: contract the legacy ledger
+## Contraction status
 
-SCA-774 tracks ending the rollback window. Before removing the legacy exact
-table/index, require production certification, no active fallback, a tested
-backup, an explicit release decision and an old-binary format fence. Move compact
-maintenance off the legacy mirror triggers; in one writer transaction install
-the final writers, stop legacy writes, remove legacy consumers/tables, and bump
-the format/authorization epoch. Prove privacy equivalence, concurrent-write and
-crash safety, bounded SQL cost and additional physical savings. Raw stable IDs
-and prose authorization ledgers remain. That release must explicitly retire the
-legacy fallback and describe recovery after new writes; this release does none
-of those destructive steps.
+SCA-774 is complete in migration 150. The migration verifies the compact ledger
+against the legacy ledger and raw edges in both directions, aborts on any
+divergence, stabilizes raw edge identities, rebuilds the compact-origin
+admission links, and drops the legacy exact table, its target index and the
+admission compact mirror. The mention triggers write the compact ledger
+directly, and the admission link indexes are partial on their actual users.
+
+A workspace whose compact ledger diverges fails to open with a migration error.
+Restore the verified backup, let the previous release finish certification, and
+retry the upgrade. After a successful upgrade, run the reclamation step above
+and record the before/after active-file bytes. The checked-in dense fixture
+measurement is `TestPerformanceCompactAccessShadow` in `core/internal/storage`.

@@ -27,8 +27,12 @@ func TestCandidateProofBorrowedWriteSeesUnversionedLedgerChanges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// The empty compact ledger omits this bare-ID exact reference. Installing
-			// its rows inside a borrowed writer changes authority without an epoch bump.
+			// Simulate an empty compact ledger: it omits this bare-ID exact
+			// reference. Installing its rows inside a borrowed writer changes
+			// authority without an epoch bump.
+			if _, err := ws.DB().Exec(`DELETE FROM resource_access_compact_edges`); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := ws.DB().Exec(`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`); err != nil {
 				t.Fatal(err)
 			}
@@ -56,7 +60,7 @@ func TestCandidateProofBorrowedWriteSeesUnversionedLedgerChanges(t *testing.T) {
 				if err := tx.QueryRowContext(maintenance, `SELECT version FROM resource_access_epoch`).Scan(&before); err != nil {
 					return err
 				}
-				if _, err := tx.ExecContext(maintenance, `INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`); err != nil {
+				if _, err := tx.ExecContext(maintenance, `INSERT INTO resource_access_compact_edges SELECT rowid,unhex(anx_resource_atom_key(CAST(target_ref AS BLOB))) FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`); err != nil {
 					return err
 				}
 				if err := tx.QueryRowContext(maintenance, `SELECT version FROM resource_access_epoch`).Scan(&after); err != nil {
