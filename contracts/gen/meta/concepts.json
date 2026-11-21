@@ -20232,7 +20232,8 @@
                   "approved",
                   "needs_context",
                   "rejected",
-                  "resolved"
+                  "resolved",
+                  "skipped"
                 ]
               },
               {
@@ -29462,7 +29463,8 @@
                   "approved",
                   "needs_context",
                   "rejected",
-                  "resolved"
+                  "resolved",
+                  "skipped"
                 ]
               },
               {

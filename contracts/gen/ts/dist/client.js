@@ -10057,7 +10057,8 @@ export const commandRegistry = [
                         "approved",
                         "needs_context",
                         "rejected",
-                        "resolved"
+                        "resolved",
+                        "skipped"
                     ]
                 },
                 {

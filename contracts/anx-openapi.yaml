@@ -14074,11 +14074,11 @@ components:
 
     HumanAttentionResponseOutcome:
       type: string
-      enum: [answered, approved, rejected, acknowledged, needs_context, resolved]
+      enum: [answered, approved, rejected, acknowledged, needs_context, resolved, skipped]
       description: >
         answered means a chosen proposal or free reply; approved and rejected mean the
         explicit review Approve and Reject actions; acknowledged means the operator
-        closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. The response text remains the audit note.
+        closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. skipped means the human cleared the decision without deciding it (Decide's Skip): the ask closes with status answered so existing waiters end, nothing is ruled or recorded as a standing ruling, the task returns to its owner as with needs_context, a card citing it is not treated as decided, and the requester may ask again later (with supersedes) if it still needs a decision. Server-linked access requests do not accept it. The response text remains the audit note.
 
     CurationCandidate:
       type: object

@@ -134,6 +134,11 @@ answers. Undo is the client-held delayed send in `inboxResponseQueue.js`,
 never a retraction. Copy ref is on every row, and `c` copies the focused row's
 ref (`j`/`k` move focus). Reply drafts use the durable key
 `inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
+Rows can be selected (checkbox, or `x` on the highlighted row) and skipped
+together; with nothing selected the bar offers Skip all. Skip is not an answer:
+it records outcome `skipped` with a note that nothing was decided, makes no
+ruling, and lets the requester ask again later. Access, host and PM decisions
+cannot be skipped and stay in the list. Skips wait behind their own Undo.
 
 **Watch** (`/watch`) is outcomes per workspace, built from the brief. The
 Initiatives list (`InitiativeRollupList`, rules in `watchList.js`) has one

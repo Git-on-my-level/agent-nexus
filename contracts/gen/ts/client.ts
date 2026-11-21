@@ -10108,7 +10108,8 @@ export const commandRegistry: CommandSpec[] = [
             "approved",
             "needs_context",
             "rejected",
-            "resolved"
+            "resolved",
+            "skipped"
           ]
         },
         {

@@ -260,6 +260,12 @@ func TestNextAskDecidedMoot(t *testing.T) {
 			wantFlagged: false,
 		},
 		{
+			name:        "skipped is not a decision",
+			text:        "event:ask-1",
+			asks:        asks("answered", "skipped", "", true),
+			wantFlagged: false,
+		},
+		{
 			name: "expired needs_context flags",
 			text: "event:ask-1",
 			asks: map[string]citedAsk{"ask-1": {
