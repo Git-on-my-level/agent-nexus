@@ -103,9 +103,10 @@ func (s *Store) applyAskTaskOutcomeTx(ctx context.Context, tx *accessTx, actor, 
 			break
 		}
 	}
-	if outcome == "needs_context" {
+	if outcome == "needs_context" || outcome == "skipped" {
 		// Clarification belongs to the author/owner even when ordinary answers
-		// route through a configured board role.
+		// route through a configured board role. A skipped decision was not
+		// decided, so it goes back to the owner the same way.
 		next = firstNonEmpty(owner, anyStringValue(ask["requester_label"]), anyStringValue(ask["requester_actor_id"]))
 	}
 	phase := effectivePhase

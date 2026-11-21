@@ -20,7 +20,7 @@ export const EVENT_TYPE_VALUES = Object.freeze(["topic_created", "topic_updated"
 /** host_bridge_job values (strict), in contract order. */
 export const HOST_BRIDGE_JOB_VALUES = Object.freeze(["answers", "wake", "git", "files", "spool"]);
 /** human_attention_response_outcome values (strict), in contract order. */
-export const HUMAN_ATTENTION_RESPONSE_OUTCOME_VALUES = Object.freeze(["answered", "approved", "rejected", "acknowledged", "needs_context", "resolved"]);
+export const HUMAN_ATTENTION_RESPONSE_OUTCOME_VALUES = Object.freeze(["answered", "approved", "rejected", "acknowledged", "needs_context", "resolved", "skipped"]);
 /** lifecycle_state values (strict), in contract order. */
 export const LIFECYCLE_STATE_VALUES = Object.freeze(["active", "archived", "trashed"]);
 /** priority values (strict), in contract order. */

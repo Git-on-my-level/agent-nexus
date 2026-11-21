@@ -34,6 +34,14 @@
   import StakesBadges from "$lib/components/decide/StakesBadges.svelte";
   import StandingRulings from "$lib/components/decide/StandingRulings.svelte";
   import { sentBackItemIds } from "$lib/standingRulings.js";
+  import DecideBulkBar from "$lib/components/decide/DecideBulkBar.svelte";
+  import DecidePick from "$lib/components/decide/DecidePick.svelte";
+  import {
+    canSkip,
+    pendingSkip,
+    skippingItemIds,
+    undoSkip,
+  } from "$lib/decideSkip.js";
   import {
     mutationConfirmations,
     mutationOutbox,
@@ -102,8 +110,17 @@
         .filter((entry) => entry.state !== "attention")
         .map((entry) => entry.itemId),
       ...sentBackItemIds($mutationOutbox, $mutationConfirmations),
+      ...skippingItemIds($pendingSkip, $mutationOutbox, $mutationConfirmations),
     ]),
   );
+  /** Rows ticked for a bulk skip, by inbox item id. */
+  let picked = $state(new Set());
+  function togglePick(id) {
+    const next = new Set(picked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    picked = next;
+  }
   /*
    * Only the response queue decides: a send that fails (or needs the reader,
    * like an unreachable requester) drops back to `failed`/`attention` and the
@@ -290,6 +307,16 @@
   }
 
   function onUndo() {
+    // Undo the newer of the two waiting actions: a skip or an answer.
+    const answer = $inboxResponseToast;
+    const answerNewer =
+      answer?.state === "pending" &&
+      (!$pendingSkip || answer.deadline > $pendingSkip.deadline);
+    const unskipped = answerNewer ? null : undoSkip();
+    if (unskipped) {
+      selectedId = unskipped[0] ?? selectedId;
+      return;
+    }
     const restored = undoInboxResponse();
     if (!restored) return;
     if (folded.has(restored.itemId)) {
@@ -314,6 +341,28 @@
       void goto(href(`/decide/${encodeURIComponent(selected.inboxItemId)}`));
   }
 
+  /** X ticks the highlighted row for a bulk skip, as in a mail client. */
+  function pickKey(event) {
+    if (
+      event.key !== "x" ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      !wide ||
+      !selected ||
+      !canSkip(selected) ||
+      helpOpen ||
+      otherDialogOpen() ||
+      (event.target instanceof HTMLElement &&
+        (event.target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)))
+    )
+      return false;
+    event.preventDefault();
+    togglePick(selected.inboxItemId);
+    return true;
+  }
+
   /** Phone stack: only keys that do not act on one decision. */
   const STACK_KEYS = new Set(["help", "close-help", "undo"]);
 
@@ -324,6 +373,7 @@
     });
     if (!wide && (!action || !STACK_KEYS.has(action.type))) return;
     if (!action) {
+      if (pickKey(event)) return;
       if (
         event.key === "c" &&
         !event.metaKey &&
@@ -393,6 +443,7 @@
     ["Send the answer", [modSymbol(), "Enter"]],
     ["Open the initiative", ["O"]],
     ["Copy the ref", ["C"]],
+    ["Select for skipping", ["X"]],
     ["Undo the last answer", [modSymbol(), "Z"]],
     ["Shortcut help", ["?"]],
     ["Clear the choice, or close this help", ["Esc"]],
@@ -454,6 +505,10 @@
     </div>
   {/if}
 
+  {#if $brief.data && (decisions.length || $pendingSkip)}
+    <DecideBulkBar {decisions} bind:selected={picked} href={href("/decide")} />
+  {/if}
+
   {#if !$brief.data && $brief.error}
     <StateError
       title="Decisions didn’t load"
@@ -513,6 +568,14 @@
               >
             </div>
           {:else}
+            {#if canSkip(decision)}
+              <DecidePick
+                {decision}
+                labelled
+                checked={picked.has(decision.inboxItemId)}
+                ontoggle={togglePick}
+              />
+            {/if}
             <DecisionCard {decision} variant="stack" {now} {onAnswered} />
           {/if}
         </li>
@@ -538,9 +601,18 @@
           {#each decisions as decision (decision.ref)}
             {@const wait = rowWait(decision)}
             {@const isSelected = decision.inboxItemId === selectedId}
-            <li>
+            <li class="flex min-w-0 items-stretch">
+              {#if canSkip(decision)}
+                <DecidePick
+                  {decision}
+                  checked={picked.has(decision.inboxItemId)}
+                  ontoggle={togglePick}
+                />
+              {:else}
+                <span class="w-[1.6rem] shrink-0" aria-hidden="true"></span>
+              {/if}
               <a
-                class="flex min-h-[52px] min-w-0 flex-col justify-center gap-0.5 border-l-2 px-4 py-2 {isSelected
+                class="flex min-h-[52px] min-w-0 flex-1 flex-col justify-center gap-0.5 border-l-2 px-3 py-2 {isSelected
                   ? 'border-transparent hover:bg-panel-hover lg:border-accent lg:bg-bg-soft'
                   : 'border-transparent hover:bg-panel-hover'}"
                 href={itemHref(decision.inboxItemId)}

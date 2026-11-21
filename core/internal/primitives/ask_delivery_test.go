@@ -44,7 +44,7 @@ func answerDeliveryFixture(s *Store, ask map[string]any, outcome string) (map[st
 }
 func TestAskAnswerAtomicTaskOutcome(t *testing.T) {
 	t.Parallel()
-	for _, outcome := range []string{"answered", "needs_context", "resolved"} {
+	for _, outcome := range []string{"answered", "needs_context", "resolved", "skipped"} {
 		t.Run(outcome, func(t *testing.T) {
 			s, ws, card, ask := askDeliveryFixture(t)
 			ctx := context.Background()
