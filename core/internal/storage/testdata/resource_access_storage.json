@@ -2214,7 +2214,7 @@
     "../primitives/ask_subscriptions.go:*Store:RecordAskDelivery": "4806682668b319aeecc94637a783acd86e5fe1bf4e23c76f8828a975b34c7cff",
     "../primitives/ask_subscriptions.go:*Store:askDeliveries": "4e5ee870450ed2f763bfe8d9080b8185754f0616db788514668a5421d4cd9be5",
     "../primitives/ask_subscriptions.go:type:AskSubscriptionInput": "d03894b3bcf444ce5bfccfbab336ea4a1afbc2d0388d88cda8b44a34563c08c4",
-    "../primitives/ask_task_outcome.go:*Store:applyAskTaskOutcomeTx": "af8c9904dec2ff7bc0fa92d795331d4de800c2d1144e674b45bbf9d32b0c074f",
+    "../primitives/ask_task_outcome.go:*Store:applyAskTaskOutcomeTx": "771cb44ee7c6deac1e191d79199ced2ec7e4ac88d2f15534d72e959e502d8440",
     "../primitives/ask_wake_stream.go:*Store:AskWakePage": "061815dc1d185302e075681322acd7dee64402a47917389d66e74dc84829b396",
     "../primitives/ask_wake_stream.go:*Store:AskWakeSnapshotPage": "a8bddfaff0770780621754149715cd618726dc264aa514a8d7cde3c3ea293094",
     "../primitives/ask_wake_stream.go:*Store:AskWakeSnapshotStart": "722cf4914e1af25ad8474a09111bf73eeebd8ed784e12d1d744cc7c9bcf0c76b",
