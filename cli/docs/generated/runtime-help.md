@@ -507,7 +507,7 @@ Asking for decisions
 - Every ask, review and escalation belongs to a work card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
 - Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.
 - Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.
-- Answers atomically record a decision on the card and route next action to its owner/requester. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
+- Answers atomically record a decision on the card and route next action to its owner/requester. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>. skipped means the human cleared the ask from Decide without deciding: nothing was ruled and no standing ruling exists, so continue on your stated default where it is reversible, or ask again later with --supersedes if it still needs a decision.
 - Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
 
 
@@ -3751,12 +3751,12 @@ Inputs:
   - body `partial` (boolean)
   - body `related_refs` (list<any>)
   - body `response_text` (string)
-  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved, skipped
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `debug inbox list`).
   --response-text <text>  Freeform response text.
-  --outcome <value>       answered, approved, rejected, acknowledged, needs_context, or resolved (required).
+  --outcome <value>       answered, approved, rejected, acknowledged, needs_context, resolved, or skipped (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (`me` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).
