@@ -13,7 +13,26 @@ const scope = await vi.hoisted(async () => {
   const { writable } = await import("svelte/store");
   return { localWorkScope: writable("scope-a") };
 });
-vi.mock("$lib/localWorkScope.js", () => scope);
+vi.mock("$lib/localWorkScope.js", () => ({
+  ...scope,
+  canUseLocalWorkScope: (value) => Boolean(value),
+}));
+const store = vi.hoisted(() => {
+  const records = new Map();
+  return {
+    records,
+    saveLocalWork: vi.fn((scope, kind, target, value) => {
+      const key = `${scope}|${kind}|${target}`;
+      if (value === null) records.delete(key);
+      else records.set(key, { scope, kind, target, value });
+      return Promise.resolve();
+    }),
+    listLocalWork: vi.fn(async (scope, kind) =>
+      [...records.values()].filter((r) => r.scope === scope && r.kind === kind),
+    ),
+  };
+});
+vi.mock("$lib/localWorkStore.js", () => store);
 const brief = vi.hoisted(() => ({ refreshBrief: vi.fn(async () => {}) }));
 vi.mock("$lib/briefStore.js", () => brief);
 
@@ -22,8 +41,10 @@ import {
   SKIP_REASON,
   SKIP_UNDO_MS,
   canSkip,
+  PENDING_KIND,
   flushSkip,
   pendingSkip,
+  recoverPendingSkips,
   resetDecideSkip,
   skipDecisions,
   skipTarget,
@@ -51,6 +72,8 @@ beforeEach(() => {
   resetDecideSkip();
   scope.localWorkScope.set("scope-a");
   outbox.enqueueLocalMutation.mockClear();
+  store.records.clear();
+  store.saveLocalWork.mockClear();
   outbox.mutationConfirmations.set({});
   brief.refreshBrief.mockClear();
 });
@@ -130,11 +153,50 @@ describe("skipping", () => {
     expect(undoSkip()).toEqual(["inbox:b"]);
   });
 
-  it("drops a skip when the reader switched workspace inside the window", async () => {
+  it("journals the frozen requests before the window, and Undo deletes them", () => {
+    skipDecisions([agentAsk]);
+    const [record] = [...store.records.values()];
+    expect(record).toMatchObject({ scope: "scope-a", kind: PENDING_KIND });
+    expect(record.value.entries[0].request.body.outcome).toBe("skipped");
+    undoSkip();
+    expect(store.records.size).toBe(0);
+  });
+
+  it("a crash inside the window is recovered with the frozen keys", async () => {
+    skipDecisions([agentAsk]);
+    const [record] = [...store.records.values()];
+    // The tab dies: in-memory state is gone, the journal is not.
+    resetDecideSkip();
+    await vi.advanceTimersByTimeAsync(SKIP_UNDO_MS);
+    expect(outbox.enqueueLocalMutation).not.toHaveBeenCalled();
+    await recoverPendingSkips();
+    const sent = outbox.enqueueLocalMutation.mock.calls.map(([e]) => e);
+    expect(sent).toEqual(record.value.entries);
+    expect(store.records.size).toBe(0);
+  });
+
+  it("leaves another window's skip alone until its deadline", async () => {
+    skipDecisions([agentAsk]);
+    const [record] = [...store.records.values()];
+    resetDecideSkip();
+    store.records.clear();
+    store.records.set("other", record);
+    await recoverPendingSkips();
+    expect(outbox.enqueueLocalMutation).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(SKIP_UNDO_MS + 100);
+    expect(outbox.enqueueLocalMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a skip journaled when the reader switched workspace inside the window", async () => {
     skipDecisions([agentAsk]);
     scope.localWorkScope.set("scope-b");
     await flushSkip();
     expect(outbox.enqueueLocalMutation).not.toHaveBeenCalled();
+    expect(store.records.size).toBe(1);
+    scope.localWorkScope.set("scope-a");
+    await vi.advanceTimersByTimeAsync(SKIP_UNDO_MS);
+    await recoverPendingSkips();
+    expect(outbox.enqueueLocalMutation).toHaveBeenCalledTimes(1);
   });
 
   it("hides rows while waiting, sending or confirmed, but not when stuck", () => {

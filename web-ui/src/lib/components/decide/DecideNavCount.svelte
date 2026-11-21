@@ -3,6 +3,7 @@
   import { countWaitingDecisions } from "$lib/brief.js";
   import { readerScope } from "$lib/readerScope.js";
   import { inboxResponseOverlay } from "$lib/inboxResponseQueue.js";
+  import { watchPendingSkips } from "$lib/decideSkip.js";
 
   /**
    * How many decisions wait on the reader, beside Decide. It reads the same
@@ -20,6 +21,8 @@
   $effect(() => {
     void $readerScope;
     if (!enabled || !workspace) return;
+    // Skips a crash left behind are sent from any page, not only Decide.
+    watchPendingSkips();
     return mountBrief();
   });
 

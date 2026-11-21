@@ -206,13 +206,17 @@ separate delivery controls. Confirmed answers enter the scoped Inbox cache even
 when the originating component has unmounted. Epoch fencing still discards writes
 after sign-out or principal replacement.
 
-Decide's Skip (one decision, a selection, or Skip all) holds the chosen item ids
-behind a five-second Undo, then saves one `inbox.skip` outbox entry per item
-(`decideSkip.js`). Each freezes its respond body with its own idempotency key and
-a second key for the quiet resend used only when core reports the requester is
-unreachable. A skip made in one workspace or for one principal is dropped, not
-sent, if the scope changes inside the window. Leaving the page saves a waiting
-skip instead of discarding it. An ask already closed elsewhere confirms as done.
+Decide's Skip (one decision, a selection, or Skip all) freezes one respond
+body per item, with its own idempotency key and a second key for the quiet
+resend used only when core reports the requester is unreachable. The frozen
+batch is journaled under `skip-pending` before the five-second Undo starts;
+Undo deletes it. When the window closes, each item becomes an `inbox.skip`
+outbox entry under the key frozen at skip time (`decideSkip.js`), and the
+journal entry is removed once all are in the outbox. A crash, killed tab or
+workspace switch inside the window leaves the journal; the next time the reader
+opens that workspace, any batch past its deadline is sent with the same keys,
+so a double recovery records each skip once. Sign-out moves the epoch and
+discards it. An ask or grouped batch already closed elsewhere confirms as done.
 
 ## Task and document authoring
 

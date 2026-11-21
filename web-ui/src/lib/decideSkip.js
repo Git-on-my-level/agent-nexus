@@ -6,10 +6,11 @@
  * it can carry on with its default or ask again later. Nothing is recorded
  * that would stop the same question coming back.
  *
- * Skipping waits a few seconds behind an Undo, like an answer. Then every
- * skip goes into the durable outbox (`mutationOutbox.js`) as its own entry,
- * persisted before it is sent, so a reload or a dropped connection never
- * loses it and a failure brings that one row back with a retry.
+ * Skipping is journaled at once, then waits a few seconds behind an Undo,
+ * like an answer. Then every skip goes into the durable outbox
+ * (`mutationOutbox.js`) as its own entry, so a reload, a crash or a dropped
+ * connection never loses it and a failure brings that one row back with a
+ * retry.
  */
 import { get, writable } from "svelte/store";
 import { refreshBrief } from "$lib/briefStore.js";
@@ -18,7 +19,8 @@ import {
   mutationConfirmations,
 } from "$lib/mutationOutbox.js";
 import { randomUUID } from "$lib/replayPolicy.js";
-import { localWorkScope } from "$lib/localWorkScope.js";
+import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
+import { listLocalWork, saveLocalWork } from "$lib/localWorkStore.js";
 import { SKIP } from "$lib/standingRulingSend.js";
 
 export { SKIP };
@@ -58,71 +60,155 @@ function skipRequest(decision) {
 }
 
 /**
- * The skip waiting behind Undo: `{ ids, decisions, deadline }`, or null.
+ * The skip waiting behind Undo: `{ batch, scope, ids, deadline }`, or null.
  * Only the latest skip is undoable; a newer one sends the earlier one first.
+ *
+ * The frozen requests are journaled under `skip-pending` the moment the
+ * reader skips, before the window starts, so a crash or a killed tab inside
+ * the window cannot lose them: `recoverPendingSkips` sends whatever is past
+ * its deadline the next time this reader opens the workspace. Undo deletes
+ * the journal entry. Sign-out moves the scope's epoch, which discards it.
  */
+export const PENDING_KIND = "skip-pending";
 export const pendingSkip = writable(null);
 let timer = null;
 let current = null;
 export const skipSaveFailures = writable(0);
 
+function frozenEntry(decision, href) {
+  return {
+    key: randomUUID(),
+    target: skipTarget(decision.inboxItemId),
+    operation: SKIP,
+    href,
+    title: "Skip without deciding",
+    preview: decision.title,
+    request: skipRequest(decision),
+  };
+}
+
 /** Skip these decisions after the undo window. Returns how many will go. */
 export function skipDecisions(decisions, { href = "" } = {}) {
   const chosen = (decisions ?? []).filter(canSkip);
   if (!chosen.length) return 0;
+  const scope = get(localWorkScope);
+  if (!canUseLocalWorkScope(scope)) return 0;
   if (current) void flushSkip();
+  const batch = randomUUID();
+  const deadline = Date.now() + SKIP_UNDO_MS;
+  const entries = chosen.map((decision) => frozenEntry(decision, href));
+  let saved;
+  try {
+    // Writes the synchronous journal now; storage failure stops the skip.
+    saved = saveLocalWork(scope, PENDING_KIND, batch, { entries, deadline });
+  } catch {
+    skipSaveFailures.set(chosen.length);
+    return 0;
+  }
+  void saved.catch(() => {});
   current = {
+    batch,
+    scope,
+    entries,
     ids: chosen.map((decision) => decision.inboxItemId),
-    decisions: chosen,
-    href,
-    // A skip belongs to the workspace and reader it was made in.
-    scope: get(localWorkScope),
-    deadline: Date.now() + SKIP_UNDO_MS,
+    deadline,
   };
-  pendingSkip.set({ ...current });
+  pendingSkip.set({ ids: current.ids, deadline });
   timer = setTimeout(() => void flushSkip(), SKIP_UNDO_MS);
   return chosen.length;
+}
+
+function forgetPending(scope, batch, reason) {
+  try {
+    void saveLocalWork(scope, PENDING_KIND, batch, null, {
+      deletionReason: reason,
+    }).catch(() => {});
+  } catch {
+    // Signed out: the epoch already discarded it.
+  }
 }
 
 /** Take back the waiting skip. Returns its item ids, or null. */
 export function undoSkip() {
   if (!current) return null;
-  const { ids } = current;
+  const { ids, scope, batch } = current;
   clearTimeout(timer);
   timer = null;
   current = null;
   pendingSkip.set(null);
+  forgetPending(scope, batch, "undo");
   return ids;
 }
 
-/** Save the waiting skip to the outbox now (window closed, page left). */
+/**
+ * Hand a journaled batch to the outbox, under the keys frozen when the
+ * reader skipped. Sending a batch twice (two tabs recovering at once) reuses
+ * the same outbox keys and idempotency keys, so core records each skip once.
+ */
+async function sendBatch(scope, batch, entries) {
+  watchSkipConfirmations();
+  const saved = await Promise.allSettled(
+    entries.map((entry) => enqueueLocalMutation(entry)),
+  );
+  const failed = saved.filter((result) => result.status === "rejected").length;
+  skipSaveFailures.set(failed);
+  // Keep the journal until every entry is in the outbox.
+  if (!failed) forgetPending(scope, batch, "sent");
+}
+
+/** Send the waiting skip now (window closed, page left). */
 export async function flushSkip() {
   if (!current) return;
-  const { decisions, href, scope } = current;
+  const { scope, batch, entries } = current;
   clearTimeout(timer);
   timer = null;
   current = null;
   pendingSkip.set(null);
-  // The reader switched workspace or signed out inside the window: these
-  // ids mean nothing there, so the skip is dropped, as an answer would be.
+  // The reader moved to another workspace inside the window. The outbox
+  // writes to the active one, so the journaled skip waits until this reader
+  // is back there; sign-out discards it.
   if (scope !== get(localWorkScope)) return;
-  watchSkipConfirmations();
-  const saved = await Promise.allSettled(
-    decisions.map((decision) =>
-      enqueueLocalMutation({
-        key: randomUUID(),
-        target: skipTarget(decision.inboxItemId),
-        operation: SKIP,
-        href,
-        title: "Skip without deciding",
-        preview: decision.title,
-        request: skipRequest(decision),
-      }),
-    ),
-  );
-  skipSaveFailures.set(
-    saved.filter((result) => result.status === "rejected").length,
-  );
+  await sendBatch(scope, batch, entries);
+}
+
+/**
+ * Send journaled skips whose undo window has closed: left behind by a crash,
+ * a killed tab, or a workspace switch. One still inside its window (this
+ * tab's own, or another tab's) is left alone; the timer sends it.
+ */
+export async function recoverPendingSkips() {
+  const scope = get(localWorkScope);
+  if (!canUseLocalWorkScope(scope)) return;
+  let records = [];
+  try {
+    records = await listLocalWork(scope, PENDING_KIND);
+  } catch {
+    return;
+  }
+  for (const record of records) {
+    const { entries, deadline } = record.value ?? {};
+    if (record.target === current?.batch || !Array.isArray(entries)) continue;
+    if (Number(deadline) > Date.now()) {
+      clearTimeout(recoveryTimer);
+      recoveryTimer = setTimeout(
+        () => void recoverPendingSkips(),
+        deadline - Date.now() + 50,
+      );
+      continue;
+    }
+    if (scope !== get(localWorkScope)) return;
+    await sendBatch(scope, record.target, entries);
+  }
+}
+
+let stopRecovery = null;
+let recoveryTimer = null;
+/** Idempotent: recover on mount and whenever the reader's scope changes. */
+export function watchPendingSkips() {
+  if (stopRecovery) return;
+  stopRecovery = localWorkScope.subscribe(() => {
+    void recoverPendingSkips();
+  });
 }
 
 /**
@@ -190,4 +276,8 @@ export function resetDecideSkip() {
   skipSaveFailures.set(0);
   stopConfirmed?.();
   stopConfirmed = null;
+  stopRecovery?.();
+  stopRecovery = null;
+  clearTimeout(recoveryTimer);
+  recoveryTimer = null;
 }

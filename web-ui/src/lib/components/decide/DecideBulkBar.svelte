@@ -9,6 +9,7 @@
     skipSaveFailures,
     stuckSkips,
     undoSkip,
+    watchPendingSkips,
   } from "$lib/decideSkip.js";
 
   /**
@@ -64,6 +65,7 @@
   }
 
   onMount(() => {
+    watchPendingSkips();
     const clock = setInterval(() => (now = Date.now()), 500);
     // A skip waiting behind Undo is saved when the reader leaves, not lost.
     const leave = () => void flushSkip();
