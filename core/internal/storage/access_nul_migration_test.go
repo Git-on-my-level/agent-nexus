@@ -72,6 +72,7 @@ func TestResourceAccessMigrationRepairsNULRows(t *testing.T) {
 	if _, err = ws.DB().Exec(`INSERT INTO resource_access_series_refs VALUES('legacy-nul','{}',?)`, "prose\x00document:[]"); err != nil {
 		t.Fatal(err)
 	}
+	resetLegacyAccessLedgerForFixture(t, ws.DB())
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
 	}

@@ -29,7 +29,6 @@ func installAdmissionCanonicalVertices(ctx context.Context, tx *sql.Tx) error {
 	// recursive invocations), making partial key insertion order significant.
 	byTable := map[string][][2]string{
 		"resource_access_edges":           {{"@source_kind", "@source_id"}},
-		"resource_access_exact_edges":     {{"@source_kind", "@source_id"}},
 		"resource_access_external_edges":  {{"@source_kind", "@source_id"}},
 		"ref_edges":                       {{"@source_type", "@source_id"}},
 		"resource_access_admission_roots": {{"@kind", "@id"}},

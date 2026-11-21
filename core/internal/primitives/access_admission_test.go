@@ -185,7 +185,7 @@ func TestAdmissionGraphRandomizedParity(t *testing.T) {
 	}
 	// Direct compact-ledger writes and operator rollback must select precisely
 	// the same edges as the canonical reader, including an incomplete ledger.
-	exec(`INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`)
+	exec(`INSERT INTO resource_access_compact_edges SELECT rowid,unhex(anx_resource_atom_key(CAST(target_ref AS BLOB))) FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`)
 	for _, control := range []string{`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`, `DELETE FROM resource_access_compact_edges WHERE edge_id=(SELECT min(edge_id) FROM resource_access_compact_edges)`, `UPDATE resource_access_compact_control SET force_legacy=1`, `DELETE FROM resource_access_compact_control`} {
 		exec(control)
 		for _, scope := range []AccessScope{{ActorID: "owner"}, {ActorID: "stranger"}, {}} {

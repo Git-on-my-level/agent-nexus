@@ -96,6 +96,11 @@ var recentMigrations = []migration{
 	// fyi notes and standing rulings. One backfill statement over brief_notes.
 	{Version: 148, AfterApply: installOutcomeFacts},
 	{Version: 149, AfterApply: installAgentHandoffColumns},
+	// Complete the compact-access contraction (SCA-774). The legacy exact-edge
+	// ledger and the admission compact-atom mirror are verified equivalent to
+	// the compact ledger in both directions, then dropped. A mismatch aborts the
+	// upgrade instead of repairing or guessing.
+	{Version: 150, AfterApply: retireLegacyAccessLedger, Verify: verifyRetiredAccessLedger},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

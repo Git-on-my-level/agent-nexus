@@ -271,6 +271,7 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 					}
 				}
 			}
+			resetLegacyAccessLedgerForFixture(t, ws.DB())
 			for _, stmt := range []string{`DROP TABLE resource_access_edges`, `DROP TABLE resource_access_tombstones`, `DROP INDEX idx_ref_edges_access_target`, `DROP INDEX idx_cards_access_thread`, `DROP INDEX idx_inbox_access_card`, `DROP INDEX idx_work_access_project`, `DROP INDEX idx_inbox_access_event`, `DROP INDEX idx_wakeups_access_trigger_event`, `DELETE FROM schema_migrations WHERE version>=54`} {
 				if history == "main-v54" && stmt == `DELETE FROM schema_migrations WHERE version>=54` {
 					stmt = `DELETE FROM schema_migrations WHERE version>=55`
@@ -327,6 +328,32 @@ func TestResourceAccessMigrationBackfillsAndMaintainsPayloadEdges(t *testing.T) 
 				t.Fatal("orphan ownership edges")
 			}
 		})
+	}
+}
+
+// resetLegacyAccessLedgerForFixture restores the pre-150 derived ledgers after
+// a test rewinds schema_migrations on a workspace that was already opened at the
+// current schema. Migration 150 is destructive, so a rewound fixture must
+// recreate the legacy exact ledger and clear the compact certification before
+// the historical migrations replay.
+func resetLegacyAccessLedgerForFixture(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, q := range []string{
+		// Drop rather than delete: the admission delete triggers reference
+		// indexes that a rewound fixture may have removed.
+		`DROP VIEW IF EXISTS resource_access_compact_reconstructed`,
+		`DROP TABLE IF EXISTS resource_access_compact_edges`,
+		`CREATE TABLE resource_access_compact_edges(edge_id INTEGER PRIMARY KEY,target_key BLOB NOT NULL CHECK(typeof(target_key)='blob' AND length(target_key)=32))`,
+		`CREATE INDEX idx_access_compact_target ON resource_access_compact_edges(target_key)`,
+		`UPDATE resource_access_compact_job SET cursor=NULL,done=0`,
+		`DROP TABLE IF EXISTS resource_access_exact_edges`,
+		`CREATE TABLE resource_access_exact_edges(edge_id INTEGER PRIMARY KEY,source_kind TEXT NOT NULL,source_id TEXT NOT NULL,target_key TEXT NOT NULL)`,
+		`CREATE INDEX idx_access_exact_edges_target ON resource_access_exact_edges(target_key,source_kind,source_id)`,
+		`INSERT OR IGNORE INTO resource_access_exact_edges SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("reset legacy access ledger: %s: %v", q, err)
+		}
 	}
 }
 
@@ -395,7 +422,7 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	if _, err = ws.DB().Exec(`UPDATE artifacts SET content_refs_json='["[]"]' WHERE id IN (SELECT artifact_id FROM card_revisions WHERE card_id=?)`, public["id"]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = ws.DB().Exec(`INSERT OR IGNORE INTO resource_access_edges VALUES('board',?,'[]')`, public["board_id"]); err != nil {
+	if _, err = ws.DB().Exec(`INSERT OR IGNORE INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('board',?,'[]')`, public["board_id"]); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version>=58`); err != nil {
@@ -407,6 +434,7 @@ func TestResourceAccessMigrationReconcilesPrivacy57(t *testing.T) {
 	if _, err = ws.DB().Exec(`INSERT INTO resource_access_series_refs VALUES('legacy','{}','{}'),('legacy','{}','card:private-history')`); err != nil {
 		t.Fatal(err)
 	}
+	resetLegacyAccessLedgerForFixture(t, ws.DB())
 
 	if err = ws.Close(); err != nil {
 		t.Fatal(err)
@@ -476,6 +504,7 @@ func TestResourceAccessMigrationRepairsLegacyProseAndUnknownRollups(t *testing.T
 			if _, err = ws.DB().Exec(`DELETE FROM schema_migrations WHERE version>?`, version); err != nil {
 				t.Fatal(err)
 			}
+			resetLegacyAccessLedgerForFixture(t, ws.DB())
 			if err = ws.Close(); err != nil {
 				t.Fatal(err)
 			}

@@ -142,10 +142,8 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 			t.Fatalf("compact reader=%v want=%v err=%v", active, want, err)
 		}
 	}
-	selected(false) // Empty metadata never certifies a workspace.
-	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
-		t.Fatal(err)
-	}
+	// Migration 150 makes the compact ledger the only reader.
+	selected(true)
 	var reported bool
 	w.RunCompactAccessMigration(ctx, func(_ CompactAccessVerification, err error) {
 		if err != nil {
@@ -154,22 +152,19 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 		reported = true
 	})
 	if !reported {
-		t.Fatal("worker did not certify")
+		t.Fatal("worker did not report the certified workspace")
 	}
 	var mode int
 	if err := w.db.QueryRowContext(ctx, "SELECT reader FROM resource_access_compact_control").Scan(&mode); err != nil || mode != 1 {
 		t.Fatal("certification not published", mode, err)
 	}
-	selected(false) // Certification cannot undo an active kill switch.
-	compactExec(t, w, `UPDATE resource_access_edges SET target_ref='document:changed-under-fallback' WHERE rowid=1`)
-	if _, err := w.VerifyCompactAccessCutover(ctx); err != nil {
-		t.Fatal(err)
-	}
+	// The historical kill switch no longer selects a physical ledger, but a
+	// changed value still invalidates warm authorization snapshots.
 	var epoch int64
 	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
+	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
 		t.Fatal(err)
 	}
 	selected(true)
@@ -177,7 +172,7 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
 		t.Fatal("epoch not invalidated", after, epoch, err)
 	}
-	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
+	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
@@ -186,10 +181,7 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 	if err := w.RollbackCompactAccess(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.SetCompactAccessLegacyReads(ctx, false); err != nil {
-		t.Fatal(err)
-	}
-	selected(false) // A durable operator rollback requires explicit re-certification.
+	selected(true) // The retired rollback mode no longer changes the reader.
 }
 
 func TestCompactAccessUpgradeOverrideMetadata(t *testing.T) {

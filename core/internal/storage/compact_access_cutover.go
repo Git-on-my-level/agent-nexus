@@ -35,7 +35,12 @@ func installStableAccessEdges(ctx context.Context, tx *sql.Tx) error {
 	}
 	// Bind verification to every ledger write, including direct imports that do
 	// not advance the canonical authorization epoch. This is an O(1) counter.
-	tables := []string{"resource_access_exact_edges", "resource_access_compact_edges"}
+	tables := []string{"resource_access_compact_edges"}
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return err
+	} else if exact {
+		tables = append(tables, "resource_access_exact_edges")
+	}
 	if !stable {
 		tables = append(tables, "resource_access_stable_edges")
 	}
@@ -207,70 +212,88 @@ func (w *Workspace) CutoverCompactAccess(ctx context.Context, proof CompactAcces
 		return ErrCompactAccessChanged
 	}
 	if !stable {
-		// Capture before any rename. Source writers use explicit columns so the
-		// added INTEGER PRIMARY KEY does not alter their INSERT contracts.
-		rows, err := tx.QueryContext(ctx, `SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND (tbl_name='resource_access_edges' OR sql LIKE '%INSERT INTO resource_access_edges VALUES%' OR sql LIKE '%INSERT INTO resource_access_edges SELECT%') ORDER BY name`)
-		if err != nil {
+		if err = stabilizeAccessEdgesTx(ctx, tx); err != nil {
 			return err
-		}
-		type trigger struct{ name, sql string }
-		var triggers []trigger
-		for rows.Next() {
-			var tr trigger
-			if err = rows.Scan(&tr.name, &tr.sql); err != nil {
-				rows.Close()
-				return err
-			}
-			if !strings.HasPrefix(tr.name, "access_stable_") {
-				triggers = append(triggers, tr)
-			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return err
-		}
-		for _, name := range []string{"access_stable_insert", "access_stable_update", "access_stable_delete"} {
-			if _, err = tx.ExecContext(ctx, `DROP TRIGGER `+name); err != nil {
-				return err
-			}
-		}
-		for _, tr := range triggers {
-			if _, err = tx.ExecContext(ctx, `DROP TRIGGER "`+strings.ReplaceAll(tr.name, `"`, `""`)+`"`); err != nil {
-				return err
-			}
-		}
-		for _, q := range []string{
-			`ALTER TABLE resource_access_edges RENAME TO resource_access_unstable_edges`,
-			`ALTER TABLE resource_access_stable_edges RENAME TO resource_access_edges`,
-		} {
-			if _, err = tx.ExecContext(ctx, q); err != nil {
-				return fmt.Errorf("stabilize access identities: %w", err)
-			}
-		}
-		for _, tr := range triggers {
-			q := strings.ReplaceAll(tr.sql, "INSERT INTO resource_access_edges VALUES", "INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES")
-			q = strings.ReplaceAll(q, "INSERT INTO resource_access_edges SELECT", "INSERT INTO resource_access_edges(source_kind,source_id,target_ref) SELECT")
-			if tr.name == "access_mention_edge_insert" || tr.name == "access_mention_edge_update" {
-				// SQLite REPLACE may delete a colliding raw row without firing
-				// its DELETE trigger. Repair only the indexed conflicting tuple
-				// and NEW key before rebuilding derived edges; no corpus scan.
-				orphan := `SELECT x.edge_id FROM resource_access_exact_edges x WHERE x.target_key=anx_resource_atom_key(CAST(NEW.target_ref AS BLOB)) AND x.source_kind=NEW.source_kind AND x.source_id=NEW.source_id AND x.edge_id<>NEW.rowid AND NOT EXISTS(SELECT 1 FROM resource_access_edges r WHERE r.rowid=x.edge_id)`
-				repair := `DELETE FROM resource_access_mentions WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_mention_buckets WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_exact_edges WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_mentions WHERE edge_id=NEW.rowid; DELETE FROM resource_access_mention_buckets WHERE edge_id=NEW.rowid; DELETE FROM resource_access_exact_edges WHERE edge_id=NEW.rowid; `
-				if !strings.Contains(q, " BEGIN ") {
-					return errors.New("unrecognized access edge trigger; cutover refused")
-				}
-				q = strings.Replace(q, " BEGIN ", " BEGIN "+repair, 1)
-			}
-			if _, err = tx.ExecContext(ctx, q); err != nil {
-				return err
-			}
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET reader=1,stable=1 WHERE singleton=1; UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1`); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// stabilizeAccessEdgesTx replaces the implicit-rowid raw table with the staged
+// explicit-ID table and reinstalls every writer with explicit columns. The
+// caller must have populated resource_access_stable_edges and verified it.
+func stabilizeAccessEdgesTx(ctx context.Context, tx *sql.Tx) error {
+	// The rename must leave cross-table trigger bodies and views pointing at the
+	// public table name. Set the connection pragma inside the transaction so the
+	// migration runner and the online cutover share this path.
+	if _, err := tx.ExecContext(ctx, `PRAGMA legacy_alter_table=ON`); err != nil {
+		return err
+	}
+	defer tx.ExecContext(ctx, `PRAGMA legacy_alter_table=OFF`)
+	// Capture before any rename. Source writers use explicit columns so the
+	// added INTEGER PRIMARY KEY does not alter their INSERT contracts.
+	rows, err := tx.QueryContext(ctx, `SELECT name,sql FROM sqlite_schema WHERE type='trigger' AND (tbl_name='resource_access_edges' OR sql LIKE '%INSERT INTO resource_access_edges VALUES%' OR sql LIKE '%INSERT INTO resource_access_edges SELECT%') ORDER BY name`)
+	if err != nil {
+		return err
+	}
+	type trigger struct{ name, sql string }
+	var triggers []trigger
+	for rows.Next() {
+		var tr trigger
+		if err = rows.Scan(&tr.name, &tr.sql); err != nil {
+			rows.Close()
+			return err
+		}
+		if !strings.HasPrefix(tr.name, "access_stable_") {
+			triggers = append(triggers, tr)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, name := range []string{"access_stable_insert", "access_stable_update", "access_stable_delete"} {
+		if _, err = tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS `+name); err != nil {
+			return err
+		}
+	}
+	for _, tr := range triggers {
+		if _, err = tx.ExecContext(ctx, `DROP TRIGGER "`+strings.ReplaceAll(tr.name, `"`, `""`)+`"`); err != nil {
+			return err
+		}
+	}
+	for _, q := range []string{
+		`ALTER TABLE resource_access_edges RENAME TO resource_access_unstable_edges`,
+		`ALTER TABLE resource_access_stable_edges RENAME TO resource_access_edges`,
+	} {
+		if _, err = tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("stabilize access identities: %w", err)
+		}
+	}
+	for _, tr := range triggers {
+		q := strings.ReplaceAll(tr.sql, "INSERT INTO resource_access_edges VALUES", "INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES")
+		q = strings.ReplaceAll(q, "INSERT INTO resource_access_edges SELECT", "INSERT INTO resource_access_edges(source_kind,source_id,target_ref) SELECT")
+		if tr.name == "access_mention_edge_insert" || tr.name == "access_mention_edge_update" {
+			// SQLite REPLACE may delete a colliding raw row without firing
+			// its DELETE trigger. This legacy cutover path repairs by target
+			// atom; migration 150 replaces these triggers with an O(1)
+			// conflict-row repair that does not scan a shared atom.
+			orphan := `SELECT x.edge_id FROM resource_access_compact_edges x WHERE x.target_key=unhex(anx_resource_atom_key(CAST(NEW.target_ref AS BLOB))) AND x.edge_id<>NEW.rowid AND NOT EXISTS(SELECT 1 FROM resource_access_edges r WHERE r.rowid=x.edge_id)`
+			repair := `DELETE FROM resource_access_mentions WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_mention_buckets WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_compact_edges WHERE edge_id IN (` + orphan + `); DELETE FROM resource_access_mentions WHERE edge_id=NEW.rowid; DELETE FROM resource_access_mention_buckets WHERE edge_id=NEW.rowid; DELETE FROM resource_access_compact_edges WHERE edge_id=NEW.rowid; `
+			if !strings.Contains(q, " BEGIN ") {
+				return errors.New("unrecognized access edge trigger; cutover refused")
+			}
+			q = strings.Replace(q, " BEGIN ", " BEGIN "+repair, 1)
+		}
+		if _, err = tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *Workspace) RollbackCompactAccess(ctx context.Context) error {

@@ -122,7 +122,7 @@ func TestHistoricalWakeupPrivateTransitionAdmission(t *testing.T) {
 	}
 	checkAdmissionSecurityParity(t, ws.DB(), "private after upgrade")
 	for _, q := range []string{
-		`INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`,
+		`INSERT INTO resource_access_compact_edges SELECT rowid,unhex(anx_resource_atom_key(CAST(target_ref AS BLOB))) FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`,
 		`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`,
 		`UPDATE threads SET body_json='{"pm_actor_id":"second-owner"}' WHERE id='parent'`,
 		`UPDATE resource_access_compact_control SET force_legacy=1`,
@@ -333,7 +333,7 @@ func admissionUpgradeRandomizedScaleParity(t *testing.T, seed int64, fenced bool
 		case 5:
 			exec(`UPDATE resource_handle_aliases SET alias_handle=? WHERE resource_type='document' AND resource_id='retired'`, fmt.Sprintf("kept-%d", step))
 		case 6:
-			exec(`INSERT INTO resource_access_compact_edges SELECT edge_id,unhex(target_key) FROM resource_access_exact_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`)
+			exec(`INSERT INTO resource_access_compact_edges SELECT rowid,unhex(anx_resource_atom_key(CAST(target_ref AS BLOB))) FROM resource_access_edges WHERE true ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key`)
 			exec(`UPDATE resource_access_compact_control SET reader=1,force_legacy=?`, rng.Intn(2))
 		case 7:
 			exec(`UPDATE threads SET body_json=json_object('pm_actor_id',?) WHERE id='other-parent'`, []string{"", "owner", "second-owner"}[rng.Intn(3)])

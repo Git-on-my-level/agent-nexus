@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// Migration 150 makes the compact ledger a required capability. Dropping it is
+// a schema error, not a supported teardown; admission must fail closed rather
+// than silently granting access through a missing table.
 func TestCandidateCompactTeardownSelection(t *testing.T) {
 	ctx := context.Background()
 	ws, err := initializeTestWorkspace(ctx, t.TempDir())
@@ -24,21 +27,15 @@ func TestCandidateCompactTeardownSelection(t *testing.T) {
 	if _, err = s.PatchThread(ctx, "owner", workString(private["thread_id"]), map[string]any{"pm_actor_id": "owner"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{`UPDATE resource_access_compact_control SET reader=1,force_legacy=0`, `DROP TABLE resource_access_compact_edges`} {
-		if _, err := ws.DB().Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if s.CanAccessResource(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), "card", workString(public["id"])) {
-		t.Fatal("missing selected capability granted a resource")
-	}
-	if _, err := ws.DB().Exec(`UPDATE resource_access_compact_control SET reader=0`); err != nil {
+	if _, err := ws.DB().Exec(`DROP TABLE resource_access_compact_edges`); err != nil {
 		t.Fatal(err)
 	}
+	// A public resource needs no ledger probe and remains visible. A private
+	// resource must never become visible because the required table is missing.
 	if !s.CanAccessResource(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), "card", workString(public["id"])) {
-		t.Fatal("legacy admission depends on removed optional table")
+		t.Fatal("missing compact ledger denied a public resource")
 	}
 	if s.CanAccessResource(WithRequestAccessScope(ctx, AccessScope{ActorID: "reader"}), "card", workString(private["id"])) {
-		t.Fatal("teardown lost canonical denial")
+		t.Fatal("missing required compact ledger granted a private resource")
 	}
 }

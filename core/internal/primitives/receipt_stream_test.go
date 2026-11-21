@@ -556,7 +556,7 @@ func TestReceiptPayloadPlanSeeksWakeupID(t *testing.T) {
 			sawSeek = true
 			if metadata {
 				sawMetadataSeek = true
-				if !strings.Contains(detail, "sqlite_autoindex_resource_access_edges_1") || !strings.Contains(detail, "SEARCH x USING INTEGER PRIMARY KEY") || !strings.Contains(detail, "sqlite_autoindex_resource_access_mentions_1") {
+				if !strings.Contains(detail, "sqlite_autoindex_resource_access_edges_1") || !strings.Contains(detail, "SEARCH c USING INTEGER PRIMARY KEY") || !strings.Contains(detail, "sqlite_autoindex_resource_access_mentions_1") {
 					t.Fatalf("reference metadata did not seek the selected source keys:\n%s", detail)
 				}
 			}

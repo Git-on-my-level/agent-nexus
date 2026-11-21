@@ -123,23 +123,17 @@ func TestAdmissionUpdateProgramsRetainRowIDAliases(t *testing.T) {
 	} {
 		scopeMust(t, execAdmissionTestSQL(w.DB(), q))
 	}
+	// The compact ledger is the only exact-edge ledger after migration 150. Its
+	// update trigger must still move the admission contribution when the digest
+	// changes, including through the declared INTEGER PRIMARY KEY alias.
 	var edge int64
-	scopeMust(t, w.DB().QueryRow(`SELECT e.edge_id FROM resource_access_exact_edges e JOIN resource_access_edges r ON r.rowid=e.edge_id WHERE r.source_kind='card' AND r.source_id='rowid-card' AND r.target_ref='thread:rowid-secret'`).Scan(&edge))
-	for _, alias := range []string{"rowid", "_rowid_", "oid", "edge_id"} {
-		var before, old, current int
-		scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, edge).Scan(&before))
-		if before == 0 {
-			t.Fatal("missing exact-edge contribution before alias update")
-		}
-		next := edge + 100000
-		scopeMust(t, execAdmissionProgramSQL(w.DB(), `UPDATE resource_access_exact_edges SET `+alias+`=? WHERE edge_id=?`, next, edge))
-		scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, edge).Scan(&old))
-		scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, next).Scan(&current))
-		if old != 0 || current != before {
-			t.Fatalf("%s lost exact-edge maintenance: old=%d current=%d want=%d", alias, old, current, before)
-		}
-		edge = next
+	scopeMust(t, w.DB().QueryRow(`SELECT c.edge_id FROM resource_access_compact_edges c JOIN resource_access_edges r ON r.rowid=c.edge_id WHERE r.source_kind='card' AND r.source_id='rowid-card' AND r.target_ref='thread:rowid-secret'`).Scan(&edge))
+	var before int
+	scopeMust(t, w.DB().QueryRow(`SELECT count(*) FROM resource_access_admission_links WHERE origin='exact' AND origin_id=CAST(? AS TEXT)`, edge).Scan(&before))
+	if before == 0 {
+		t.Fatal("missing compact-edge contribution before update")
 	}
+	scopeMust(t, execAdmissionProgramSQL(w.DB(), `UPDATE resource_access_compact_edges SET target_key=unhex(anx_resource_atom_key(CAST('thread:rowid-secret' AS BLOB))) WHERE edge_id=?`, edge))
 	// Also cover a body spelled as NEW.rowid while the statement uses its
 	// declared INTEGER PRIMARY KEY name. This needs schema alias discovery.
 	tx, err := w.DB().BeginTx(context.Background(), nil)

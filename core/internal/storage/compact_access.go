@@ -70,17 +70,6 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 		`CREATE TABLE IF NOT EXISTS resource_access_compact_job (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), cursor INTEGER, done INTEGER NOT NULL CHECK(done IN (0,1)))`,
 		`INSERT INTO resource_access_compact_job VALUES(1,NULL,0) ON CONFLICT DO NOTHING`,
-		// Mirror the legacy ledger, including imported updates and changed keys.
-		// unhex preserves the existing digest/normalization; CHECK rejects bad keys.
-		`CREATE TRIGGER IF NOT EXISTS access_compact_insert AFTER INSERT ON resource_access_exact_edges BEGIN
- INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
- ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
-		`CREATE TRIGGER IF NOT EXISTS access_compact_update AFTER UPDATE ON resource_access_exact_edges BEGIN
- DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id;
- INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
- ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
-		`CREATE TRIGGER IF NOT EXISTS access_compact_delete AFTER DELETE ON resource_access_exact_edges BEGIN
- DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id; END`,
 		// This relation is for verification only. No production read selects it.
 		`CREATE VIEW IF NOT EXISTS resource_access_compact_reconstructed AS
  SELECT c.edge_id,e.source_kind,e.source_id,lower(hex(c.target_key)) AS target_key
@@ -88,6 +77,29 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 	} {
 		if _, err = tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("install compact access shadow: %w", err)
+		}
+	}
+	// The legacy exact ledger was retired in migration 150. Only workspaces that
+	// still carry it need the transitional mirror triggers.
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return err
+	} else if exact {
+		for _, q := range []string{
+			// Mirror the legacy ledger, including imported updates and changed keys.
+			// unhex preserves the existing digest/normalization; CHECK rejects bad keys.
+			`CREATE TRIGGER IF NOT EXISTS access_compact_insert AFTER INSERT ON resource_access_exact_edges BEGIN
+ INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
+ ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+			`CREATE TRIGGER IF NOT EXISTS access_compact_update AFTER UPDATE ON resource_access_exact_edges BEGIN
+ DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id;
+ INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
+ ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+			`CREATE TRIGGER IF NOT EXISTS access_compact_delete AFTER DELETE ON resource_access_exact_edges BEGIN
+ DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id; END`,
+		} {
+			if _, err = tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("install compact access shadow: %w", err)
+			}
 		}
 	}
 	if err = installStableAccessEdges(ctx, tx); err != nil {
@@ -121,6 +133,16 @@ func (w *Workspace) maintainCompactAccessChunk(ctx context.Context, limit int) (
 		return false, err
 	}
 	if done {
+		return true, tx.Commit()
+	}
+	// Migration 150 retired the legacy ledger. The compact ledger is written
+	// directly by the mention triggers, so there is nothing left to backfill.
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return false, err
+	} else if !exact {
+		if _, err = tx.ExecContext(ctx, `UPDATE resource_access_compact_job SET done=1 WHERE singleton=1`); err != nil {
+			return false, err
+		}
 		return true, tx.Commit()
 	}
 	// Keep the seek separate from the initial scan: a nullable OR predicate would
@@ -210,23 +232,36 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 	}
 	// Both EXCEPT directions compare every field byte-for-byte. Also check raw
 	// edges independently: an equally corrupt old/new ledger is not verification.
-	legacy := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_exact_edges`
+	// After migration 150 the legacy ledger is gone; the compact ledger is then
+	// compared directly with the raw edge table.
 	reconstructed := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_compact_reconstructed`
 	raw := `SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges`
-	for i, q := range []string{
-		`SELECT EXISTS(` + legacy + ` EXCEPT ` + reconstructed + `)`,
-		`SELECT EXISTS(` + reconstructed + ` EXCEPT ` + legacy + `)`,
-		`SELECT EXISTS(` + legacy + ` EXCEPT ` + raw + `)`,
-		`SELECT EXISTS(` + raw + ` EXCEPT ` + legacy + `)`,
-		`SELECT EXISTS(SELECT 1 FROM resource_access_compact_edges c LEFT JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE e.rowid IS NULL)`,
-	} {
+	checks := []struct{ name, query string }{
+		{"orphan_compact_edge", `SELECT EXISTS(SELECT 1 FROM resource_access_compact_edges c LEFT JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE e.rowid IS NULL)`},
+	}
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return result, err
+	} else if exact {
+		legacy := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_exact_edges`
+		checks = append([]struct{ name, query string }{
+			{"exact_to_compact", `SELECT EXISTS(` + legacy + ` EXCEPT ` + reconstructed + `)`},
+			{"compact_to_exact", `SELECT EXISTS(` + reconstructed + ` EXCEPT ` + legacy + `)`},
+			{"exact_to_raw", `SELECT EXISTS(` + legacy + ` EXCEPT ` + raw + `)`},
+			{"raw_to_exact", `SELECT EXISTS(` + raw + ` EXCEPT ` + legacy + `)`},
+		}, checks...)
+	} else {
+		checks = append([]struct{ name, query string }{
+			{"compact_to_raw", `SELECT EXISTS(` + reconstructed + ` EXCEPT ` + raw + `)`},
+			{"raw_to_compact", `SELECT EXISTS(` + raw + ` EXCEPT ` + reconstructed + `)`},
+		}, checks...)
+	}
+	for _, check := range checks {
 		var mismatch bool
-		if err = tx.QueryRowContext(ctx, q).Scan(&mismatch); err != nil {
+		if err = tx.QueryRowContext(ctx, check.query).Scan(&mismatch); err != nil {
 			return result, err
 		}
 		if mismatch {
-			checks := []string{"exact_to_compact", "compact_to_exact", "exact_to_raw", "raw_to_exact", "orphan_compact_edge"}
-			return result, &compactMismatchError{check: checks[i]}
+			return result, &compactMismatchError{check: check.name}
 		}
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&result.Rows); err != nil {
@@ -260,8 +295,27 @@ func (w *Workspace) PrepareCompactAccessMigration(ctx context.Context) (proof Co
 // resuming without a writer, including generation triggers used by strict proof
 // publication. Partial/older shadows still take the normal install transaction.
 func (w *Workspace) compactShadowReady(ctx context.Context) (bool, error) {
-	names := []string{"resource_access_compact_job", "access_compact_insert", "access_compact_update", "access_compact_delete", "resource_access_compact_reconstructed", "resource_access_stable_edges", "access_stable_insert", "access_stable_update", "access_stable_delete"}
-	for _, table := range []string{"resource_access_exact_edges", "resource_access_compact_edges", "resource_access_stable_edges"} {
+	names := []string{"resource_access_compact_job", "resource_access_compact_reconstructed"}
+	tables := []string{"resource_access_compact_edges"}
+	var stable bool
+	if err := w.db.QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
+		return false, err
+	}
+	// Migration 150 retires the staging table and its triggers once raw edge
+	// identities are stable. Older workspaces still need them until cutover.
+	if !stable {
+		names = append(names, "resource_access_stable_edges", "access_stable_insert", "access_stable_update", "access_stable_delete")
+		tables = append(tables, "resource_access_stable_edges")
+	}
+	var exact bool
+	if err := w.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&exact); err != nil {
+		return false, err
+	}
+	if exact {
+		names = append(names, "access_compact_insert", "access_compact_update", "access_compact_delete")
+		tables = append(tables, "resource_access_exact_edges")
+	}
+	for _, table := range tables {
 		for _, op := range []string{"insert", "update", "delete"} {
 			names = append(names, "compact_generation_"+table+"_"+op)
 		}
