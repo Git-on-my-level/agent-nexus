@@ -27,8 +27,19 @@ MEASURED = (
     'TestOverviewPersonalSizedWorkspaceLatency',
     'TestOverviewDenseAccessWorkspaceLatency',
     'TestEventsStreamPublicProbeLatencyDoesNotWaitForHiddenPollTicks',
+    # Migration 150 scale fixtures: a 100k-edge WAL-bound measurement and a
+    # 20k-edge reclamation measurement. Both are measured, not correctness
+    # gates, and the storage package is already near the blocking-lane budget.
+    'TestMigration150DenseFixtureWALBound',
+    'TestMeasureLegacyAccessLedgerReduction',
 )
 ADVISORY = '^(' + '|'.join(MEASURED) + ')$'
+# The advisory lane discovers by name; keep the measured fixtures that do not
+# carry a Performance/Latency suffix in its explicit run set.
+ADVISORY_RUN = ('^Test.*(Performance|Latency)'
+                '|^TestResourceAccess(CommonReadPerformance|LargeDenialPrepareAndPMRoutes)$'
+                '|^TestMigration150DenseFixtureWALBound$'
+                '|^TestMeasureLegacyAccessLedgerReduction$')
 
 
 def other_packages(packages):
@@ -82,14 +93,18 @@ def main():
     elif args.partition == 'advisory':
         # Route scale fixtures retain their dedicated measured/sharded lane.
         command = ['go', 'test', '-parallel=2', '-timeout=25m', './...',
-                   '-run', '^Test.*(Performance|Latency)|^TestResourceAccess(CommonReadPerformance|LargeDenialPrepareAndPMRoutes)$',
+                   '-run', ADVISORY_RUN,
                    '-skip', '^TestPerformanceRoutes$']
     elif args.partition == 'primitives':
         command = ['go', 'test', '-parallel=2', '-timeout=25m', './internal/primitives/...', '-skip', ADVISORY]
     else:
         packages = subprocess.check_output(['go', 'list', './...'], text=True).splitlines()
         packages = other_packages(packages)
-        command = ['go', 'test', '-parallel=2', '-timeout=25m', *packages, '-skip', ADVISORY]
+        # The storage package already takes ~21m on a slow runner on main
+        # (run 44331725824) and migration 150 adds bounded upgrade cost. Keep
+        # the blocking lane at 30m so runner variance does not fail a correct
+        # change; the measured fixtures above stay in the advisory lane.
+        command = ['go', 'test', '-parallel=2', '-timeout=30m', *packages, '-skip', ADVISORY]
     print(' '.join(command), flush=True)
     if not args.plan:
         subprocess.run(command, check=True)

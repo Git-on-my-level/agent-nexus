@@ -88,7 +88,10 @@ func admissionMigrationCommitsAndResumesRootChunks(t *testing.T, fenced bool) {
 	if err := read.QueryRow(`SELECT count(*) FROM ` + ledger + ` WHERE version=116`).Scan(&recorded); err != nil || recorded != 0 {
 		t.Fatalf("incomplete migration recorded: count=%d err=%v", recorded, err)
 	}
-	if _, err := read.Exec(`CREATE TRIGGER test_completed_root_not_replayed BEFORE INSERT ON resource_access_admission_reach WHEN NEW.root_id='root-0' BEGIN SELECT RAISE(ABORT,'completed root replayed'); END`); err != nil {
+	// Migration 150 legitimately rebuilds the compact ledger (ledger 2) from the
+	// verified compact edges. Only a replay of the interrupted ledger-1 backfill
+	// is a failure.
+	if _, err := read.Exec(`CREATE TRIGGER test_completed_root_not_replayed BEFORE INSERT ON resource_access_admission_reach WHEN NEW.root_id='root-0' AND NEW.ledger=1 BEGIN SELECT RAISE(ABORT,'completed root replayed'); END`); err != nil {
 		t.Fatal(err)
 	}
 	read.Close()

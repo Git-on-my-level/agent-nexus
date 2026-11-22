@@ -17,17 +17,6 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	applied_at TEXT NOT NULL
 );`
 
-type migration struct {
-	Version    int
-	Statements []string
-	// AfterApply runs in the same transaction after Statements (optional).
-	AfterApply func(ctx context.Context, tx *sql.Tx) error
-	// ApplyChunk executes one resumable chunk in the runner's transaction.
-	// The runner alone verifies completion, records Version and updates its ledger.
-	ApplyChunk func(ctx context.Context, tx *sql.Tx) (done bool, err error)
-	Verify     func(ctx context.Context, tx *sql.Tx) error
-}
-
 var migrations = append([]migration{
 	{
 		Version: 1,

@@ -16,7 +16,9 @@ func TestInboxLifecycleUpgradeDoesNotBackfillAtStartup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real SQLite upgrade benchmark")
 	}
-	sizes := []int{1000, 10000, 100000}
+	// 50k still proves the metadata-only startup bound without spending most of
+	// the blocking lane's budget on the fixture insert.
+	sizes := []int{1000, 10000, 50000}
 	if value := os.Getenv("ANX_INBOX_UPGRADE_ROWS"); value != "" {
 		n, err := strconv.Atoi(value)
 		if err != nil {

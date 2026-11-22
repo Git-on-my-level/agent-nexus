@@ -240,7 +240,9 @@ jobs:
 
   core-other-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The storage package already takes ~21m on a slow runner on main; the
+    # partition timeout is 30m, so leave room for setup and the static checks.
+    timeout-minutes: 40
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.go_shared == 'true'
     steps:

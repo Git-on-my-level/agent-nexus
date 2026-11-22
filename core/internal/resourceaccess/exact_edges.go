@@ -2,14 +2,17 @@ package resourceaccess
 
 import "strings"
 
-// Each arm retains its own indexed equality probe. Do not hide these branches
-// inside a materialized whole-ledger union or hex() the indexed BLOB column.
-const CompactReaderSQL = `(SELECT reader=1 AND force_legacy=0 FROM main.resource_access_compact_control WHERE singleton=1)`
+// CompactReaderSQL reports whether the compact ledger is available. The legacy
+// exact-edge ledger was retired in migration 150, so the compact ledger is the
+// only reader whenever the control row exists. A missing control row is a
+// schema error and fails closed. The historical reader/force_legacy columns are
+// retained for compatibility but no longer select a physical ledger.
+const CompactReaderSQL = `(SELECT reader IN (0,1,2) FROM main.resource_access_compact_control WHERE singleton=1)`
 
-// Ledger selects the exact-edge ledgers a statement probes. SelectedLedger
-// emits both arms, gated by the persisted selection in the same statement.
-// LegacyLedger and CompactLedger emit one ungated arm; a caller must verify in
-// that same statement that CompactReaderSQL still selects that ledger.
+// Ledger names the historical exact-edge ledger selection. The legacy ledger is
+// retired, so every value now probes the compact ledger. The type is retained
+// because admission owners and reachability still carry independent ledger
+// values (1 and 2) derived from the same compact rows.
 type Ledger int
 
 const (
@@ -31,11 +34,10 @@ func ReaderLedger(valid bool, compact int64) Ledger {
 	}
 }
 
-// ExactEdgeTerms returns the exact-edge arms of one probe. reader selects the
-// compact ledger for SelectedLedger. Recursive closures pass a column that their
-// root computed once from CompactReaderSQL: SQLite tests a column of the current
-// vertex before it builds the inactive arm's IN-list probe, but tests a subquery
-// gate only after that probe, once per arm and vertex.
+// ExactEdgeTerms returns the compact-ledger arm of one probe. The legacy
+// exact-edge table no longer exists; the ledger and reader arguments are kept
+// for callers that still carry the historical selection, but every arm reads
+// resource_access_compact_edges joined to the raw edge row.
 func ExactEdgeTerms(ledger Ledger, prefix, carry, reader, where string, keys []string) []string {
 	binaryKeys := make([]string, len(keys))
 	for i, key := range keys {
@@ -44,27 +46,15 @@ func ExactEdgeTerms(ledger Ledger, prefix, carry, reader, where string, keys []s
 	if where == "" {
 		where = "1"
 	}
-	legacy := "SELECT e.source_kind,e.source_id" + carry + " FROM " + prefix + " JOIN main.resource_access_exact_edges e ON e.target_key IN (" + strings.Join(keys, ",") + ") WHERE "
 	compact := "SELECT e.source_kind,e.source_id" + carry + " FROM " + prefix + " JOIN main.resource_access_compact_edges c ON c.target_key IN (" + strings.Join(binaryKeys, ",") + ") CROSS JOIN main.resource_access_edges e ON e.rowid=c.edge_id WHERE "
-	switch ledger {
-	case LegacyLedger:
-		return []string{legacy + "(" + where + ")"}
-	case CompactLedger:
-		return []string{compact + "(" + where + ")"}
-	}
-	return []string{legacy + "NOT (" + reader + ") AND (" + where + ")", compact + "(" + reader + ") AND (" + where + ")"}
+	// The reader column is CompactReaderSQL at the recursive root. Gating the
+	// only arm on it preserves the fail-closed behavior when the control row is
+	// missing, without probing sqlite_schema per vertex.
+	return []string{compact + "(" + reader + ") AND (" + where + ")"}
 }
 
-// ExactEdgeExists probes only the selected ledger. An unknown selection probes
-// neither, exactly as the gated arms above return no rows.
+// ExactEdgeExists probes the compact ledger. The legacy ledger is retired, so
+// the selection arguments are retained only for call-site compatibility.
 func ExactEdgeExists(ledger Ledger, reader, key string) string {
-	legacy := "EXISTS(SELECT 1 FROM main.resource_access_exact_edges WHERE target_key=" + key + ")"
-	compact := "EXISTS(SELECT 1 FROM main.resource_access_compact_edges WHERE target_key=unhex(" + key + "))"
-	switch ledger {
-	case LegacyLedger:
-		return legacy
-	case CompactLedger:
-		return compact
-	}
-	return "(CASE WHEN (" + reader + ") THEN " + compact + " WHEN NOT (" + reader + ") THEN " + legacy + " ELSE 0 END)"
+	return "(CASE WHEN (" + reader + ") THEN EXISTS(SELECT 1 FROM main.resource_access_compact_edges WHERE target_key=unhex(" + key + ")) ELSE 0 END)"
 }

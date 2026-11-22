@@ -42,7 +42,7 @@ func fixtureAt(t testing.TB, root string) (Store, auth.Principal, auth.Principal
 	if _, err = db.Exec(`INSERT INTO host_agents(host_id,name,agent_id,identity_kind) VALUES('host','owner','owner','derived')`); err != nil {
 		t.Fatal(err)
 	}
-	s := Store{DB: db, Auth: auth.NewStore(db)}
+	s := Store{DB: db, Auth: auth.NewStore(db), workspace: w}
 	human := auth.Principal{AgentID: "human", ActorID: "human", PrincipalKind: "human"}
 	owner := auth.Principal{AgentID: "owner", ActorID: "owner", PrincipalKind: "agent"}
 	_, err = s.Declare(ctx, Declaration{Name: "collector", Description: "Test collector", AgentID: "owner", ExpectedInterval: "1m", Series: []Definition{{Name: "builds", Kind: "gauge", Unit: "builds"}, {Name: "health", Kind: "state", Unit: "state"}}}, human)
@@ -60,9 +60,18 @@ func fixtureAt(t testing.TB, root string) (Store, auth.Principal, auth.Principal
 	return s, human, owner, writer
 }
 
+// Close releases the workspace serving lease when this store owns it. Tests
+// that reopen a workspace must use this instead of closing DB directly.
+func (s Store) Close() error {
+	if s.workspace != nil {
+		return s.workspace.Close()
+	}
+	return s.DB.Close()
+}
+
 func reopenStore(t testing.TB, s Store, root string) Store {
 	t.Helper()
-	if err := s.DB.Close(); err != nil {
+	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
 	w, err := storage.InitializeWorkspace(context.Background(), root)
@@ -70,7 +79,7 @@ func reopenStore(t testing.TB, s Store, root string) Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { w.Close() })
-	return Store{DB: w.DB(), Auth: auth.NewStore(w.DB())}
+	return Store{DB: w.DB(), Auth: auth.NewStore(w.DB()), workspace: w}
 }
 
 func TestRestartPreservesDedupeBudgetsAndLabelCardinality(t *testing.T) {

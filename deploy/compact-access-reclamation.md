@@ -1,19 +1,28 @@
 # Compact access: production reclamation
 
-Certification and compact readers activate online by default. File reclamation
-is a separate **operator-run offline maintenance operation**. Neither core
-startup nor the packed-host updater invokes it. Keep legacy writes enabled
-through this release's instant-reader-rollback window.
+Migration 150 retires the legacy exact-edge ledger and the admission compact
+mirror. The compact ledger is the only exact-edge ledger, and the compact reader
+is always selected. File reclamation is a separate **operator-run offline
+maintenance operation**. Neither core startup nor the packed-host updater
+invokes it. Roll back a bad release by restoring the verified pre-upgrade
+backup; the historical instant reader rollback no longer selects a physical
+ledger.
 
 ## When hosted operators run it
 
-Deploy the release normally first. Let each workspace certify while serving;
-check the certification log and the control row below. Schedule reclamation in
-the next approved packed-host maintenance window, after a verified backup and
-with the target core stopped. It can be coordinated with an update, but never
-run concurrently with the updater: its recovery handler can restart services.
-If certification is incomplete, skip that workspace and let it continue on
-legacy; do not extend an outage waiting for backfill.
+Before deploying the release that contains migration 150, take a verified
+per-workspace backup and complete the restore drill in step 3 below. Migration
+150 is forward-only: it verifies and drops the legacy exact-edge ledger, and an
+older binary cannot open a 150+ workspace. Do not deploy the 150 release until
+the backup is verified.
+
+Deploy the release normally. Migration 150 runs at startup, before serving, and
+certifies the compact ledger as part of the upgrade. If it aborts on a ledger
+mismatch, restore the verified backup, let the previous release finish compact
+certification, and retry. Schedule reclamation in the next approved packed-host
+maintenance window, after a verified backup and with the target core stopped. It
+can be coordinated with an update, but never run concurrently with the updater:
+its recovery handler can restart services.
 
 On a packed Docker host, the operator owns this sequence:
 
@@ -31,11 +40,13 @@ On a packed Docker host, the operator owns this sequence:
    Keep these controls held through backup, reclamation, replacement and checks.
 3. Create a fresh deployment backup containing SQLite, required blobs, and the
    configuration/keys needed for restore, stored outside the active volume.
-   Verify checksums and perform the deployment's restore drill on an isolated
-   copy with the **same core release**, no public ingress and no outbound side
-   effects. Require database integrity, readiness, blob reads and private
-   owner/stranger controls. Do not proceed on backup or restore-check failure.
-   Do not treat a filesystem copy of a live WAL database as a verified backup.
+   This is also the mandatory pre-upgrade backup for the release that runs
+   migration 150. Verify checksums and perform the deployment's restore drill on
+   an isolated copy with the **same core release**, no public ingress and no
+   outbound side effects. Require database integrity, readiness, blob reads and
+   private owner/stranger controls. Do not proceed on backup or restore-check
+   failure. Do not treat a filesystem copy of a live WAL database as a verified
+   backup.
 4. Run the helper from the same immutable image, using the stopped volume. The
    release image includes `/usr/local/bin/anx-access-reclaim`. It does not need
    deployment credentials or network access. The example below assumes the
@@ -94,11 +105,11 @@ INTO`, compares all table contents and PM cursor IDs, checks integrity and
 
 Before admitting new writes, a failed smoke check can restore the retained source
 under the same stopped boundary. After admitting writes, never overwrite them
-with the backup: use instant **reader** fallback or forward recovery. The env/flag
-kill switch is a core capability; a hosted manager may allowlist environment
-keys. Do not assume editing an unrecognized manager flag propagates it. The
-durable SQL fallback in the [core runbook](../core/docs/compact-access-shadow.md#pause-and-instant-reader-rollback)
-works immediately on the active database without container recreation.
+with the backup: use forward recovery. Migration 150 retired the legacy ledger,
+so there is no instant reader fallback that recreates it; rollback is
+restore-only. The `--compact-access-legacy-reads` switch only changes the reader
+before 150, cannot restore the dropped tables, and is a no-op once the legacy
+ledger is gone.
 
 ## Self-host operators
 
@@ -119,15 +130,29 @@ Run as the workspace owner and keep the supervisor stopped until the verified
 copy is published. If downtime or spare disk is unavailable, defer reclamation;
 the certified compact reader remains usable and free pages can be reused.
 
-## Later release: contract the legacy ledger
+## Contraction status
 
-SCA-774 tracks ending the rollback window. Before removing the legacy exact
-table/index, require production certification, no active fallback, a tested
-backup, an explicit release decision and an old-binary format fence. Move compact
-maintenance off the legacy mirror triggers; in one writer transaction install
-the final writers, stop legacy writes, remove legacy consumers/tables, and bump
-the format/authorization epoch. Prove privacy equivalence, concurrent-write and
-crash safety, bounded SQL cost and additional physical savings. Raw stable IDs
-and prose authorization ledgers remain. That release must explicitly retire the
-legacy fallback and describe recovery after new writes; this release does none
-of those destructive steps.
+SCA-774 is complete in migration 150. The migration verifies the compact ledger
+against the legacy ledger and raw edges in both directions, aborts on any
+divergence, stabilizes raw edge identities, verifies both admission ledgers
+against the compact ledger, and drops the legacy exact table, its target index
+and the admission compact mirror. The mention triggers write the compact ledger
+directly, and the admission link indexes are partial on their actual users.
+
+The migration commits bounded phases and checkpoints the WAL between them, so a
+large workspace does not accumulate the whole migration in one WAL. Its peak
+additional disk requirement is approximately one times the current
+`state.sqlite` size for the raw-edge staging copy and verification temp
+b-trees, plus WAL headroom for one index build. The checked-in 100k-edge,
+300k-admission-link measurement (`TestMigration150DenseFixtureWALBound` in
+`core/internal/storage`) records a peak WAL of about 12 MiB against a 386 MB
+database.
+
+A workspace whose compact ledger diverges fails to open with a migration error.
+Restore the verified backup, let the previous release finish certification, and
+retry the upgrade. If the migration is interrupted, the workspace carries a
+format fence that the previous release refuses to open; restart the new release
+to resume the bounded phases. After a successful upgrade, run the reclamation
+step above and record the before/after active-file bytes. The checked-in
+reclamation measurement is `TestPerformanceCompactAccessShadow` in
+`core/internal/storage`.

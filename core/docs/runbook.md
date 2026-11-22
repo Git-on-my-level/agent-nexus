@@ -17,13 +17,13 @@ repo and live in the private `agent-nexus-saas/controlplane` repo.
 `anx-core` reads configuration from flags (highest priority) and environment
 variables.
 
-The `--compact-access-migration` / `ANX_COMPACT_ACCESS_MIGRATION` worker is
-on by default; readers switch only after workspace certification.
 `--compact-access-legacy-reads` / `ANX_COMPACT_ACCESS_LEGACY_READS` forces legacy
-reads before serving on restart; the linked runbook also gives the immediate
-SQL rollback for a running core. See [compact access shadow migration](compact-access-shadow.md)
-for certified reader cutover, stable edge IDs, verified file reclamation and
-rollback. Default activation awaits the documented retention decision.
+reads before serving on restart. Migration 150 retires the legacy exact-edge
+ledger, so after a workspace reaches 150 the compact ledger is the only reader
+and rollback is restore-only. The switch is a no-op once the legacy ledger is
+gone; it never writes `force_legacy` after 150. See
+[compact access shadow migration](compact-access-shadow.md) for stable edge IDs,
+verified file reclamation and rollback.
 
 | Purpose                                                                                                                                                                           | Flag                            | Env                                       | Default                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
@@ -308,6 +308,46 @@ Rollback:
   non-destructive, but there is no in-place downgrade.
 - Migrations 139 (v0.13.65), 142 and 147 are forward-only. A rollback to an
   older release requires restoring the backup taken before the first of them.
+
+## Migration 150: retire the legacy access ledger
+
+Migration 150 completes the compact-access contraction. It verifies the compact
+ledger against the legacy exact ledger and independently hashed raw edges in
+both `EXCEPT` directions, stabilizes raw edge identities, verifies both
+admission ledgers against the compact ledger, and then drops
+`resource_access_exact_edges` and `resource_access_admission_compact_atoms`.
+The compact ledger becomes the only exact-edge ledger. A divergence aborts the
+upgrade; the migration never repairs or guesses.
+
+Prerequisites:
+
+- Take a fresh, verified per-workspace backup before upgrading. This is
+  mandatory, not advisory: the migration drops tables and rewrites triggers,
+  and a failed upgrade may leave the workspace unopenable by the previous
+  release. Complete the deployment's restore drill on an isolated copy before
+  starting the new binary.
+- Reserve free space on the state volume for the raw-edge staging copy and the
+  verification temp b-trees. The peak additional requirement is approximately
+  one times the current `state.sqlite` size, plus WAL headroom. The migration
+  commits bounded phases and checkpoints the WAL between them, so WAL is bounded
+  by one index build, not the database size. The checked-in 100k-edge,
+  300k-admission-link measurement (`TestMigration150DenseFixtureWALBound` in
+  `core/internal/storage`) records a peak WAL of about 12 MiB against a 386 MB
+  database.
+- Do not run the old and new binaries against the same workspace. Stop the old
+  core before starting the release that contains 150. If the migration is
+  interrupted, the workspace carries a format fence that the previous release
+  refuses to open; restart the new release to resume the bounded phases.
+
+Rollback:
+
+- Restore the verified pre-upgrade backup. Do not start an older binary against
+  a 150+ workspace: the old `ExactEdgeTerms`/`SelectedLedger` SQL references
+  `resource_access_exact_edges`, which no longer exists, so authorization
+  statements fail at prepare time. The failure is loud and non-destructive, but
+  there is no in-place downgrade and no reader switch that recreates the table.
+- If the migration aborts on a ledger mismatch, restore the backup, let the
+  previous release finish compact certification, and retry the upgrade.
 
 ## Local development run
 

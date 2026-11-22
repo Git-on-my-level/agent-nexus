@@ -38,6 +38,9 @@ import (
 const testBootstrapToken = "bootstrap-token-for-tests"
 
 type authIntegrationOptions struct {
+	// workspace, if set, is reused instead of initializing a fresh fixture.
+	// The caller must have closed any previous workspace on the same root.
+	workspace *storage.Workspace
 	// servingPool instruments requests without changing the maintenance pool.
 	servingPool                   func(*storage.Workspace) *sql.DB
 	scopedInboxReader             bool
@@ -71,9 +74,13 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 	requireIntegrationTest(t)
 	t.Helper()
 
-	workspace, err := initializeTestWorkspace(context.Background(), t.TempDir())
-	if err != nil {
-		t.Fatalf("initialize workspace: %v", err)
+	workspace := options.workspace
+	if workspace == nil {
+		var err error
+		workspace, err = initializeTestWorkspace(context.Background(), t.TempDir())
+		if err != nil {
+			t.Fatalf("initialize workspace: %v", err)
+		}
 	}
 
 	servingDB := workspace.DB()

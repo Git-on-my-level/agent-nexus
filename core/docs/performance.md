@@ -2741,6 +2741,37 @@ selects the replacement indexes, so no observed plan shape changes. Historical
 allowlist entries that mention the dropped names are not produced by current
 queries.
 
+## Compact access contraction
+
+Migration 150 retires the legacy exact-edge ledger and the admission compact
+mirror. The compact ledger is the only exact-edge ledger, and admission's
+`exact` and `compact` origins both read it. The three admission link indexes are
+now partial:
+
+- `idx_access_admission_child` is partial on `origin='comment'`; only the
+  document cleanup triggers read it.
+- `idx_access_admission_parent` is partial on `origin='document_comment'`; only
+  the event cleanup triggers read it.
+- `idx_access_admission_via` is partial on the five origins that delete by key.
+
+`TestAdmissionLinkIndexesArePartialAndUsed` asserts each statement keeps an
+index-backed `SEARCH` plan. The admission ledger selection no longer probes
+`sqlite_schema` on every statement: migration 150 makes the compact table a
+required capability, so the selection is a constant read of the control row.
+`TestRetireLegacyAccessLedgerPreservesAdmissionDecisions` builds a pre-150
+workspace, certifies the compact ledger, records admission decisions for a
+corpus of principals and resources, applies the migration, and requires every
+decision to be identical. `TestRetireLegacyAccessLedgerAbortsOnMismatch` proves
+a divergent compact ledger aborts the upgrade.
+
+The migration commits bounded phases and checkpoints the WAL between them, so
+WAL is bounded by one index build, not the database size.
+`TestMigration150DenseFixtureWALBound` runs a 100k-edge fixture with 300k
+admission links, records a peak WAL of about 12 MiB against a 386 MB database,
+and asserts a 32 MiB bound. Peak additional disk is approximately one times the
+database size for the raw-edge staging copy and verification temp b-trees, plus
+WAL headroom for one index build.
+
 ## Portable work briefing
 
 `GET /work/{card_ref}/briefing` resolves one authorized card and performs the

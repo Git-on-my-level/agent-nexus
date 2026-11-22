@@ -117,20 +117,13 @@ func buildOwnershipTemplate(name string, owner bool, ledger resourceaccess.Ledge
 	refs("JOIN main.runs r ON d.kind='run' AND r.id=d.id", "r.handle")
 	// Legacy source URLs may exceed the bounded evidence-key projection. Keep
 	// their indexed ownership edges while separating publication from reference.
-	for _, e := range []struct{ table, where string }{
-		{"resource_access_exact_edges", " AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')"},
-		{"resource_access_external_edges", ""},
-	} {
-		if e.table == "resource_access_exact_edges" {
-			terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id", carry, reader, "m.authority<>'nexus'"+e.where, []string{resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")})...)
-			terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", carry, reader, "(r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where, []string{resourceaccess.AtomKeySQL("r.ref")})...)
-			continue
-		}
-		// Keep the recursive vertex outside the metadata lookup. Reordering this
-		// join starts with every source-owned card for each recursion step.
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'"+e.where)
-		terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id JOIN main."+e.table+" e ON e.target_key="+resourceaccess.AtomKeySQL("r.ref")+" WHERE (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')"+e.where)
-	}
+	// The compact ledger is the only exact-edge ledger after migration 150.
+	terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id", carry, reader, "m.authority<>'nexus' AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')", []string{resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")})...)
+	terms = append(terms, resourceaccess.ExactEdgeTerms(ledger, name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id", carry, reader, "(r.ref LIKE 'http://%' OR r.ref LIKE 'https://%') AND e.source_kind NOT IN ('work_metadata','work_observation','work_evidence_record','work_evidence_alias')", []string{resourceaccess.AtomKeySQL("r.ref")})...)
+	// Keep the recursive vertex outside the metadata lookup. Reordering this
+	// join starts with every source-owned card for each recursion step.
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d CROSS JOIN main.work_metadata m ON d.kind='card' AND m.card_id=d.id JOIN main.resource_access_external_edges e ON e.target_key="+resourceaccess.AtomKeySQL("json_extract(m.metadata_json,'$.source.url')")+" WHERE m.authority<>'nexus'")
+	terms = append(terms, "SELECT e.source_kind,e.source_id"+carry+" FROM "+name+" d JOIN main.resource_access_tombstones r ON r.kind=d.kind AND r.id=d.id JOIN main.resource_access_external_edges e ON e.target_key="+resourceaccess.AtomKeySQL("r.ref")+" WHERE (r.ref LIKE 'http://%' OR r.ref LIKE 'https://%')")
 	// The atomically maintained identity index already contains live handles,
 	// virtual revision handles, historical aliases and tombstones. One indexed
 	// probe replaces a recursive UNION arm per spelling source. SQLite copies

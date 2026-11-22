@@ -85,6 +85,11 @@ func applyMigrationToLedger(ctx context.Context, db *sql.DB, m migration, ledger
 		if done {
 			return nil
 		}
+		if m.BetweenChunks != nil {
+			if err := m.BetweenChunks(ctx, db); err != nil {
+				return fmt.Errorf("migration %d: %w", m.Version, err)
+			}
+		}
 	}
 }
 
@@ -93,7 +98,7 @@ func applyMigrationToLedger(ctx context.Context, db *sql.DB, m migration, ledger
 // behind an advanced ledger; a previously malformed preview fails at startup.
 func verifyAdmissionMigration(ctx context.Context, tx *sql.Tx) error {
 	for _, table := range []string{
-		"resource_access_admission_compact_atoms", "resource_access_admission_keys", "resource_access_admission_links",
+		"resource_access_admission_keys", "resource_access_admission_links",
 		"resource_access_admission_roots", "resource_access_admission_graph",
 		"resource_access_admission_spellings", "resource_access_admission_prose_prefixes", "resource_access_admission_reach",
 		"resource_access_admission_rebuild", "resource_access_admission_owners", "resource_access_admission_root_owners", "work_lifecycle_positions",

@@ -13,7 +13,7 @@ Inbox request.
 
 | Table                                               | Supplied production |      Fixture |
 | --------------------------------------------------- | ------------------: | -----------: |
-| resource_access_edges / resource_access_exact_edges |        245,428 each | 240,877 each |
+| resource_access_edges / resource_access_compact_edges |        245,428 each | 240,877 each |
 | resource_access_mention_buckets                     |             130,524 |      130,520 |
 | resource_access_external_edges                      |              34,797 |       35,038 |
 | resource_access_mentions                            |              16,919 |       16,315 |
@@ -30,6 +30,11 @@ Twenty-four private principal owners are distributed across threads; cards,
 prose mentions, historical aliases and navigation edges propagate their privacy.
 The reader sees public work and twelve public asks. The fixture asserts that
 private card titles do not reach either handler response.
+
+Migration 150 retired the legacy `resource_access_exact_edges` ledger and the
+admission compact mirror. The compact ledger is now the only exact-edge ledger;
+the counts above describe the historical fixture that produced the latency
+baseline.
 
 ## Amplification path
 

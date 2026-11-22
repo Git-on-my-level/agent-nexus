@@ -1083,10 +1083,6 @@
       "target_id": "scope:edge-endpoints",
       "target_type": "scope:edge-endpoints"
     },
-    "resource_access_admission_compact_atoms": {
-      "edge_id": "internal:authorization",
-      "target_key": "internal:authorization"
-    },
     "resource_access_admission_graph": {
       "child_id": "internal:authorization",
       "child_kind": "internal:authorization",
@@ -1201,6 +1197,9 @@
       "done": "internal:authorization",
       "singleton": "internal:authorization"
     },
+    "resource_access_edge_conflict": {
+      "edge_id": "internal:authorization"
+    },
     "resource_access_edges": {
       "edge_id": "internal:authorization",
       "source_id": "internal:authorization",
@@ -1210,12 +1209,6 @@
     "resource_access_epoch": {
       "singleton": "internal:authorization",
       "version": "internal:authorization"
-    },
-    "resource_access_exact_edges": {
-      "edge_id": "internal:authorization",
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization",
-      "target_key": "internal:authorization"
     },
     "resource_access_external_edges": {
       "source_id": "scope:edge-endpoints",
@@ -1255,22 +1248,11 @@
       "labels": "internal:authorization",
       "series": "internal:authorization"
     },
-    "resource_access_stable_edges": {
-      "edge_id": "internal:authorization",
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization",
-      "target_ref": "internal:authorization"
-    },
     "resource_access_tombstones": {
       "id": "internal:authorization",
       "kind": "internal:authorization",
       "owner": "internal:authorization",
       "ref": "internal:authorization"
-    },
-    "resource_access_unstable_edges": {
-      "source_id": "internal:authorization",
-      "source_kind": "internal:authorization",
-      "target_ref": "internal:authorization"
     },
     "resource_handle_aliases": {
       "alias_handle": "scope:resource-alias",
@@ -1645,7 +1627,7 @@
     "../../cmd/anx-core/blob_backend.go:buildBlobBackend": "67d76e06af1489a62a7c6f2a42bb1bdcb01fc6f02876aab8b12b4a58efaf58f2",
     "../../cmd/anx-core/blob_backend.go:buildBlobBackendWithS3Factory": "d235c8a1b4b00f392770a6ba176a77a4614e2c2d2b56331445799433f5d768b2",
     "../../cmd/anx-core/healthcheck_cli.go:runHealthcheckCLI": "ce30e599f95e46de0156bd8c7bc4d70277a60baf0987a2e160220c3f29c42f80",
-    "../../cmd/anx-core/main.go:main": "763c8946f459330b56b2b7ef3b62fdc55081a5854a7cb5ae37023249be611788",
+    "../../cmd/anx-core/main.go:main": "183a470f61221165c6e19adc3402839992e4d15fa84d50058fea45331843bbd6",
     "../../cmd/anx-core/persona_sweep.go:startPersonaArchiveSweep": "22e972d7046866f608a8ada15d324319b655716d6eb49677db13d9766c0ca132",
     "../../cmd/anx-idle-fixture/main.go:main": "9dcf93756e1de13aa3aad26eb2e72d70569da926c9c94d1ce3a5905c1aeeddf7",
     "../../cmd/anx-idle-fixture/main.go:settle": "5f7740c99108cb2ad8414c9fa58a78d7c3b3a6310bf1450b7b280d83be23a25e",
@@ -2675,7 +2657,7 @@
     "../primitives/receipt_stream.go:*Store:advanceReceiptVisibility": "c082294cdfc2520a53499c32f1fc87f9cb4026b6849efd2e94fba93f4f7a32f5",
     "../primitives/receipt_stream.go:*Store:listReceiptSnapshotPage": "39d852280d5074cab60a9791ae10f626e9851237ea718bbd06b6ee20cffa57b5",
     "../primitives/receipt_stream.go:*Store:listReceiptTailPage": "1b7fc78d975ce945a97c4353bd02a737ab1686d461e505719c07ac4fcc0b5098",
-    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "1e1be78c90fc7343823c2a8dc5de32697c2d97a1859a08d3be8ec91869726c1b",
+    "../primitives/receipt_stream.go:*Store:loadVisibleReceipts": "1ede29c1406cede9428e8badcd81259e62ad0f7193c297cb106c61c7828f9507",
     "../primitives/receipt_stream.go:*Store:receiptDenial": "3da86b58d83c174f9ebf2d0d0ce6a930c70e2d1e03e2cb7f5575887af3fe30fc",
     "../primitives/receipt_stream.go:*Store:receiptStreamHead": "1aba0745bc7e013e78c4a5ffd401b6b045b95a6d44e6405c3bda6d13180ec340",
     "../primitives/receipt_stream.go:*Store:receiptThreadDenied": "1e8d1a0bb697e38ea451ac80b4c4ce9bacba820b06728a7ced021fc54f935076",
@@ -3568,7 +3550,7 @@
     "../sqliteutil/maintenance.go:BeginMaintenanceChunk": "872d19731c5f191a06d3ccbdbac15da88b81771371b2a974395cd133b4c2162a",
     "../sqliteutil/maintenance.go:BeginMaintenanceChunkWithBusyWait": "4bd04d991df3f4cb29ef623fbbdca3ff91cbfda6f3d1ef769ee4c3a08891f246",
     "../sqliteutil/maintenance.go:SetConnectionBusyTimeout": "bde644aa5e22c7f23c16907a1fc4e33c16a77379c62b875132f5885fe9d4e681",
-    "../storage/access_admission.go:installAccessAdmission": "3fa73839030d3db96811a21ee6ba236720a8bea005a6965cffc420b1b1253636",
+    "../storage/access_admission.go:installAccessAdmission": "6d5cc0af6d7a19c5defd7bd462dfedcb279f6dd7caf3d9de9ed1075b2037f74f",
     "../storage/access_admission.go:installAdmissionCompactSync": "cf8503ef65d42311a21830c9382241ee2dff5e6852f0c1246f34f33b3a1bdf01",
     "../storage/access_admission_backfill.go:accessAdmissionMigrationChunk": "93a81a129d3aeb5c85bad5c1d4bc4b6e9800aaf4380f10400214c59f182d74ee",
     "../storage/access_admission_graph.go:installAccessAdmissionGraph": "2e5815f19c5e3c18dab3ccb80392e07126f9d8753f5625dd962f5fc01484fb85",
@@ -3586,8 +3568,34 @@
     "../storage/access_admission_updates.go:admissionUpdateOf": "a88d127b4a626daa27afb9129444584c332bc7cfcda2e394c6a940a6b9c6c300",
     "../storage/access_admission_updates.go:restrictAdmissionEvidenceWrites": "ab12fb83fdca0b9f20f72b01ab2e1c052b9afc5815dcbc73f6b01be935d3d939",
     "../storage/access_admission_updates.go:restrictAdmissionUpdates": "80f4ada0c6290ed024e62721a396f36f68ccc6e19ada983b3db319981e3cb6c7",
-    "../storage/access_admission_vertices.go:installAdmissionCanonicalVertices": "0f9efae8f8e58438e0710652aae87d32c898699d9123a2a3227142e27e241dfc",
+    "../storage/access_admission_vertices.go:installAdmissionCanonicalVertices": "d8ca57fe0cdd4a720b2f587d2321211e9c04dc01c33e2a542ed7194ceba7732f",
     "../storage/access_admission_wakeups.go:installHistoricalWakeupAdmission": "5f5655ab5a44e2717bb4522dea37170ffeb99eaa65aeffc56eb237d2ae00e88c",
+    "../storage/access_ledger_retirement.go:admissionLedgerMatches": "4c9238fee295903862eaa0a650de3767bd41a6e96945ffcbd2b062e48124aa29",
+    "../storage/access_ledger_retirement.go:createAdmissionLinkIndex": "523a8c05e602b9cb21bbce0ea49b3ac8a1dbdb2d7473d0fea7cec15aca0bb354",
+    "../storage/access_ledger_retirement.go:ensureCompactAccessLedger": "c7842b11a454124ef1e8d3492f613c2959846b7d34fd7136a529c394187bfc09",
+    "../storage/access_ledger_retirement.go:reinstallAdmissionLedgerTriggers": "9656f48cd6fcb51127c1fe45e0745161abf62ca1c2fb2384f75719a9083ebf55",
+    "../storage/access_ledger_retirement.go:reinstallMentionEdgeWriters": "520c3ec116a4d27fd460376f0f2bcde82cf6191370f437eb59389f940837b5fb",
+    "../storage/access_ledger_retirement.go:reinstallReceiptAccessTriggers": "0db35cce3909591265b8d9a18380af7f2791da103cd1ed956364994794f02d1c",
+    "../storage/access_ledger_retirement.go:reinstallRetiredAccessWriters": "0fd9c0392b461b4d22d86ee19099ddd85ecaa239c2c30bc3e6d9ab1f7affa543",
+    "../storage/access_ledger_retirement.go:retireBatch": "8a47509efb91ef78655db47011b05b7f828193e1af7f70fffd6df263bd2fd8ee",
+    "../storage/access_ledger_retirement.go:retireBatchMax": "e95f96b7eb991a863628108da2d4eb23c2996c3c349caae46f00ae2e69422c04",
+    "../storage/access_ledger_retirement.go:retireCompactDone": "e195eb72247ae480fbe43e5cf51331dc07c2259acbf29c5f58a9a700bcdc1e1f",
+    "../storage/access_ledger_retirement.go:retireDeleteAdmissionLedger": "bf3d78ef3d1f7eb0475bfcab659a9a8dfba4ef51658e3a2bbe2e997f7dfc8138",
+    "../storage/access_ledger_retirement.go:retireDeleteAll": "fdf2ada69b8d46e7348a9ebfc5297f3f115af8d37dbd6b2143cf50c22c988ef2",
+    "../storage/access_ledger_retirement.go:retireInsertAdmissionLedger": "8dcc45f0ed29acddd6b61010c8c75a164d0cdf25a6f681cf622f6c97f8b9f0cb",
+    "../storage/access_ledger_retirement.go:retireInsertCompact": "c0cdcb99c439ca6563428001aa1861ef0f69b29fd1f08a45f9424ebc276df525",
+    "../storage/access_ledger_retirement.go:retireInsertExact": "99ea66b11456e157ba42f746fb96957b4ab490e96773518def66283b7f872f06",
+    "../storage/access_ledger_retirement.go:retireInstall": "00745a23e3387666c74c7f96d2ae8024cd268328daeafa5e3d364b41e5b604f5",
+    "../storage/access_ledger_retirement.go:retireLegacyAccessLedgerChunk": "ebbc24c3c10b62e328054a120acf25036fdefa5df8451c32fd070edd63a832df",
+    "../storage/access_ledger_retirement.go:retireStableCopy": "34bc56cdadacbe797f39af68d4b32daaae5ee3e80bdfc37a9204c9d420a18bda",
+    "../storage/access_ledger_retirement.go:retireStableCreate": "df10a977fc1c8d4a53d6e91f6ced457833623cc834313570ed26033b5831ad72",
+    "../storage/access_ledger_retirement.go:retireStableFinalize": "5489831ef35588b1af9c00b81ed4ed74e29b6f116bb248ace2532c96e5022255",
+    "../storage/access_ledger_retirement.go:runRetirementPhase": "3e99afb0aeb9b2531fb6cce240c57ea95a186fdaa3d223d754541ae81f3227f9",
+    "../storage/access_ledger_retirement.go:verifyLegacyExactLedgerEquivalent": "5e04e20fb84d2277da90759d631752dedb21996cbb8cb63339e54880510b78f9",
+    "../storage/access_ledger_retirement_verify.go:checkpointMigrationWAL": "b2c4ecff961e3b5d7af4b47456eab5eb6a852c60c69b41089601f99c3fe18fe0",
+    "../storage/access_ledger_retirement_verify.go:clearRetirementFence": "09999ca416cfc36f6d9afe70ec05b888cfda12c36525011ed3fad5d2faec78a5",
+    "../storage/access_ledger_retirement_verify.go:installRetirementFence": "dc6264e588451341810d7e3536dbd0c8c861c26fde74deb74340247ee29f2a57",
+    "../storage/access_ledger_retirement_verify.go:verifyRetiredAccessLedger": "583db1fec87ed5fa280ccdd0bd186d28d86ae0638c4b7ec6472f2cab3e03dca4",
     "../storage/access_mentions.go:installResourceAccessEpochTriggers": "53b0d7bb0a166d97a798350b8ba03aefc195661b13da7d35ba216b5305cee768",
     "../storage/access_mentions.go:installResourceAccessMentions": "e47ef6daf4c71afba8045a4ddbb6a5f47bc0304de1ca010fd556cda77d1c8650",
     "../storage/access_mentions.go:installResourceAccessRevisionHandles": "27726e0607b67094a2951130e0294cde68339533fd4baa9cb1b8e300c4b5f4d7",
@@ -3646,23 +3654,20 @@
     "../storage/comment_search.go:installCommentSearch": "3026cd9308ed6a5c5434c6cc3af774eda498111cd9ff0044b1c882fc05be3b48",
     "../storage/comment_search_external.go:upgradeCommentSearchPendingCursor": "b2b89aa0b1b3f00a31508a2155aca3ee4cc68b71e50cb0c79be190da24596943",
     "../storage/comment_search_external.go:upgradeExternalCommentSearch": "a6fb8b98f047ad9535e691b2938b78cbf79e3b71f9f9f977df991d604b667730",
-    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "95869a8f8ca81e1039369cfe4766e480c6ff7dd243c13af34b4a3652deb807b6",
+    "../storage/compact_access.go:*Workspace:InitializeCompactAccessShadow": "a15e5b898dde00a6598b66b9a650ef3112ab90a9e1fe834d0a7fb310ed48b25e",
     "../storage/compact_access.go:*Workspace:MaintainCompactAccessBatch": "f90b8d85560159b0e92e5b90451915ce988767d00b9d62066e92d7c03432b56a",
-    "../storage/compact_access.go:*Workspace:PrepareCompactAccessMigration": "a9eb3505e21afc2b21ad8b5cee00e03085a94742b1b346e2560cac7c44f699a5",
-    "../storage/compact_access.go:*Workspace:RunCompactAccessMigration": "81ea0c6585db2293cd128082a0afcf005e8d6376c347d839c9361785b8fc412c",
     "../storage/compact_access.go:*Workspace:VerifyCompactAccessShadow": "9e9c68f1e05618dfb7451808926292a19243ebf98b003940ea02195c17bc5011",
-    "../storage/compact_access.go:*Workspace:compactShadowReady": "07dd2df0b7a36748ceef558736d409983235995aed9cfe7ee177f7728360539c",
     "../storage/compact_access.go:*Workspace:initializeCompactAccessMetadata": "c6a08d7474830724153eb35e03408fe1ea051063fa0391860ce04f73cf532982",
-    "../storage/compact_access.go:*Workspace:maintainCompactAccessChunk": "4ffa9191205608abadf2c93f4a13ac8133f29a6c160c5d5ad692abe1a032413b",
-    "../storage/compact_access.go:*Workspace:runCompactAccessMigration": "9d3b978a4398892e26344165d7631c06511ad94548f025eca7b0fadc060eadd2",
-    "../storage/compact_access.go:verifyCompactAccess": "faa99a0e712121525bde85dcfcb254c61f5101791079ed669d8cd099eee658b6",
-    "../storage/compact_access_cutover.go:*Workspace:CutoverCompactAccess": "167b7938632701b0248f9b09cf943c5eaf2f700564bdb42316d882c73a34529e",
+    "../storage/compact_access.go:*Workspace:maintainCompactAccessChunk": "a189a0258e5bac68363c76a6d506910281b805a3a285e5583cc68f6efaa3b962",
+    "../storage/compact_access.go:verifyCompactAccess": "f07b564cd0c504827cbac2eefd6daf62a10060a8976fe8f6335b73964e54320c",
+    "../storage/compact_access_cutover.go:*Workspace:CutoverCompactAccess": "2d2e001ac94d04f9b01a1c1a96225b43bd6f3e49f3ac32e8a20b4958cf2cb5e5",
     "../storage/compact_access_cutover.go:*Workspace:MaintainStableAccessBatch": "4e8afdb9365ba05ff7bb6f5b1b72151f63a9748ff88682e0b2b573d0b4377086",
-    "../storage/compact_access_cutover.go:*Workspace:RollbackCompactAccess": "dfc304fbb120339563b175348e5193be25b05260e6aab07a6917069d40d627f1",
-    "../storage/compact_access_cutover.go:*Workspace:SetCompactAccessLegacyReads": "ac0828b6336d8f7c5b246d0c63bb97deac54fc14d0438e3f1d2b0051785592a1",
+    "../storage/compact_access_cutover.go:*Workspace:RollbackCompactAccess": "bf864c9466c3024e0a503e528daaa120912f141e078ba1899efafaca6fb39f92",
+    "../storage/compact_access_cutover.go:*Workspace:SetCompactAccessLegacyReads": "d1bcabd73b8098aa01aa49c241dfc18efa81f716874a5198e381ca033eb1dc72",
     "../storage/compact_access_cutover.go:*Workspace:VerifyCompactAccessCutover": "f6649f3b962ab34defaa18f4351869984764fd11b237dcc92fb4e09cfc691989",
     "../storage/compact_access_cutover.go:enableCompactAccessLease": "f92b83fff6ddffb1fc7c7e208fb4ec9b3d61cdf24ed546dae63018c0c8027775",
-    "../storage/compact_access_cutover.go:installStableAccessEdges": "f1bf07771df2a2eb637d83ade6925b8e697fe0e8d85e0c05bf9cf4081d67260c",
+    "../storage/compact_access_cutover.go:installStableAccessEdges": "3bf5c92d0e5b652353b8f1d025ea79a63d29bc14fde36ffcde777d5c75abe7a1",
+    "../storage/compact_access_cutover.go:stabilizeAccessEdgesTx": "95b41092764a2866d6766c0a633c8ba1b3b574186ef61a208be2159018e21971",
     "../storage/compact_access_reclaim.go:ReclaimCompactAccessOffline": "6a849497df60ba622d012ebc8378f0748bb83a36c10d26e1c31cec5161d0cd04",
     "../storage/compact_access_reclaim.go:ReclaimCompactAccessOfflineWithReserve": "6e1d51d1ced62246e93717a6bd5dc7c6ab98a799440d459e34d1a90ec3dc5b67",
     "../storage/compact_access_retired.go:*Workspace:RunCompactAccessRetiredMaintenance": "0ce9d7e777331cd0398f680886012445a94f163a3fb97062f533bb2b20952abe",
@@ -3730,8 +3735,8 @@
     "../storage/migrate_remove_builtin_pm.go:verifyPMArchive": "823e5471be1eb85dc3b15bdf002825a2f4d1d98baa0da7fba0af5858bd55daab",
     "../storage/migrate_remove_builtin_pm.go:withdrawPMWatcherAsks": "8f2ee09c5bfa5acf3de26998177c99c7a67d9043f25670979155406991e2168e",
     "../storage/migrate_remove_builtin_pm.go:writePMArchive": "e6b2d50e9df3fe67045ed207e27a2fe43cc15fbe2df2f497c653751ef8787ff9",
-    "../storage/migration_runner.go:applyMigrationToLedger": "784f1228ca7f87702fd4e5d20fc700e0c6ba829b170729112ead8d422fc586f0",
-    "../storage/migration_runner.go:verifyAdmissionMigration": "7ccf64c88f3f278552fdca6eabc0435717a43981427cfd27066e6b0f2f7cd1e5",
+    "../storage/migration_runner.go:applyMigrationToLedger": "07cf0c0239664ed43ed64c5d1f9c701217c492f57d4b64c934eeaf017701bb27",
+    "../storage/migration_runner.go:verifyAdmissionMigration": "ac883a5b185ff437cfd15dbff88a6621773929b3c3262ef1ffdf265c9529c8db",
     "../storage/migrations.go:applyMigration": "a689d3d827912182e3e1e6cc4e9efbb126541888c305b429ae43c944296e8d7a",
     "../storage/migrations.go:applyMigrations": "4fd4cf8bb8094176e5bd9ac162337c29d6f9c918ef4b0b77ae89f4e2e7479aa9",
     "../storage/migrations.go:createMigrationsTableSQL": "da797d2a03024d34826a56b3c3d278f5791c381eda2b6d530c25f7850fafc83f",
@@ -3772,7 +3777,7 @@
     "../storage/migrations_legacy_schema.go:applyMigration24HomeGroupCursors": "824c64ef200984913f98bef4927bbf67d8b38edb199e7175d6b098662bf7bf74",
     "../storage/migrations_legacy_schema.go:applyMigration9LegacyStatusCleanup": "172a9e3cbfaa1d21271d1a68af37534e2755bd991502956bd7aa4160c7149cf6",
     "../storage/migrations_recent.go:installAgentHandoffColumns": "0635f254302b42b007f156f48472881905d073db92407d33da15fb4c8e66c6f7",
-    "../storage/migrations_recent.go:recentMigrations": "8e443ef3b89c08046927031e97b0b6c602d787035547e295e270a1a18ffeafcb",
+    "../storage/migrations_recent.go:recentMigrations": "0db74dbca7ffa8e3b88baebe4f95f83d615de103ac6324d23f8bfc76cc5699e9",
     "../storage/migrations_resource_access.go:accessSourceInsert": "2f462d750bf81888f5759bafbd9a6be1b9404cedd1af3b83cb3fdc90e7c723c0",
     "../storage/migrations_resource_access.go:installCompleteResourceAccess": "1e311d078576d5f1402ca716a8552622b3452a73bfa2613ba9ee365ef2477425",
     "../storage/migrations_resource_access.go:installResourceAccess": "8fe1eb78cb6239f7a42a284af85ba7b8b04758e25014bc34fc4bffdc156d7de8",
@@ -3791,7 +3796,7 @@
     "../storage/pm_workspace_context.go:installPMWorkspaceContext": "871b2dd21b538ce31534186a7b78a371b73b913dc8afd725045bfa4341b692a1",
     "../storage/projection_retry.go:installProjectionRetryBackoff": "45d230cc375d4356de7b6fcff0f92a012ff853c587818337280b91d7933dbcce",
     "../storage/receipt_stream.go:indexBoundedReceiptStreamReads": "4a6bb9bc30a15286702cf72090fa97ecc82a5c427714b3c067cf96ef35405367",
-    "../storage/receipt_stream_access.go:installReceiptStreamAccess": "89c871e912f38c3d85424a142d3548dba4612af54d9d7d42079eb3b0b09650d8",
+    "../storage/receipt_stream_access.go:installReceiptStreamAccess": "60d50617428811df2b1fd45ae45816065941a4817d9de57764c54e17054e00bc",
     "../storage/reference_functions.go:init": "1e525e91850943bb119ae23c2c73ab91098394a60665f2ac4be61b16fb77ec5b",
     "../storage/replay_gc.go:CollectReplayReceipts": "92634681fe619acadbc266f298950518ba002b359c2b53e959c813b1e3e47afb",
     "../storage/replay_gc.go:RunReplayReceiptMaintenance": "98440dfc8866870d255a7f7bd0b4ed55573a16c77a06392fb09b46b826b56404",
@@ -3819,7 +3824,7 @@
     "../storage/scope_migration_epoch.go:BindScopeMigrationAuthority": "0d2394c27cfbd7c18f01cb1c8be25e3f96a520e27409638b17a437ff8bfb03a8",
     "../storage/scope_migration_epoch.go:InstallScopeMigrationEpoch": "f7eaac2ebe2b6c34b2084dc789816a187dec283a00ece67913454aa8131fb19c",
     "../storage/scope_migration_fence.go:*Workspace:InstallScopeFormatFence": "f275d1e5a8df923290bdfedaf2025fda9292db9f33a7f60f315c24c7869385e0",
-    "../storage/scope_migration_fence.go:applyWorkspaceMigrations": "0dc3fc335d2975693134cff9ccef7c714cf649fc746d476266d20599ce779dc8",
+    "../storage/scope_migration_fence.go:applyWorkspaceMigrations": "87cabb6cddc7fcfd094e1396a452c39cceb07a46e76e18e4f59abc66fe53cb9c",
     "../storage/scope_migration_fence.go:scopeLedgerDigest": "25755d6a7774b3895bc3d77b671f46c545cfe65738742035eae3ea1f0fd6de80",
     "../storage/scope_migration_lock_unix.go:acquireScopeProcessLock": "8f70873d3f53a0343ca0eae664ebb56a87937aa836d9da839a7c4534f883e2c2",
     "../storage/scope_migration_lock_windows.go:acquireScopeProcessLock": "8643060ea92ad21531bd57f0651acc97b7f5760cb1f961284db9d252e223e570",
@@ -3916,12 +3921,17 @@
     "../testutil/perfguard/work.go:installWorkTrace": "20693ec50f01e251d446fa1734baa1fc77f77140ad874d577bd8ebc14484e3a4"
   },
   "external_key_publications": {
-    "work_evidence_record": ["evidence_json"],
+    "work_evidence_record": [
+      "evidence_json"
+    ],
     "work_metadata": [
       "metadata_json.source",
       "metadata_json.source_refs.*",
       "metadata_json._anx_source_evidence_refs.*"
     ],
-    "work_observation": ["body_json.facts", "body_json.evidence.*"]
+    "work_observation": [
+      "body_json.facts",
+      "body_json.evidence.*"
+    ]
   }
 }

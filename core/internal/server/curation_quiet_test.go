@@ -1,6 +1,7 @@
 package server
 
 import (
+	"agent-nexus-core/internal/primitives"
 	"agent-nexus-core/internal/storage"
 	"encoding/json"
 	"fmt"
@@ -144,13 +145,21 @@ func TestCurationUpgradeClearsHumanInboxProjection(t *testing.T) {
 	if _, err := f.env.workspace.DB().Exec(`DELETE FROM schema_migrations WHERE version=119`); err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := storage.InitializeWorkspace(f.ctx, f.env.workspace.Layout().RootDir)
+	// Migration 150 makes the compact ledger the only reader, so the workspace
+	// holds an exclusive serving lease. Stop the server and workspace before
+	// reopening to replay migration 119, then rebuild the fixture on the
+	// upgraded database.
+	root := f.env.workspace.Layout().RootDir
+	f.env.server.Close()
+	if err := f.env.workspace.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := storage.InitializeWorkspace(f.ctx, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = upgraded.Close(); err != nil {
-		t.Fatal(err)
-	}
+	f.env = newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken, workspace: upgraded})
+	f.store = f.env.primitiveStore.(*primitives.Store)
 	var stale int
 	encoded, _ := json.Marshal(legacyIDs)
 	if err = f.env.workspace.DB().QueryRow(`SELECT count(*) FROM derived_inbox_items WHERE source_event_id IN (SELECT value FROM json_each(?))`, string(encoded)).Scan(&stale); err != nil {

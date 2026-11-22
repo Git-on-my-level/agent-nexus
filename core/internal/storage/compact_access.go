@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math/rand/v2"
-	"strings"
 	"time"
 
 	"agent-nexus-core/internal/sqliteutil"
@@ -70,17 +68,6 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 		`CREATE TABLE IF NOT EXISTS resource_access_compact_job (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), cursor INTEGER, done INTEGER NOT NULL CHECK(done IN (0,1)))`,
 		`INSERT INTO resource_access_compact_job VALUES(1,NULL,0) ON CONFLICT DO NOTHING`,
-		// Mirror the legacy ledger, including imported updates and changed keys.
-		// unhex preserves the existing digest/normalization; CHECK rejects bad keys.
-		`CREATE TRIGGER IF NOT EXISTS access_compact_insert AFTER INSERT ON resource_access_exact_edges BEGIN
- INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
- ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
-		`CREATE TRIGGER IF NOT EXISTS access_compact_update AFTER UPDATE ON resource_access_exact_edges BEGIN
- DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id;
- INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
- ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
-		`CREATE TRIGGER IF NOT EXISTS access_compact_delete AFTER DELETE ON resource_access_exact_edges BEGIN
- DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id; END`,
 		// This relation is for verification only. No production read selects it.
 		`CREATE VIEW IF NOT EXISTS resource_access_compact_reconstructed AS
  SELECT c.edge_id,e.source_kind,e.source_id,lower(hex(c.target_key)) AS target_key
@@ -88,6 +75,29 @@ func (w *Workspace) InitializeCompactAccessShadow(ctx context.Context) (err erro
 	} {
 		if _, err = tx.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("install compact access shadow: %w", err)
+		}
+	}
+	// The legacy exact ledger was retired in migration 150. Only workspaces that
+	// still carry it need the transitional mirror triggers.
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return err
+	} else if exact {
+		for _, q := range []string{
+			// Mirror the legacy ledger, including imported updates and changed keys.
+			// unhex preserves the existing digest/normalization; CHECK rejects bad keys.
+			`CREATE TRIGGER IF NOT EXISTS access_compact_insert AFTER INSERT ON resource_access_exact_edges BEGIN
+ INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
+ ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+			`CREATE TRIGGER IF NOT EXISTS access_compact_update AFTER UPDATE ON resource_access_exact_edges BEGIN
+ DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id;
+ INSERT INTO resource_access_compact_edges VALUES(NEW.edge_id,unhex(NEW.target_key))
+ ON CONFLICT(edge_id) DO UPDATE SET target_key=excluded.target_key; END`,
+			`CREATE TRIGGER IF NOT EXISTS access_compact_delete AFTER DELETE ON resource_access_exact_edges BEGIN
+ DELETE FROM resource_access_compact_edges WHERE edge_id=OLD.edge_id; END`,
+		} {
+			if _, err = tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("install compact access shadow: %w", err)
+			}
 		}
 	}
 	if err = installStableAccessEdges(ctx, tx); err != nil {
@@ -121,6 +131,16 @@ func (w *Workspace) maintainCompactAccessChunk(ctx context.Context, limit int) (
 		return false, err
 	}
 	if done {
+		return true, tx.Commit()
+	}
+	// Migration 150 retired the legacy ledger. The compact ledger is written
+	// directly by the mention triggers, so there is nothing left to backfill.
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return false, err
+	} else if !exact {
+		if _, err = tx.ExecContext(ctx, `UPDATE resource_access_compact_job SET done=1 WHERE singleton=1`); err != nil {
+			return false, err
+		}
 		return true, tx.Commit()
 	}
 	// Keep the seek separate from the initial scan: a nullable OR predicate would
@@ -210,94 +230,42 @@ func verifyCompactAccess(ctx context.Context, tx *sql.Tx) (CompactAccessVerifica
 	}
 	// Both EXCEPT directions compare every field byte-for-byte. Also check raw
 	// edges independently: an equally corrupt old/new ledger is not verification.
-	legacy := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_exact_edges`
+	// After migration 150 the legacy ledger is gone; the compact ledger is then
+	// compared directly with the raw edge table.
 	reconstructed := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_compact_reconstructed`
 	raw := `SELECT rowid,source_kind,source_id,anx_resource_atom_key(CAST(target_ref AS BLOB)) FROM resource_access_edges`
-	for i, q := range []string{
-		`SELECT EXISTS(` + legacy + ` EXCEPT ` + reconstructed + `)`,
-		`SELECT EXISTS(` + reconstructed + ` EXCEPT ` + legacy + `)`,
-		`SELECT EXISTS(` + legacy + ` EXCEPT ` + raw + `)`,
-		`SELECT EXISTS(` + raw + ` EXCEPT ` + legacy + `)`,
-		`SELECT EXISTS(SELECT 1 FROM resource_access_compact_edges c LEFT JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE e.rowid IS NULL)`,
-	} {
+	checks := []struct{ name, query string }{
+		{"orphan_compact_edge", `SELECT EXISTS(SELECT 1 FROM resource_access_compact_edges c LEFT JOIN resource_access_edges e ON e.rowid=c.edge_id WHERE e.rowid IS NULL)`},
+	}
+	if exact, err := sqliteTableExists(ctx, tx, "resource_access_exact_edges"); err != nil {
+		return result, err
+	} else if exact {
+		legacy := `SELECT edge_id,source_kind,source_id,target_key FROM resource_access_exact_edges`
+		checks = append([]struct{ name, query string }{
+			{"exact_to_compact", `SELECT EXISTS(` + legacy + ` EXCEPT ` + reconstructed + `)`},
+			{"compact_to_exact", `SELECT EXISTS(` + reconstructed + ` EXCEPT ` + legacy + `)`},
+			{"exact_to_raw", `SELECT EXISTS(` + legacy + ` EXCEPT ` + raw + `)`},
+			{"raw_to_exact", `SELECT EXISTS(` + raw + ` EXCEPT ` + legacy + `)`},
+		}, checks...)
+	} else {
+		checks = append([]struct{ name, query string }{
+			{"compact_to_raw", `SELECT EXISTS(` + reconstructed + ` EXCEPT ` + raw + `)`},
+			{"raw_to_compact", `SELECT EXISTS(` + raw + ` EXCEPT ` + reconstructed + `)`},
+		}, checks...)
+	}
+	for _, check := range checks {
 		var mismatch bool
-		if err = tx.QueryRowContext(ctx, q).Scan(&mismatch); err != nil {
+		if err = tx.QueryRowContext(ctx, check.query).Scan(&mismatch); err != nil {
 			return result, err
 		}
 		if mismatch {
-			checks := []string{"exact_to_compact", "compact_to_exact", "exact_to_raw", "raw_to_exact", "orphan_compact_edge"}
-			return result, &compactMismatchError{check: checks[i]}
+			return result, &compactMismatchError{check: check.name}
 		}
 	}
 	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&result.Rows); err != nil {
 		return result, err
 	}
 	return result, nil
-}
-
-// RunCompactAccessMigration resumes bounded certification after startup.
-// Verification holds a WAL read snapshot, not a writer lease.
-// Reports expose one final outcome, never SQL text or resource contents.
-func (w *Workspace) RunCompactAccessMigration(ctx context.Context, report func(CompactAccessVerification, error)) {
-	w.runCompactAccessMigration(ctx, compactMigrationSchedule{
-		budget:       10 * time.Minute,
-		initialDelay: 0,
-		batchDelay:   25 * time.Millisecond,
-		retryMin:     250 * time.Millisecond,
-		retryMax:     5 * time.Second,
-	}, report)
-}
-
-// PrepareCompactAccessMigration is called before other maintenance or serving.
-// It installs mirrors and certifies if possible within ten seconds. Incomplete
-// durable progress resumes online; only the caller's final outcome is logged.
-func (w *Workspace) PrepareCompactAccessMigration(ctx context.Context) (proof CompactAccessVerification, resume bool, err error) {
-	w.runCompactAccessMigration(ctx, compactMigrationSchedule{budget: 10 * time.Second, batchDelay: 0, retryMin: 10 * time.Millisecond, retryMax: 50 * time.Millisecond}, func(p CompactAccessVerification, e error) { proof, err = p, e })
-	return proof, compactMigrationRetryable(err), err
-}
-
-// A completed installation is atomic. Validate every installed object before
-// resuming without a writer, including generation triggers used by strict proof
-// publication. Partial/older shadows still take the normal install transaction.
-func (w *Workspace) compactShadowReady(ctx context.Context) (bool, error) {
-	names := []string{"resource_access_compact_job", "access_compact_insert", "access_compact_update", "access_compact_delete", "resource_access_compact_reconstructed", "resource_access_stable_edges", "access_stable_insert", "access_stable_update", "access_stable_delete"}
-	for _, table := range []string{"resource_access_exact_edges", "resource_access_compact_edges", "resource_access_stable_edges"} {
-		for _, op := range []string{"insert", "update", "delete"} {
-			names = append(names, "compact_generation_"+table+"_"+op)
-		}
-	}
-	args := make([]any, len(names))
-	for i, name := range names {
-		args[i] = name
-	}
-	var count int
-	err := w.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name IN (`+strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")+`)`, args...).Scan(&count)
-	if err != nil || count != len(names) {
-		return false, err
-	}
-	var ready bool
-	err = w.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM resource_access_compact_job WHERE singleton=1)`).Scan(&ready)
-	return ready, err
-}
-
-type compactObserverKey struct{}
-
-// WithCompactAccessMigrationObserver observes completed attempts after their
-// connections and transactions are released. Observers receive safe diagnostics
-// and may pause between attempts; they never execute while holding a writer.
-func WithCompactAccessMigrationObserver(ctx context.Context, observe func(stage string, err error)) context.Context {
-	return context.WithValue(ctx, compactObserverKey{}, observe)
-}
-func observeCompactAttempt(ctx context.Context, stage string, err error) {
-	if observe, ok := ctx.Value(compactObserverKey{}).(func(string, error)); ok {
-		observe(stage, compactMigrationError(stage, err))
-	}
-}
-
-// Separate timing from the worker so contention and exhaustion tests need not
-// wait ten minutes. All waits happen after transaction/connection cleanup.
-type compactMigrationSchedule struct {
-	budget, initialDelay, batchDelay, retryMin, retryMax time.Duration
 }
 
 func compactMigrationWait(ctx context.Context, delay time.Duration) bool {
@@ -315,146 +283,4 @@ func compactMigrationRetryable(err error) bool {
 	var code interface{ Code() int }
 	return errors.Is(err, ErrCompactAccessChanged) || errors.Is(err, context.DeadlineExceeded) ||
 		(errors.As(err, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6))
-}
-
-// compactBudgetCause names what consumed an exhausted budget. When the budget
-// ends a bookkeeping read with nothing but the deadline, the earlier failed
-// attempt (such as write contention at shadow_install) is the real cause.
-func compactBudgetCause(stage string, cause error, failedStage string, failedErr error) (string, error) {
-	var code interface{ Code() int }
-	if failedErr != nil && errors.Is(cause, context.DeadlineExceeded) && !errors.As(cause, &code) {
-		return failedStage, failedErr
-	}
-	return stage, cause
-}
-
-func (w *Workspace) runCompactAccessMigration(parent context.Context, schedule compactMigrationSchedule, report func(CompactAccessVerification, error)) {
-	ctx, cancel := context.WithTimeout(parent, schedule.budget)
-	defer cancel()
-	var result CompactAccessVerification
-	var lastErr error
-	succeeded := false
-	stage := "shadow_install"
-	// The last failed attempt, kept for diagnosis if the budget then expires
-	// in the next attempt's first read.
-	var failedStage string
-	var failedErr error
-	// Exactly one final callback, including shutdown, budget exhaustion and an
-	// already certified workspace. Keep the last stage/cause for diagnosis.
-	defer func() {
-		if !succeeded && ctx.Err() != nil {
-			if parent.Err() != nil {
-				lastErr = compactMigrationError(stage, parent.Err())
-			} else {
-				cause := lastErr
-				if cause == nil {
-					cause = ctx.Err()
-				}
-				stage, cause = compactBudgetCause(stage, cause, failedStage, failedErr)
-				diagnostic := compactMigrationError(stage, cause).(*CompactAccessMigrationError)
-				diagnostic.Reason = "budget_exhausted_" + diagnostic.Reason
-				lastErr = diagnostic
-			}
-		} else {
-			lastErr = compactMigrationError(stage, lastErr)
-		}
-		if report != nil {
-			report(result, lastErr)
-		}
-	}()
-	delay, retry := schedule.initialDelay, schedule.retryMin
-	installed := false
-	compactFinished := false
-	for compactMigrationWait(ctx, delay) {
-		if lastErr != nil {
-			failedStage, failedErr = stage, lastErr
-		}
-		lastErr = nil
-		// Inspect the durable mode before taking a writer: restarts must neither
-		// reinstall a certified shadow nor undo an operator rollback.
-		stage = "reader_mode"
-		var mode int
-		lastErr = w.db.QueryRowContext(ctx, `SELECT reader FROM resource_access_compact_control WHERE singleton=1`).Scan(&mode)
-		if lastErr == nil && mode != 0 {
-			succeeded = mode == 1
-			if mode == 2 {
-				lastErr = &CompactAccessMigrationError{Stage: stage, Reason: "operator_rollback", cause: errors.New("operator selected legacy reads")}
-			}
-			return
-		}
-		if lastErr == nil && !installed {
-			stage = "shadow_state"
-			installed, lastErr = w.compactShadowReady(ctx)
-		}
-		if lastErr == nil && !installed {
-			stage = "shadow_install"
-			chunkCtx, finish := context.WithTimeout(ctx, time.Second)
-			lastErr = w.InitializeCompactAccessShadow(chunkCtx)
-			if lastErr != nil && chunkCtx.Err() != nil {
-				lastErr = errors.Join(chunkCtx.Err(), lastErr)
-			}
-			finish()
-			installed = lastErr == nil
-			observeCompactAttempt(ctx, stage, lastErr)
-		}
-		var done bool
-		if lastErr == nil {
-			stage = "compact_backfill"
-			done, lastErr = w.MaintainCompactAccessBatch(ctx)
-			// A committed copy is progress even if the following raw copy
-			// loses the writer. Do not carry an old contention penalty forward.
-			// The finishing keyset also commits copied rows; !done would skip it.
-			if lastErr == nil && !compactFinished {
-				retry = schedule.retryMin
-			}
-			compactFinished = compactFinished || (lastErr == nil && done)
-		}
-		if lastErr == nil {
-			stage = "stable_backfill"
-			rawDone, err := w.MaintainStableAccessBatch(ctx)
-			done, lastErr = done && rawDone, err
-			if err == nil && !rawDone {
-				retry = schedule.retryMin
-			}
-		}
-		if lastErr == nil && done {
-			stage = "verification"
-			verifyCtx, finish := context.WithTimeout(ctx, 5*time.Minute)
-			result, lastErr = w.VerifyCompactAccessCutover(verifyCtx)
-			if lastErr != nil && verifyCtx.Err() != nil {
-				lastErr = errors.Join(verifyCtx.Err(), lastErr)
-			}
-			finish()
-			observeCompactAttempt(ctx, stage, lastErr)
-			if lastErr == nil {
-				stage = "cutover"
-				cutoverCtx, finish := context.WithTimeout(ctx, time.Second)
-				lastErr = w.CutoverCompactAccess(cutoverCtx, result)
-				if lastErr != nil && cutoverCtx.Err() != nil {
-					lastErr = errors.Join(cutoverCtx.Err(), lastErr)
-				}
-				finish()
-			}
-			if lastErr == nil {
-				succeeded = true // A committed cutover remains successful across shutdown.
-				return
-			}
-		}
-		if lastErr != nil {
-			if ctx.Err() != nil || !compactMigrationRetryable(lastErr) {
-				return
-			}
-			var code interface{ Code() int }
-			if errors.As(lastErr, &code) && (code.Code()&255 == 5 || code.Code()&255 == 6) {
-				// Long jitter is for actual writer contention, after releasing the lease.
-				delay = retry/2 + time.Duration(rand.Int64N(int64(retry-retry/2)))
-				retry = min(retry*2, schedule.retryMax)
-			} else {
-				// Expired adaptive slices and changed proofs retry in the next short slice.
-				delay, retry = schedule.batchDelay, schedule.retryMin
-			}
-		} else {
-			delay, retry = schedule.batchDelay, schedule.retryMin
-		}
-	}
 }

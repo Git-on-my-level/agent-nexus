@@ -87,7 +87,6 @@ func main() {
 		streamPollInterval          = envDuration("ANX_STREAM_POLL_INTERVAL", time.Second)
 		projectionMode              = envString("ANX_PROJECTION_MODE", server.ProjectionModeBackground)
 		projectionPollInterval      = envDuration("ANX_PROJECTION_MAINTENANCE_INTERVAL", 5*time.Second)
-		compactAccessMigration      = envBool("ANX_COMPACT_ACCESS_MIGRATION", true)
 		compactAccessLegacyReads    = envBool("ANX_COMPACT_ACCESS_LEGACY_READS", false)
 		scopedInboxReader           = envBool("ANX_SCOPED_INBOX_READER", false)
 		projectionBatchSize         = envInt("ANX_PROJECTION_MAINTENANCE_BATCH_SIZE", 50)
@@ -158,8 +157,7 @@ func main() {
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
-	flag.BoolVar(&compactAccessMigration, "compact-access-migration", compactAccessMigration, "enable online compact access migration and certified reader cutover")
-	flag.BoolVar(&compactAccessLegacyReads, "compact-access-legacy-reads", compactAccessLegacyReads, "force legacy authorization reads even after certification (rollback kill switch)")
+	flag.BoolVar(&compactAccessLegacyReads, "compact-access-legacy-reads", compactAccessLegacyReads, "force legacy authorization reads before migration 150 (no-op after 150)")
 	flag.BoolVar(&scopedInboxReader, "scoped-inbox-reader", scopedInboxReader, "enable the scoped inbox index with legacy authorization and fallback")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")
@@ -604,28 +602,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "failed to initialize usage tracking")
 		os.Exit(1)
 	}
-	var compactWait <-chan struct{}
-	if compactAccessMigration {
-		compactCtx, compactCancel := context.WithTimeout(maintenanceCtx, 10*time.Minute)
-		defer compactCancel()
-		report := func(_ storage.CompactAccessVerification, err error) {
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "compact access migration: %v\n", err)
-				return
-			}
-			fmt.Fprintln(os.Stderr, "compact access migration: certified; certified reader selected unless legacy fallback is set")
-		}
-		proof, resume, err := workspace.PrepareCompactAccessMigration(compactCtx)
-		if !resume {
-			report(proof, err)
-		} else {
-			compactDone := make(chan struct{})
-			compactWait = compactDone
-			go func() { defer close(compactDone); workspace.RunCompactAccessMigration(compactCtx, report) }()
-			defer func() { maintenanceCancel(); <-compactDone }()
-		}
-	}
-
 	retiredDone := make(chan struct{})
 	go func() { defer close(retiredDone); workspace.RunCompactAccessRetiredMaintenance(maintenanceCtx) }()
 	defer func() { maintenanceCancel(); <-retiredDone }()
@@ -642,15 +618,6 @@ func main() {
 	documentHistoryDone := make(chan struct{})
 	go func() {
 		defer close(documentHistoryDone)
-		// Moving edges advances the authorization epoch, which would restart
-		// compact access certification; let a resumed certification finish.
-		if compactWait != nil {
-			select {
-			case <-compactWait:
-			case <-maintenanceCtx.Done():
-				return
-			}
-		}
 		workspace.RunDocumentAccessHistoryMaintenance(maintenanceCtx, func(err error) {
 			fmt.Fprintf(os.Stderr, "document access history maintenance: retrying bounded batch: %v\n", err)
 		})
@@ -659,15 +626,6 @@ func main() {
 	authAuditDone := make(chan struct{})
 	go func() {
 		defer close(authAuditDone)
-		// Deleting audit filter edges advances the authorization epoch, which
-		// would restart compact access certification; let a resumed run finish.
-		if compactWait != nil {
-			select {
-			case <-compactWait:
-			case <-maintenanceCtx.Done():
-				return
-			}
-		}
 		workspace.RunAuthAuditAccessMaintenance(maintenanceCtx, func(err error) {
 			fmt.Fprintf(os.Stderr, "auth audit access maintenance: retrying bounded batch: %v\n", err)
 		})
@@ -676,15 +634,6 @@ func main() {
 	cardManifestDone := make(chan struct{})
 	go func() {
 		defer close(cardManifestDone)
-		// Pruning an artifact advances the authorization epoch, which would
-		// restart compact access certification; let a resumed certification finish.
-		if compactWait != nil {
-			select {
-			case <-compactWait:
-			case <-maintenanceCtx.Done():
-				return
-			}
-		}
 		workspace.RunCardManifestMaintenance(maintenanceCtx, func(err error) {
 			fmt.Fprintf(os.Stderr, "card manifest maintenance: %v\n", err)
 		})
