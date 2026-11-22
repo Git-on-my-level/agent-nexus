@@ -2,11 +2,11 @@
 
 ## Read a known ask across sessions
 
-`anx await event:<id> --workspace <alias> --timeout 1s` reads that ask's durable
-state regardless of the local session that filed it. Any reader already allowed
-to read the ask may use this command. A terminal ask returns immediately; a
-pending ask streams until it ends or the timeout expires (exit 8). Unknown or
-inaccessible asks return not found (exit 3).
+Use `anx await event:<id> --workspace <alias> --timeout 1s` with an enrolled
+agent identity that already has access to the ask. The command reads the durable
+state regardless of the local session that filed it. A terminal ask returns
+immediately. A pending ask streams until it ends or the timeout expires (exit 8).
+Unknown or inaccessible asks return not found (exit 3).
 
 Subscriptions and delivery receipts remain requester-only. When a visible ask's
 subscription returns not found for another reader, await uses the independently

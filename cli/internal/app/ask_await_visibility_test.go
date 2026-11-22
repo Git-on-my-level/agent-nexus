@@ -112,18 +112,29 @@ func TestAwaitKnownAskAcrossSessionsAndReaders(t *testing.T) {
 }
 
 func TestAwaitInvisibleAskDoesNotSubscribeOrStream(t *testing.T) {
-	for _, name := range []string{"unknown_id", "unauthorized_identity"} {
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct{ name, actor, askID, token string }{
+		{"unknown_id", "worker", "missing-ask", "test-token"},
+		{"unauthorized_identity", "observer", "private-ask", "observer-token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "GET" || r.URL.Path != "/asks/hidden-or-missing" {
+				if r.Method != http.MethodGet || r.URL.Path != "/asks/"+tc.askID {
 					t.Errorf("invisible ask triggered another request: %s %s", r.Method, r.URL.Path)
 				}
-				w.WriteHeader(404)
+				if r.Header.Get("Authorization") != "Bearer "+tc.token {
+					t.Error("unexpected reader credential")
+				}
+				w.WriteHeader(http.StatusNotFound)
 				fmt.Fprint(w, `{"error":{"code":"not_found","message":"ask not found"}}`)
 			}))
 			defer server.Close()
 			a, out := dailyTestApp(t, server.URL)
-			if exit := a.Run([]string{"--json", "--as", "worker", "await", "event:hidden-or-missing", "--timeout", "300ms"}); exit != 3 {
+			if tc.actor == "observer" {
+				home, _ := a.UserHomeDir()
+				writeDerivedAgentFixture(t, home, tc.actor, `{"agent_id":"agent-2","actor_id":"actor-2","username":"observer.host","access_token":"observer-token","access_token_expires_at":"2099-01-01T00:00:00Z"}`)
+				_ = runCLIForTest(t, home, map[string]string{}, nil, []string{"--json", "--base-url", server.URL, "--as", tc.actor, "version"})
+			}
+			if exit := a.Run([]string{"--json", "--as", tc.actor, "await", "event:" + tc.askID, "--timeout", "300ms"}); exit != 3 {
 				t.Fatalf("exit=%d want=3: %s", exit, out.String())
 			}
 		})
