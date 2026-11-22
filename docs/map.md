@@ -37,7 +37,6 @@ Where things live. Generated; never hand-edited.
 | cli/internal/app                           | 187   | Package app implements CLI commands.                                                                                                                                                                                                                                  |
 | cli/internal/authcli                       | 2     | Package authcli defines the result and payload types shared by the CLI's authentication and auth-admin commands (invites, principals, audit events, bootstrap status) so their handlers and output envelopes keep one shape.                                          |
 | cli/internal/bridge                        | 7     | Package bridge owns the single OS-user host service, local registration and migration state.                                                                                                                                                                          |
-| cli/internal/bridgeconfig                  | 2     | Package bridgeconfig loads the host bridge's TOML configuration and owns its on-disk root directory layout.                                                                                                                                                           |
 | cli/internal/buildinfo                     | 1     | (undocumented)                                                                                                                                                                                                                                                        |
 | cli/internal/config                        | 2     | Package config resolves CLI runtime settings                                                                                                                                                                                                                          |
 | cli/internal/errnorm                       | 5     | Package errnorm normalizes transport and API errors into the CLI's stable error kinds, exit codes and machine-readable metadata, so scripts and orchestrators branch on classified behavior instead of message text.                                                  |
@@ -66,7 +65,6 @@ Where things live. Generated; never hand-edited.
 | core/cmd/anx-sqlite-compact                | 2     | anx-sqlite-compact writes a verified, compacted copy of a stopped workspace database.                                                                                                                                                                                 |
 | core/cmd/contract-gen                      | 3     | contract-gen regenerates the OpenAPI-derived contract artifacts                                                                                                                                                                                                       |
 | core/cmd/route-inventory                   | 1     | route-inventory combines the HTTP contract and intentional exception registry with the actual router's access classifiers.                                                                                                                                            |
-| core/cmd/scopedrepo-gen                    | 1     | scopedrepo-gen copies reviewed SQL templates into Go constants.                                                                                                                                                                                                       |
 | core/cmd/test-sql-fixture                  | 1     | Test-only legacy fixture writer.                                                                                                                                                                                                                                      |
 | core/internal/actors                       | 2     | Package actors stores the workspace actor registry                                                                                                                                                                                                                    |
 | core/internal/askpresentation              | 1     | Package askpresentation carries additive, authored decision copy.                                                                                                                                                                                                     |
@@ -89,24 +87,19 @@ Where things live. Generated; never hand-edited.
 | core/internal/loopstats                    | 1     | Package loopstats records bounded, numeric-only maintenance diagnostics.                                                                                                                                                                                              |
 | core/internal/observation                  | 17    | Package observation collects source evidence without granting upstream write authority.                                                                                                                                                                               |
 | core/internal/plans                        | 6     | Package plans validates initiative graphs and derives reproducible read state.                                                                                                                                                                                        |
-| core/internal/primitives                   | 184   | Package primitives is core's canonical domain layer                                                                                                                                                                                                                   |
-| core/internal/readmodel                    | 8     | Package readmodel contains bounded projection algorithms.                                                                                                                                                                                                             |
+| core/internal/primitives                   | 178   | Package primitives is core's canonical domain layer                                                                                                                                                                                                                   |
 | core/internal/replaypolicy                 | 1     | Package replaypolicy owns the receipt/recovery window shared with the web UI.                                                                                                                                                                                         |
 | core/internal/resourceaccess               | 16    | Package resourceaccess applies the request's record policy at database reads and writes without coupling auxiliary stores to the canonical primitive store.                                                                                                           |
 | core/internal/router                       | 7     | Package router watches canonical events and routes agent wake packets to registered agent bridges, building the wake artifacts and verifying signed bridge check-ins.                                                                                                 |
 | core/internal/runtimememory                | 3     | Package runtimememory owns process memory policy and isolated operator diagnostics.                                                                                                                                                                                   |
 | core/internal/schedule                     | 2     | Package schedule parses, normalizes and validates thread cadences                                                                                                                                                                                                     |
 | core/internal/schema                       | 4     | Package schema loads the shared contract YAML (contracts/anx-schema.yaml) and validates typed refs, enum values and provenance against it so that contract-invalid writes fail before they reach storage.                                                             |
-| core/internal/scopedrepo                   | 17    | Code generated by scopedrepo-gen; DO NOT EDIT.                                                                                                                                                                                                                        |
-| core/internal/scopemigrate                 | 5     | Package scopemigrate stages historical metadata.                                                                                                                                                                                                                      |
-| core/internal/scopes                       | 5     | Package scopes defines the bounded, internal contract for the scope migration.                                                                                                                                                                                        |
-| core/internal/scopesearch                  | 7     | Package scopesearch implements the bounded search executor and transactional posting deltas.                                                                                                                                                                          |
-| core/internal/scopestream                  | 5     | Package scopestream executes bounded exact-audience SSE ticks.                                                                                                                                                                                                        |
+| core/internal/scopesearch                  | 5     | Package scopesearch implements the bounded search executor and transactional posting deltas.                                                                                                                                                                          |
 | core/internal/secrets                      | 3     | Package secrets stores workspace secrets encrypted at rest.                                                                                                                                                                                                           |
 | core/internal/series                       | 4     | Package series owns push-only, workspace-local time series.                                                                                                                                                                                                           |
 | core/internal/seriesref                    | 2     | Package seriesref resolves bounded metric references through scoped readers.                                                                                                                                                                                          |
 | core/internal/server                       | 139   | Package server exposes core's HTTP API                                                                                                                                                                                                                                |
-| core/internal/server/stream                | 3     | Package stream registers core's long-lived HTTP endpoints (SSE, chunked streams) under a single /stream/ prefix so authentication and the route inventory classify them uniformly, and wraps each connection with its own authorization scope.                        |
+| core/internal/server/stream                | 2     | Package stream registers core's long-lived HTTP endpoints (SSE, chunked streams) under a single /stream/ prefix so authentication and the route inventory classify them uniformly, and wraps each connection with its own authorization scope.                        |
 | core/internal/sidecar                      | 2     | Package sidecar hosts privileged in-process services inside anx-core                                                                                                                                                                                                  |
 | core/internal/sqliteutil                   | 2     | Package sqliteutil opens the bounded maintenance transactions used by background rebuild programs                                                                                                                                                                     |
 | core/internal/sqltext                      | 1     | Package sqltext provides deterministic projection keys shared by SQL and Go.                                                                                                                                                                                          |
@@ -134,7 +127,7 @@ Where things live. Generated; never hand-edited.
 | tools/anx-http-record/internal/recorder    | 2     | Package recorder writes the JSONL exchange log                                                                                                                                                                                                                        |
 | tools/anx-http-record/internal/replay      | 2     | Package replay sends a compiled run against a target core and resolves the runtime ID bindings the run produced.                                                                                                                                                      |
 
-1 of 101 packages are undocumented.
+1 of 94 packages are undocumented.
 
 ## web-ui areas
 
@@ -142,11 +135,9 @@ Where things live. Generated; never hand-edited.
 | ---------------------------------------------------------------------------- | -------------- |
 | web-ui/src/lib                                                               | (undocumented) |
 | web-ui/src/lib/actions                                                       | (undocumented) |
-| web-ui/src/lib/compat                                                        | (undocumented) |
 | web-ui/src/lib/components                                                    | (undocumented) |
 | web-ui/src/lib/components/access                                             | (undocumented) |
 | web-ui/src/lib/components/agents                                             | (undocumented) |
-| web-ui/src/lib/components/attention                                          | (undocumented) |
 | web-ui/src/lib/components/collection                                         | (undocumented) |
 | web-ui/src/lib/components/decide                                             | (undocumented) |
 | web-ui/src/lib/components/document-detail                                    | (undocumented) |
@@ -218,25 +209,25 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1714  | web-ui/src/routes/+layout.svelte                                                   |
 | 1594  | cli/dogfood/pi/seed/kids-lemonade-stand-chapters.mjs                               |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
-| 1547  | web-ui/src/lib/anxCoreClient.js                                                    |
-| 1542  | web-ui/src/lib/mutationOutbox.js                                                   |
+| 1541  | web-ui/src/lib/anxCoreClient.js                                                    |
 | 1527  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
+| 1461  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1451  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
 | 1397  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
-| 1348  | core/internal/primitives/brief.go                                                  |
+| 1346  | core/internal/primitives/brief.go                                                  |
 | 1321  | web-ui/src/lib/components/DiscussionDrawer.svelte                                  |
 | 1320  | web-ui/src/lib/components/work/SwimlaneBoard.svelte                                |
 | 1319  | web-ui/src/lib/components/CommandPalette.svelte                                    |
 | 1315  | core/internal/primitives/topics_store.go                                           |
-| 1282  | web-ui/src/lib/inboxResponseQueue.js                                               |
-| 1266  | web-ui/src/lib/server/authSession.js                                               |
+| 1271  | web-ui/src/lib/inboxResponseQueue.js                                               |
+| 1251  | web-ui/src/lib/server/authSession.js                                               |
 | 1249  | core/internal/storage/migrations.go                                                |
 | 1240  | core/internal/auth/hosts.go                                                        |
 | 1197  | core/internal/primitives/derived_store.go                                          |
 | 1074  | web-ui/src/lib/visualReportCharts.js                                               |
-| 1039  | core/internal/auth/store.go                                                        |
 | 1039  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/+page.svelte                 |
 | 1016  | web-ui/scripts/game-dev-studio-seed-data.mjs                                       |
+| 1015  | core/internal/auth/store.go                                                        |
 | 959   | core/internal/server/stream_handlers.go                                            |
 | 942   | cli/internal/app/loop_tier.go                                                      |
 | 933   | web-ui/src/routes/o/[organization]/w/[workspace]/agents/[agentId]/+page.svelte     |
@@ -249,10 +240,10 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 892   | mcp/executor/executor.go                                                           |
 | 891   | cli/internal/errnorm/enrich.go                                                     |
 | 887   | web-ui/src/lib/visualReports.js                                                    |
-| 884   | web-ui/src/lib/brief.js                                                            |
 | 884   | web-ui/src/lib/workSummary.js                                                      |
 | 881   | web-ui/src/lib/components/work/WorkViews.svelte                                    |
 | 879   | cli/internal/app/resource_messages.go                                              |
+| 877   | web-ui/src/lib/brief.js                                                            |
 | 834   | core/internal/server/report_handlers.go                                            |
 | 832   | core/internal/primitives/card_leases.go                                            |
 | 824   | web-ui/src/lib/components/reports/LiveReportPanel.svelte                           |

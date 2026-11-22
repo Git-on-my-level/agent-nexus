@@ -715,10 +715,6 @@ export function undoInboxResponse() {
   };
 }
 
-export function hasPendingInboxResponse() {
-  return Boolean(pending);
-}
-
 /** Commit the waiting response now (page unload, a newer response). */
 export function flushInboxResponse() {
   return pending ? commit(pending) : Promise.resolve();
@@ -1153,15 +1149,8 @@ const restoreSlots = new Map();
  * Hands an undone response's composer state to the page that owns it (the
  * standalone item page restores its draft, notify target and attachments).
  */
-export function stashInboxRestore(itemId, state) {
+function stashInboxRestore(itemId, state) {
   restoreSlots.set(String(itemId ?? ""), state);
-}
-
-export function takeInboxRestore(itemId) {
-  const key = String(itemId ?? "");
-  const state = restoreSlots.get(key) ?? null;
-  restoreSlots.delete(key);
-  return state;
 }
 
 /** Test hook: forget everything queued. */

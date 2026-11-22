@@ -29,8 +29,6 @@ type workCommandSpec struct {
 }
 
 var workCommands = map[string]workCommandSpec{
-	"initiative promote":         {path: "/work/{id}/promote", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text: Deprecated: use anx work move <card> --root --reason text."},
-	"initiative retire":          {path: "/work/{id}/retire", method: "POST", idFlag: "card-id", optionalBody: true, summary: "<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text."},
 	"work cadence":               {method: "PATCH", summary: "Set cadence: <card> --every 1d [--budget 7d] [--stop-rule text], or --clear."},
 	"work measure":               {method: "PATCH", summary: "Set the number an initiative is judged by: <card> --label text --direction up|down --target n [--series series:ref] [--unit unit] [--baseline n], or --clear. Watch shows the latest reading of the series against the target. Use this for a goal's outcome; work goal is for recurring work scored by run receipts."},
 	"work goal":                  {method: "PATCH", summary: "Set goal: <card> --metric score --direction up [--target n] [--baseline n] [--label text] [--unit unit] [--series series:ref], or --clear."},
@@ -48,7 +46,6 @@ var workCommands = map[string]workCommandSpec{
 	"work get":                   {path: "/work/{id}", method: "GET", idFlag: "work-id", summary: "Read one work card, source authority, executions and current evidence."},
 	"work briefing":              {path: "/work/{id}/briefing", method: "GET", idFlag: "work-id", summary: "Read a bounded portable briefing for one work card."},
 	"work checkpoint":            {path: "/work/{id}/checkpoint", method: "PUT", idFlag: "work-id", body: true, summary: "Replace the current attributed recovery checkpoint."},
-	"work group":                 {path: "/work/{id}/group", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>."},
 	"work fold":                  {path: "/work/{id}/fold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> --into <parent> [--request-key key]: transfer references, carry the promise and archive."},
 	"work unfold":                {path: "/work/{id}/unfold", method: "POST", idFlag: "work-id", optionalBody: true, summary: "<card> [--request-key key]: reverse a fold without overwriting conflicting edits."},
 	"work ungrouped":             {path: "/work/ungrouped", method: "GET", summary: "Recent ungrouped cards and deterministic likely homes.", filters: []string{"limit"}},
@@ -78,7 +75,6 @@ type parsedWorkCommand struct {
 	name, id, fromFile             string
 	under, into, after, requestKey string
 	handle                         string
-	reason, toBoard                string
 	topLevel, initiative, brief    bool
 	requestedBy                    string
 	title                          string
@@ -122,7 +118,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	out.spec = spec
 	fs := newSilentFlagSet(out.name)
 	var id, fromFile, handle, under, into, after, requestKey trackedString
-	var reason, toBoard, title, requestedBy trackedString
+	var title, requestedBy trackedString
 	var limit trackedInt
 	var topLevel, initiative, brief trackedBool
 
@@ -133,14 +129,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 	if spec.body || spec.optionalBody {
 		fs.Var(&fromFile, "from-file", "JSON request from path or - for stdin")
 	}
-	if out.name == "initiative retire" {
-		fs.Var(&under, "under", "Group atomically under another initiative")
-		fs.Var(&toBoard, "to-board", "Non-initiatives destination board")
-	}
-	if strings.HasPrefix(out.name, "initiative ") {
-		fs.Var(&reason, "reason", "Required audit reason")
-	}
-	if out.name == "work create" || out.name == "work group" {
+	if out.name == "work create" {
 		fs.Var(&under, "under", "Stored parent card ref or path alias")
 		fs.Var(&after, "after", "Preceding plan step id")
 	}
@@ -148,7 +137,7 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		fs.Var(&into, "into", "Parent card ref")
 		fs.Var(&after, "after", "Preceding plan step id")
 	}
-	if out.name == "work create" || out.name == "work group" || out.name == "work fold" || out.name == "work unfold" || strings.HasPrefix(out.name, "initiative ") {
+	if out.name == "work create" || out.name == "work fold" || out.name == "work unfold" {
 		fs.Var(&requestKey, "request-key", "Retain the original key and body until confirmed")
 	}
 	if out.name == "work create" {
@@ -238,10 +227,6 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		}
 		out.handle = handle.value
 	}
-	out.reason, out.toBoard = strings.TrimSpace(reason.value), strings.TrimSpace(toBoard.value)
-	if strings.HasPrefix(out.name, "initiative ") && (out.reason == "" || len([]rune(out.reason)) > 2000) {
-		return out, errnorm.Usage("invalid_request", "--reason (1..2000 characters) is required")
-	}
 	out.topLevel = topLevel.value
 	out.initiative, out.title = initiative.value, strings.TrimSpace(title.value)
 	out.requestedBy = strings.TrimSpace(requestedBy.value)
@@ -256,9 +241,6 @@ func parseWorkCommand(args []string) (parsedWorkCommand, error) {
 		return out, errnorm.Usage("invalid_request", "--top-level and --under cannot be combined")
 	}
 	out.under, out.into, out.after, out.requestKey = strings.TrimSpace(under.value), strings.TrimSpace(into.value), strings.TrimSpace(after.value), strings.TrimSpace(requestKey.value)
-	if out.name == "work group" && out.under == "" && fromFile.value == "" {
-		return out, errnorm.Usage("invalid_request", "--under <card> is required")
-	}
 	if out.name == "work fold" && out.into == "" && fromFile.value == "" {
 		return out, errnorm.Usage("invalid_request", "--into <card> is required")
 	}
@@ -339,7 +321,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 		if parsed.handle != "" {
 			object["handle"] = parsed.handle
 		}
-		for key, value := range map[string]string{"under": parsed.under, "into": parsed.into, "after": parsed.after, "request_key": parsed.requestKey, "reason": parsed.reason, "to_board": parsed.toBoard} {
+		for key, value := range map[string]string{"under": parsed.under, "into": parsed.into, "after": parsed.after, "request_key": parsed.requestKey} {
 			if value != "" {
 				object[key] = value
 			}
@@ -394,7 +376,7 @@ func (a *App) runWorkCommand(ctx context.Context, args []string, cfg config.Reso
 	}
 	// A work create without an explicit home always enters Unsorted.
 	ctx = runcontext.WithTopLevel(ctx, parsed.topLevel || parsed.name == "work create")
-	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work group" || parsed.name == "work fold" || parsed.name == "work unfold" || strings.HasPrefix(parsed.name, "initiative ")) {
+	if object, ok := body.(map[string]any); ok && (parsed.name == "work create" || parsed.name == "work fold" || parsed.name == "work unfold") {
 		if err := ensureGroupingRequestKey(object); err != nil {
 			return nil, parsed.name, err
 		}

@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Groups: `47`
+- Groups: `46`
 
 ## `topics`
 
@@ -50,8 +50,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agent`
 
-- Commands: `7`
+- Commands: `10`
 - Command IDs:
+  - `agent.handoffs.ack` (`agent handoffs ack`)
+  - `agent.handoffs.get` (`agent handoffs get`)
+  - `agent.handoffs.send` (`agent handoffs send`)
   - `agent.inbox.answers.read` (`agent inbox answers read`)
   - `agent.inbox.asks.list` (`agent inbox asks list`)
   - `agent.inbox.subscribe` (`agent inbox subscribe`)
@@ -302,13 +305,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `inbox.stream` (`inbox stream`)
   - `inbox.summary` (`inbox summary`)
 
-## `initiative`
-
-- Commands: `2`
-- Command IDs:
-  - `initiative.promote` (`initiative promote`)
-  - `initiative.retire` (`initiative retire`)
-
 ## `integrations`
 
 - Commands: `7`
@@ -485,7 +481,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `work`
 
-- Commands: `21`
+- Commands: `20`
 - Command IDs:
   - `agents.me.presence` (`work presence`)
   - `work.briefing` (`work briefing`)
@@ -494,7 +490,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.create` (`work create`)
   - `work.fold` (`work fold`)
   - `work.get` (`work get`)
-  - `work.group` (`work group`)
   - `work.list` (`work list`)
   - `work.move` (`work move`)
   - `work.observations.list` (`work observations list`)

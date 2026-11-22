@@ -39,6 +39,21 @@
     },
     {
       "method": "POST",
+      "path": "/agent-handoffs",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "GET",
+      "path": "/agent-handoffs/{handoff_id}",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/agent-handoffs/{handoff_id}/ack",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
       "path": "/agent-inbox/answers/read",
       "access_class": "workspace_business_surface"
     },
@@ -1229,11 +1244,6 @@
     },
     {
       "method": "POST",
-      "path": "/work/{card_ref}/group",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
       "path": "/work/{card_ref}/move",
       "access_class": "workspace_business_surface"
     },
@@ -1258,11 +1268,6 @@
       "access_class": "authenticated_principal_surface"
     },
     {
-      "method": "POST",
-      "path": "/work/{card_ref}/promote",
-      "access_class": "workspace_business_surface"
-    },
-    {
       "method": "GET",
       "path": "/work/{card_ref}/refresh",
       "access_class": "workspace_business_surface"
@@ -1270,11 +1275,6 @@
     {
       "method": "POST",
       "path": "/work/{card_ref}/refresh",
-      "access_class": "workspace_business_surface"
-    },
-    {
-      "method": "POST",
-      "path": "/work/{card_ref}/retire",
       "access_class": "workspace_business_surface"
     },
     {

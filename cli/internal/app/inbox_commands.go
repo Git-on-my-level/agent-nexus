@@ -299,24 +299,6 @@ func looksLikeInboxAlias(raw string) bool {
 	return strings.HasPrefix(raw, inboxAliasPrefix)
 }
 
-func (a *App) resolveInboxItemIDAndThread(ctx context.Context, cfg config.Resolved, inboxItemID string) (string, string, error) {
-	match, err := a.resolveInboxItemFromList(ctx, cfg, inboxItemID)
-	if err != nil {
-		return "", "", err
-	}
-	subjectRef := strings.TrimSpace(anyString(match.Item["subject_ref"]))
-	if subjectRef == "" {
-		return "", "", errnorm.Usage(
-			"invalid_request",
-			fmt.Sprintf("subject_ref is required for inbox item %q (ensure inbox list output includes subject_ref)", match.ID),
-		)
-	}
-	if err := validateTypedRefShape(subjectRef); err != nil {
-		return "", "", err
-	}
-	return match.ID, subjectRef, nil
-}
-
 func (a *App) resolveInboxItemFromList(ctx context.Context, cfg config.Resolved, inboxItemID string) (inboxListMatch, error) {
 	result, err := a.invokeTypedJSON(ctx, cfg, "inbox list", "inbox.list", nil, nil, nil)
 	if err != nil {

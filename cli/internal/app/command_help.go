@@ -20,9 +20,6 @@ func commandHelpTopic(args []string) (string, bool) {
 	if len(commandArgs) == 0 {
 		return "", false
 	}
-	if rewritten, ok := applyCommandShapeCompatibilityAlias(commandArgs); ok {
-		commandArgs = rewritten
-	}
 	path, flags, known := matchPreflightFlagSpec(commandArgs)
 	if !known {
 		// A plain command path followed by help has no flag values to confuse.

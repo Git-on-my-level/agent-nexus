@@ -1,11 +1,11 @@
 /** Attribute on a `<form>` or field control to disable ⌘/Ctrl+Enter submission. */
-export const FORM_SUBMIT_SHORTCUT_OPT_OUT = "data-anx-no-submit-shortcut";
+const FORM_SUBMIT_SHORTCUT_OPT_OUT = "data-anx-no-submit-shortcut";
 
 /** Opt out of blur-commit and Escape-blur text shortcuts (`handleModEnterBlurCommit`, `handleEscapeTextBlurCommit`). */
 export const TEXT_SHORTCUT_OPT_OUT = "data-anx-no-text-shortcut";
 
 /** Value `blur`: ⌘/Ctrl+Enter blurs the focused text control (commit via `onblur`). */
-export const MOD_ENTER_COMMIT_ATTR = "data-anx-mod-enter-commit";
+const MOD_ENTER_COMMIT_ATTR = "data-anx-mod-enter-commit";
 
 /** Value `blur`: Escape blurs the focused text control. Use sparingly. */
 export const ESCAPE_DISMISS_ATTR = "data-anx-escape-dismiss";

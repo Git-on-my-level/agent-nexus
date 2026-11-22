@@ -15,7 +15,11 @@ transaction. Its initial TTL is 24 hours, chosen to allow the 12-hour reminder
 before automatic expiry; callers can renew it or explicitly hand it off under
 the existing fencing rules. The 12-hour ruling is the default promise deadline,
 not the lease TTL; the automatic agent lease remains 24 hours. Human creators do
-not acquire a lease. Existing opaque launcher owner labels remain supported;
+not acquire a lease. An agent that creates a card for another actor (an explicit
+assignee that resolves to some other actor and never to the creator) does not
+acquire it either: that is delegated work, and a creator lease would let the
+creator's release or expiry fall the card back away from its assignee. The
+assignee claims it with `anx lease acquire`. Existing opaque launcher owner labels remain supported;
 the automatic lease owner is
 `actor:<creating-actor-id>`, visible through `anx lease show`.
 

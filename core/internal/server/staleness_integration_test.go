@@ -243,36 +243,3 @@ func countStaleThreadExceptions(t *testing.T, baseURL string, threadID string) i
 	}
 	return count
 }
-
-func findStaleThreadExceptionEvent(t *testing.T, baseURL string, threadID string) map[string]any {
-	t.Helper()
-
-	resp, err := http.Get(baseURL + "/threads/" + threadID + "/timeline")
-	if err != nil {
-		t.Fatalf("GET /threads/{id}/timeline: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("unexpected timeline status: %d", resp.StatusCode)
-	}
-
-	var payload struct {
-		Events []map[string]any `json:"events"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode timeline response: %v", err)
-	}
-
-	for _, event := range payload.Events {
-		eventType, _ := event["type"].(string)
-		if eventType != "exception_raised" {
-			continue
-		}
-		payloadObj, _ := event["payload"].(map[string]any)
-		subtype, _ := payloadObj["subtype"].(string)
-		if subtype == "stale_topic" {
-			return event
-		}
-	}
-	return nil
-}

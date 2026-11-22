@@ -28,7 +28,7 @@ export const LANE_COLUMNS = [
 ];
 
 /** "This week" on the board: the last seven days. */
-export const DONE_WINDOW_MS = 7 * 24 * 3_600_000;
+const DONE_WINDOW_MS = 7 * 24 * 3_600_000;
 
 /**
  * Done children split by core's `done_at`: those that entered Done in the
@@ -53,7 +53,7 @@ export function splitDone(children, now = Date.now()) {
 export const CELL_PREVIEW = 5;
 
 /** The column a phase belongs in. An unknown phase has not started. */
-export const phaseColumn = (phase) =>
+const phaseColumn = (phase) =>
   LANE_COLUMNS.find((column) => column.phases.includes(phase))?.key ??
   "not_started";
 
@@ -125,7 +125,7 @@ export function hiddenChildren(rollup) {
 }
 
 /** Why core suggested a home, in the reader's words. */
-export const HOME_REASONS = {
+const HOME_REASONS = {
   related_parent: "named as related",
   shared_ref: "shares a link",
   same_repository: "same repository",

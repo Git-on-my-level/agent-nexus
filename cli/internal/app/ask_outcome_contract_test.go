@@ -15,7 +15,7 @@ import (
 func TestInboxRespondAcceptsEveryContractOutcome(t *testing.T) {
 	t.Parallel()
 
-	for _, outcome := range []string{"answered", "approved", "rejected", "acknowledged", "needs_context", "resolved"} {
+	for _, outcome := range []string{"answered", "approved", "rejected", "acknowledged", "needs_context", "resolved", "skipped"} {
 		outcome := outcome
 		t.Run(outcome, func(t *testing.T) {
 			t.Parallel()
@@ -55,7 +55,7 @@ func TestInboxRespondAcceptsEveryContractOutcome(t *testing.T) {
 func TestDraftInboxRespondAcceptsEveryContractOutcome(t *testing.T) {
 	t.Parallel()
 
-	for _, outcome := range []string{"answered", "approved", "rejected", "acknowledged", "needs_context", "resolved"} {
+	for _, outcome := range []string{"answered", "approved", "rejected", "acknowledged", "needs_context", "resolved", "skipped"} {
 		errs := validateDraftInboxRespond(map[string]any{"inbox_item_id": "inbox:1", "response_text": "ok", "outcome": outcome})
 		if len(errs) != 0 {
 			t.Fatalf("outcome %q rejected: %v", outcome, errs)

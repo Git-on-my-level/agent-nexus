@@ -26,6 +26,16 @@
   },
   {
     "method": "POST",
+    "path": "/agent-handoffs",
+    "reason": "Queues one addressed wake after checking the bounded reference list."
+  },
+  {
+    "method": "POST",
+    "path": "/agent-handoffs/{handoff_id}/ack",
+    "reason": "Records the intended recipient pickup result on one existing wake."
+  },
+  {
+    "method": "POST",
     "path": "/agent-inbox/answers/read",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
@@ -644,11 +654,6 @@
   },
   {
     "method": "POST",
-    "path": "/work/{card_ref}/group",
-    "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
-  },
-  {
-    "method": "POST",
     "path": "/work/{card_ref}/unfold",
     "reason": "Transactional replay-safe grouping mutation; covered by targeted atomicity and privacy tests."
   },
@@ -661,16 +666,6 @@
     "method": "POST",
     "path": "/asks/{ask_id}/retire",
     "reason": "Transactional stale withdrawal or exact-retirement undo: indexed ask, subject, authority and claim reads; bounded evidence, audit, requester notification and replay receipt."
-  },
-  {
-    "method": "POST",
-    "path": "/work/{card_ref}/promote",
-    "reason": "Atomic explicit initiative membership mutation; bounded advisory read covered by initiative budget."
-  },
-  {
-    "method": "POST",
-    "path": "/work/{card_ref}/retire",
-    "reason": "Atomic explicit initiative membership mutation; bounded advisory read covered by initiative budget."
   },
   {
     "method": "POST",

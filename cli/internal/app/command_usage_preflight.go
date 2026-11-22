@@ -26,6 +26,10 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "help", nil
 	}
 
+	if len(args) >= 2 && args[0] == "agent" && args[1] == "handoffs" {
+		parsed, err := parseAgentHandoffCommand(args[2:])
+		return parsed.name, err
+	}
 	if len(args) >= 2 && args[0] == "bridge" {
 		flags := map[string]preflightFlagSpec{}
 		switch args[1] {
@@ -243,9 +247,6 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		}
 		parsed, err := parseWorkCommand(args)
 		return parsed.name, err
-	}
-	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
-		args = rewritten
 	}
 	if err := preflightKnownCommandShape(args); err != nil {
 		return preflightShapeCommandName(args), err

@@ -27,10 +27,6 @@ func formatInboxList(body any) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderInboxItem(item map[string]any) string {
-	return renderInboxItemWithMode(item, false)
-}
-
 func renderInboxListRow(item map[string]any, listID string) string {
 	return compactSummary(
 		listID,

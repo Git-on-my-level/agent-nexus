@@ -192,6 +192,9 @@ func (s *Store) MoveWork(ctx context.Context, actor, id string, in MoveWorkInput
 		if err = tx.QueryRowContext(ctx, `SELECT `+workIsInitiativeSQL("c")+`,c.parent_card_id FROM main.cards c WHERE c.id=?`, c.CardID).Scan(&wasInitiative, &oldParent); err != nil {
 			return err
 		}
+		if wasInitiative && !in.Root && in.Reason == "" {
+			return &InitiativeGroupingError{Ref: "card:" + firstNonEmptyString(c.Handle.String, c.CardID)}
+		}
 		if in.Root != wasInitiative && in.Reason == "" {
 			return workInvalid("a reason is required to promote or retire an initiative")
 		}
@@ -266,28 +269,6 @@ func workCardRef(ctx context.Context, tx *accessTx, id string) any {
 		return nil
 	}
 	return ref
-}
-
-// ChangeInitiative keeps the promote/retire routes as spellings of MoveWork.
-// Boards no longer decide initiatives; to_board is accepted and ignored.
-func (s *Store) ChangeInitiative(ctx context.Context, actor, id, verb, reason, toBoard, under string) (map[string]any, error) {
-	reason = strings.TrimSpace(reason)
-	if actor == "" || reason == "" || len([]rune(reason)) > 2000 {
-		return nil, workInvalid("actor and reason (1..2000 characters) are required")
-	}
-	switch verb {
-	case "promote":
-		if toBoard != "" || under != "" {
-			return nil, workInvalid("to_board and under are retire-only")
-		}
-		return s.MoveWork(ctx, actor, id, MoveWorkInput{Root: true, Reason: reason})
-	case "retire":
-		if under == "" {
-			return s.MoveWork(ctx, actor, id, MoveWorkInput{Unsorted: true, Reason: reason})
-		}
-		return s.MoveWork(ctx, actor, id, MoveWorkInput{Under: under, Reason: reason})
-	}
-	return nil, workInvalid("unknown initiative action")
 }
 
 // InitiativeChanges hydrates only scoped canonical events from a fixed routing

@@ -19,7 +19,7 @@ func inspectBridgeResumeCheck(dir string, w hostbridge.Workspace, agent hostbrid
 	inProgress, err := inspectResumeNamespace(dir, w, agent, live)
 	if err == nil && agent.Jobs["wake"] {
 		var runtimeProgress bool
-		runtimeProgress, err = inspectRuntimeReceipts(dir, live)
+		runtimeProgress, err = inspectRuntimeReceipts(dir, live, false)
 		inProgress = inProgress || runtimeProgress
 	}
 	// If the owner exited during inspection, executing records need reconciliation.

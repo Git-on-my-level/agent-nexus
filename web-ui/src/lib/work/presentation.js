@@ -28,7 +28,7 @@ export const label = (value) =>
  * A phase as one short lowercase word for a count ("3 blocked · 4 moving"),
  * as Watch's kid rows read.
  */
-export const PHASE_COUNT_WORDS = {
+const PHASE_COUNT_WORDS = {
   backlog: "backlog",
   ready: "ready",
   in_progress: "moving",
@@ -231,7 +231,7 @@ function parseStructuredInstruction(text) {
  * a JSON payload (`{"next_action":"…"}`); a JSON blob is never a title —
  * prefer an instruction summary field, then the task title, then a generic.
  */
-export function sentenceCase(text) {
+function sentenceCase(text) {
   const s = String(text ?? "").trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
@@ -329,28 +329,11 @@ export function workTargetRevision(work) {
 }
 
 /**
- * Who proposed a decision, in the reader's words. `actorLabel` maps an actor
- * id to a display name; `currentActorId` turns the reader's own proposals
- * into "You".
- */
-export function proposerLabel(
-  item,
-  { actorLabel = (id) => id, currentActorId = "" } = {},
-) {
-  const kind = String(item?.origin_kind ?? "").toLowerCase();
-  const by = String(item?.proposed_by ?? "").trim();
-  if (kind === "channel") return "Proposed from a channel";
-  if (by && currentActorId && by === currentActorId) return "You proposed";
-  if (by) return `${actorLabel(by) || by} proposes`;
-  return "Proposed";
-}
-
-/**
  * The order an operator reads the task table in: what is stuck, then what is
  * moving, then what waits for review, then what could start. Closed work
  * (Done, Cancelled) is not in this list; the table folds it away.
  */
-export const ATTENTION_ORDER = [
+const ATTENTION_ORDER = [
   "blocked",
   "in_progress",
   "review",
@@ -573,7 +556,7 @@ const DECISION_KIND_PREFIX =
  * every proposal in the same voice, so the prefix is noise in a list where
  * every row would otherwise start with the same three words.
  */
-export function stripDecisionPrefix(text) {
+function stripDecisionPrefix(text) {
   return String(text ?? "")
     .trim()
     .replace(DECISION_KIND_PREFIX, "");
@@ -676,37 +659,6 @@ function phaseAsk(item, body) {
   if (!phase) return "";
   const at = body.match(/\bat\s+(.+?)\s+to\s+\S+/i)?.[1]?.trim() ?? "";
   return at ? `Move to ${label(phase)} at ${at}` : `Move to ${label(phase)}`;
-}
-
-/**
- * What approving will do, in the reader's words. Scope and ownership come
- * from core; nothing here changes what core enforces.
- */
-export function decisionConsequence(item, work = null) {
-  const scope = String(item?.scope ?? "");
-  const source = work?.source ? sourceLabel(work.source) : "";
-  const owned = work ? isNexusOwned(work) : false;
-  const phase = String(item?.payload?.phase ?? "").trim();
-  if (scope === "work.phase") {
-    const target = phase ? ` to ${label(phase)}` : "";
-    if (item?.deliverable === false) {
-      const where =
-        source && source !== "Managed here" ? source : "this source";
-      return `No delivery path exists for ${where} yet. Approving records your decision${target} and keeps the request pending; nothing changes at ${where} until a delivery path exists.`;
-    }
-    if (!work)
-      return `Approving authorizes this change${target}. If the initiative lives in another tracker, it is requested there rather than applied here.`;
-    if (owned || source === "Managed here")
-      return phase
-        ? `Approving moves this initiative${target}.`
-        : "This proposal names no target phase, so it cannot be applied. Decline it and propose it again.";
-    return `Approving requests this change${target} at ${source}. Nothing changes at ${source} until that request is delivered and read back.`;
-  }
-  if (scope === "work.annotate")
-    return "Approving records this note on the initiative. The source is not changed.";
-  if (["github", "multica", "ssh_git", "git"].includes(scope))
-    return `Approving authorizes this change at ${sourceLabel({ authority: scope })}. The result is read back before it counts as done.`;
-  return "Approving authorizes exactly this proposal. Delivery and outcome are tracked below.";
 }
 
 /**

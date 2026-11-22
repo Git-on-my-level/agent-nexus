@@ -300,15 +300,6 @@ var derivedSubcommandSpec = subcommandSpec{
 	examples: []string{"anx derived rebuild --actor-id <actor-id>"},
 }
 
-func packetCreateSubcommandSpec(resource string) subcommandSpec {
-	trimmed := strings.TrimSpace(resource)
-	return subcommandSpec{
-		command:  trimmed,
-		valid:    []string{"create"},
-		examples: []string{fmt.Sprintf("anx %s create", trimmed)},
-	}
-}
-
 func (s subcommandSpec) normalize(raw string) string {
 	token := strings.ToLower(strings.TrimSpace(raw))
 	if token == "" {

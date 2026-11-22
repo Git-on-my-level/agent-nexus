@@ -32,34 +32,6 @@ type WakePacket struct {
 	Version              string
 }
 
-// BuildWakeRequestPayload mirrors wake packet subject fields on the durable wake request event payload.
-func BuildWakeRequestPayload(
-	wakeupID, handle, targetActorID, workspaceID, workspaceName, threadID string,
-	triggerEventID, triggerCreatedAt, triggerText, sessionKey string,
-	subjectRef string, resolvedSubject map[string]any,
-) map[string]any {
-	p := map[string]any{
-		"wakeup_id":          wakeupID,
-		"wake_artifact_id":   wakeupID,
-		"target_handle":      handle,
-		"target_actor_id":    targetActorID,
-		"workspace_id":       workspaceID,
-		"workspace_name":     workspaceName,
-		"thread_id":          threadID,
-		"trigger_event_id":   triggerEventID,
-		"trigger_created_at": triggerCreatedAt,
-		"trigger_text":       triggerText,
-		"session_key":        sessionKey,
-	}
-	if s := strings.TrimSpace(subjectRef); s != "" {
-		p["subject_ref"] = s
-	}
-	if len(resolvedSubject) > 0 {
-		p["resolved_subject"] = resolvedSubject
-	}
-	return p
-}
-
 // WakeArtifactRefs orders durable refs for wake artifacts and wake request events (thread, optional subject, trigger event).
 func WakeArtifactRefs(threadID, eventID, subjectRef string) []string {
 	out := []string{"thread:" + threadID}

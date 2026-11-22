@@ -344,7 +344,11 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			}
 			phase := anyString(card["column_key"])
 			if phase == strings.TrimPrefix(condition, "state=") {
-				return map[string]any{"target": target, "state": phase}, true, nil
+				result := map[string]any{"target": target, "state": phase}
+				if resolution := a.cardResolutionEvidence(waitCtx, cfg, card); resolution != nil {
+					result["resolution"] = resolution
+				}
+				return result, true, nil
 			}
 			return nil, false, nil
 		}
@@ -364,15 +368,49 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 		}
 		return nil, false, nil
 	}
-	if result, done, err := check(); err != nil {
+	type checked struct {
+		result map[string]any
+		done   bool
+	}
+	first, err := retryTransientRead(waitCtx, func() (checked, error) {
+		result, done, err := check()
+		return checked{result, done}, err
+	})
+	if err != nil {
 		return nil, err
-	} else if done {
+	}
+	if result, done := first.result, first.done; done {
 		return &commandResult{Data: result}, nil
 	}
 	authCfg := cfg
 	cursor := ""
 	backoff := 250 * time.Millisecond
+	// recheck: an event arrived but re-reading the card failed transiently.
+	// The cursor is past that event, so retry the read itself (after the
+	// backoff below) instead of waiting for an event that may never come.
+	recheck := false
 	for waitCtx.Err() == nil {
+		if recheck && targetIsCard {
+			result, done, checkErr := check()
+			if checkErr != nil && !transientAwaitError(checkErr) {
+				return nil, checkErr
+			}
+			if checkErr == nil {
+				recheck = false
+				if done {
+					return &commandResult{Data: result}, nil
+				}
+			} else {
+				select {
+				case <-waitCtx.Done():
+				case <-time.After(backoff):
+				}
+				if backoff < 4*time.Second {
+					backoff *= 2
+				}
+				continue
+			}
+		}
 		var err error
 		authCfg, err = a.cfgWithResolvedAuthToken(waitCtx, authCfg)
 		if err != nil {
@@ -392,6 +430,10 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			headers["Last-Event-ID"] = cursor
 		}
 		resp, openErr := client.OpenStream(waitCtx, httpclient.RawRequest{Method: http.MethodGet, Path: path, Headers: headers})
+		if openErr == nil && transientStreamStatus(resp.StatusCode) {
+			resp.Body.Close()
+			openErr = errTransientStream
+		}
 		if openErr == nil {
 			if resp.StatusCode >= 400 {
 				body, _ := io.ReadAll(resp.Body)
@@ -417,6 +459,10 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 				}
 				if targetIsCard {
 					result, done, checkErr := check()
+					if checkErr != nil && transientAwaitError(checkErr) {
+						recheck = true
+						break
+					}
 					if checkErr != nil {
 						resp.Body.Close()
 						return nil, checkErr
@@ -442,6 +488,9 @@ func (a *App) runAwait(ctx context.Context, args []string, cfg config.Resolved) 
 			}
 			resp.Body.Close()
 		}
+		// The stream does not replay a transition made while it was down
+		// (or before its first cursor), so every reconnect re-reads the card.
+		recheck = targetIsCard
 		select {
 		case <-waitCtx.Done():
 			break
@@ -509,3 +558,46 @@ func inboxAskID(item map[string]any) string {
 	}
 	return ""
 }
+
+// cardResolutionEvidence returns the first event cited as the card's
+// resolution evidence, so an agent awaiting another agent's answer gets it in
+// the same call: `cards resolve --body` records the answer as that event. It
+// is one bounded read at completion; a failed read leaves the result as before.
+func (a *App) cardResolutionEvidence(ctx context.Context, cfg config.Resolved, card map[string]any) map[string]any {
+	// The card already matched; an await deadline that is about to lapse must
+	// not cost the caller the answer, so the reads get their own short budget.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	// resolution_refs are stored sorted, so order says nothing about which
+	// event is the answer. `cards resolve --body` posts it at resolve time:
+	// take the newest message with text among the first few cited events.
+	var best map[string]any
+	var bestAt time.Time
+	checked := 0
+	for _, raw := range asSlice(card["resolution_refs"]) {
+		ref := anyString(raw)
+		if !strings.HasPrefix(ref, "event:") {
+			continue
+		}
+		if checked++; checked > maxResolutionEvents {
+			break
+		}
+		result, err := a.invokeRawJSON(ctx, cfg, "await resolution", "GET", "/events/"+url.PathEscape(strings.TrimPrefix(ref, "event:")), nil)
+		if err != nil {
+			continue
+		}
+		ev := asMap(commandResultBody(result)["event"])
+		text := anyString(asMap(ev["payload"])["text"])
+		if anyString(ev["type"]) != "message_posted" || text == "" {
+			continue
+		}
+		at, _ := time.Parse(time.RFC3339Nano, anyString(ev["ts"]))
+		if best == nil || at.After(bestAt) {
+			best, bestAt = map[string]any{"event_ref": ref, "actor_id": anyString(ev["actor_id"]), "text": text}, at
+		}
+	}
+	return best
+}
+
+// maxResolutionEvents bounds the reads one await completion may make.
+const maxResolutionEvents = 5

@@ -372,3 +372,10 @@ func TestCurationToolsAreAgentWork(t *testing.T) {
 		t.Fatal("agents must be able to undo delivery grouping")
 	}
 }
+
+func TestBooleanEnumUsesJSONBooleans(t *testing.T) {
+	schema := jsonSchemaForField(Field{Type: "boolean", EnumValues: []string{"true"}})
+	if values, ok := schema["enum"].([]any); !ok || len(values) != 1 || values[0] != true {
+		t.Fatalf("enum=%#v", schema["enum"])
+	}
+}

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -49,20 +48,6 @@ func extractMessageText(event map[string]any) string {
 		}
 	}
 	return strings.TrimSpace(anyString(event["summary"]))
-}
-
-func stableJSON(value any) ([]byte, error) {
-	return json.Marshal(value)
-}
-
-func asMap(value any) map[string]any {
-	out, _ := value.(map[string]any)
-	return out
-}
-
-func asSlice(value any) []any {
-	out, _ := value.([]any)
-	return out
 }
 
 func anyString(value any) string {

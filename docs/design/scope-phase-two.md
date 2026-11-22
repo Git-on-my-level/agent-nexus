@@ -1,5 +1,10 @@
 # Inbox scope-authority cutover
 
+> Status: the disabled Stream B foundation this note relies on (`internal/scopedrepo`,
+> `internal/scopemigrate`, `internal/scopestream`, `internal/scopes`) was removed
+> from `core`; recover it from Git history if the cutover resumes. The commands
+> and paths below are kept as history and no longer run at HEAD.
+
 Phase one shipped in v0.12.18. The next deliverable is a production inbox
 reader whose complete request passes the existing privacy and performance
 gates. Overview follows only after inbox establishes the capture and proof

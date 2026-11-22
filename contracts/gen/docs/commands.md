@@ -97,6 +97,45 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns JSON with provenance and explicit freshness.
 - Agent notes: Explicit declared push source; core never fetches external data.
 
+## `agent.handoffs.ack`
+
+- CLI path: `agent handoffs ack`
+- HTTP: `POST /agent-handoffs/{handoff_id}/ack`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Attest that the recipient checked every reference, or record the first inaccessible reference.
+- Concepts: `agents`
+- Error codes: `agent_required`, `invalid_request`, `not_found`, `conflict`, `ref_unavailable`
+- Output: Returns the current handoff receipt.
+- Agent notes: Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup.
+
+## `agent.handoffs.get`
+
+- CLI path: `agent handoffs get`
+- HTTP: `GET /agent-handoffs/{handoff_id}`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `none`
+- Why: Read transport delivery and recipient pickup independently.
+- Concepts: `agents`
+- Error codes: `agent_required`, `not_found`
+- Output: Returns the current handoff receipt.
+- Agent notes: Only the sender and recipient can read a receipt. Delivery and pickup do not change task state.
+
+## `agent.handoffs.send`
+
+- CLI path: `agent handoffs send`
+- HTTP: `POST /agent-handoffs`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Address a workspace agent by actor identity with portable references.
+- Concepts: `agents`
+- Error codes: `agent_required`, `invalid_request`, `not_found`, `ref_unavailable`
+- Output: Returns the current handoff receipt.
+- Agent notes: Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:<id>, multica:issue:<uuid>, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record.
+
 ## `agent.inbox.answers.read`
 
 - CLI path: `agent inbox answers read`
@@ -2214,32 +2253,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ open_ask_count, asks, generated_at }`; shared human asks visible to the caller, not agent answer notifications.
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
 
-## `initiative.promote`
-
-- CLI path: `initiative promote`
-- HTTP: `POST /work/{card_ref}/promote`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-
-## `initiative.retire`
-
-- CLI path: `initiative retire`
-- HTTP: `POST /work/{card_ref}/retire`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns initiative membership, work and advisory facts.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-
 ## `integrations.bind`
 
 - CLI path: `integrations bind`
@@ -2359,6 +2372,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Agent notes: Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock.
 - Examples:
   - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+  - Claim a card assigned to you as yourself: `anx lease acquire card:review-request --ttl 30m`
 
 ## `lease.release`
 
@@ -2599,7 +2613,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `home`, `documents`, `cards`
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Output: Returns the workspace Overview projection.
-- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.
+- Agent notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
 
 ## `plan.set`
 
@@ -3386,19 +3400,6 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `WorkResponse`.
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
 
-## `work.group`
-
-- CLI path: `work group`
-- HTTP: `POST /work/{card_ref}/group`
-- Stability: `beta`
-- Surface: `canonical`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Concepts: `cards`, `evidence`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Output: Returns `WorkResponse`.
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-
 ## `work.list`
 
 - CLI path: `work list`
@@ -3419,7 +3420,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Stability: `beta`
 - Surface: `canonical`
 - Input mode: `json-body`
-- Why: Move a card under a parent, to top level or to Unsorted
+- Why: Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason.
 - Concepts: `cards`
 - Error codes: `invalid_request`, `not_found`, `conflict`
 - Output: Returns WorkResponse.

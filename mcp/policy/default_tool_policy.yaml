@@ -153,6 +153,15 @@ commands:
   "integrations.run":
     classification: unsupported_shell_shaped
     reason: "Local CLI harness configuration or stdin hook; never a remote MCP action."
+  "agent.handoffs.ack":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
+  "agent.handoffs.get":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
+  "agent.handoffs.send":
+    classification: unsupported_other
+    reason: "Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification."
   "agent.inbox.subscribe":
     classification: unsupported_other
     reason: "Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification"
@@ -891,9 +900,6 @@ commands:
     classification: unsupported_shell_shaped
     reason: "Use the enrolled host CLI for scoped token exchange and optional source command execution."
 
-  "work.group":
-    classification: exposed_write
-    reason: Deprecated stored-parent move alias; plan steps no longer define hierarchy.
   "work.fold":
     classification: exposed_write
     reason: Transfer references and archive with a reversible scoped snapshot.
@@ -903,15 +909,9 @@ commands:
   "work.ungrouped":
     classification: exposed_read
     reason: Bounded visible recent cards with deterministic likely homes.
-  "initiative.promote":
-    classification: exposed_write
-    reason: Deprecated move-to-root alias with an audit reason; board roles no longer define initiatives.
-  "initiative.retire":
-    classification: exposed_write
-    reason: Retire membership and optionally group atomically with an audit reason; agents may act.
   "work.move":
-    classification: unsupported_other
-    reason: "Use the work-tree CLI surface; no MCP move adaptation is included in this phase."
+    classification: exposed_write
+    reason: Move a card under a parent, to top level or to Unsorted; promoting or retiring an initiative needs an audit reason.
   "work.resolve":
     classification: unsupported_other
     reason: "Path resolution is currently a work-tree CLI helper; no MCP adaptation is included in this phase."

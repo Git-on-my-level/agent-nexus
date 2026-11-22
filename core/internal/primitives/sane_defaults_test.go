@@ -335,3 +335,76 @@ func TestSaneStepEvidenceCancelsPendingDefaultTracking(t *testing.T) {
 		t.Fatalf("real step evidence kept daily reminders: %v %v", digests, err)
 	}
 }
+
+func TestAgentCreateForAnotherActorLeavesTheLeaseToTheAssignee(t *testing.T) {
+	ctx := context.Background()
+	ws, err := initializeTestWorkspace(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	s := NewTestStore(ws.DB(), ws.Layout().ArtifactContentDir)
+	for _, id := range []string{"asker", "lane"} {
+		if _, err = ws.DB().Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES(?,?,?,'now','now','{"principal_kind":"agent"}')`, id, id, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// An agent whose id differs from its actor id: the creator itself.
+	if _, err = ws.DB().Exec(`INSERT INTO agents(id,username,actor_id,created_at,updated_at,metadata_json) VALUES('agent-asker-2','asker2','asker2','now','now','{"principal_kind":"agent"}')`); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		owner string
+		lease string
+	}{
+		{"actor:lane", "none"},  // delegated: the lane claims it
+		{"agent:lane", "none"},  // agent ref resolves to the lane's actor
+		{"lane", "none"},        // a bare assignee is an actor id
+		{"actor:asker", "held"}, // creator assigned itself explicitly
+		{"agent:asker", "held"}, // same, through its agent ref
+		{"team:infra", "held"},  // typed labels identify no actor: keep the creator lease
+	}
+	for _, c := range cases {
+		card, err := s.CreateWork(ctx, "asker", "", map[string]any{"title": "Request " + c.owner, "owner": c.owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := workString(card["id"])
+		lease, err := s.GetCardLease(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lease.State != c.lease {
+			t.Errorf("owner=%s lease=%+v, want state %s", c.owner, lease, c.lease)
+		}
+		if c.lease == "held" && lease.Owner != "actor:asker" {
+			t.Errorf("owner=%s lease owner=%s, want actor:asker", c.owner, lease.Owner)
+		}
+	}
+	// A creator whose agent id differs from its actor id still self-assigns
+	// through either form of its agent ref.
+	for _, owner := range []string{"agent:agent-asker-2", "agent-asker-2"} {
+		card, err := s.CreateWork(ctx, "asker2", "", map[string]any{"title": "Self " + owner, "owner": owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		lease, err := s.GetCardLease(ctx, workString(card["id"]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lease.State != "held" || lease.Owner != "actor:asker2" {
+			t.Errorf("owner=%s lease=%+v, want held by actor:asker2", owner, lease)
+		}
+	}
+	// The delegated card cannot fall back away from its assignee: nothing expires.
+	card, err := s.CreateWork(ctx, "asker", "", map[string]any{"title": "Delegated", "owner": "actor:lane", "phase": "in_progress"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expired, err := s.ExpireDueCardLeases(ctx, "system", 50); err != nil || len(expired) != 0 {
+		t.Fatalf("expired=%v err=%v", expired, err)
+	}
+	if _, err = s.AcquireCardLease(ctx, "lane", workString(card["id"]), CardLeaseAcquireInput{Owner: "actor:lane", TTL: time.Hour}); err != nil {
+		t.Fatalf("assignee could not claim delegated card: %v", err)
+	}
+}

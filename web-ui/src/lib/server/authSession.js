@@ -46,7 +46,7 @@ const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const REFRESH_TOKEN_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const RETRYABLE_AUTH_SESSION_FAILURE_COOKIE_MAX_AGE_SECONDS = 2 * 60;
 const RETRYABLE_AUTH_SESSION_FAILURE_MAX_ATTEMPTS = 2;
-export const RETRYABLE_AUTH_SESSION_ERROR_CODE = "auth_session_retryable";
+const RETRYABLE_AUTH_SESSION_ERROR_CODE = "auth_session_retryable";
 // Retain the last access token only slightly beyond its real core TTL so
 // refresh-race detection can still tell "stale token after rotation" apart
 // from "no prior access token", without preserving stale-auth state for the
@@ -348,11 +348,7 @@ function cacheRecentRefreshResult(key, tokens) {
   });
 }
 
-export function readWorkspaceAccessToken(
-  event,
-  organizationSlug,
-  workspaceSlug,
-) {
+function readWorkspaceAccessToken(event, organizationSlug, workspaceSlug) {
   return (
     event.cookies.get(
       getAuthAccessCookieName(organizationSlug, workspaceSlug),
@@ -980,17 +976,6 @@ export async function isSessionEndingUpstreamResponse(response) {
       .catch(() => ""),
   );
   return SESSION_ENDING_FORBIDDEN_CODES.has(String(payload?.error?.code ?? ""));
-}
-
-export function isLikelyStaleWorkspaceRefreshFailure(
-  error,
-  { hadAccessToken = false } = {},
-) {
-  return (
-    hadAccessToken &&
-    error?.status === 401 &&
-    error?.details?.error?.code === "invalid_token"
-  );
 }
 
 export function isRetryableWorkspaceRefreshFailure(

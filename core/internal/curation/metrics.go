@@ -83,7 +83,7 @@ func ComputeMetrics(asks []AskRecord, promises []PromiseRecord, windowStart, now
 	// S17
 	var vals, weights []float64
 	for _, a := range asks {
-		if a.Proposal || a.Response == nil || !inWindow(a.Response.At) {
+		if a.Proposal || a.Response == nil || a.Response.Outcome == "skipped" || !inWindow(a.Response.At) {
 			continue
 		}
 		vals = append(vals, a.Response.At.Sub(a.RequestedAt).Hours())
@@ -104,7 +104,8 @@ func ComputeMetrics(asks []AskRecord, promises []PromiseRecord, windowStart, now
 		if a.Withdrawal != nil && IsMootReason(a.Withdrawal.Reason) && a.Withdrawal.At.Sub(a.RequestedAt) >= 24*time.Hour {
 			moot++
 		}
-		if a.Response == nil {
+		// A skip clears an ask without deciding it: not an answer.
+		if a.Response == nil || a.Response.Outcome == "skipped" {
 			continue
 		}
 		m.S18.Answered++

@@ -123,8 +123,6 @@ type ListAuditResult struct {
 
 func New(cfg config.Resolved) *Service { return &Service{cfg: cfg} }
 
-func (s *Service) Config() config.Resolved { return s.cfg }
-
 func (s *Service) RevokePrincipal(ctx context.Context, agentID string, opts RevokeOptions) (RevokePrincipalResult, error) {
 	agentID = strings.TrimSpace(agentID)
 	if agentID == "" {

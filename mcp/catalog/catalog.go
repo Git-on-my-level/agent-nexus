@@ -348,6 +348,10 @@ func jsonSchemaForField(field Field) map[string]any {
 	if len(field.EnumValues) > 0 {
 		values := make([]any, 0, len(field.EnumValues))
 		for _, value := range field.EnumValues {
+			if schema["type"] == "boolean" {
+				values = append(values, value == "true")
+				continue
+			}
 			values = append(values, value)
 		}
 		schema["enum"] = values
@@ -423,7 +427,7 @@ func SupportsIdempotencyKey(id, method string) bool {
 	}
 	if strings.HasPrefix(id, "work.") || strings.HasPrefix(id, "pm.") {
 		switch id {
-		case "work.create", "work.group", "work.fold", "work.unfold", "work.observations.submit", "pm.decisions.create":
+		case "work.create", "work.move", "work.fold", "work.unfold", "work.observations.submit", "pm.decisions.create":
 			return true
 		default:
 			return false

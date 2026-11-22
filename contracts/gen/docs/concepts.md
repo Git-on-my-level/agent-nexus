@@ -15,8 +15,11 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agents`
 
-- Commands: `21`
+- Commands: `24`
 - Command IDs:
+  - `agent.handoffs.ack`
+  - `agent.handoffs.get`
+  - `agent.handoffs.send`
   - `agent.inbox.answers.read`
   - `agent.inbox.asks.list`
   - `agent.notification-receipts.stream`
@@ -138,7 +141,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `cards`
 
-- Commands: `77`
+- Commands: `74`
 - Command IDs:
   - `agents.get`
   - `agents.me.presence`
@@ -168,8 +171,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `cards.revisions.list`
   - `cards.timeline`
   - `cards.trash`
-  - `initiative.promote`
-  - `initiative.retire`
   - `lease.acquire`
   - `lease.release`
   - `lease.renew`
@@ -201,7 +202,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.create`
   - `work.fold`
   - `work.get`
-  - `work.group`
   - `work.list`
   - `work.move`
   - `work.observations.list`
@@ -304,10 +304,8 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `evidence`
 
-- Commands: `32`
+- Commands: `29`
 - Command IDs:
-  - `initiative.promote`
-  - `initiative.retire`
   - `pm.actions.acknowledge`
   - `pm.actions.get`
   - `pm.actions.list`
@@ -328,7 +326,6 @@ Generated from `contracts/anx-openapi.yaml`.
   - `work.create`
   - `work.fold`
   - `work.get`
-  - `work.group`
   - `work.list`
   - `work.observations.list`
   - `work.observations.submit`

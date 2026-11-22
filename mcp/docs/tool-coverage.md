@@ -12,7 +12,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | --- | --- |
 | actors | 2 |
 | adapters | 5 |
-| agent | 8 |
+| agent | 11 |
 | agents | 4 |
 | artifacts | 10 |
 | ask | 4 |
@@ -32,7 +32,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hook | 1 |
 | host | 18 |
 | inbox | 5 |
-| initiative | 2 |
 | integrations | 7 |
 | lease | 4 |
 | meta | 9 |
@@ -56,7 +55,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | usage | 1 |
 | watch | 1 |
 | where | 1 |
-| work | 21 |
+| work | 20 |
 | workspace | 4 |
 
 ## Counts by Classification
@@ -64,12 +63,12 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | Classification | Commands |
 | --- | --- |
 | exposed_read | 92 |
-| exposed_write | 75 |
+| exposed_write | 73 |
 | gated_admin | 30 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 13 |
-| unsupported_other | 16 |
+| unsupported_other | 18 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
@@ -77,11 +76,11 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 
 | Surface | Commands | Rule |
 | --- | --- | --- |
-| standalone default | 167 | exposed_read + exposed_write + adapted |
+| standalone default | 165 | exposed_read + exposed_write + adapted |
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 70 | not represented as direct MCP tools in v1 |
+| unsupported | 72 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -94,6 +93,9 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | adapters.list | adapters | GET | /adapters | gated_admin | Inspect explicitly declared series grants; administration is required by core. |
 | adapters.revoke | adapters | POST | /adapters/{name}/revoke | gated_admin | Withdraw a series grant; requires current workspace administration. |
 | adapters.token | adapters | POST | /adapters/{name}/token | gated_sensitive | Return a short-lived credential for the owning enrolled agent; never expose by default. |
+| agent.handoffs.ack | agent | POST | /agent-handoffs/{handoff_id}/ack | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
+| agent.handoffs.get | agent | GET | /agent-handoffs/{handoff_id} | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
+| agent.handoffs.send | agent | POST | /agent-handoffs | unsupported_other | Addressed handoffs are available through the CLI and workspace API; MCP exposure requires separate qualification. |
 | agent.inbox.answers.read | agent | POST | /agent-inbox/answers/read | exposed_write | ordinary authenticated agent per-answer read state write |
 | agent.inbox.asks.list | agent | GET | /agent-inbox/asks | exposed_read | requester-scoped, keyset-paginated human attention inbox projection |
 | agent.inbox.subscribe | agent | POST | /agent-inbox/subscriptions | unsupported_other | Ask delivery is available through the CLI and HTTP API; MCP exposure requires separate qualification |
@@ -258,8 +260,6 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
-| initiative.promote | initiative | POST | /work/{card_ref}/promote | exposed_write | Deprecated move-to-root alias with an audit reason; board roles no longer define initiatives. |
-| initiative.retire | initiative | POST | /work/{card_ref}/retire | exposed_write | Retire membership and optionally group atomically with an audit reason; agents may act. |
 | integrations.bind | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |
 | integrations.disable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
 | integrations.enable | integrations | LOCAL |  | unsupported_shell_shaped | Local CLI harness configuration or stdin hook; never a remote MCP action. |
@@ -348,9 +348,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | work.create | work | POST | /work | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.fold | work | POST | /work/{card_ref}/fold | exposed_write | Transfer references and archive with a reversible scoped snapshot. |
 | work.get | work | GET | /work/{card_ref} | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
-| work.group | work | POST | /work/{card_ref}/group | exposed_write | Deprecated stored-parent move alias; plan steps no longer define hierarchy. |
 | work.list | work | GET | /work | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
-| work.move | work | POST | /work/{card_ref}/move | unsupported_other | Use the work-tree CLI surface; no MCP move adaptation is included in this phase. |
+| work.move | work | POST | /work/{card_ref}/move | exposed_write | Move a card under a parent, to top level or to Unsorted; promoting or retiring an initiative needs an audit reason. |
 | work.observations.list | work | GET | /work/{card_ref}/observations | exposed_read | Read scoped central work or PM context and preserve evidence, freshness, pagination and receipt uncertainty. |
 | work.observations.submit | work | POST | /work/{card_ref}/observations | exposed_write | Authenticated durable request; core enforces scope, selected-agent identity, replay protection and evidence authority. |
 | work.participants.list | work | GET | /work/{card_ref}/participants | exposed_read | Read task-scoped participation after core privacy checks; other agents' session identifiers remain private. |

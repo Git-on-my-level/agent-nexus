@@ -1684,7 +1684,7 @@ paths:
       x-anx-surface: canonical
       x-anx-command-id: work.move
       x-anx-cli-path: work move
-      x-anx-why: Move a card under a parent, to top level or to Unsorted
+      x-anx-why: "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason."
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
       x-anx-output-envelope: Returns WorkResponse.
@@ -1802,102 +1802,6 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/promote:
-    post:
-      operationId: initiativePromote
-      deprecated: true
-      summary: Deprecated; use work move with root true
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: initiative.promote
-      x-anx-cli-path: initiative promote
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
-      responses:
-        '200':
-          description: Membership and audit event committed together
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/retire:
-    post:
-      operationId: initiativeRetire
-      deprecated: true
-      summary: Deprecated; use work move with under
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: initiative.retire
-      x-anx-cli-path: initiative retire
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns initiative membership, work and advisory facts.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/InitiativeMutationRequest'}
-      responses:
-        '200':
-          description: Membership and audit event committed together
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/InitiativeMutationResponse'}
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /work/{card_ref}/group:
-    post:
-      operationId: workGroup
-      deprecated: true
-      summary: Deprecated; use work move with under
-      tags: [work]
-      x-anx-surface: canonical
-      x-anx-agent-notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-      x-anx-command-id: work.group
-      x-anx-cli-path: work group
-      x-anx-why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-      x-anx-input-mode: json-body
-      x-anx-streaming: {mode: none}
-      x-anx-output-envelope: Returns `WorkResponse`.
-      x-anx-error-codes: [invalid_request, not_found, conflict, work_unavailable]
-      x-anx-concepts: [cards, evidence]
-      x-anx-stability: beta
-      parameters:
-      - {name: card_ref, in: path, required: true, schema: {type: string}}
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/WorkGroupRequest'}
-      responses:
-        '200':
-          description: Move an existing card under a stored parent
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/WorkResponse'}
         '409':
           $ref: '#/components/responses/ErrorResponse'
   /work/{card_ref}/fold:
@@ -5101,7 +5005,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Stable owner id for this claim, such as an execution or session id.}
+        - {name: owner, required: false, description: "Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: ttl, required: true, description: Lease length as a duration (60s to 7d), for example 2h.}
         - {name: reason, description: Short audit text recorded on the card timeline.}
         - {name: if-epoch, description: Acquire only if the lease epoch still equals this value (0 when never leased).}
@@ -5113,6 +5017,7 @@ paths:
       x-anx-agent-notes: "Fails with 409 lease_held (CLI exit 13) naming the holder and expires_at when another owner holds an unexpired lease. The same owner re-acquiring extends the lease without a new epoch. A new holder increments epoch; use epoch as the fencing token for downstream writes. Not a partition-safe authority lock."
       x-anx-examples:
       - {title: Claim a card for two hours, command: "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"}
+      - {title: Claim a card assigned to you as yourself, command: "anx lease acquire card:review-request --ttl 30m"}
       parameters:
         - $ref: '#/components/parameters/CardID'
       requestBody:
@@ -5150,7 +5055,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: owner, required: false, description: "Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: ttl, description: New lease length from now (60s to 7d); defaults to the lease's current TTL.}
       x-anx-streaming: { mode: none }
       x-anx-output-envelope: "Returns `{ lease, changed }`."
@@ -5197,7 +5102,7 @@ paths:
       x-anx-cli-input:
         mode: flags
         flags:
-        - {name: owner, required: true, description: Owner id that holds the lease.}
+        - {name: owner, required: false, description: "Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same."}
         - {name: reason, description: Short audit text recorded on the card timeline.}
         - {name: handoff-to, description: Owner id that takes the lease under a new epoch in the same transaction.}
         - {name: ttl, description: Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL.}
@@ -5792,7 +5697,7 @@ paths:
       tags: [home]
       x-anx-surface: projection
       x-anx-command-id: overview.get
-      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.
+      x-anx-agent-notes: Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.
       x-anx-cli-path: overview
       x-anx-why: Read the same active-work Overview projection used by the web UI.
       x-anx-input-mode: none
@@ -7337,6 +7242,8 @@ paths:
       x-anx-stability: beta
       x-anx-output-envelope: SSE notification_receipt contains the authorized wake.
       x-anx-error-codes: [not_found, auth_required]
+      parameters:
+        - {name: handoffs, in: query, schema: {type: string, enum: ['1']}, description: Opt in to addressed handoffs on the existing bridge stream.}
       responses:
         '200':
           description: SSE outcome and keepalive messages.
@@ -9362,6 +9269,104 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /agent-handoffs:
+    post:
+      operationId: queueAgentHandoff
+      summary: Queue a handoff for a registered agent
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.send
+      x-anx-cli-path: agent handoffs send
+      x-anx-why: Address a workspace agent by actor identity with portable references.
+      x-anx-agent-notes: "Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:<id>, multica:issue:<uuid>, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record."
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, invalid_request, not_found, ref_unavailable]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [recipient_actor_id, refs, expires_at]
+              properties:
+                recipient_actor_id: {type: string}
+                refs:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items: {type: string, maxLength: 300}
+                expires_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: The queued record or its current state on semantic replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
+  /agent-handoffs/{handoff_id}:
+    parameters:
+      - {name: handoff_id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getAgentHandoff
+      summary: Read a handoff receipt
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.get
+      x-anx-cli-path: agent handoffs get
+      x-anx-why: Read transport delivery and recipient pickup independently.
+      x-anx-agent-notes: "Only the sender and recipient can read a receipt. Delivery and pickup do not change task state."
+      x-anx-input-mode: none
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, not_found]
+      responses:
+        '200':
+          description: Receipt visible to the sender and intended recipient.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
+  /agent-handoffs/{handoff_id}/ack:
+    parameters:
+      - {name: handoff_id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: acknowledgeAgentHandoff
+      summary: Record recipient pickup
+      tags: [agents]
+      x-anx-surface: canonical
+      x-anx-command-id: agent.handoffs.ack
+      x-anx-cli-path: agent handoffs ack
+      x-anx-why: Attest that the recipient checked every reference, or record the first inaccessible reference.
+      x-anx-agent-notes: "Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup."
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [agents]
+      x-anx-stability: beta
+      x-anx-output-envelope: Returns the current handoff receipt.
+      x-anx-error-codes: [agent_required, invalid_request, not_found, conflict, ref_unavailable]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome]
+              properties:
+                outcome: {type: string, enum: [refs_verified, ref_blocked]}
+                blocked_ref: {type: string, description: Required for ref_blocked and must be a ref from the handoff.}
+      responses:
+        '200':
+          description: The first recorded pickup or an identical replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentHandoff'}
 
   /agent-notifications:
     get:
@@ -11816,6 +11821,7 @@ components:
         unsorted: {type: boolean, enum: [true], description: Remove its parent and place it in Unsorted.}
         reason: {type: string, minLength: 1, maxLength: 2000, description: Required for root and when moving an initiative under another card.}
         after: {type: string, description: Optional preceding sibling plan step id; never creates a plan step or hierarchy edge. Children remain ordered by creation time.}
+        replay_as: {type: string, enum: [work.group], description: Resend a work.group request saved before that route was removed. The move uses that request's replay scope, so a group that already landed replays its receipt instead of moving again.}
       oneOf:
       - required: [under]
         not: {anyOf: [{required: [root]}, {required: [unsorted]}]}
@@ -11887,14 +11893,6 @@ components:
             required: [argv]
             properties:
               argv: {type: array, items: {type: string}}
-    WorkGroupRequest:
-      type: object
-      properties:
-        actor_id: {type: string}
-        request_key: {type: string, maxLength: 256}
-        under: {type: string, description: Visible open parent card ref.}
-        after: {type: string, description: Optional preceding plan step id.}
-      required: [under]
     WorkFoldRequest:
       type: object
       properties:
@@ -12613,7 +12611,7 @@ components:
     PlanHealth:
       type: object
       required: [state, reason, since]
-      description: "New cards receive a computed source=default promise 12 hours after creation, superseded by explicit promises, cadence or evidence. Agent creators automatically acquire a 24-hour work lease. Digest-only work has state=digest and no repeat alerts. Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (live-owned non-cadence work with nothing promised), digest (unowned/fallback work or a default after its one reminder). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
+      description: "New cards receive a computed source=default promise 12 hours after creation, superseded by explicit promises, cadence or evidence. Agent creators automatically acquire a 24-hour work lease, except on work they assign to another actor, which the assignee claims. Digest-only work has state=digest and no repeat alerts. Cadence cards use source=cadence: moving through twice the cadence from the last receipt (or cadence assignment before the first run), then past_promise; never no_promise. Their reason reports receipt health. Other cards are computed on read from one clock, promise versus evidence (anx-schema promises). A live note promise is the stated next, so reason names that note's next step and date. Plan-step due dates, the effective due_at and the first RFC3339/YYYY-MM-DD date inside wake_condition are milestones and count only when no live note promise remains; then the earliest unmet at wins. A plan edit meets a milestone inside the horizon and does not meet a note promise. Evidence, a step status change, a linked step moving, or a changed source observation meets a note promise; last_evidence_at is the newest of those plus plan edits. States: done (card phase done or cancelled), past_promise (the counted promise's at is in the past and no reset landed since), moving (a counted promise is still in the future), no_promise (live-owned non-cadence work with nothing promised), digest (unowned/fallback work or a default after its one reminder). There are no duration thresholds; blocked is a count, not a state. since is promise.at for past_promise, last_evidence_at for moving and no_promise, null for done or when unknown."
       properties:
         state: {type: string, enum: [past_promise, moving, no_promise, digest, done]}
         reason: {type: string}
@@ -12625,7 +12623,7 @@ components:
     PossiblyMoot:
       type: object
       required: [flagged, sources]
-      description: "Overtaken by events. Only sources ANX has actually observed count as terminal — a done card, or a PR observed merged or closed through the observation cache. A backlog or ready card, or an open ask, is flagged when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published, resolved). Linked sources are plan step refs and related_refs, resolved through the batched evidence-backed ref resolution; PR URLs read merged from ingested observations, never a read-time fetch. Context-only refs (documents, topics, boards, threads) neither contribute nor block; any other ref that is unresolved, invisible to the reader or of unknown workflow state withholds the flag entirely. The ask rule uses the phase the brief shows. A card placed in backlog, ready, in_progress, or review is also flagged when its latest live note — the note brief.v1 shows — cites an explicit event ref to an inbox ask or review the reader can see that is already answered, resolved, withdrawn, or expired, including a needs_context answer whose expires_at has passed. Stored blocked is placed in in_progress and stored in_review is placed in review, so both are eligible. done and cancelled stay closed. The linked-source rule stays on stored backlog and ready. The ask rule can flag with sources still zero. Prose without that ref is ignored. An ask the reader cannot see does not flag and is not named. Never closes anything: the flag only carries evidence so a human or agent can close the card or ask."
+      description: "Overtaken by events. Only sources ANX has actually observed count as terminal — a done card, or a PR observed merged or closed through the observation cache. A backlog or ready card, or an open ask, is flagged when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published, resolved). Linked sources are plan step refs and related_refs, resolved through the batched evidence-backed ref resolution; PR URLs read merged from ingested observations, never a read-time fetch. Context-only refs (documents, topics, boards, threads) neither contribute nor block; any other ref that is unresolved, invisible to the reader or of unknown workflow state withholds the flag entirely. The ask rule uses the phase the brief shows. A card placed in backlog, ready, in_progress, or review is also flagged when its latest live note — the note brief.v1 shows — cites an explicit event ref to an inbox ask or review the reader can see that is already answered, resolved, withdrawn, or expired, including a needs_context answer whose expires_at has passed; a skipped answer is not decided and does not flag. Stored blocked is placed in in_progress and stored in_review is placed in review, so both are eligible. done and cancelled stay closed. The linked-source rule stays on stored backlog and ready. The ask rule can flag with sources still zero. Prose without that ref is ignored. An ask the reader cannot see does not flag and is not named. Never closes anything: the flag only carries evidence so a human or agent can close the card or ask."
       properties:
         flagged: {type: boolean}
         reason: {type: string, description: "Evidence sentence over observed sources only, for example \"all 2 linked sources are merged\", or the code next_ask_decided when that rule is what flagged the card."}
@@ -13236,23 +13234,6 @@ components:
           items: { $ref: '#/components/schemas/TypedRef' }
         provenance: { $ref: '#/components/schemas/Provenance' }
 
-    InitiativeMutationRequest:
-      type: object
-      required: [reason]
-      properties:
-        actor_id: {type: string}
-        request_key: {type: string, description: Retain the key and original body until confirmed.}
-        reason: {type: string, minLength: 1, maxLength: 2000}
-        to_board: {type: string, description: Retire destination; defaults to oldest active non-initiatives board or creates Tasks.}
-        under: {type: string, description: Retire only; move under a visible open parent card without changing plan steps.}
-    InitiativeMutationResponse:
-      type: object
-      required: [work, event, initiative_budget]
-      properties:
-        work: {$ref: '#/components/schemas/Work'}
-        event: {type: object, additionalProperties: true}
-        initiative_budget: {type: object, additionalProperties: true}
-        over_target: {$ref: '#/components/schemas/InitiativeOverTarget'}
     InitiativeOverTarget:
       type: object
       required: [count, target, truncated, next_actions]
@@ -14093,11 +14074,11 @@ components:
 
     HumanAttentionResponseOutcome:
       type: string
-      enum: [answered, approved, rejected, acknowledged, needs_context, resolved]
+      enum: [answered, approved, rejected, acknowledged, needs_context, resolved, skipped]
       description: >
         answered means a chosen proposal or free reply; approved and rejected mean the
         explicit review Approve and Reject actions; acknowledged means the operator
-        closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. The response text remains the audit note.
+        closed the item without answering it. needs_context returns the task to its owner without counting as answered; re-ask with supersedes. resolved explicitly closes a native task. skipped means the human cleared the decision without deciding it (Decide's Skip): the ask closes with status answered so existing waiters end, nothing is ruled or recorded as a standing ruling, the task returns to its owner as with needs_context, a card citing it is not treated as decided, and the requester may ask again later (with supersedes) if it still needs a decision. Server-linked access requests do not accept it. The response text remains the audit note.
 
     CurationCandidate:
       type: object
@@ -14582,6 +14563,22 @@ components:
             items: { $ref: '#/components/schemas/AgentNotificationReceipt' }
       required: [thread, events, artifacts, topics, cards, documents]
 
+    AgentHandoff:
+      type: object
+      required: [handoff_id, sender_actor_id, recipient_actor_id, refs, queued_at, expires_at, delivery_status, pickup_status]
+      properties:
+        handoff_id: {type: string}
+        sender_actor_id: {type: string}
+        recipient_actor_id: {type: string}
+        refs: {type: array, items: {type: string}}
+        queued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        delivery_status: {type: string, enum: [queued, claimed, bridge_delivered, failed, expired]}
+        bridge_delivered_at: {type: string, format: date-time}
+        pickup_status: {type: string, enum: [pending, acknowledged, expired]}
+        acknowledged_at: {type: string, format: date-time}
+        outcome: {type: string, enum: [refs_verified, ref_blocked]}
+        blocked_ref: {type: string}
     AgentNotificationReceipt:
       type: object
       description: Sender/operator-visible projection of an agent wake notification.
@@ -14949,7 +14946,6 @@ components:
       properties:
         generated_at: { type: string, format: date-time }
         since_you_last_looked: { $ref: '#/components/schemas/OverviewChanges' }
-        brief: { $ref: '#/components/schemas/OverviewBrief' }
         work:
           type: object
           required: [status, total, human_count, items]
@@ -15402,200 +15398,6 @@ components:
         answered_at: { type: string, format: date-time }
         answered_by: { $ref: '#/components/schemas/BriefPrincipal' }
         followed_recommendation: { type: boolean }
-    OverviewBrief:
-      type: object
-      required: [status, generated_at, decisions, since_last_look, at_risk, machine, initiatives]
-      additionalProperties: true
-      description: >
-        Morning brief: five ranked, computed answers for the top of Overview — what needs a decision, what changed since the
-        caller's previous visit, what is off track and why, whether agents are working, and where each initiative actually is.
-        Derived entirely from the rows this request already loaded and already filtered (the bounded visit work snapshot, the
-        assembled needs_you rows, since_you_last_looked and the agent roster), so it issues no additional query and adds no
-        O(workspace) pass. Nothing is hand-maintained. Counts describe only what the caller is authorized to see: where access
-        is denied the number is smaller, and no field reveals that something was withheld. Sections carry at most section_limit
-        rows plus a `more` remainder.
-      properties:
-        status: { type: string, enum: [ok] }
-        generated_at: { type: string, format: date-time }
-        section_limit: { type: integer, description: Rows a section shows before the more remainder. }
-        throughput_hours: { type: integer, description: Window for machine.finished_24h. }
-        decisions: { $ref: '#/components/schemas/OverviewBriefDecisions' }
-        since_last_look: { $ref: '#/components/schemas/OverviewBriefChanges' }
-        at_risk: { $ref: '#/components/schemas/OverviewBriefRisk' }
-        machine: { $ref: '#/components/schemas/OverviewBriefMachine' }
-        initiatives: { $ref: '#/components/schemas/OverviewBriefInitiatives' }
-
-    OverviewBriefDecisions:
-      type: object
-      required: [status, count, items, more, href]
-      description: >
-        The needs_you rows, ranked. Score precedence is blocking open work (1000 per visible dependent), then an overdue (600)
-        or within-48h (300) due date, then priority (critical/p0 320, high/p1 200, medium/p2 80, low/p3 20), then a blocked
-        phase (150), then age at a third of a point per hour capped at 30 days (240). Age is deliberately sub-critical: it
-        lifts work everyone has walked past without letting a stale question outrank a p0 raised this morning. Ties break
-        oldest first, then by id, so the order is stable across reads. `reason` is the computed explanation for the rank, at most
-        three clauses. blocks counts only dependents this caller can see, so it is a lower bound and never implies a hidden row.
-      properties:
-        status: { type: string, enum: [ok, unavailable] }
-        message: { type: string }
-        count: { type: integer, description: Ranked candidates, not just the rows returned. }
-        more: { type: integer }
-        truncated: { type: boolean }
-        href: { type: string }
-        items: { type: array, items: { $ref: '#/components/schemas/OverviewBriefDecision' } }
-
-    OverviewBriefDecision:
-      type: object
-      required: [id, title, href, reason, signals]
-      properties:
-        id: { type: string, description: Matching needs_you row id. }
-        title: { type: string }
-        source: { type: string }
-        href: { type: string }
-        reason: { type: string, description: Computed rank explanation, e.g. "blocks 2 cards · 3d without a change". }
-        signals:
-          type: object
-          additionalProperties: true
-          properties:
-            kind: { type: string, enum: [task, ask, decision] }
-            blocks: { type: integer, description: Visible open rows declaring depends_on this one; a lower bound. }
-            priority: { type: string }
-            phase: { type: string }
-            due_at: { type: string, format: date-time }
-            age_hours: { type: integer }
-            since: { type: string, format: date-time }
-
-    OverviewBriefChanges:
-      type: object
-      required: [since, groups, total]
-      description: >
-        Grouped digest of what changed since the caller's previous Overview visit, computed over the same bounded visible rows.
-        Groups are ordered finished, newly blocked, new asks, new decisions, asks answered, plan steps done, initiatives off
-        track, cancelled, updated; empty groups are omitted. first_visit is true when there is no previous visit to compare with,
-        which is not the same as nothing having changed. newly_blocked counts transitions, not current state: a card already
-        blocked at the previous visit, or one whose previous phase is unknown, is reported under updated, so editing a blocked
-        card is never reported as a new blocker.
-      properties:
-        since: { type: string, format: date-time, nullable: true }
-        first_visit: { type: boolean }
-        total: { type: integer }
-        truncated: { type: boolean }
-        groups: { type: array, items: { $ref: '#/components/schemas/OverviewBriefChangeGroup' } }
-
-    OverviewBriefChangeGroup:
-      type: object
-      required: [key, label, count, items, more]
-      properties:
-        key: { type: string, enum: [completed, newly_blocked, new_asks, decisions, answered, steps, initiatives, cancelled, updated] }
-        label: { type: string }
-        count: { type: integer }
-        more: { type: integer }
-        items:
-          type: array
-          items:
-            type: object
-            required: [ref, title, href]
-            properties:
-              ref: { type: string }
-              title: { type: string }
-              href: { type: string }
-              at: { type: string, format: date-time }
-              step_id: { type: string, description: Plan step this row reports, for a completed-step row. Two steps of one initiative share its ref, so ref plus step_id is the row identity. }
-
-    OverviewBriefRisk:
-      type: object
-      required: [status, count, items, more]
-      description: >
-        Initiatives and work past their promise, longest past first. Every row carries the computed promise reason. A row with
-        no computed reason is omitted rather than guessed at.
-      properties:
-        status: { type: string, enum: [ok] }
-        count: { type: integer }
-        more: { type: integer }
-        truncated: { type: boolean }
-        items:
-          type: array
-          items:
-            type: object
-            required: [ref, title, href, state, reason]
-            properties:
-              ref: { type: string }
-              title: { type: string }
-              href: { type: string }
-              state: { type: string, enum: [past_promise] }
-              reason: { type: string }
-              since: { type: string, format: date-time }
-              progress:
-                type: object
-                properties:
-                  done: { type: integer }
-                  total: { type: integer }
-
-    OverviewBriefMachine:
-      type: object
-      required: [status, finished_24h, agents_finished_24h, href]
-      description: >
-        Is the machine running. working and waiting reuse the roster's derived states; stuck is the three-way silence split —
-        an agent with no recent signal counts as stuck only while it holds an open run or a card, never merely for being
-        offline or never enrolled. finished_24h counts visible cards that reached done or cancelled inside throughput_hours and
-        agents_finished_24h the distinct owners among them, so throughput survives a roster read failure; working, waiting and
-        stuck are then null and roster_status is unavailable.
-      properties:
-        status: { type: string, enum: [ok] }
-        roster_status: { type: string, enum: [ok, unavailable] }
-        message: { type: string }
-        working: { type: integer, nullable: true }
-        waiting: { type: integer, nullable: true }
-        stuck: { type: integer, nullable: true }
-        finished_24h: { type: integer }
-        agents_finished_24h: { type: integer }
-        truncated: { type: boolean }
-        roster_truncated: { type: boolean }
-        href: { type: string }
-        stuck_items:
-          type: array
-          items:
-            type: object
-            required: [ref, title, href, reason]
-            properties:
-              ref: { type: string }
-              title: { type: string }
-              href: { type: string }
-              reason: { type: string }
-              last_signal_at: { type: string, format: date-time }
-
-    OverviewBriefInitiatives:
-      type: object
-      required: [status, count, items, more, by_state, href]
-      description: >
-        Every initiative's promise state, in the shared order (past_promise, no_promise, moving, digest, done). by_state counts all
-        of them by state, so an initiative with no promise is visible as a gap rather than reported as moving.
-      properties:
-        status: { type: string, enum: [ok] }
-        count: { type: integer }
-        more: { type: integer }
-        truncated: { type: boolean }
-        href: { type: string }
-        by_state: { type: object, additionalProperties: { type: integer } }
-        items:
-          type: array
-          items:
-            type: object
-            required: [ref, title, href, state, reason]
-            properties:
-              ref: { type: string }
-              title: { type: string }
-              href: { type: string }
-              state: { type: string, enum: [past_promise, moving, no_promise, digest, done] }
-              reason: { type: string }
-              phase: { type: string }
-              next_step: { type: string }
-              progress:
-                type: object
-                properties:
-                  done: { type: integer }
-                  total: { type: integer }
-
     OverviewDashboard:
       type: object
       required: [status]

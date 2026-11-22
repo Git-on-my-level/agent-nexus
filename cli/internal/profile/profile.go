@@ -233,17 +233,3 @@ func LoadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	}
 	return ed25519.PrivateKey(decoded), nil
 }
-
-func ParseAccessTokenExpiry(raw string) (time.Time, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, false
-	}
-	if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return parsed, true
-	}
-	if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
-		return parsed, true
-	}
-	return time.Time{}, false
-}

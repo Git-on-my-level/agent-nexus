@@ -504,27 +504,6 @@ func TestRunDoctorJSON(t *testing.T) {
 	}
 }
 
-func doctorCheckOK(checks []any, name string) bool {
-	for _, raw := range checks {
-		check, _ := raw.(map[string]any)
-		if anyStringValue(check["name"]) == name {
-			ok, _ := check["ok"].(bool)
-			return ok
-		}
-	}
-	return false
-}
-
-func doctorCheckMessageContains(checks []any, name string, needle string) bool {
-	for _, raw := range checks {
-		check, _ := raw.(map[string]any)
-		if anyStringValue(check["name"]) == name {
-			return strings.Contains(anyStringValue(check["message"]), needle)
-		}
-	}
-	return false
-}
-
 func TestRunAPICallJSONWithStdinBody(t *testing.T) {
 	t.Parallel()
 

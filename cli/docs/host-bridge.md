@@ -140,13 +140,15 @@ with an inherited agent identity use `ANX_AS= anx bridge run`.
 
 Runtime receipts are private under each retained namespace's `runtime-receipts/`.
 An earlier runtime claim without a durable local outcome becomes an inspectable
-`uncertain` receipt and pauses that lane; it is never silently adopted or rerun.
+`uncertain` receipt. An addressed handoff with an uncertain outcome is skipped
+without replay, so unrelated wakes on the shared stream can still run. An
+uncertain legacy runtime wake still pauses dispatch.
 Doctor also inventories extra/unowned consumers, singleton ownership, migration
 phase, enrollment, namespace safety, runtime uncertainty, and Git writer bindings.
 Namespace checks include sanitized errors without command values or filenames.
 Executing answer/runtime records report `in_progress` while their namespace's
 consumer lock is held; ownerless execution and uncertain/paused records still
-require reconciliation. Startup and migration keep their stricter safety checks.
+require reconciliation. Migration retains its stricter safety checks.
 Service log lines carry RFC3339 UTC timestamps. Normal SSE reconnect deadlines
 are quiet; real stream/job errors remain logged.
 

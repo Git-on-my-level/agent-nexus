@@ -137,8 +137,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `meta command` (command): Get one command metadata entry
 - `meta concepts` (command): List concept index
 - `meta concept` (command): Get commands grouped by concept
-- `initiative promote` (command): <card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-- `initiative retire` (command): <card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
 - `pm context` (command): Read Decide context: visible cards, open decisions and recent activity.
 - `pm actions acknowledge` (command): Acknowledge a failed or unresolvable action.
 - `pm actions get` (command): Read authorization, attempts and receipt; source_reported is not verified.
@@ -158,7 +156,6 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `work create` (command): Create under a named parent, or --initiative for top level. Without either the card enters Unsorted.
 - `work fold` (command): <card> --into <parent> [--request-key key]: transfer references, carry the promise and archive.
 - `work get` (command): Read one work card, source authority, executions and current evidence.
-- `work group` (command): <card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
 - `work list` (command): List work cards across sources in the authenticated workspace.
 - `work patch` (command): Update work metadata with if_version; external status remains source-owned.
 - `work presence` (command): Set the current derived agent's card and progress note.
@@ -510,7 +507,7 @@ Asking for decisions
 - Every ask, review and escalation belongs to a work card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
 - Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.
 - Start with anx ask --template decision > ask.md, edit YAML frontmatter and run anx ask --from-file ask.md --preview. Missing situation, impact or recommendation with why fails CLI lint; --force --reason records an exception. Warnings quote jargon to rewrite. Technical details and labelled evidence {label,url} are collapsed. Native evidence stays in related_refs; older asks render body. ANX runs no rewriting model.
-- Answers atomically record a decision on the card and route next action to its owner/requester. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>.
+- Answers atomically record a decision on the card and route next action to its owner/requester. Only a matching sole ask blocker moves blocked to ready; resolved explicitly completes native work. needs_context returns the note to the owner and exits await with 10; re-ask with --supersedes event:<old-ask>. skipped means the human cleared the ask from Decide without deciding: nothing was ruled and no standing ruling exists, so continue on your stated default where it is reversible, or ask again later with --supersedes if it still needs a decision.
 - Closed subjects withdraw their asks through bounded durable maintenance. Await exits 11 for withdrawal and 12 for expiry. Optional --on-answer or ANX_RESUME_CMD registers a host-local command for anx bridge run; answer JSON goes to stdin, never shell interpolation. Webhook subscriptions return a once-only signing secret. The task remains authoritative even if delivery fails.
 
 
@@ -520,7 +517,7 @@ Daily loop
 2. Use `anx where card:<slug>` to inspect its home before substantive work. Use `anx work start card:<slug>` only when explicitly taking ownership of a Nexus-native task: it adds an assignee and marks in progress.
 3. Post `anx note card:<slug> "What changed and why" --evidence <ref>` after meaningful progress. Include evidence, decisions, blockers, uncertainty and next steps; avoid raw chat copies and repeated unchanged updates. A note with `--next` or `--evidence` is progress: it starts a card that has not started (backlog or ready) when you own it or nobody does, assigning you if it has no owner (result.started); a card someone else owns stays put with warning note_card_not_started. A parent whose children have started reads in_progress in tree, where and Watch. Notes carry a request_key: rerun the same note after a timeout and it is sent once. Always name the task explicitly: participation does not change legacy current-card selection.
 4. Report execution blockers on the card. For a consequential human decision, create one recommended ask with `anx ask --from-file ask.md`; keep `next_actor` on the agent and do not also block the card for that question. Withdraw an ask that is no longer needed with `anx ask withdraw <event:ask-id> --reason "<short reason>"`. Use `anx work block` only for an authorized Nexus-native task blocked by an execution issue, not as a duplicate of a human ask.
-5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --deadline <RFC3339>` as a background process and re-arm it after each return (the deadline is absolute, so re-arming never extends it; exit 14 deadline_reached means no answer by then): it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected.
+5. Filing an ask is not finished until something will wake you. Run `anx await <ask-id>` when one answer gates the next step. After `anx auth access-requests request`, run the returned `anx await access-request:<id>`: exit 0 means approved and exit 9 means denied. The decision uses the same answer notification and wake as an ask. With several open asks, or to keep working meanwhile, run `anx await --answers --deadline <RFC3339>` as a background process and re-arm it after each return (the deadline is absolute, so re-arming never extends it; exit 14 deadline_reached means no answer by then): it blocks until this session has answers it has not been handed, skips other sessions' asks and marks nothing read. `anx orient` and `anx inbox list --status answered` also show replies. Exit 8 means timeout; exit 9 means an individual answer was rejected. Ask another agent, on any machine: create a card assigned to it (`anx cards create --board <board> --title "<question>" --body-file q.md --assignee-ref actor:<id>`) and run `anx await card:<handle>`; it returns the answer as `resolution`. To answer one: find it with `anx work list --owner me`, claim it with `anx lease acquire <card> --ttl 30m` (the owner defaults to you), then `anx cards resolve <card> --body "<answer>"`. When it needs a human, file `anx ask --subject-ref <card> --blocks <card>`, move the card to `blocked`, and resolve it with the answer once it arrives.
 6. Agent wakeups use the same workspace-local notification across supported harnesses: on wake, read `anx inbox list --unread` or `anx orient`, then mark each processed answer to your own ask with `anx inbox read event:<ask-id>`. `inbox read` marks that answer only, including before wake delivery, and that read state is shared with other sessions of your agent, so it refuses an ask another session filed; `anx notifications read --wakeup-id <id>` separately marks the wake notification read.
 7. Verify acceptance criteria before changing task completion. For an authorized Nexus-native task, `anx done card:<slug> --evidence <url|event:ref|artifact:ref>` resolves that explicit task and clears legacy presence. Report source-owned completion as attributed evidence for its authorized source workflow. Closing a session or finishing a run never completes a task.
 8. When ANX itself gets in your way (a confusing error, a missing command, a view that disagrees with the CLI), file it with `anx feedback "<what happened>" --evidence <ref>`: it lands on card:anx-feedback for the people who run the workspace and returns a prefilled upstream issue link.
@@ -3754,12 +3751,12 @@ Inputs:
   - body `partial` (boolean)
   - body `related_refs` (list<any>)
   - body `response_text` (string)
-  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved
+  Enum values: notify_mode: none, original, replacement; outcome: acknowledged, answered, approved, needs_context, rejected, resolved, skipped
 
 CLI flags (`inbox respond`):
   --inbox-item-id <id>    Inbox item id or list alias (see `debug inbox list`).
   --response-text <text>  Freeform response text.
-  --outcome <value>       answered, approved, rejected, acknowledged, needs_context, or resolved (required).
+  --outcome <value>       answered, approved, rejected, acknowledged, needs_context, resolved, or skipped (required).
   --notify-mode <mode>    original, target, or none.
   --actor-id <id>         Actor id (`me` uses the resolved agent's actor when configured).
   --from-file <path>      JSON body file (API request shape).
@@ -4249,92 +4246,6 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx debug meta concept ... ; anx --json debug meta concept ... ; anx debug meta concept ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
-```
-
-## `initiative promote`
-
-<card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-
-```text
-Generated Help: initiative promote
-
-- Command ID: `initiative.promote`
-- CLI path: `initiative promote`
-- HTTP: `POST /work/{card_ref}/promote`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns initiative membership, work and advisory facts.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `initiative retire`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  - body `to_board` (string)
-  - body `under` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --reason text: Deprecated: use anx work move <card> --root --reason text.
-
-Usage: anx initiative promote <ref> (or --card-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `initiative retire`
-
-<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
-
-```text
-Generated Help: initiative retire
-
-- Command ID: `initiative.retire`
-- CLI path: `initiative retire`
-- HTTP: `POST /work/{card_ref}/retire`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns initiative membership, work and advisory facts.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `initiative promote`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `reason` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `request_key` (string)
-  - body `to_board` (string)
-  - body `under` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --reason text [--to-board board:ref] [--under card:initiative]: Deprecated: use anx work move <card> --under <parent> --reason text.
-
-Usage: anx initiative retire <ref> (or --card-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
 ```
 
 ## `pm context`
@@ -4844,7 +4755,7 @@ Generated Help: work briefing
 - Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
-- Adjacent commands: `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -4879,7 +4790,7 @@ Generated Help: work capabilities
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -4910,7 +4821,7 @@ Generated Help: work checkpoint
 - Error codes: `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Read anx context --brief before picking up work. Checkpoints preserve context, never grant ownership or permission. Save decisions and acceptance evidence through their canonical surfaces.
-- Adjacent commands: `work briefing`, `work capabilities`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -4957,7 +4868,7 @@ Generated Help: work create
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Board placement is layout only. under names the stored parent; initiative true explicitly creates an initiative. Without either, needs_home is true. Paths are input aliases resolved before creation; stored references remain canonical card refs.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5042,7 +4953,7 @@ Generated Help: work fold
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5084,7 +4995,7 @@ Generated Help: work get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5095,48 +5006,6 @@ Work is an existing card; projects are topics. Scope and identity come from the 
 Read one work card, source authority, executions and current evidence.
 
 Usage: anx work get <ref> (or --work-id <ref>)
-
-Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
-
-Use --json for one machine-readable envelope.
-```
-
-## `work group`
-
-<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
-
-```text
-Generated Help: work group
-
-- Command ID: `work.group`
-- CLI path: `work group`
-- HTTP: `POST /work/{card_ref}/group`
-- Side effect class: `remote_coordination_write`
-- Stability: `beta`
-- Input mode: `json-body`
-- Why: Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.
-- Output: Returns `WorkResponse`.
-- Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
-- Concepts: `cards`, `evidence`
-- Agent notes: Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
-
-Inputs:
-  Required:
-  - path `card_ref`
-  - body `under` (string)
-  Optional:
-  - body `actor_id` (string)
-  - body `after` (string)
-  - body `request_key` (string)
-
-Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
-
-<card> --under <parent> [--after <step-id>] [--request-key key]: Deprecated: use anx work move <card> --under <parent>.
-
-Usage: anx work group <ref> (or --work-id <ref>) [--from-file <path|->]
-
-JSON body follows the central API contract; use anx debug meta commands for generated schemas. Server validates scope, versions and evidence.
 
 Lists preserve next_cursor; pass it unchanged with --cursor. Reading does not refresh or mutate sources.
 
@@ -5161,7 +5030,7 @@ Generated Help: work list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5200,7 +5069,7 @@ Generated Help: work patch
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `outcome_unknown`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5258,7 +5127,7 @@ Generated Help: work presence
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `run_attribution_invalid`
 - Concepts: `agents`, `cards`, `runs`
 - Agent notes: Validate workspace identity and route-specific proof before mutation; error codes are stable.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Optional:
@@ -5296,7 +5165,7 @@ Generated Help: work resolve
 - Error codes: `invalid_request`, `not_found`, `conflict`
 - Concepts: `cards`
 - Agent notes: Stored parentage is the only hierarchy. Paths are aliases; persist canonical card refs. Suggestions never file work automatically. Reads admit only visible cards before hydration and bound expansion to depth three.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work tree`, `work unfold`, `work ungrouped`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5328,7 +5197,7 @@ Generated Help: work unfold
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5368,7 +5237,7 @@ Generated Help: work ungrouped
 - Error codes: `invalid_request`, `work_unavailable`
 - Concepts: `cards`
 - Agent notes: Workspace authenticated; reader-scoped deterministic grouping.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`
 
 Work is an existing card; projects are topics. Scope and identity come from the resolved host agent. No local tracker database.
 
@@ -5400,7 +5269,7 @@ Generated Help: work observations list
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5437,7 +5306,7 @@ Generated Help: work observations submit
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5500,7 +5369,7 @@ Generated Help: work participants list
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5537,7 +5406,7 @@ Generated Help: work participants register
 - Error codes: `auth_required`, `invalid_token`, `forbidden`, `invalid_request`, `not_found`, `conflict`, `sessions_unavailable`, `quota_exceeded`
 - Concepts: `cards`, `evidence`
 - Agent notes: Existing bearer authentication is required, including in development mode. Registration and participation writes require an agent principal and never mint credentials. Sessions are private to that principal. Task reads expose only explicitly shared participation metadata; native session identifiers and other task links are never shared. Upserts refresh server-clock activity leases of 120 seconds. A session heartbeat does not refresh task participation. Session closure is terminal and never changes work state, assignees, source authority, or ownership. Session identity is independent of per-attempt /runs. Capabilities are caller-reported, not server-verified support.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work patch`, `work presence`, `work refresh get`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5578,7 +5447,7 @@ Generated Help: work refresh get
 - Error codes: `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh request`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -5613,7 +5482,7 @@ Generated Help: work refresh request
 - Error codes: `quota_exceeded`, `invalid_request`, `not_found`, `conflict`, `work_unavailable`
 - Concepts: `cards`, `evidence`
 - Agent notes: Workspace authenticated. Source-backed fields are read-only outside attributed observations; refresh acceptance is not a successful read.
-- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work group`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
+- Adjacent commands: `work briefing`, `work capabilities`, `work checkpoint`, `work create`, `work fold`, `work get`, `work list`, `work move`, `work observations list`, `work observations submit`, `work participants list`, `work participants register`, `work patch`, `work presence`, `work refresh get`, `work resolve`, `work tree`, `work unfold`, `work ungrouped`
 
 Inputs:
   Required:
@@ -6567,6 +6436,7 @@ Generated Help: lease acquire
 - Adjacent commands: `lease release`, `lease renew`, `lease show`
 - Examples:
   - Claim a card for two hours: `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'`
+  - Claim a card assigned to you as yourself: `anx lease acquire card:review-request --ttl 30m`
 
 Inputs:
   Required:
@@ -6580,7 +6450,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Stable owner id for this claim
+  - `--owner`: Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--ttl` required: Lease length as a duration (60s to 7d)
   - `--reason`: Short audit text recorded on the card timeline.
   - `--if-epoch`: Acquire only if the lease epoch still equals this value (0 when never leased).
@@ -6590,13 +6460,13 @@ Local Help: lease acquire
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Claim a card before starting work; exits 13 lease_held naming the holder when another owner holds it.
-- Quick start: anx lease acquire <card> --owner <id> --ttl <dur>
+- Quick start: anx lease acquire <card> --ttl <dur>
 - Examples:
   - `anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'ramp step 3'`
 
 Flags:
   <card>                       Accepted by lease acquire.
-  --owner <id>                 Accepted by lease acquire.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --ttl <dur>                  Accepted by lease acquire (60s to 7d).
   --reason <text>              Accepted by lease acquire.
   --if-epoch <n>               Accepted by lease acquire.
@@ -6639,7 +6509,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Owner id that holds the lease.
+  - `--owner`: Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--ttl`: New lease length from now (60s to 7d); defaults to the lease's current TTL.
 
 Local Help: lease renew
@@ -6647,13 +6517,13 @@ Local Help: lease renew
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Extend a lease you still hold; an expired lease must be re-acquired (exit 12).
-- Quick start: anx lease renew <card> --owner <id>
+- Quick start: anx lease renew <card>
 - Examples:
   - `anx lease renew card:ramp-batch --owner exec-7f3a --ttl 2h`
 
 Flags:
   <card>                       Accepted by lease renew.
-  --owner <id>                 Accepted by lease renew.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --ttl <dur>                  Accepted by lease renew.
 
 Global flags:
@@ -6697,7 +6567,7 @@ Inputs:
 
 CLI input:
   Flags:
-  - `--owner` required: Owner id that holds the lease.
+  - `--owner`: Owner id that holds the lease. Defaults to the caller (actor:<your actor id>); `me` means the same.
   - `--reason`: Short audit text recorded on the card timeline.
   - `--handoff-to`: Owner id that takes the lease under a new epoch in the same transaction.
   - `--ttl`: Hand-off lease length (60s to 7d); only with --handoff-to. Defaults to the released lease's TTL.
@@ -6707,14 +6577,14 @@ Local Help: lease release
 - Kind: `local helper`
 - Side effect class: `remote_coordination_write`
 - Summary: Give up your lease, or hand it to the next owner with --handoff-to; releasing live work without a hand-off wakes the PM (card_unowned).
-- Quick start: anx lease release <card> --owner <id>
+- Quick start: anx lease release <card>
 - Examples:
   - `anx lease release card:ramp-batch --owner exec-7f3a --reason 'step 3 merged'`
   - `anx lease release card:ramp-batch --owner exec-7f3a --handoff-to exec-9c21 --ttl 2h`
 
 Flags:
   <card>                       Accepted by lease release.
-  --owner <id>                 Accepted by lease release.
+  --owner <id>|me              Lease owner; defaults to you (actor:<your actor id>); me is the same. A bare id means actor:<id> and re-points the assignee; an opaque launcher label needs a colon, such as exec:7f3a.
   --reason <text>              Accepted by lease release.
   --handoff-to <id>            Accepted by lease release; moves the lease to this owner with a new epoch in the same transaction.
   --ttl <dur>                  Accepted by lease release only with --handoff-to (60s to 7d).

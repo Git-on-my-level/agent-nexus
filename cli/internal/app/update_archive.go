@@ -87,9 +87,6 @@ func (r *releaseBudgetReader) Read(p []byte) (int, error) {
 func safeArchiveName(name string) bool {
 	return name != "" && !strings.HasPrefix(name, "/") && !strings.Contains(name, "\\") && name == path.Clean(name) && name != ".." && !strings.HasPrefix(name, "../")
 }
-func extractReleaseBinary(archive string, b []byte) ([]byte, os.FileMode, error) {
-	return extractReleaseBinaryContext(context.Background(), archive, b)
-}
 func extractReleaseBinaryContext(ctx context.Context, archive string, b []byte) ([]byte, os.FileMode, error) {
 	if strings.HasSuffix(archive, ".zip") {
 		return extractZIPBinaryContext(ctx, b)

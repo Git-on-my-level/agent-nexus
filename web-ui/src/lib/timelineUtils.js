@@ -16,7 +16,7 @@ const EVENT_TYPE_LABELS = {
   human_attention_responded: "Human response recorded",
 };
 
-export const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
+const KNOWN_EVENT_TYPES = new Set(Object.keys(EVENT_TYPE_LABELS));
 
 const EVENT_TYPE_DOT_CLASSES = {
   message_posted: "bg-blue-400",
@@ -160,7 +160,7 @@ function payloadObject(event) {
 }
 
 /** @param {Record<string, unknown>} payload */
-export function changedFieldsFromPayload(payload) {
+function changedFieldsFromPayload(payload) {
   const cf = payload?.changed_fields;
   if (!Array.isArray(cf)) return [];
   return [...new Set(cf.map((x) => String(x).trim()).filter(Boolean))];
@@ -215,7 +215,7 @@ function refDeltaSummary(prev, next, labelHints) {
  * @param {{ labelHints?: Record<string, string> }} [ctx]
  * @returns {string[]}
  */
-export function buildTimelineEventChangePreview(event, ctx = {}) {
+function buildTimelineEventChangePreview(event, ctx = {}) {
   const labelHints = ctx.labelHints ?? {};
   const type = String(event?.type ?? "");
   const payload = payloadObject(event);
@@ -293,7 +293,7 @@ export function buildTimelineEventChangePreview(event, ctx = {}) {
  * @param {Record<string, unknown>} event
  * @returns {string}
  */
-export function buildTimelineEventHeadline(event) {
+function buildTimelineEventHeadline(event) {
   const type = String(event?.type ?? "");
   const payload = payloadObject(event);
   const baseLabel = EVENT_TYPE_LABELS[type] ?? "Event";
@@ -328,7 +328,7 @@ export function buildTimelineEventHeadline(event) {
   return baseLabel;
 }
 
-export function timelineEventUsesMarkdownSummary(type) {
+function timelineEventUsesMarkdownSummary(type) {
   return (
     type === "message_posted" ||
     type === "human_attention_requested" ||

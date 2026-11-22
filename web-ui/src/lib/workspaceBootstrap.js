@@ -105,7 +105,7 @@ function currentAppPathFromPageSnapshot(snapshot) {
     : stripBasePath(snapshot.url.pathname);
 }
 
-export function needsLoginRedirectNow() {
+function needsLoginRedirectNow() {
   const snapshot = get(page);
   const workspace = snapshot.data?.workspace ?? null;
   const workspaceSlug = workspace?.slug ?? "";
@@ -333,7 +333,7 @@ export async function activateDevPersonaSession({
   }
 }
 
-export function actorRegistryHasActor(actorId, actors = []) {
+function actorRegistryHasActor(actorId, actors = []) {
   const wanted = String(actorId ?? "").trim();
   if (!wanted) {
     return false;
@@ -343,7 +343,7 @@ export function actorRegistryHasActor(actorId, actors = []) {
   );
 }
 
-export function defaultHumanActorIdFromDevFixtures(devFixturePersonas) {
+function defaultHumanActorIdFromDevFixtures(devFixturePersonas) {
   return (
     devFixturePersonas.find(
       (persona) =>
@@ -353,7 +353,7 @@ export function defaultHumanActorIdFromDevFixtures(devFixturePersonas) {
   );
 }
 
-export function reconcileDevActorSelection({
+function reconcileDevActorSelection({
   workspaceSlug,
   agent,
   actors,

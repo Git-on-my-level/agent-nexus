@@ -180,15 +180,3 @@ func normalizeTopicFlagRef(raw string) string {
 	}
 	return "topic:" + raw
 }
-
-func (a *App) parseTopicIDAndBodyInput(args []string, commandName string) (string, map[string]any, error) {
-	id, body, err := a.parseIDAndBodyInput(args, "topic-id", "topic id", commandName)
-	if err != nil {
-		return "", nil, err
-	}
-	bodyMap, ok := body.(map[string]any)
-	if !ok {
-		return "", nil, errnorm.Usage("invalid_request", fmt.Sprintf("JSON body for `anx %s` must be an object", commandName))
-	}
-	return id, bodyMap, nil
-}

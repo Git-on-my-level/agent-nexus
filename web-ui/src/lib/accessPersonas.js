@@ -11,10 +11,7 @@ import { formatAgo } from "$lib/time/format.js";
  * host bridge heartbeat never makes a persona active.
  */
 
-export const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Page-level filters, in toolbar order. */
-export const PERSONA_FILTERS = ["active", "idle", "archived"];
+const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function text(value) {
   return String(value ?? "").trim();
@@ -38,7 +35,7 @@ export function personaKind(agent, host) {
 }
 
 /** The persona's own most recent use, as epoch ms, or NaN. */
-export function personaLastUsed(agent) {
+function personaLastUsed(agent) {
   const times = [agent?.last_used_at, agent?.last_progress_at]
     .map(time)
     .filter(Number.isFinite);

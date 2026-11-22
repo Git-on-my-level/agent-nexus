@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WORKSPACE_HEADER_CONSTANTS } from "../../src/lib/compat/workspaceCompat.js";
+import { WORKSPACE_HEADER_CONSTANTS } from "../../src/lib/workspaceRequestHeaders.js";
 import { buildCoreWorkspaceRoutingHeadersFromSlugs } from "../../src/lib/coreWorkspaceHeadersShared.js";
 import { buildServerCoreWorkspaceContextHeaders } from "../../src/lib/server/coreWorkspaceContextHeaders.js";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths.js";

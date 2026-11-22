@@ -24,7 +24,7 @@ export function shortNativeId(nativeId) {
 }
 
 /** The source line's name: "GitHub #208", "Multica MUL-12", "Git". */
-export function sourceName(work) {
+function sourceName(work) {
   const source = work?.source ?? {};
   return [sourceLabel(source), shortNativeId(source.native_id)]
     .filter(Boolean)

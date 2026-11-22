@@ -237,15 +237,16 @@ const (
 	HumanAttentionResponseOutcomeAcknowledged = "acknowledged"
 	HumanAttentionResponseOutcomeNeedsContext = "needs_context"
 	HumanAttentionResponseOutcomeResolved     = "resolved"
+	HumanAttentionResponseOutcomeSkipped      = "skipped"
 )
 
 // HumanAttentionResponseOutcomeValues lists every human_attention_response_outcome value in contract order. Do not modify it.
-var HumanAttentionResponseOutcomeValues = []string{HumanAttentionResponseOutcomeAnswered, HumanAttentionResponseOutcomeApproved, HumanAttentionResponseOutcomeRejected, HumanAttentionResponseOutcomeAcknowledged, HumanAttentionResponseOutcomeNeedsContext, HumanAttentionResponseOutcomeResolved}
+var HumanAttentionResponseOutcomeValues = []string{HumanAttentionResponseOutcomeAnswered, HumanAttentionResponseOutcomeApproved, HumanAttentionResponseOutcomeRejected, HumanAttentionResponseOutcomeAcknowledged, HumanAttentionResponseOutcomeNeedsContext, HumanAttentionResponseOutcomeResolved, HumanAttentionResponseOutcomeSkipped}
 
 // IsHumanAttentionResponseOutcome reports whether value is exactly a canonical human_attention_response_outcome value.
 func IsHumanAttentionResponseOutcome(value string) bool {
 	switch value {
-	case HumanAttentionResponseOutcomeAnswered, HumanAttentionResponseOutcomeApproved, HumanAttentionResponseOutcomeRejected, HumanAttentionResponseOutcomeAcknowledged, HumanAttentionResponseOutcomeNeedsContext, HumanAttentionResponseOutcomeResolved:
+	case HumanAttentionResponseOutcomeAnswered, HumanAttentionResponseOutcomeApproved, HumanAttentionResponseOutcomeRejected, HumanAttentionResponseOutcomeAcknowledged, HumanAttentionResponseOutcomeNeedsContext, HumanAttentionResponseOutcomeResolved, HumanAttentionResponseOutcomeSkipped:
 		return true
 	}
 	return false

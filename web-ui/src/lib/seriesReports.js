@@ -1,4 +1,4 @@
-export const seriesPanelTypes = [
+const seriesPanelTypes = [
   // A timeline is a series binding, not a query: an adapter publishes the
   // events and the panel shows them one by one rather than binned.
   "live-timeline",

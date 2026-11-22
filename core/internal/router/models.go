@@ -125,13 +125,3 @@ func VerifyBridgeCheckinSignature(publicKeyB64 string, checkin AgentBridgeChecki
 	hash := sha256.Sum256(bridgeProofMessage(checkin))
 	return ecdsa.VerifyASN1(publicKey, hash[:], signature)
 }
-
-func decodeIntoMap[T any](value map[string]any) (T, error) {
-	var out T
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return out, err
-	}
-	err = json.Unmarshal(encoded, &out)
-	return out, err
-}

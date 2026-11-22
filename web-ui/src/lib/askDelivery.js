@@ -172,7 +172,7 @@ export function deliveryRowModel(delivery, { now = Date.now() } = {}) {
  * this client has never seen keeps core's own word. `Object.hasOwn`, because a
  * phase of `constructor` otherwise answers with a function.
  */
-export function phaseLabel(phase) {
+function phaseLabel(phase) {
   const key = asText(phase);
   if (!key) return "";
   return Object.hasOwn(PHASE_LABELS, key) ? PHASE_LABELS[key] : key;

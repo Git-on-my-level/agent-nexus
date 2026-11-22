@@ -11,12 +11,12 @@ import { randomUUID } from "$lib/replayPolicy.js";
 
 /**
  * Moves, legacy grouping and folds use persisted actor-scoped request keys.
- * Existing work.top_level entries are translated by the outbox sender; new
- * promotion intents always use work.move. Plan undo remains only for saved
+ * Existing work.top_level and work.group entries are translated by the outbox
+ * sender; new grouping and promotion intents always use work.move. Plan undo remains only for saved
  * legacy group operations.
  */
 
-export const GROUPING_OPERATIONS = [
+const GROUPING_OPERATIONS = [
   "work.move",
   "work.group",
   "work.fold",
@@ -27,12 +27,12 @@ export const GROUPING_OPERATIONS = [
 export const isGrouping = (entry) =>
   GROUPING_OPERATIONS.includes(entry?.operation);
 /** One grouping change per card at a time. */
-export const groupingTarget = (ref) => `work:${ref}:grouping`;
+const groupingTarget = (ref) => `work:${ref}:grouping`;
 /** Where an Edit from the outbox hands a saved grouping back to the board. */
 export const GROUPING_DRAFT_TARGET = "board:grouping";
 
 const VERB_OPERATION = {
-  group: "work.group",
+  group: "work.move",
   fold: "work.fold",
   unfold: "work.unfold",
   ungroup: "work.ungroup",

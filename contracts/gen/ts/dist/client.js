@@ -315,6 +315,165 @@ export const commandRegistry = [
         "ts_method": "adaptersToken"
     },
     {
+        "command_id": "agent.handoffs.ack",
+        "cli_path": "agent handoffs ack",
+        "group": "agent",
+        "method": "POST",
+        "path": "/agent-handoffs/{handoff_id}/ack",
+        "operation_id": "acknowledgeAgentHandoff",
+        "summary": "Record recipient pickup",
+        "why": "Attest that the recipient checked every reference, or record the first inaccessible reference.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the current handoff receipt.",
+        "error_codes": [
+            "agent_required",
+            "invalid_request",
+            "not_found",
+            "conflict",
+            "ref_unavailable"
+        ],
+        "concepts": [
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Use the authorized source tooling for each ref. Only the intended recipient can acknowledge pickup.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "outcome",
+                    "type": "string",
+                    "enum_values": [
+                        "ref_blocked",
+                        "refs_verified"
+                    ]
+                }
+            ],
+            "optional": [
+                {
+                    "name": "blocked_ref",
+                    "type": "string"
+                }
+            ]
+        },
+        "path_params": [
+            "handoff_id"
+        ],
+        "adjacent_commands": [
+            "agent.handoffs.get",
+            "agent.handoffs.send",
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
+            "agent.inbox.subscribe",
+            "agent.notifications.dismiss",
+            "agent.notifications.list",
+            "agent.notifications.read",
+            "agent.wakeups.stream"
+        ],
+        "go_method": "AgentHandoffsAck",
+        "ts_method": "agentHandoffsAck"
+    },
+    {
+        "command_id": "agent.handoffs.get",
+        "cli_path": "agent handoffs get",
+        "group": "agent",
+        "method": "GET",
+        "path": "/agent-handoffs/{handoff_id}",
+        "operation_id": "getAgentHandoff",
+        "summary": "Read a handoff receipt",
+        "why": "Read transport delivery and recipient pickup independently.",
+        "input_mode": "none",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the current handoff receipt.",
+        "error_codes": [
+            "agent_required",
+            "not_found"
+        ],
+        "concepts": [
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Only the sender and recipient can read a receipt. Delivery and pickup do not change task state.",
+        "path_params": [
+            "handoff_id"
+        ],
+        "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.send",
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
+            "agent.inbox.subscribe",
+            "agent.notifications.dismiss",
+            "agent.notifications.list",
+            "agent.notifications.read",
+            "agent.wakeups.stream"
+        ],
+        "go_method": "AgentHandoffsGet",
+        "ts_method": "agentHandoffsGet"
+    },
+    {
+        "command_id": "agent.handoffs.send",
+        "cli_path": "agent handoffs send",
+        "group": "agent",
+        "method": "POST",
+        "path": "/agent-handoffs",
+        "operation_id": "queueAgentHandoff",
+        "summary": "Queue a handoff for a registered agent",
+        "why": "Address a workspace agent by actor identity with portable references.",
+        "input_mode": "json-body",
+        "streaming": {
+            "mode": "none"
+        },
+        "output_envelope": "Returns the current handoff receipt.",
+        "error_codes": [
+            "agent_required",
+            "invalid_request",
+            "not_found",
+            "ref_unavailable"
+        ],
+        "concepts": [
+            "agents"
+        ],
+        "stability": "beta",
+        "surface": "canonical",
+        "agent_notes": "Use a registered workspace actor ID and an explicit deadline within seven days. Canonical refs are event:\u003cid\u003e, multica:issue:\u003cuuid\u003e, and GitHub issue, pull request or full commit URLs. Replay the same refs, recipient and deadline for the original record.",
+        "body_schema": {
+            "required": [
+                {
+                    "name": "expires_at",
+                    "type": "datetime"
+                },
+                {
+                    "name": "recipient_actor_id",
+                    "type": "string"
+                },
+                {
+                    "name": "refs",
+                    "type": "list\u003cstring\u003e"
+                }
+            ]
+        },
+        "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.inbox.answers.read",
+            "agent.inbox.asks.list",
+            "agent.inbox.subscribe",
+            "agent.notifications.dismiss",
+            "agent.notifications.list",
+            "agent.notifications.read",
+            "agent.wakeups.stream"
+        ],
+        "go_method": "AgentHandoffsSend",
+        "ts_method": "agentHandoffsSend"
+    },
+    {
         "command_id": "agent.inbox.answers.read",
         "cli_path": "agent inbox answers read",
         "group": "agent",
@@ -351,6 +510,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.asks.list",
             "agent.inbox.subscribe",
             "agent.notifications.dismiss",
@@ -388,6 +550,9 @@ export const commandRegistry = [
         "surface": "projection",
         "agent_notes": "Results are scoped to the authenticated requester and keyset-paginated; do not infer open state from a partial event timeline.",
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.subscribe",
             "agent.notifications.dismiss",
@@ -449,6 +614,9 @@ export const commandRegistry = [
             ]
         },
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.asks.list",
             "agent.notifications.dismiss",
@@ -514,6 +682,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.asks.list",
             "agent.inbox.subscribe",
@@ -549,6 +720,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.asks.list",
             "agent.inbox.subscribe",
@@ -587,6 +761,9 @@ export const commandRegistry = [
         "stability": "beta",
         "surface": "projection",
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.asks.list",
             "agent.inbox.subscribe",
@@ -622,6 +799,9 @@ export const commandRegistry = [
         "surface": "canonical",
         "agent_notes": "Current resource access applies on every poll.",
         "adjacent_commands": [
+            "agent.handoffs.ack",
+            "agent.handoffs.get",
+            "agent.handoffs.send",
             "agent.inbox.answers.read",
             "agent.inbox.asks.list",
             "agent.inbox.subscribe",
@@ -789,7 +969,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -9878,7 +10057,8 @@ export const commandRegistry = [
                         "approved",
                         "needs_context",
                         "rejected",
-                        "resolved"
+                        "resolved",
+                        "skipped"
                     ]
                 },
                 {
@@ -9974,130 +10154,6 @@ export const commandRegistry = [
         ],
         "go_method": "InboxSummary",
         "ts_method": "inboxSummary"
-    },
-    {
-        "command_id": "initiative.promote",
-        "cli_path": "initiative promote",
-        "group": "initiative",
-        "method": "POST",
-        "path": "/work/{card_ref}/promote",
-        "operation_id": "initiativePromote",
-        "summary": "Deprecated; use work move with root true",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns initiative membership, work and advisory facts.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                },
-                {
-                    "name": "to_board",
-                    "type": "string"
-                },
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "initiative.retire"
-        ],
-        "go_method": "InitiativePromote",
-        "ts_method": "initiativePromote"
-    },
-    {
-        "command_id": "initiative.retire",
-        "cli_path": "initiative retire",
-        "group": "initiative",
-        "method": "POST",
-        "path": "/work/{card_ref}/retire",
-        "operation_id": "initiativeRetire",
-        "summary": "Deprecated; use work move with under",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns initiative membership, work and advisory facts.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "reason",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                },
-                {
-                    "name": "to_board",
-                    "type": "string"
-                },
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "initiative.promote"
-        ],
-        "go_method": "InitiativeRetire",
-        "ts_method": "initiativeRetire"
     },
     {
         "command_id": "integrations.bind",
@@ -10411,8 +10467,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Stable owner id for this claim"
+                    "description": "Stable owner id for this claim, such as an execution or session id. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "ttl",
@@ -10455,6 +10510,10 @@ export const commandRegistry = [
             {
                 "title": "Claim a card for two hours",
                 "command": "anx lease acquire card:ramp-batch --owner exec-7f3a --ttl 2h --reason 'batch ramp step 3'"
+            },
+            {
+                "title": "Claim a card assigned to you as yourself",
+                "command": "anx lease acquire card:review-request --ttl 30m"
             }
         ],
         "body_schema": {
@@ -10510,8 +10569,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Owner id that holds the lease."
+                    "description": "Owner id that holds the lease. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "reason",
@@ -10612,8 +10670,7 @@ export const commandRegistry = [
             "flags": [
                 {
                     "name": "owner",
-                    "required": true,
-                    "description": "Owner id that holds the lease."
+                    "description": "Owner id that holds the lease. Defaults to the caller (actor:\u003cyour actor id\u003e); `me` means the same."
                 },
                 {
                     "name": "ttl",
@@ -11282,7 +11339,7 @@ export const commandRegistry = [
         ],
         "stability": "beta",
         "surface": "projection",
-        "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it. brief holds the ranked morning answers (decisions, since_last_look, at_risk as past-promise rows, machine, initiatives) computed from the same authorized rows, with no extra query.",
+        "agent_notes": "Includes since_you_last_looked against the prior visit, then records the authenticated viewer baseline. Read /overview/changes without advancing it.",
         "adjacent_commands": [
             "overview.changes"
         ],
@@ -14160,7 +14217,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14212,7 +14268,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14303,7 +14358,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14562,7 +14616,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14639,7 +14692,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.create",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14694,7 +14746,6 @@ export const commandRegistry = [
             "work.checkpoint",
             "work.create",
             "work.fold",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -14712,83 +14763,6 @@ export const commandRegistry = [
         ],
         "go_method": "WorkGet",
         "ts_method": "workGet"
-    },
-    {
-        "command_id": "work.group",
-        "cli_path": "work group",
-        "group": "work",
-        "method": "POST",
-        "path": "/work/{card_ref}/group",
-        "operation_id": "workGroup",
-        "summary": "Deprecated; use work move with under",
-        "why": "Deprecated compatibility alias for work move. Initiative status follows stored parentage, never board role.",
-        "input_mode": "json-body",
-        "streaming": {
-            "mode": "none"
-        },
-        "output_envelope": "Returns `WorkResponse`.",
-        "error_codes": [
-            "invalid_request",
-            "not_found",
-            "conflict",
-            "work_unavailable"
-        ],
-        "concepts": [
-            "cards",
-            "evidence"
-        ],
-        "stability": "beta",
-        "surface": "canonical",
-        "agent_notes": "Compatibility alias implemented through stored-parent moves; no plan steps are written. Prefer work move.",
-        "body_schema": {
-            "required": [
-                {
-                    "name": "under",
-                    "type": "string"
-                }
-            ],
-            "optional": [
-                {
-                    "name": "actor_id",
-                    "type": "string"
-                },
-                {
-                    "name": "after",
-                    "type": "string"
-                },
-                {
-                    "name": "request_key",
-                    "type": "string"
-                }
-            ]
-        },
-        "path_params": [
-            "card_ref"
-        ],
-        "adjacent_commands": [
-            "work.briefing",
-            "work.capabilities",
-            "work.checkpoint",
-            "work.create",
-            "work.fold",
-            "work.get",
-            "work.list",
-            "work.move",
-            "work.observations.list",
-            "work.observations.submit",
-            "work.participants.list",
-            "work.participants.register",
-            "work.patch",
-            "agents.me.presence",
-            "work.refresh.get",
-            "work.refresh.request",
-            "work.resolve",
-            "work.tree",
-            "work.unfold",
-            "work.ungrouped"
-        ],
-        "go_method": "WorkGroup",
-        "ts_method": "workGroup"
     },
     {
         "command_id": "work.list",
@@ -14825,7 +14799,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.move",
             "work.observations.list",
             "work.observations.submit",
@@ -14851,7 +14824,7 @@ export const commandRegistry = [
         "path": "/work/{card_ref}/move",
         "operation_id": "workMove",
         "summary": "Move a card under a parent, to top level or to Unsorted",
-        "why": "Move a card under a parent, to top level or to Unsorted",
+        "why": "Changes where a card sits in the work hierarchy. A move to top level makes an initiative and is a human's call: pass requested_by naming the human who asked, or the move is refused with 403 human_request_required. Demoting or promoting an initiative needs a reason.",
         "input_mode": "json-body",
         "streaming": {
             "mode": "none"
@@ -14881,6 +14854,13 @@ export const commandRegistry = [
                 {
                     "name": "reason",
                     "type": "string"
+                },
+                {
+                    "name": "replay_as",
+                    "type": "string",
+                    "enum_values": [
+                        "work.group"
+                    ]
                 },
                 {
                     "name": "request_key",
@@ -14920,7 +14900,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.observations.list",
             "work.observations.submit",
@@ -14975,7 +14954,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.submit",
@@ -15134,7 +15112,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15193,7 +15170,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15273,7 +15249,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15417,7 +15392,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15472,7 +15446,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15536,7 +15509,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15586,7 +15558,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15636,7 +15607,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15703,7 +15673,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -15752,7 +15721,6 @@ export const commandRegistry = [
             "work.create",
             "work.fold",
             "work.get",
-            "work.group",
             "work.list",
             "work.move",
             "work.observations.list",
@@ -16052,6 +16020,15 @@ export class AnxClient {
     }
     adaptersToken(pathParams, options = {}) {
         return this.invoke("adapters.token", pathParams, options);
+    }
+    agentHandoffsAck(pathParams, options = {}) {
+        return this.invoke("agent.handoffs.ack", pathParams, options);
+    }
+    agentHandoffsGet(pathParams, options = {}) {
+        return this.invoke("agent.handoffs.get", pathParams, options);
+    }
+    agentHandoffsSend(options = {}) {
+        return this.invoke("agent.handoffs.send", {}, options);
     }
     agentInboxAnswersRead(options = {}) {
         return this.invoke("agent.inbox.answers.read", {}, options);
@@ -16503,12 +16480,6 @@ export class AnxClient {
     inboxSummary(options = {}) {
         return this.invoke("inbox.summary", {}, options);
     }
-    initiativePromote(pathParams, options = {}) {
-        return this.invoke("initiative.promote", pathParams, options);
-    }
-    initiativeRetire(pathParams, options = {}) {
-        return this.invoke("initiative.retire", pathParams, options);
-    }
     leaseAcquire(pathParams, options = {}) {
         return this.invoke("lease.acquire", pathParams, options);
     }
@@ -16742,9 +16713,6 @@ export class AnxClient {
     }
     workGet(pathParams, options = {}) {
         return this.invoke("work.get", pathParams, options);
-    }
-    workGroup(pathParams, options = {}) {
-        return this.invoke("work.group", pathParams, options);
     }
     workList(options = {}) {
         return this.invoke("work.list", {}, options);

@@ -379,7 +379,7 @@ func (s *Store) loadGroupingCard(ctx context.Context, tx *accessTx, ref string) 
 	return s.loadBoardCardByGlobalID(ctx, tx, resolved.ID, true)
 }
 
-// groupWorkTx is used by BOTH create paths, fold and work.group, inside the
+// groupWorkTx is used by BOTH create paths and fold, inside the
 // card's own transaction. It stores the parent; it never edits a plan.
 // A current initiative must be moved explicitly (MoveWork with a reason).
 func (s *Store) groupWorkTx(ctx context.Context, tx *accessTx, actor string, child boardCardRow, under, after, due string) (string, error) {

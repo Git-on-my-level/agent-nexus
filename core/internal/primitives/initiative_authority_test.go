@@ -126,7 +126,7 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	promote, err := s.ChangeInitiative(ctx, "writer", workString(c["ref"]), "promote", "Independent outcome", "", "")
+	promote, err := s.MoveWork(ctx, "writer", workString(c["ref"]), MoveWorkInput{Root: true, Reason: "Independent outcome"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if err != nil || brief["over_target"] == nil {
 		t.Fatalf("brief=%v err=%v", brief, err)
 	}
-	retired, err := s.ChangeInitiative(ctx, "writer", workString(c["ref"]), "retire", "Finished independent scope", workString(tasks["ref"]), "")
+	retired, err := s.MoveWork(ctx, "writer", workString(c["ref"]), MoveWorkInput{Unsorted: true, Reason: "Finished independent scope"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestInitiativeLifecycleFeedTargetAndPrivacy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.ChangeInitiative(ctx, "writer", workString(hidden["ref"]), "retire", "Confidential rationale", workString(tasks["ref"]), ""); err != nil {
+	if _, err = s.MoveWork(ctx, "writer", workString(hidden["ref"]), MoveWorkInput{Unsorted: true, Reason: "Confidential rationale"}); err != nil {
 		t.Fatal(err)
 	}
 	// Moving the retired card to public layout must not publish its private
@@ -230,7 +230,7 @@ func TestInitiativeRetireUnderAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.ChangeInitiative(ctx, "writer", workString(c["ref"]), "retire", "Consolidate", "", workString(parent["ref"])); err != nil {
+	if _, err = s.MoveWork(ctx, "writer", workString(c["ref"]), MoveWorkInput{Under: workString(parent["ref"]), Reason: "Consolidate"}); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.EnrichWorkHierarchy(ctx, []map[string]any{c, parent}, "writer", false, time.Now()); err != nil {
@@ -571,7 +571,7 @@ func TestInitiativeRetireUnderIgnoresEarlierChecklistAtomically(t *testing.T) {
 	if err = s.SetCardPlan(ctx, "writer", workString(earlier["id"]), workString(earlier["updated_at"]), plans.Plan{Steps: []plans.Step{{ID: "dependency", Title: "Needs outcome", Ref: workString(child["ref"])}}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.ChangeInitiative(ctx, "writer", workString(child["ref"]), "retire", "Consolidate", workString(tasks["ref"]), workString(under["ref"]))
+	_, err = s.MoveWork(ctx, "writer", workString(child["ref"]), MoveWorkInput{Under: workString(under["ref"]), Reason: "Consolidate"})
 	if err != nil {
 		t.Fatal(err)
 	}

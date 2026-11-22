@@ -9,28 +9,6 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 )
 
-func parseProposalIDArg(args []string, commandName string) (string, error) {
-	fs := newSilentFlagSet(commandName)
-	var proposalIDFlag trackedString
-	fs.Var(&proposalIDFlag, "proposal-id", "Proposal id")
-	if err := fs.Parse(args); err != nil {
-		return "", errnorm.Usage("invalid_flags", err.Error())
-	}
-	positionals := fs.Args()
-	proposalID := strings.TrimSpace(proposalIDFlag.value)
-	if proposalID == "" && len(positionals) > 0 {
-		proposalID = strings.TrimSpace(positionals[0])
-		positionals = positionals[1:]
-	}
-	if err := validateDraftID(proposalID); err != nil {
-		return "", err
-	}
-	if len(positionals) > 0 {
-		return "", errnorm.Usage("invalid_args", fmt.Sprintf("unexpected positional arguments for `anx %s`", commandName))
-	}
-	return proposalID, nil
-}
-
 func mapBody(raw any, commandName string) (map[string]any, error) {
 	body, ok := raw.(map[string]any)
 	if !ok {

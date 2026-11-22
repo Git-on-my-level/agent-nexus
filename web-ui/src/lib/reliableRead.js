@@ -5,10 +5,7 @@ export function isReadAccessDenied(error) {
 }
 
 /** Also used by incremental readers before publishing a partial snapshot. */
-export function handleReadAccessDenied(
-  error,
-  { cacheScope, onAccessDenied } = {},
-) {
+function handleReadAccessDenied(error, { cacheScope, onAccessDenied } = {}) {
   if (!isReadAccessDenied(error)) return false;
   if (cacheScope) purgeWorkspaceViews(cacheScope, error);
   onAccessDenied?.();
@@ -16,7 +13,7 @@ export function handleReadAccessDenied(
 }
 
 /** Retry only reads: authentication and mutation failures must never be replayed. */
-export function isTransientReadError(error) {
+function isTransientReadError(error) {
   const status = error?.status ?? error?.coreHttpStatus;
   if (status) return [502, 503, 504].includes(status);
   return (

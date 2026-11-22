@@ -4,6 +4,7 @@ import (
 	"agent-nexus-core/internal/primitives"
 	"context"
 	"encoding/json"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -66,4 +67,23 @@ func TestScopedInboxMountedReaderRetainsEnrichmentAndPrivacy(t *testing.T) {
 		t.Fatalf("dispatcher was not exercised: %+v", d)
 	}
 	_ = stranger
+}
+
+func scopeInboxHTTP(t *testing.T, env authIntegrationEnv, token, path string) map[string]any {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, env.server.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatal(resp.StatusCode, err, body)
+	}
+	return body
 }

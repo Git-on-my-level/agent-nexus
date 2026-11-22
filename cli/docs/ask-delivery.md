@@ -20,6 +20,11 @@ free text never completes work. Source-owned phases remain unchanged.
 Structured access-grant requests support only approve/reject; their API exposes
 `allowed_response_outcomes` so clients can restrict those actions.
 Re-ask with `--supersedes event:<previous-ask>` after supplying the missing evidence.
+`skipped` means the human cleared the ask from Decide without deciding it, often
+in bulk. The ask closes as answered so waiters end, but nothing was ruled and no
+standing ruling is recorded. The task returns to its owner as with `needs_context`.
+Continue on your stated default where it is reversible, or ask again later with
+`--supersedes` if it still needs a decision.
 
 Effective source cancellation, card closure/archive and expiry reconcile through durable, indexed batches of
 200; busy workspaces may take several ticks. Asks carry no inactivity flag:
@@ -127,7 +132,7 @@ Missing evidence links and pointer-only bodies fail locally. See `anx ask --help
 The ask result includes `anx await event:<ask-id>`. It subscribes once and reads a
 single indexed SSE outcome, refreshing authentication on reconnect. `--timeout
 10m --json` controls duration and machine output. Exit codes: 0 answered (including
-approved, acknowledged, resolved), 9 rejected, 10 needs_context, 11 withdrawn,
+approved, acknowledged, resolved, skipped), 9 rejected, 10 needs_context, 11 withdrawn,
 12 expired, 8 timeout. The response JSON includes task outcome and delivery state.
 The existing `anx await --answers` batch and card-state await remain available.
 

@@ -19,7 +19,6 @@ func TestLeaseUsageBeforeHostResolution(t *testing.T) {
 	for _, args := range [][]string{
 		{"lease"}, {"lease", "bogus", "card:x"},
 		{"lease", "show"}, {"lease", "show", "card:x", "card:y"}, {"lease", "show", "card:x", "--owner", "a"},
-		{"lease", "acquire", "card:x", "--ttl", "2h"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a", "--ttl", "30s"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a", "--ttl", "8d"},
@@ -27,7 +26,6 @@ func TestLeaseUsageBeforeHostResolution(t *testing.T) {
 		{"lease", "acquire", "card:x", "--owner", "has space", "--ttl", "2h"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a", "--ttl", "2h", "--if-epoch", "-1"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a", "--owner", "exec-b", "--ttl", "2h"},
-		{"lease", "renew", "card:x"},
 		{"lease", "renew", "card:x", "--owner", "exec-a", "--reason", "x"},
 		{"lease", "release", "card:x", "--owner", "exec-a", "--ttl", "2h"},
 		{"lease", "release", "card:x", "--owner", "exec-a", "--handoff-to", "exec-a"},
@@ -35,6 +33,7 @@ func TestLeaseUsageBeforeHostResolution(t *testing.T) {
 		{"lease", "release", "card:x", "--owner", "exec-a", "--handoff-to", "exec-b", "--ttl", "30s"},
 		{"lease", "renew", "card:x", "--owner", "exec-a", "--handoff-to", "exec-b"},
 		{"lease", "acquire", "card:x", "--owner", "exec-a", "--ttl", "2h", "--handoff-to", "exec-b"},
+		{"lease", "release", "card:x", "--handoff-to", "me"},
 	} {
 		a := newTestApp(t)
 		a.Getenv = func(string) string { return "" }
@@ -141,5 +140,44 @@ func TestLeaseRequests(t *testing.T) {
 	}
 	if c := calls[4]; c.path != "/cards/card:ramp/lease/release" || c.body["owner"] != "exec-a" || c.body["handoff_to"] != "exec-b" || c.body["ttl_seconds"] != float64(10800) || c.body["reason"] != "lane rotation" {
 		t.Fatalf("handoff: %+v", c)
+	}
+}
+
+func TestLeaseOwnerDefaultsToTheCaller(t *testing.T) {
+	owners := []any{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/agents/agent-lane" {
+			io.WriteString(w, `{"agent":{"id":"agent-lane","actor_id":"actor-lane"}}`)
+			return
+		}
+		var body map[string]any
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		owners = append(owners, body["owner"])
+		io.WriteString(w, `{"lease":{"card_ref":"card:ask","state":"held","owner":"actor:actor-lane","epoch":1},"changed":true}`)
+	}))
+	defer server.Close()
+	a := newTestApp(t)
+	a.Stderr = &bytes.Buffer{}
+	cfg := config.Resolved{BaseURL: server.URL, AccessToken: "owner", AgentID: "agent-lane", Timeout: 10 * time.Second}
+	for _, args := range [][]string{
+		{"lease", "acquire", "card:ask", "--ttl", "30m"},
+		{"lease", "renew", "card:ask", "--owner", "me"},
+		{"lease", "release", "card:ask", "--handoff-to", "actor:other"},
+	} {
+		if _, _, err := a.runCommand(context.Background(), args, cfg); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	for i, owner := range owners {
+		if owner != "actor:actor-lane" {
+			t.Fatalf("call %d owner=%v, want actor:actor-lane", i, owner)
+		}
+	}
+	if len(owners) != 3 {
+		t.Fatalf("owners=%v", owners)
+	}
+	if _, _, err := a.runCommand(context.Background(), []string{"lease", "release", "card:ask", "--handoff-to", "actor:actor-lane"}, cfg); err == nil {
+		t.Fatal("hand-off to the resolved caller was accepted")
 	}
 }

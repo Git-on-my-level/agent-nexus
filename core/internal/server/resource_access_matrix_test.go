@@ -210,7 +210,8 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO standing_rulings(id,title_key,requester,kind,question,answer,source_ask_id,created_by,created_at) VALUES('matrix-private-ruling','confidential ruling','','answer','Confidential ruling question','Confidential ruling answer',?,?,?)`, askID, stranger.ActorID, now.Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
-	replacements := strings.NewReplacer("{ruling_id}", "matrix-private-ruling", "{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
+	handoffID := seedHandoffFixture(t, store, owner.ActorID, rosterAgent.ActorID, []string{"event:" + anyString(event["id"])})
+	replacements := strings.NewReplacer("{handoff_id}", handoffID, "{ruling_id}", "matrix-private-ruling", "{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
 	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "matrix-private-ruling", "Confidential"}
 	snapshot := func() string {
 		var v string
@@ -256,6 +257,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					}
 					if p.Policy == "reference-write" {
 						payload = privacyWritePayload(t, p.Path, principal.ActorID, boardID, cardID, threadID, anyString(document["id"]), anyString(event["id"]), agent.AgentID)
+					}
+					if p.Path == "/agent-handoffs" {
+						payload["recipient_actor_id"] = rosterAgent.ActorID
 					}
 					if p.Policy == "reference-read" {
 						if p.Path != "/refs/resolve" {
@@ -487,6 +491,10 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"scope_ref": "document:" + doc}
 	case "/workspace/dashboard":
 		return map[string]any{"actor_id": actor, "document_ref": "document:" + doc}
+	case "/agent-handoffs":
+		return map[string]any{"refs": []string{"event:" + event}, "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}
+	case "/agent-handoffs/{handoff_id}/ack":
+		return map[string]any{"outcome": "refs_verified"}
 	case "/agent-inbox/answers/read":
 		return map[string]any{"answer_event_id": event}
 	case "/agent-notifications/read", "/agent-notifications/dismiss":

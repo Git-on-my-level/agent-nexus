@@ -83,7 +83,10 @@ reference. A renewal does this even when the card was reassigned since acquire.
 Opaque launcher/session labels leave the assignee unchanged. Renewal preserves
 a reminded default promise's digest route; it does not count as progress.
 
-Agent creation's automatic lease has a **24-hour TTL**. David's **12-hour**
+Agent creation's automatic lease has a **24-hour TTL**. A card an agent creates
+for another actor gets no creator lease: it is delegated, and the assignee
+claims it (`anx lease acquire <card> --ttl <dur>`; the CLI owner defaults to the
+caller). David's **12-hour**
 default is the computed promise deadline, not a lease duration. These are
 independent clocks; explicit lease TTLs and renewal keep their existing rules.
 

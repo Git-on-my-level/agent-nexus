@@ -114,7 +114,6 @@
       "archiveCard": 1,
       "markHomeRead": 1,
       "setDashboardPins": 1,
-      "groupWork": 1,
       "foldWork": 1,
       "unfoldWork": 1,
       "setCardPlan": 1,
@@ -139,10 +138,11 @@
   },
   "lib/standingRulingSend.js": {
     "classification": "outbox",
-    "reason": "Audited persisted-request senders for sending an ask back and for making or revoking a standing ruling; called only by the mutation outbox.",
+    "reason": "Audited persisted-request senders for sending an ask back, making or revoking a standing ruling, and skipping a decision (inbox respond with frozen idempotency keys); called only by the mutation outbox.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "asksRetire": 1,
+      "respondInboxItem": 2,
       "rulingsCreate": 2,
       "rulingsRevoke": 1
     }

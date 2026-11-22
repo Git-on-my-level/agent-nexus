@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WORKSPACE_HEADER_CONSTANTS } from "../../src/lib/compat/workspaceCompat";
+import { WORKSPACE_HEADER_CONSTANTS } from "../../src/lib/workspaceRequestHeaders";
 import { buildCoreRequestContextHeaders } from "../../src/lib/coreClientRequestHeaders";
 import { WORKSPACE_HEADER } from "../../src/lib/workspacePaths";
 

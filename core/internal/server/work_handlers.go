@@ -40,7 +40,7 @@ func workRouteAccess(r *http.Request) routeAccessRequirement {
 		if len(parts) == 1 && parts[0] != "" {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPatch
 		}
-		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants" || parts[1] == "group" || parts[1] == "fold" || parts[1] == "unfold" || parts[1] == "promote" || parts[1] == "retire" || parts[1] == "move") {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "observations" || parts[1] == "refresh" || parts[1] == "participants" || parts[1] == "fold" || parts[1] == "unfold" || parts[1] == "move") {
 			valid = r.Method == http.MethodGet || r.Method == http.MethodPost
 		}
 	}
@@ -69,7 +69,7 @@ func workStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.As(err, &grouping) {
 		payload := errorPayload("invalid_request", grouping.Error())
 		payload["details"] = map[string]any{"initiative_ref": grouping.Ref}
-		payload["next_actions"] = []map[string]any{{"command_id": "initiative.retire", "argv": []string{"anx", "initiative", "retire", grouping.Ref, "--reason", "Consolidate initiative scope"}, "mutates": true, "side_effect_class": "remote_coordination_write"}}
+		payload["next_actions"] = []map[string]any{{"command_id": "work.move", "argv": []string{"anx", "work", "move", grouping.Ref, "--unsorted", "--reason", "Consolidate initiative scope"}, "mutates": true, "side_effect_class": "remote_coordination_write"}}
 		writeJSON(w, 400, map[string]any{"error": payload})
 		return
 	}
@@ -366,6 +366,8 @@ func handleWork(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
 			return
 		}
 		writeJSON(w, 202, map[string]any{"refresh": publicWorkRefresh(refresh)})
+	default:
+		writeError(w, 404, "not_found", "endpoint not found")
 	}
 }
 

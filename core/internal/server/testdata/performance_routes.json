@@ -23,6 +23,19 @@
   },
   {
     "method": "GET",
+    "path": "/agent-handoffs/{handoff_id}",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 404,
+    "reason": "One scoped primary-key wake lookup and a fixed receipt containing at most eight canonical refs.",
+    "authorized_as": "agent",
+    "must_contain": "pickup_status",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
     "path": "/agent-inbox/asks",
     "max_queries": 100,
     "max_rows": 1024,

@@ -52,12 +52,6 @@ func handleRebuildDerived(w http.ResponseWriter, r *http.Request, opts handlerOp
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func isStaleTopicException(event map[string]any) bool {
-	payload, _ := event["payload"].(map[string]any)
-	subtype, _ := payload["subtype"].(string)
-	return subtype == "stale_topic"
-}
-
 func decidedInboxItemIDs(events []map[string]any) map[string]struct{} {
 	out := make(map[string]struct{})
 	// Undo names one exact retirement, so replay order and tied timestamps do

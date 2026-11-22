@@ -43,10 +43,10 @@ import { nextStepModel, planHealthModel } from "./planHealth.js";
 const asText = (value) => String(value ?? "").trim();
 
 /** How many steps one digest list shows before the rest become a count. */
-export const STEP_LIST_LIMIT = 3;
+const STEP_LIST_LIMIT = 3;
 
 /** The three lists, in reading order: what landed, what moves, what is next. */
-export const STEP_LISTS = Object.freeze([
+const STEP_LISTS = Object.freeze([
   { key: "completed", label: "Recently completed" },
   { key: "current", label: "Current" },
   { key: "next", label: "Next" },
@@ -86,7 +86,7 @@ const STATUS_PRESENTATION = Object.freeze({
 const NEUTRAL = Object.freeze({ tone: "neutral", glyph: "·" });
 
 /** Worst first. The order every list of cards is sorted by. */
-export const ATTENTION_ORDER = Object.freeze([
+const ATTENTION_ORDER = Object.freeze([
   "blocked",
   "past_promise",
   "no_promise",

@@ -30,7 +30,7 @@ export const STANDING_OPERATIONS = [
 ];
 
 export const notADecisionTarget = (itemId) => `not-a-decision:${itemId}`;
-export const rulingTarget = (askRef) => `ruling:${askRef}`;
+const rulingTarget = (askRef) => `ruling:${askRef}`;
 export const revokeTarget = (id) => `ruling-revoke:${id}`;
 
 /**
@@ -72,7 +72,7 @@ export function enqueueNotADecision({ itemId, askRef, always, title, href }) {
 }
 
 /** Make an answer that was sent a standing ruling for its question. */
-export function enqueueStandingAnswer({ askRef, answer, title, href }) {
+function enqueueStandingAnswer({ askRef, answer, title, href }) {
   return enqueueLocalMutation({
     key: randomUUID(),
     target: rulingTarget(askRef),
@@ -106,7 +106,7 @@ export function enqueueRulingRevoke({ id, question, href }) {
  */
 const intents = new Map();
 
-export function setStandingAnswerIntent(itemId, intent) {
+function setStandingAnswerIntent(itemId, intent) {
   if (intent?.askRef && intent.answer) intents.set(itemId, intent);
   else intents.delete(itemId);
 }

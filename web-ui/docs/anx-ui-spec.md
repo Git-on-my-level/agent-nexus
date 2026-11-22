@@ -134,6 +134,11 @@ answers. Undo is the client-held delayed send in `inboxResponseQueue.js`,
 never a retraction. Copy ref is on every row, and `c` copies the focused row's
 ref (`j`/`k` move focus). Reply drafts use the durable key
 `inbox:<item-id>:reply` on every surface. `?initiative=<ref>` narrows the list.
+Rows can be selected (checkbox, or `x` on the highlighted row) and skipped
+together; with nothing selected the bar offers Skip all. Skip is not an answer:
+it records outcome `skipped` with a note that nothing was decided, makes no
+ruling, and lets the requester ask again later. Access, host and PM decisions
+cannot be skipped and stay in the list. Skips wait behind their own Undo.
 
 **Watch** (`/watch`) is outcomes per workspace, built from the brief. The
 Initiatives list (`InitiativeRollupList`, rules in `watchList.js`) has one
@@ -333,7 +338,7 @@ A dedicated surface showing items that need operator attention. It is the only a
 
 - The first row of the current mailbox is selected automatically; the pane is never an empty placeholder while rows exist. The automatic selection stays on its row while the list refreshes, so a live update never swaps the item being answered. Below `lg` the list and the detail are separate screens and only an explicit choice (`?item=`) opens the detail.
 - The pane header says who is blocked and for how long ("Omar Reed has been blocked for 3h 12m").
-- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). When the requester is an agent with a presence note (`anx note`), the strip also shows that note with its age and the agent's state dot, linked to the agent page (`components/agents/AgentPresenceLine.svelte`, read from the shell roster). Threads and boards are not operator subjects and get no subject line.
+- A **context strip** shows what the item blocks — the subject task (title, phase) or doc (title, version) — and the latest progress note around it (author, age, excerpt), preferring the requester's own latest message. It reads `docs.get` and `events.list` (message events on the task's thread and the item's threads). When the requester is an agent with a presence note (`anx note`), the strip also shows that note with its age and the agent's state dot, linked to the agent page (read from the shell roster). Threads and boards are not operator subjects and get no subject line.
 - The respond surface shows agent-authored **`response_proposals`** from the backing `human_attention_requested` event, numbered 1–5. The first is marked **Recommended**. Choosing a proposal selects it and sends it; **`review`** items also offer **Approve** / **Reject**, which send fixed text. A freeform reply and **Acknowledge** complete the surface. The Inbox pane and the standalone item route (`/inbox/{id}`) share this component (`InboxRespondPanel`) and behave the same; the standalone page adds the notify-target and attachment controls.
 - Both surfaces notify the original requester by default when core can reach them (`notification_target_status.resolvable`), and nobody otherwise. Acknowledge never notifies.
 - Links from the standalone page back into the Inbox use the Inbox's own parameters (`?mailbox=handled&item=…`); `?status=` is not an Inbox parameter.
@@ -609,8 +614,8 @@ Agent Nexus web UI v0 is complete when it can:
 ### Executive Overview
 
 Overview reads the core `/overview` projection shared with agents: Initiatives,
-Recent changes and Dashboard, then a collapsed More detail fold (the morning
-brief, what is waiting on you, work counts, freshness and agent presence). The
+Recent changes and Dashboard, then a collapsed More detail fold (what is
+waiting on you, work counts, freshness and agent presence). The
 cross-workspace ask read behind that fold runs when the fold is opened, not on
 every visit. Initiatives use the same live-initiatives renderer and projection
 as document reports (`progress.done/total`, `needs[]`). Rows show the first summary line, Markdown checklist

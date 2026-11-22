@@ -32,7 +32,7 @@ export const ATTENTION_ORDER = Object.freeze([
  * `label` is the full text, which rides along in the `title` and the
  * accessible name.
  */
-export const PLAN_HEALTH = Object.freeze({
+const PLAN_HEALTH = Object.freeze({
   past_promise: {
     state: "past_promise",
     label: "Past promise",

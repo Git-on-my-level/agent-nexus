@@ -69,18 +69,3 @@ func moveRewriteRefs(refs any, mapping map[string]string) []string {
 	}
 	return moveUnique(values)
 }
-
-func moveListRefs(workspace map[string]any, key, kind string) []string {
-	refs := []string{}
-	for _, raw := range asSlice(workspace[key]) {
-		object := moveExtractObject(raw, strings.TrimSuffix(kind, "s"))
-		ref := moveFieldString(object, "ref")
-		if ref == "" {
-			ref = moveResourceRef(kind, moveFieldString(object, "id"))
-		}
-		if ref != "" {
-			refs = append(refs, ref)
-		}
-	}
-	return refs
-}

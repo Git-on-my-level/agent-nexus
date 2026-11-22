@@ -9,6 +9,8 @@ Accepted by David, 2026-10-25. Scope: agent-and-inbox ergonomics.
 2. Agent-created cards acquire a work lease for the creating actor. Release
    without hand-off or expiry assigns the card to its parent initiative's owner,
    then the workspace lead, with an automatic note. Never leave it ownerless.
+   Amended 2026-11-17 (David): a card an agent creates for another actor is
+   delegated, so the assignee owns it and claims the lease; the creator gets none.
 3. `no_promise` and stale flags apply only to live-owned, non-cadence work.
    Cadence work is tracked by receipts and the recurring-work overdue rule.
    Unowned work goes into one daily digest for its fallback owner.

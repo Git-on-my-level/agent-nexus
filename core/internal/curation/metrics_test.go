@@ -97,14 +97,18 @@ func TestMetricS18(t *testing.T) {
 		{ID: "6", RequestedAt: h(0), Withdrawal: &AskWithdrawal{At: h(48), Reason: "mistake"}},
 		{ID: "7", RequestedAt: h(0), Proposal: true, Response: &AskResponse{At: h(1), Text: "x"}},
 		{ID: "8", RequestedAt: h(-500), Response: &AskResponse{At: h(1), Text: "x"}}, // outside window
+		{ID: "9", RequestedAt: h(0), Proposals: props, Response: &AskResponse{At: h(1), Text: "Skipped", Outcome: "skipped"}},
+	}
+	if d := ComputeMetrics(asks, nil, h(0), now).S17.Decisions; d != 4 {
+		t.Fatalf("a skip counted as a decision: %d", d)
 	}
 	m := ComputeMetrics(asks, nil, h(0), now).S18
-	if m.Asks != 6 || m.Answered != 3 {
+	if m.Asks != 7 || m.Answered != 3 {
 		t.Fatalf("asks=%d answered=%d", m.Asks, m.Answered)
 	}
 	wantPtr(t, "recommended", m.AnsweredRecommendedPct, f(33.3))
 	wantPtr(t, "needs_context", m.NeedsContextPct, f(33.3))
-	wantPtr(t, "moot", m.WithdrawnMootAfter24hPct, f(16.7))
+	wantPtr(t, "moot", m.WithdrawnMootAfter24hPct, f(14.3))
 
 	z := ComputeMetrics(nil, nil, h(0), now).S18
 	wantPtr(t, "z rec", z.AnsweredRecommendedPct, nil)

@@ -211,7 +211,8 @@ func noteCitationText(payloadJSON string) string {
 }
 
 // askCitedDecided reports whether this ask or review is already decided, and
-// the instant to show as evidence. needs_context is still waiting. An ask the
+// the instant to show as evidence. needs_context is still waiting, and a
+// skipped ask was cleared without a decision, so neither counts. An ask the
 // reader cannot see is never decided here: flagging it would reveal the answer.
 func (a citedAsk) askCitedDecided(now time.Time) (bool, string) {
 	if !a.Visible || (a.Kind != "ask" && a.Kind != "review") {
@@ -229,7 +230,7 @@ func (a citedAsk) askCitedDecided(now time.Time) (bool, string) {
 	case "withdrawn", "withdrawn_as_stale", "expired", "resolved":
 		return true, mootStamp(a.AnsweredAt)
 	case "answered":
-		if a.Outcome == "needs_context" {
+		if a.Outcome == "needs_context" || a.Outcome == "skipped" {
 			return false, ""
 		}
 		return true, mootStamp(a.AnsweredAt)

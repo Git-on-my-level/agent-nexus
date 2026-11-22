@@ -8,7 +8,7 @@ import {
 } from "$lib/workspacePaths";
 import { normalizeBaseUrl } from "$lib/config";
 import { getAuthSessionCookieName } from "$lib/server/authSession";
-import { resolveWorkspaceEnv } from "$lib/compat/workspaceCompat";
+import { resolveWorkspaceEnv } from "$lib/workspaceRequestHeaders";
 
 /** Shown in parse errors; keep in sync with web-ui README / runbook examples. */
 const ANX_WORKSPACES_JSON_EXAMPLE =
@@ -246,20 +246,6 @@ export function loadWorkspaceCatalog(
     usesSyntheticDefaultWorkspace,
     allowsEmptyCatalog: allowsEmptyStaticCatalog && workspaces.length === 0,
   });
-}
-
-export function getWorkspaceBySlug(
-  workspaceSlug,
-  env = privateEnv,
-  organizationSlug = "",
-) {
-  const catalog = loadWorkspaceCatalog(env);
-  const org = normalizeOrganizationSlug(organizationSlug);
-  if (!org) {
-    return null;
-  }
-  const key = workspaceCompositeKey(org, workspaceSlug);
-  return catalog.workspaceByComposite.get(key) ?? null;
 }
 
 /**

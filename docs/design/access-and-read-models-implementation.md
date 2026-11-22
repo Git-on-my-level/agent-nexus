@@ -1,5 +1,10 @@
 # Scope implementation: ownership and release order
 
+> Status: the disabled, unwired Stream B foundation (`internal/readmodel`,
+> `internal/scopedrepo`, `internal/scopemigrate`, `internal/scopestream`,
+> `internal/scopes`, `cmd/scopedrepo-gen`) was removed from `core`; recover it
+> from Git history if the cutover resumes. This document is kept as history.
+
 The direction and product decisions are accepted. This is the dispatch contract
 for implementation, not evidence that the new reader is ready to deploy. The
 coordinator dispatches the delegable streams below and owns independent review,

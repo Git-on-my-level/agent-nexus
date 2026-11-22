@@ -36,11 +36,11 @@ func leaseUsage(verb string) string {
 	case "show":
 		return "usage: anx lease show <card>"
 	case "acquire":
-		return "usage: anx lease acquire <card> --owner <id> --ttl <dur> [--reason <text>] [--if-epoch <n>]"
+		return "usage: anx lease acquire <card> --ttl <dur> [--owner <id>|me] [--reason <text>] [--if-epoch <n>] (owner defaults to you)"
 	case "renew":
-		return "usage: anx lease renew <card> --owner <id> [--ttl <dur>]"
+		return "usage: anx lease renew <card> [--owner <id>|me] [--ttl <dur>] (owner defaults to you)"
 	case "release":
-		return "usage: anx lease release <card> --owner <id> [--reason <text>] [--handoff-to <id> [--ttl <dur>]]"
+		return "usage: anx lease release <card> [--owner <id>|me] [--reason <text>] [--handoff-to <id> [--ttl <dur>]] (owner defaults to you)"
 	}
 	return "usage: anx lease show|acquire|renew|release <card> ..."
 }
@@ -142,14 +142,14 @@ func parseLeaseCommand(args []string) (leaseCommand, error) {
 		return usage("lease " + p.verb + " takes exactly one card")
 	}
 	p.card = strings.TrimSpace(positionals[0])
-	if p.verb != "show" && p.owner == "" {
-		return usage("lease " + p.verb + " requires --owner")
-	}
 	if p.verb == "release" && p.handoffTo == "" && p.ttlSeconds > 0 {
 		return usage("--ttl applies to lease release only with --handoff-to")
 	}
 	if p.handoffTo != "" && p.handoffTo == p.owner {
 		return usage("--handoff-to must differ from --owner")
+	}
+	if p.handoffTo == "me" {
+		return usage("--handoff-to names the next owner; it cannot be me")
 	}
 	if p.verb == "acquire" && p.ttlSeconds == 0 {
 		return usage("lease acquire requires --ttl")
@@ -162,6 +162,17 @@ func (a *App) runLeaseCommand(ctx context.Context, args []string, cfg config.Res
 	name := strings.TrimSpace("lease " + p.verb)
 	if err != nil {
 		return name, nil, err
+	}
+	if p.verb != "show" && (p.owner == "" || p.owner == "me") {
+		// Without --owner the lease is the caller's own: actor:<resolved agent>.
+		_, actorID, resolveErr := a.resolveOwnAsksActor(ctx, cfg)
+		if resolveErr != nil {
+			return name, nil, resolveErr
+		}
+		p.owner = "actor:" + strings.TrimPrefix(actorID, "actor:")
+		if p.handoffTo == p.owner {
+			return name, nil, errnorm.Usage("invalid_flags", "--handoff-to must differ from the lease owner; "+leaseUsage(p.verb))
+		}
 	}
 	path := "/cards/" + url.PathEscape(p.card) + "/lease"
 	method := "GET"

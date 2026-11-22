@@ -67,8 +67,10 @@ enums:
     enum_policy: strict
     description: >
       A proposal or free reply is answered; explicit review Approve and Reject actions
-      are approved and rejected; closing without an answer is acknowledged.
-    values: [answered, approved, rejected, acknowledged, needs_context, resolved]
+      are approved and rejected; closing without an answer is acknowledged; skipped
+      means the human cleared the decision without deciding it: nothing was ruled, the
+      owner keeps the work, and may ask again later if it still needs a decision.
+    values: [answered, approved, rejected, acknowledged, needs_context, resolved, skipped]
 
   board_column_key:
     enum_policy: strict
@@ -1386,21 +1388,6 @@ initiative_overview:
     - Open initiatives are selected before closed history, newest update first; counts describe the visible bounded candidate set and truncated declares that additional candidates exist.
     - Ref preview owner_display resolves workspace actor names, falling back to the owner ref. Board metadata requires independent board visibility.
     - Native preview url is a workspace-relative route. Hosted clients prefix it with /o/<org>/w/<ws>; absolute source URLs are used as-is. Never concatenate a hosted prefix onto an absolute URL.
-overview_brief:
-  route: GET /overview (brief)
-  section_limit: 5
-  throughput_hours: 24
-  fields: [status, generated_at, section_limit, throughput_hours, decisions, since_last_look, at_risk, machine, initiatives]
-  semantics:
-    - Five computed answers above the fold: what needs a decision, what changed since the previous visit, what is off track and why, whether agents are working, and where each initiative is. No field is hand-maintained and no section depends on a posted report.
-    - Derived only from rows the same request already loaded and already filtered - the bounded visit work snapshot, the assembled needs_you rows, since_you_last_looked and the agent roster. The brief adds no query, no new route and no O(workspace) pass; its cost is one pass over data already in memory.
-    - Counts describe the authorized set. Denied access lowers a count and never surfaces as a hidden-item hint; blocks counts only dependents the caller can see and is a lower bound.
-    - decisions ranks needs_you by blocking open work (1000 per visible dependent), then overdue (600) or due within 48 hours (300), then priority (critical/p0 320, high/p1 200, medium/p2 80, low/p3 20), then a blocked phase (150), then age at a third of a point per hour capped at 30 days (240); ties break oldest first then by id. Work priorities p0-p3 and the word spellings fold to one scale. Age tops out below critical so a stale question cannot outrank a fresh p0. reason carries at most three computed clauses.
-    - since_last_look groups changes against the previous visit baseline; first_visit distinguishes no baseline from no change. Groups are ordered and empty groups omitted. A completed-step row carries step_id, because two steps of one initiative share its ref.
-    - newly_blocked counts transitions, not current state: the visit snapshot records each card's phase, and a card already blocked at the previous visit, or one whose previous phase is unknown, is reported as updated. Editing a blocked card is not a new blocker.
-    - at_risk reports only past_promise rows with a computed reason, longest past first; a row without a computed reason is omitted.
-    - machine reuses the roster's derived states and the three-way silence split: stuck requires an open run or a held card, so offline and never-enrolled identities are not alarms. finished_24h and agents_finished_24h come from visible cards closed inside throughput_hours and survive a roster read failure.
-    - initiatives orders by the shared promise order (past_promise, no_promise, moving, digest, done) and reports by_state counts for all of them, so no_promise is visible as a gap rather than reported as moving.
 watch_trends:
   route: GET /watch/trends
   groups: [decisions, initiatives, loops]
@@ -1449,12 +1436,12 @@ possibly_moot:
   fields: [flagged, reason, sources, code, ask_ref, decided_at]
   shape: {flagged: boolean, reason: string, sources: integer, code: string, ask_ref: string, decided_at: timestamp}
   semantics:
-    - Emitted beside status_mismatch on card reads, lists, refs resolve, the plan response and the initiative overview, always present there as flagged false when not flagged. On inbox items the field appears only on an open ask-shaped item whose linked sources the page's resolver actually evaluated; anything else omits the key, so the scoped readmodel hydration mirrors the HTTP payload byte for byte.
+    - Emitted beside status_mismatch on card reads, lists, refs resolve, the plan response and the initiative overview, always present there as flagged false when not flagged. On inbox items the field appears only on an open ask-shaped item whose linked sources the page's resolver actually evaluated; anything else omits the key.
     - Only sources ANX has actually observed count as terminal: a done card, or a PR observed merged or closed through the observation cache. A card stored in backlog or ready is flagged possibly moot when at least one linked source is known and every linked source has reached a terminal state (done, cancelled, closed, merged, published or resolved). An open ask is flagged on the same rule over its subject_ref and related_refs.
     - Linked sources are the card's plan step refs and its related_refs annotation, resolved through the same batched evidence-backed resolution as plan facts; a PR URL resolves merged through the ingested observation that published it, never through a network fetch at read time.
     - Context-only refs (document, topic, board, thread) neither contribute to nor block the set. Every other linked source must be observed: a ref with no fact, an unresolved one (including a card invisible to the reader, or a ref dropped by the shared ref budget), or one whose workflow state is unknown withholds the linked-source rule entirely — an unobserved or unknown source never counts as terminal, and the evidence never names it. sources counts the known sources. Zero sources withholds the linked-source rule. The next-ask rule can flag with sources still zero.
     - reason is evidence, not advice; "all 2 linked sources are merged" uses the common source status when uniform, otherwise "all N linked sources are done". When the next-ask rule is what flags the card, reason is the code next_ask_decided. If both rules flag, reason stays the linked-source sentence and code carries next_ask_decided.
-    - The ask rule uses the phase the brief shows (placement), not the raw column key. A card placed in backlog, ready, in_progress, or review is flagged when its newest live note (the note brief.v1 shows as note; the same note supplies a note promise when it carries next) contains an explicit event:<id> ref to an inbox ask or review. Stored blocked is placed in in_progress and stored in_review is placed in review, so both are eligible. done and cancelled stay closed. The ref must resolve to a human_attention_requested the reader can see whose state is answered (including outcome resolved, but not needs_context), withdrawn, or expired (resolution or expires_at in the past; expiry is decided even when the outcome is needs_context). At most 8 event refs are read from that note, in appearance order. Prose that does not cite event:<id> is ignored. A newer note that does not cite the ref clears the flag. ask_ref is event:<id> and decided_at is the answer, withdrawal, or expiry instant. The linked-source rule stays on stored backlog and ready.
+    - The ask rule uses the phase the brief shows (placement), not the raw column key. A card placed in backlog, ready, in_progress, or review is flagged when its newest live note (the note brief.v1 shows as note; the same note supplies a note promise when it carries next) contains an explicit event:<id> ref to an inbox ask or review. Stored blocked is placed in in_progress and stored in_review is placed in review, so both are eligible. done and cancelled stay closed. The ref must resolve to a human_attention_requested the reader can see whose state is answered (including outcome resolved, but not needs_context or skipped), withdrawn, or expired (resolution or expires_at in the past; expiry is decided even when the outcome is needs_context). At most 8 event refs are read from that note, in appearance order. Prose that does not cite event:<id> is ignored. A newer note that does not cite the ref clears the flag. ask_ref is event:<id> and decided_at is the answer, withdrawal, or expiry instant. The linked-source rule stays on stored backlog and ready.
     - An ask the reader cannot see — hidden by the scoped events relation or by the same PM-private filter as other brief rows — does not flag and is not named. The evidence never reveals that a withheld ask was answered.
     - The ask lookup is skipped unless the latest note cites an event ref. It is one indexed seek per batch of at most 200 refs (brief_asks primary key, plus idx_events_handle_unique for a handle spelling), bounded by the page, never by workspace size.
     - Computation never mutates phase or closes anything. The flag only surfaces evidence so a human or agent can close the card or ask itself; it may be stale the moment it is computed and never suppresses asks or notifications on its own.
@@ -1663,7 +1650,7 @@ work_tracking_defaults:
   rules:
     - Creates remain non-blocking for every creator; the creating actor is the implicit assignee when none was supplied.
     - The computed default is source default, creation plus 12h. It writes no next note and yields to explicit promises, cadence and resolved evidence.
-    - Agent creators acquire a 24h lease in the create transaction. Human creators do not. Normal lease renew, fencing and explicit hand-off semantics remain available.
+    - Agent creators acquire a 24h lease in the create transaction, unless the create names an assignee that resolves to another actor and never to the creator; that delegated work is left for the assignee to claim. Human creators do not. Normal lease renew, fencing and explicit hand-off semantics remain available.
     - Release without hand-off and expiry atomically assign responsibility to the chosen parent initiative owner, then the configured workspace lead, and append an automatic note. A fallback owner gains no read authority. Without a readable configured fallback, existing responsible ownership is retained and digested.
     - Unowned/fallback non-cadence work reads digest, never no_promise or stale. Cadence continues to use receipts and the overdue rule alone.
     - A default lapse records one reminder. Subsequent cycles only include the work in a daily owner digest, with idempotent delivery identities. Renewed explicit promises, evidence, terminal state and assignment changes cancel stale queued work.

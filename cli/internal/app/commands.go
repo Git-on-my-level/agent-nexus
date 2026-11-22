@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,9 +55,6 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	}
 	if isDiagnosticGroup(args[0]) && !debug {
 		return args[0], nil, errnorm.Usage("unknown_command", "unknown command "+args[0]+"; use anx debug "+args[0])
-	}
-	if rewritten, ok := applyCommandShapeCompatibilityAlias(args); ok {
-		args = rewritten
 	}
 	if len(args) >= 2 && isHelpToken(args[len(args)-1]) {
 		topic := strings.Join(args[:len(args)-1], " ")
@@ -132,6 +128,9 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 	if isWorkCommandRoot(args[0]) && !isReportLocalCommand(args) {
 		result, name, err := a.runWorkCommand(ctx, args, cfg)
 		return name, result, err
+	}
+	if len(args) >= 2 && args[0] == "agent" && args[1] == "handoffs" {
+		return a.runAgentHandoffCommand(ctx, args[2:], cfg)
 	}
 	switch args[0] {
 	case "series", "adapters":
@@ -478,13 +477,6 @@ func (a *App) readInputFile(path string) ([]byte, error) {
 		readFile = a.ReadFile
 	}
 	return readFile(path)
-}
-
-// readStdinScanner is the bounded line-oriented accessor for the explicitly
-// interactive PM install wizard. Mark consumption so setup cannot auto-replay.
-func (a *App) readStdinScanner(limit int64) *bufio.Scanner {
-	a.stdinConsumed = true
-	return bufio.NewScanner(io.LimitReader(a.Stdin, limit))
 }
 
 func (a *App) readStdinBytes(limit int64) ([]byte, error) {

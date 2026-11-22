@@ -268,11 +268,3 @@ func publicizeDocumentRevisionMap(ctx context.Context, q queryRower, revision ma
 		revision["thread_ref"] = makePublicTypedRef(ctx, q, "thread", threadID)
 	}
 }
-
-func revisionRefsFromRevision(revision map[string]any) []string {
-	refs, err := normalizeStringSlice(revision["refs"])
-	if err != nil {
-		return nil
-	}
-	return refs
-}

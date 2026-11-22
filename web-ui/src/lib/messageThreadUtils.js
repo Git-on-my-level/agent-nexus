@@ -66,7 +66,7 @@ function messageIdentityKeys(message) {
  * Index messages by durable id, public handle, and `event:` ref value so reply
  * parent resolution works after core canonicalizes refs to handles.
  */
-export function buildMessageByKey(messages = []) {
+function buildMessageByKey(messages = []) {
   const map = new Map();
   for (const message of Array.isArray(messages) ? messages : []) {
     for (const key of messageIdentityKeys(message)) {

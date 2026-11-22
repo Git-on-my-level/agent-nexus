@@ -54,7 +54,6 @@ it("migrated UI mutation surfaces cannot bypass their outbox sender", () => {
           "updateDocument",
           "setCardPlan",
           "moveWork",
-          "groupWork",
           "foldWork",
           "unfoldWork",
           "patchWork",
@@ -171,24 +170,6 @@ it("discussion text and metadata use a durable composer and outbox", () => {
       composer += 1;
   });
   expect(composer).toBe(1);
-});
-
-it("decision notes use durable form snapshots", () => {
-  for (const path of ["lib/components/decide/DecisionPanel.svelte"]) {
-    const ast = parse(readFileSync(`${root}/${path}`, "utf8"));
-    let forms = 0;
-    walk(ast.html, (node) => {
-      if (
-        node.type === "Element" &&
-        node.name === "form" &&
-        node.attributes.some(
-          (a) => a.type === "Action" && a.name === "durableForm",
-        )
-      )
-        forms++;
-    });
-    expect(forms).toBe(1);
-  }
 });
 
 it("task and document authoring surfaces checkpoint complete forms", () => {
