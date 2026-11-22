@@ -3,12 +3,10 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"agent-nexus-core/internal/resourceaccess"
 )
@@ -174,6 +172,9 @@ func runRetirementPhase(ctx context.Context, tx *sql.Tx, phase int, cursor sql.N
 		if err := verifyRetiredAccessLedger(ctx, tx); err != nil {
 			return 0, sql.NullInt64{}, false, err
 		}
+		if err := clearRetirementFence(ctx, tx); err != nil {
+			return 0, sql.NullInt64{}, false, err
+		}
 		return 0, sql.NullInt64{}, true, nil
 	default:
 		return 0, sql.NullInt64{}, false, fmt.Errorf("retire legacy access ledger: unknown phase %d", phase)
@@ -183,6 +184,11 @@ func runRetirementPhase(ctx context.Context, tx *sql.Tx, phase int, cursor sql.N
 // retireInstall installs the compact capability, stops the legacy writers, and
 // chooses the first bounded phase. A certified compact ledger skips the rebuild.
 func retireInstall(ctx context.Context, tx *sql.Tx) (int, sql.NullInt64, bool, error) {
+	// Fence the workspace before any destructive phase. A crash after this
+	// commit leaves a marker that a pre-150 binary refuses to open.
+	if err := installRetirementFence(ctx, tx); err != nil {
+		return 0, sql.NullInt64{}, false, err
+	}
 	if err := ensureCompactAccessLedger(ctx, tx); err != nil {
 		return 0, sql.NullInt64{}, false, err
 	}
@@ -718,91 +724,4 @@ func createAdmissionLinkIndex(ctx context.Context, tx *sql.Tx, name string) erro
 		return fmt.Errorf("install admission link index %s: %w", name, err)
 	}
 	return nil
-}
-
-// verifyRetiredAccessLedger is the recorded postcondition for migration 150.
-func verifyRetiredAccessLedger(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range []string{"resource_access_exact_edges", "resource_access_admission_compact_atoms"} {
-		exists, err := sqliteTableExists(ctx, tx, table)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return fmt.Errorf("retired access table still exists: %s", table)
-		}
-	}
-	for _, index := range []string{"idx_access_admission_child", "idx_access_admission_parent", "idx_access_admission_via"} {
-		var sql string
-		if err := tx.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='index' AND name=?`, index).Scan(&sql); err != nil {
-			return err
-		}
-		if !strings.Contains(sql, " WHERE ") {
-			return fmt.Errorf("admission index is not partial: %s", index)
-		}
-	}
-	for _, trigger := range []string{
-		"access_mention_edge_conflict_insert",
-		"access_mention_edge_conflict_update",
-		"access_mention_edge_insert",
-		"access_mention_edge_update",
-		"access_mention_edge_delete",
-		"admission_key_insert",
-		"admission_key_delete",
-		"admission_exact_insert",
-		"admission_exact_update",
-		"admission_exact_delete",
-		"admission_compact_insert",
-		"admission_compact_update",
-		"admission_compact_delete",
-		"admission_compact_source_insert",
-		"admission_compact_source_update",
-		"admission_compact_source_delete",
-	} {
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name=?)`, trigger).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
-			return fmt.Errorf("retired access trigger missing: %s", trigger)
-		}
-	}
-	var reader, stable, forceLegacy int
-	if err := tx.QueryRowContext(ctx, `SELECT reader,stable,force_legacy FROM resource_access_compact_control WHERE singleton=1`).Scan(&reader, &stable, &forceLegacy); err != nil {
-		return err
-	}
-	if reader != 1 || stable != 1 || forceLegacy != 0 {
-		return fmt.Errorf("compact access is not the only reader: reader=%d stable=%d force_legacy=%d", reader, stable, forceLegacy)
-	}
-	return nil
-}
-
-// checkpointMigrationWAL bounds migration WAL growth. Migration 150 commits
-// bounded phases; this truncates the WAL between them so a large workspace
-// never accumulates the whole migration in one WAL.
-func checkpointMigrationWAL(ctx context.Context, db *sql.DB) error {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	// Discard this connection on exit: the zero busy timeout is for the
-	// checkpoint only and must not leak into serving requests.
-	defer conn.Raw(func(any) error { return driver.ErrBadConn })
-	if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout=0`); err != nil {
-		return err
-	}
-	for attempt := 0; attempt < 5; attempt++ {
-		var busy, logPages, checkpointed int
-		if err := conn.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logPages, &checkpointed); err != nil {
-			return err
-		}
-		if busy == 0 {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(50 * time.Millisecond):
-		}
-	}
-	return errors.New("WAL checkpoint remained busy during migration")
 }

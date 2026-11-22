@@ -334,12 +334,22 @@ func enableCompactAccessLease(ctx context.Context, db *sql.DB, lease *scopeProce
 // SetCompactAccessLegacyReads applies the process configuration before serving.
 // It neither grants certification nor overrides a durable operator rollback.
 // The epoch bump makes every consuming authorization snapshot see the switch.
+// Migration 150 retires the legacy exact ledger, so once it is gone there is no
+// legacy reader to force: writing force_legacy=1 would fail the recorded 150
+// postcondition on the next open. The switch is therefore a no-op after 150.
 func (w *Workspace) SetCompactAccessLegacyReads(ctx context.Context, force bool) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	var legacy bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&legacy); err != nil {
+		return err
+	}
+	if !legacy {
+		return nil
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET force_legacy=? WHERE singleton=1 AND force_legacy<>?`, force, force)
 	if err != nil {
 		return err

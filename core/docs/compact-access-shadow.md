@@ -47,9 +47,10 @@ retry the upgrade.
 
 The legacy exact ledger is retired, so the historical instant reader rollback
 and `ANX_COMPACT_ACCESS_LEGACY_READS` switch no longer select a physical ledger.
-The control columns remain for compatibility, but the compact ledger is always
-the reader. Roll back a bad release by restoring the verified pre-upgrade
-backup; do not attempt to recreate the legacy table by hand.
+The switch is a no-op once the legacy ledger is gone. The control columns remain
+for compatibility, but the compact ledger is always the reader. Roll back a bad
+release by restoring the verified pre-upgrade backup; do not attempt to
+recreate the legacy table by hand.
 
 ## Reclaim file space in a maintenance window
 

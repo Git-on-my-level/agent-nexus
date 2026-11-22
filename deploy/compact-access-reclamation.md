@@ -108,7 +108,8 @@ under the same stopped boundary. After admitting writes, never overwrite them
 with the backup: use forward recovery. Migration 150 retired the legacy ledger,
 so there is no instant reader fallback that recreates it; rollback is
 restore-only. The `--compact-access-legacy-reads` switch only changes the reader
-before 150 and cannot restore the dropped tables.
+before 150, cannot restore the dropped tables, and is a no-op once the legacy
+ledger is gone.
 
 ## Self-host operators
 
@@ -142,13 +143,16 @@ The migration commits bounded phases and checkpoints the WAL between them, so a
 large workspace does not accumulate the whole migration in one WAL. Its peak
 additional disk requirement is approximately one times the current
 `state.sqlite` size for the raw-edge staging copy and verification temp
-b-trees, plus WAL headroom for one bounded phase. The checked-in 100k-edge
-measurement (`TestMigration150DenseFixtureWALBound` in
-`core/internal/storage`) records a peak WAL of about 8 MiB against a 118 MiB
+b-trees, plus WAL headroom for one index build. The checked-in 100k-edge,
+300k-admission-link measurement (`TestMigration150DenseFixtureWALBound` in
+`core/internal/storage`) records a peak WAL of about 12 MiB against a 386 MB
 database.
 
 A workspace whose compact ledger diverges fails to open with a migration error.
 Restore the verified backup, let the previous release finish certification, and
-retry the upgrade. After a successful upgrade, run the reclamation step above
-and record the before/after active-file bytes. The checked-in reclamation
-measurement is `TestPerformanceCompactAccessShadow` in `core/internal/storage`.
+retry the upgrade. If the migration is interrupted, the workspace carries a
+format fence that the previous release refuses to open; restart the new release
+to resume the bounded phases. After a successful upgrade, run the reclamation
+step above and record the before/after active-file bytes. The checked-in
+reclamation measurement is `TestPerformanceCompactAccessShadow` in
+`core/internal/storage`.

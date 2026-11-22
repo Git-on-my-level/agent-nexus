@@ -2765,11 +2765,12 @@ decision to be identical. `TestRetireLegacyAccessLedgerAbortsOnMismatch` proves
 a divergent compact ledger aborts the upgrade.
 
 The migration commits bounded phases and checkpoints the WAL between them, so
-WAL does not grow with database size. `TestMigration150DenseFixtureWALBound`
-runs a 100k-edge fixture, records a peak WAL of about 8 MiB against a 118 MiB
-database, and asserts a 32 MiB bound. Peak additional disk is approximately one
-times the database size for the raw-edge staging copy and verification temp
-b-trees, plus WAL headroom for one bounded phase.
+WAL is bounded by one index build, not the database size.
+`TestMigration150DenseFixtureWALBound` runs a 100k-edge fixture with 300k
+admission links, records a peak WAL of about 12 MiB against a 386 MB database,
+and asserts a 32 MiB bound. Peak additional disk is approximately one times the
+database size for the raw-edge staging copy and verification temp b-trees, plus
+WAL headroom for one index build.
 
 ## Portable work briefing
 

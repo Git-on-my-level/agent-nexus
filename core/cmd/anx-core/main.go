@@ -157,7 +157,7 @@ func main() {
 	flag.StringVar(&projectionMode, "projection-mode", projectionMode, "projection maintenance mode (background|manual)")
 	flag.DurationVar(&projectionPollInterval, "projection-maintenance-interval", projectionPollInterval, "poll interval used by background projection maintenance")
 	flag.IntVar(&projectionBatchSize, "projection-maintenance-batch-size", projectionBatchSize, "max dirty thread projections refreshed per maintenance pass")
-	flag.BoolVar(&compactAccessLegacyReads, "compact-access-legacy-reads", compactAccessLegacyReads, "force legacy authorization reads before migration 150 (rollback kill switch)")
+	flag.BoolVar(&compactAccessLegacyReads, "compact-access-legacy-reads", compactAccessLegacyReads, "force legacy authorization reads before migration 150 (no-op after 150)")
 	flag.BoolVar(&scopedInboxReader, "scoped-inbox-reader", scopedInboxReader, "enable the scoped inbox index with legacy authorization and fallback")
 	flag.BoolVar(&enforceLocalQuotas, "enforce-local-quotas", enforceLocalQuotas, "opt in to workspace capacity quotas (technical safety limits remain enabled)")
 	flag.StringVar(&workspaceAccessMode, "workspace-access-mode", workspaceAccessMode, "workspace HTTP API mode: read_write or read_only (hosted quota enforcement)")

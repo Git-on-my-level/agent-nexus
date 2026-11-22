@@ -279,8 +279,9 @@ func TestMeasureLegacyAccessLedgerReduction(t *testing.T) {
 }
 
 // TestMigration150DenseFixtureWALBound runs the real bounded migration over a
-// 100k-edge fixture and records the peak WAL. The migration checkpoints between
-// phases, so peak WAL is bounded by one batch/index build, not the database.
+// 100k-edge fixture with dense admission links and records the peak WAL. The
+// migration checkpoints between phases, so peak WAL is bounded by one index
+// build, not the database.
 func TestMigration150DenseFixtureWALBound(t *testing.T) {
 	if testing.Short() {
 		t.Skip("dense migration fixture")
@@ -289,10 +290,26 @@ func TestMigration150DenseFixtureWALBound(t *testing.T) {
 	root := t.TempDir()
 	db := mainHistoryDatabase(t, root, 149)
 	const edges = 100000
+	const keys = 97
+	const denseLinks = 50000
 	if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
 		INSERT INTO resource_access_edges(source_kind,source_id,target_ref)
-		SELECT 'card','source-'||i,'document:target-'||(i%97) FROM n`, edges); err != nil {
+		SELECT 'card','source-'||i,'document:target-'||(i%?) FROM n`, edges, keys); err != nil {
 		t.Fatal(err)
+	}
+	// Admission keys make the migration rebuild dense exact/compact links; the
+	// comment origins make the two partial child/parent index builds non-empty.
+	if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<?)
+		INSERT INTO resource_access_admission_keys(origin,origin_id,kind,id,ref,navigation,atom,published)
+		SELECT 'fixture','key-'||i,'document','target-'||i,'',0,unhex(anx_resource_atom_key(CAST('document:target-'||i AS BLOB))),0 FROM n`, keys); err != nil {
+		t.Fatal(err)
+	}
+	for _, origin := range []string{"comment", "document_comment"} {
+		if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
+			INSERT INTO resource_access_admission_links(origin,origin_id,via_id,parent_kind,parent_id,child_kind,child_id,ledger)
+			SELECT ?,?||'-'||i,0,'event','parent-'||i,'document','child-'||i,0 FROM n`, denseLinks, origin, origin); err != nil {
+			t.Fatal(err)
+		}
 	}
 	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
 	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
@@ -333,7 +350,11 @@ func TestMigration150DenseFixtureWALBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("edges=%d db_bytes=%d peak_wal_bytes=%d peak_phase=%d", edges, info.Size(), peakWAL, peakPhase)
+	var links int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM resource_access_admission_links`).Scan(&links); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("edges=%d keys=%d links=%d db_bytes=%d peak_wal_bytes=%d peak_phase=%d", edges, keys, links, info.Size(), peakWAL, peakPhase)
 	if peakWAL > 32<<20 {
 		t.Fatalf("peak WAL %d exceeds the 32 MiB bound", peakWAL)
 	}
@@ -449,5 +470,195 @@ func TestRetireLegacyAccessLedgerFreshWorkspace(t *testing.T) {
 	var n int
 	if err := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM resource_access_compact_edges`).Scan(&n); err != nil || n == 0 {
 		t.Fatalf("compact ledger not written: %d %v", n, err)
+	}
+}
+
+// TestMigration150CrashLeavesFenceOldLoaderRefuses crashes after the legacy
+// tables are dropped but before version 150 is recorded. The fence must make a
+// pre-150 loader refuse the partial state, and the new binary must resume.
+func TestMigration150CrashLeavesFenceOldLoaderRefuses(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	if _, err := db.ExecContext(ctx, `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('card','a','document:b'),('card','c','document:d')`); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	crash := migration{
+		Version:    150,
+		ApplyChunk: retireLegacyAccessLedgerChunk,
+		Verify:     verifyRetiredAccessLedger,
+		BetweenChunks: func(ctx context.Context, db *sql.DB) error {
+			var phase int
+			if err := db.QueryRowContext(ctx, `SELECT phase FROM resource_access_retirement_state WHERE singleton=1`).Scan(&phase); err != nil {
+				return err
+			}
+			if phase == retirePhaseReinstallTriggers {
+				return errors.New("simulated crash after drop")
+			}
+			return checkpointMigrationWAL(ctx, db)
+		},
+	}
+	if err := applyMigrationToLedger(ctx, db, crash, "schema_migrations"); err == nil {
+		t.Fatal("simulated crash did not abort the migration")
+	}
+	var exact bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&exact); err != nil {
+		t.Fatal(err)
+	}
+	if exact {
+		t.Fatal("crash did not reach the drop phase")
+	}
+	var recorded int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE version=150`).Scan(&recorded); err != nil {
+		t.Fatal(err)
+	}
+	if recorded != 0 {
+		t.Fatal("crashed migration was recorded")
+	}
+	if err := releasedLoaderRefusesFence(ctx, db); err == nil {
+		t.Fatal("released loader accepted a partial 150 workspace")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatalf("resume after crash: %v", err)
+	}
+	defer ws.Close()
+	var fence int
+	if err := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name='scope_format_state'`).Scan(&fence); err != nil {
+		t.Fatal(err)
+	}
+	if fence != 0 {
+		t.Fatal("fence table retained after completion")
+	}
+}
+
+// releasedLoaderRefusesFence mirrors the pre-150 applyWorkspaceMigrations
+// check: a non-empty scope_format_state without a fenced ledger is refused.
+func releasedLoaderRefusesFence(ctx context.Context, db *sql.DB) error {
+	var ledgerType string
+	err := db.QueryRowContext(ctx, `SELECT type FROM sqlite_schema WHERE name='scope_schema_migrations'`).Scan(&ledgerType)
+	if errors.Is(err, sql.ErrNoRows) {
+		var stateTable int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name='scope_format_state'`).Scan(&stateTable); err != nil {
+			return err
+		}
+		if stateTable != 0 {
+			var markers int
+			if err := db.QueryRowContext(ctx, `SELECT count(*) FROM scope_format_state`).Scan(&markers); err != nil {
+				return err
+			}
+			if markers != 0 {
+				return errors.New("fenced scope migration ledger missing")
+			}
+		}
+		return nil
+	}
+	return err
+}
+
+// TestMigration150RebuildsStaleAdmissionLedgers deletes both admission ledgers
+// before the upgrade and requires migration 150 to rebuild them from the
+// compact ledger.
+func TestMigration150RebuildsStaleAdmissionLedgers(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<200)
+		INSERT INTO resource_access_edges(source_kind,source_id,target_ref)
+		SELECT 'card','source-'||i,'document:target-'||(i%7) FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i+1 FROM n WHERE i<6)
+		INSERT INTO resource_access_admission_keys(origin,origin_id,kind,id,ref,navigation,atom,published)
+		SELECT 'fixture','key-'||i,'document','target-'||i,'',0,unhex(anx_resource_atom_key(CAST('document:target-'||i AS BLOB))),0 FROM n`); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	proof := compactCertify(t, w)
+	if err := cutoverForTest(t, w, ctx, proof); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM resource_access_admission_links WHERE origin IN ('exact','compact')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	tx, err := ws.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	for _, ledger := range []struct {
+		origin string
+		value  int
+	}{{"exact", 1}, {"compact", 2}} {
+		ok, err := admissionLedgerMatches(ctx, tx, ledger.origin, ledger.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatalf("%s admission ledger was not rebuilt", ledger.origin)
+		}
+	}
+}
+
+// TestMigration150SkipsStableCopyWhenRawDone finishes the stable copy before
+// the upgrade and requires migration 150 to skip the copy phase and finalize.
+func TestMigration150SkipsStableCopyWhenRawDone(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	if _, err := db.ExecContext(ctx, `INSERT INTO resource_access_edges(source_kind,source_id,target_ref) VALUES('card','a','document:b'),('card','c','document:d')`); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	compactCertify(t, w)
+	var rawDone int
+	if err := db.QueryRowContext(ctx, `SELECT raw_done FROM resource_access_compact_control WHERE singleton=1`).Scan(&rawDone); err != nil {
+		t.Fatal(err)
+	}
+	if rawDone != 1 {
+		t.Fatal("fixture did not finish the stable copy")
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ws.Close()
+	var stable int
+	if err := ws.DB().QueryRowContext(ctx, `SELECT stable FROM resource_access_compact_control WHERE singleton=1`).Scan(&stable); err != nil {
+		t.Fatal(err)
+	}
+	if stable != 1 {
+		t.Fatal("migration did not finalize the stable copy")
+	}
+	var rows int
+	if err := ws.DB().QueryRowContext(ctx, `SELECT count(*) FROM resource_access_edges`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 2 {
+		t.Fatalf("raw edges=%d", rows)
 	}
 }

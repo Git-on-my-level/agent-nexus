@@ -20,8 +20,10 @@ variables.
 `--compact-access-legacy-reads` / `ANX_COMPACT_ACCESS_LEGACY_READS` forces legacy
 reads before serving on restart. Migration 150 retires the legacy exact-edge
 ledger, so after a workspace reaches 150 the compact ledger is the only reader
-and rollback is restore-only. See [compact access shadow migration](compact-access-shadow.md)
-for stable edge IDs, verified file reclamation and rollback.
+and rollback is restore-only. The switch is a no-op once the legacy ledger is
+gone; it never writes `force_legacy` after 150. See
+[compact access shadow migration](compact-access-shadow.md) for stable edge IDs,
+verified file reclamation and rollback.
 
 | Purpose                                                                                                                                                                           | Flag                            | Env                                       | Default                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
@@ -327,12 +329,15 @@ Prerequisites:
 - Reserve free space on the state volume for the raw-edge staging copy and the
   verification temp b-trees. The peak additional requirement is approximately
   one times the current `state.sqlite` size, plus WAL headroom. The migration
-  commits bounded phases and checkpoints the WAL between them, so WAL does not
-  grow with database size. The checked-in 100k-edge measurement
-  (`TestMigration150DenseFixtureWALBound` in `core/internal/storage`) records a
-  peak WAL of about 8 MiB against a 118 MiB database.
+  commits bounded phases and checkpoints the WAL between them, so WAL is bounded
+  by one index build, not the database size. The checked-in 100k-edge,
+  300k-admission-link measurement (`TestMigration150DenseFixtureWALBound` in
+  `core/internal/storage`) records a peak WAL of about 12 MiB against a 386 MB
+  database.
 - Do not run the old and new binaries against the same workspace. Stop the old
-  core before starting the release that contains 150.
+  core before starting the release that contains 150. If the migration is
+  interrupted, the workspace carries a format fence that the previous release
+  refuses to open; restart the new release to resume the bounded phases.
 
 Rollback:
 

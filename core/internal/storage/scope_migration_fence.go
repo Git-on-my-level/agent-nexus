@@ -70,7 +70,17 @@ func applyWorkspaceMigrations(ctx context.Context, db *sql.DB) error {
 				return err
 			}
 			if markers != 0 {
-				return errors.New("fenced scope migration ledger missing")
+				// Migration 150 installs this sentinel before its first
+				// destructive phase. Accept only that marker so a resumed
+				// upgrade can finish; any other marker is a fenced ledger
+				// without its ledger table.
+				var sentinel int
+				if err := db.QueryRowContext(ctx, `SELECT count(*) FROM scope_format_state WHERE singleton=1 AND ledger_digest=?`, retirementFenceDigest).Scan(&sentinel); err != nil {
+					return err
+				}
+				if sentinel != markers {
+					return errors.New("fenced scope migration ledger missing")
+				}
 			}
 		}
 		// Unknown views fail through the historical loader as well.
@@ -101,12 +111,14 @@ func applyWorkspaceMigrations(ctx context.Context, db *sql.DB) error {
 	if format != 1 || reader != "legacy" {
 		return errors.New("unsupported scope reader format")
 	}
-	digest, err := scopeLedgerDigest(ctx, tx, "scope_schema_migrations")
-	if err != nil {
-		return err
-	}
-	if digest != storedDigest {
-		return errors.New("scope migration ledger integrity mismatch")
+	if storedDigest != retirementFenceDigest {
+		digest, err := scopeLedgerDigest(ctx, tx, "scope_schema_migrations")
+		if err != nil {
+			return err
+		}
+		if digest != storedDigest {
+			return errors.New("scope migration ledger integrity mismatch")
+		}
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT version FROM scope_schema_migrations`)
 	if err != nil {

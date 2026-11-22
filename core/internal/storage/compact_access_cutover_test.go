@@ -148,8 +148,9 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 	if err := w.db.QueryRowContext(ctx, "SELECT reader FROM resource_access_compact_control").Scan(&mode); err != nil || mode != 1 {
 		t.Fatal("certification not published", mode, err)
 	}
-	// The historical kill switch no longer selects a physical ledger, but a
-	// changed value still invalidates warm authorization snapshots.
+	// Migration 150 retires the legacy ledger, so the historical kill switch is
+	// a no-op: it must not write force_legacy (which would fail the recorded
+	// 150 postcondition on the next open) or invalidate snapshots.
 	var epoch int64
 	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&epoch); err != nil {
 		t.Fatal(err)
@@ -159,13 +160,17 @@ func TestCompactAccessCertifiedActivationAndKillSwitch(t *testing.T) {
 	}
 	selected(true)
 	var after int64
-	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
-		t.Fatal("epoch not invalidated", after, epoch, err)
+	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch {
+		t.Fatal("no-op switch changed epoch", after, epoch, err)
+	}
+	var force int
+	if err := w.db.QueryRowContext(ctx, "SELECT force_legacy FROM resource_access_compact_control").Scan(&force); err != nil || force != 0 {
+		t.Fatal("no-op switch wrote force_legacy", force, err)
 	}
 	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch+1 {
+	if err := w.db.QueryRowContext(ctx, "SELECT version FROM resource_access_epoch").Scan(&after); err != nil || after != epoch {
 		t.Fatal("idempotent config changed epoch", after, epoch, err)
 	}
 	if err := w.RollbackCompactAccess(ctx); err != nil {
@@ -181,6 +186,60 @@ func TestCompactAccessUpgradeOverrideMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := w.SetCompactAccessLegacyReads(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCompactAccessLegacyReadsNoOpAfterMigration150 proves the rollback switch
+// cannot write force_legacy after 150, so a restart still opens the workspace.
+func TestCompactAccessLegacyReadsNoOpAfterMigration150(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	ws, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.SetCompactAccessLegacyReads(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	var force int
+	if err := ws.DB().QueryRowContext(ctx, `SELECT force_legacy FROM resource_access_compact_control WHERE singleton=1`).Scan(&force); err != nil {
+		t.Fatal(err)
+	}
+	if force != 0 {
+		t.Fatalf("force_legacy=%d after migration 150", force)
+	}
+	if err := ws.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := InitializeWorkspace(ctx, root)
+	if err != nil {
+		t.Fatalf("reopen after legacy-reads switch: %v", err)
+	}
+	defer reopened.Close()
+}
+
+// TestCompactAccessLegacyReadsStillForcesBeforeMigration150 keeps the pre-150
+// kill switch working for a workspace that has not retired the ledger.
+func TestCompactAccessLegacyReadsStillForcesBeforeMigration150(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, 149)
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.SetCompactAccessLegacyReads(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	var force int
+	if err := db.QueryRowContext(ctx, `SELECT force_legacy FROM resource_access_compact_control WHERE singleton=1`).Scan(&force); err != nil {
+		t.Fatal(err)
+	}
+	if force != 1 {
+		t.Fatalf("force_legacy=%d before migration 150", force)
+	}
+	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 }
