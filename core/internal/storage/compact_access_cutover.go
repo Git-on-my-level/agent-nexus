@@ -302,12 +302,24 @@ func stabilizeAccessEdgesTx(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+// RollbackCompactAccess selects the legacy reader for a workspace that still
+// has the legacy exact ledger. Migration 150 retires that ledger, so after 150
+// there is no legacy reader to select: writing reader=2 would fail the recorded
+// 150 postcondition on the next open. The rollback is therefore a no-op once
+// the legacy ledger is gone.
 func (w *Workspace) RollbackCompactAccess(ctx context.Context) error {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	var legacy bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='resource_access_exact_edges')`).Scan(&legacy); err != nil {
+		return err
+	}
+	if !legacy {
+		return nil
+	}
 	if _, err = tx.ExecContext(ctx, `UPDATE resource_access_compact_control SET reader=2 WHERE singleton=1; UPDATE resource_access_epoch SET version=version+1 WHERE singleton=1`); err != nil {
 		return err
 	}

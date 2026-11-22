@@ -3662,7 +3662,7 @@
     "../storage/compact_access.go:verifyCompactAccess": "f07b564cd0c504827cbac2eefd6daf62a10060a8976fe8f6335b73964e54320c",
     "../storage/compact_access_cutover.go:*Workspace:CutoverCompactAccess": "2d2e001ac94d04f9b01a1c1a96225b43bd6f3e49f3ac32e8a20b4958cf2cb5e5",
     "../storage/compact_access_cutover.go:*Workspace:MaintainStableAccessBatch": "4e8afdb9365ba05ff7bb6f5b1b72151f63a9748ff88682e0b2b573d0b4377086",
-    "../storage/compact_access_cutover.go:*Workspace:RollbackCompactAccess": "dfc304fbb120339563b175348e5193be25b05260e6aab07a6917069d40d627f1",
+    "../storage/compact_access_cutover.go:*Workspace:RollbackCompactAccess": "bf864c9466c3024e0a503e528daaa120912f141e078ba1899efafaca6fb39f92",
     "../storage/compact_access_cutover.go:*Workspace:SetCompactAccessLegacyReads": "d1bcabd73b8098aa01aa49c241dfc18efa81f716874a5198e381ca033eb1dc72",
     "../storage/compact_access_cutover.go:*Workspace:VerifyCompactAccessCutover": "f6649f3b962ab34defaa18f4351869984764fd11b237dcc92fb4e09cfc691989",
     "../storage/compact_access_cutover.go:enableCompactAccessLease": "f92b83fff6ddffb1fc7c7e208fb4ec9b3d61cdf24ed546dae63018c0c8027775",

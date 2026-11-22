@@ -20,6 +20,22 @@ func compactFixture(t *testing.T, n int) *Workspace {
 	return w
 }
 
+// compactFixtureAtVersion builds a workspace on a historical schema so tests
+// can exercise the pre-150 cutover and rollback paths that migration 150
+// retires.
+func compactFixtureAtVersion(t *testing.T, n, version int) *Workspace {
+	t.Helper()
+	root := t.TempDir()
+	db := mainHistoryDatabase(t, root, version)
+	w := &Workspace{layout: NewLayout(root), db: db, processLock: &scopeProcessLease{refs: 1}}
+	if err := w.initializeCompactAccessMetadata(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	compactSeed(t, w, n)
+	return w
+}
+
 func compactSeed(t *testing.T, w *Workspace, n int) {
 	t.Helper()
 	tx, err := w.db.BeginTx(context.Background(), nil)
