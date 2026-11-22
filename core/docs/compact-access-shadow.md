@@ -35,9 +35,11 @@ Migration 150 runs once at startup, before serving. It:
 
 Each phase commits its own transaction and the runner checkpoints the WAL
 between phases. Peak WAL is therefore bounded by one batch or one index build,
-not by the database size. The peak additional disk requirement is approximately
-one times the current `state.sqlite` size for the raw-edge staging copy and
-verification temp b-trees, plus WAL headroom for one bounded phase.
+not by the database size. The first committed phase installs a format fence; a
+pre-150 binary refuses an interrupted workspace, and the new binary resumes it.
+The peak additional disk requirement is approximately one times the current
+`state.sqlite` size for the raw-edge staging copy and verification temp
+b-trees, plus WAL headroom for one bounded phase.
 
 A workspace whose compact ledger diverges fails to open with a migration error.
 Restore the verified backup, let the previous release finish certification, and
