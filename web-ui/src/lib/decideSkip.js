@@ -7,10 +7,11 @@
  * that would stop the same question coming back.
  *
  * Skipping is journaled at once, then waits a few seconds behind an Undo,
- * like an answer. Then every skip goes into the durable outbox
- * (`mutationOutbox.js`) as its own entry, so a reload, a crash or a dropped
- * connection never loses it and a failure brings that one row back with a
- * retry.
+ * like an answer. Then the whole selection goes into the durable outbox
+ * (`mutationOutbox.js`) as one entry, sent in chunks through
+ * POST /inbox/responses with a receipt per item, so a reload, a crash or a
+ * dropped connection never loses it, a retry sends only what is left, and a
+ * failure brings back only the rows that did not go through.
  */
 import { get, writable } from "svelte/store";
 import { refreshBrief } from "$lib/briefStore.js";
@@ -21,9 +22,9 @@ import {
 import { randomUUID } from "$lib/replayPolicy.js";
 import { localWorkScope, canUseLocalWorkScope } from "$lib/localWorkScope.js";
 import { listLocalWork, saveLocalWork } from "$lib/localWorkStore.js";
-import { SKIP } from "$lib/standingRulingSend.js";
+import { SKIP, SKIP_MANY } from "$lib/standingRulingSend.js";
 
-export { SKIP };
+export { SKIP, SKIP_MANY };
 
 /** What the requester reads. It says plainly that nothing was decided. */
 export const SKIP_REASON =
@@ -32,6 +33,7 @@ export const SKIP_REASON =
 export const SKIP_UNDO_MS = 5_000;
 
 export const skipTarget = (itemId) => `skip:${itemId}`;
+const skipManyTarget = (batch) => `skip-many:${batch}`;
 
 /**
  * Asks, reviews, grouped asks and curation proposals answer through
@@ -75,15 +77,20 @@ let timer = null;
 let current = null;
 export const skipSaveFailures = writable(0);
 
-function frozenEntry(decision, href) {
+/** One outbox entry for the whole selection; the sender chunks it. */
+function frozenEntry(decisions, batch, href) {
+  const count = decisions.length;
   return {
     key: randomUUID(),
-    target: skipTarget(decision.inboxItemId),
-    operation: SKIP,
+    target: skipManyTarget(batch),
+    operation: SKIP_MANY,
     href,
-    title: "Skip without deciding",
-    preview: decision.title,
-    request: skipRequest(decision),
+    title: count === 1 ? "Skip without deciding" : `Skip ${count} decisions`,
+    preview:
+      count === 1
+        ? decisions[0].title
+        : decisions.map((decision) => decision.title).join("\n"),
+    request: { items: decisions.map(skipRequest) },
   };
 }
 
@@ -96,7 +103,7 @@ export function skipDecisions(decisions, { href = "" } = {}) {
   if (current) void flushSkip();
   const batch = randomUUID();
   const deadline = Date.now() + SKIP_UNDO_MS;
-  const entries = chosen.map((decision) => frozenEntry(decision, href));
+  const entries = [frozenEntry(chosen, batch, href)];
   let saved;
   try {
     // Writes the synchronous journal now; storage failure stops the skip.
@@ -150,7 +157,13 @@ async function sendBatch(scope, batch, entries) {
   const saved = await Promise.allSettled(
     entries.map((entry) => enqueueLocalMutation(entry)),
   );
-  const failed = saved.filter((result) => result.status === "rejected").length;
+  const failed = saved.reduce(
+    (sum, result, index) =>
+      result.status === "rejected"
+        ? sum + (entries[index].request?.items?.length ?? 1)
+        : sum,
+    0,
+  );
   skipSaveFailures.set(failed);
   // Keep the journal until every entry is in the outbox.
   if (!failed) forgetPending(scope, batch, "sent");
@@ -211,32 +224,57 @@ export function watchPendingSkips() {
   });
 }
 
+const isSkip = (entry) =>
+  entry?.operation === SKIP || entry?.operation === SKIP_MANY;
+
+/** Item ids a skip entry covers, or, once it needs the reader, has sent. */
+function coveredIds(entry, { sentOnly = false } = {}) {
+  if (entry.operation === SKIP)
+    return sentOnly ? [] : [String(entry.target ?? "").slice(5)];
+  const items = entry.request?.items ?? [];
+  const done = entry.receipt?.done ?? {};
+  return items
+    .map((item) => item.item_id)
+    .filter((id) => !sentOnly || done[id]);
+}
+
 /**
  * Item ids being skipped: behind Undo, waiting to send, sending, or
  * confirmed. Decide drops those rows at once; a send that needs the reader
- * (`attention`) brings its row back.
+ * (`attention`) brings back only the rows it has not sent.
  */
 export function skippingItemIds(pending, outbox, confirmations) {
-  const prefix = skipTarget("");
-  return [
-    ...(pending?.ids ?? []),
-    ...[
-      ...(outbox ?? [])
-        .filter(
-          (entry) => entry.operation === SKIP && entry.state !== "attention",
-        )
-        .map((entry) => entry.target),
-      ...Object.keys(confirmations ?? {}),
-    ]
-      .filter((target) => String(target ?? "").startsWith(prefix))
-      .map((target) => target.slice(prefix.length)),
-  ];
+  const ids = [...(pending?.ids ?? [])];
+  for (const entry of outbox ?? []) {
+    if (!isSkip(entry)) continue;
+    ids.push(...coveredIds(entry, { sentOnly: entry.state === "attention" }));
+  }
+  for (const [target, row] of Object.entries(confirmations ?? {})) {
+    if (target.startsWith(skipTarget("")))
+      ids.push(target.slice(skipTarget("").length));
+    else if (target.startsWith(skipManyTarget("")) && row)
+      ids.push(...coveredIds(row));
+  }
+  return ids.filter(Boolean);
 }
 
 /** Skips the outbox could not send and that need the reader. */
 export function stuckSkips(outbox) {
   return (outbox ?? []).filter(
-    (entry) => entry.operation === SKIP && entry.state === "attention",
+    (entry) => isSkip(entry) && entry.state === "attention",
+  );
+}
+
+/** How many decisions those stuck entries still hold. */
+export function stuckSkipCount(stuck) {
+  return (stuck ?? []).reduce(
+    (sum, entry) =>
+      sum +
+      (entry.operation === SKIP
+        ? 1
+        : coveredIds(entry).length -
+          coveredIds(entry, { sentOnly: true }).length),
+    0,
   );
 }
 
@@ -250,11 +288,12 @@ let refreshTimer = null;
 export function watchSkipConfirmations() {
   if (stopConfirmed) return;
   const seen = new Set(Object.keys(get(mutationConfirmations) ?? {}));
-  const prefix = skipTarget("");
+  const prefixes = [skipTarget(""), skipManyTarget("")];
   stopConfirmed = mutationConfirmations.subscribe((rows) => {
     let fresh = false;
     for (const target of Object.keys(rows ?? {})) {
-      if (!target.startsWith(prefix) || seen.has(target)) continue;
+      if (seen.has(target) || !prefixes.some((p) => target.startsWith(p)))
+        continue;
       seen.add(target);
       fresh = true;
     }

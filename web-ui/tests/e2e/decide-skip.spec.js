@@ -5,7 +5,9 @@ import brief from "../../../contracts/fixtures/brief/brief.v1.json" with { type:
  * Decide's multi-select and Skip all: clear a backlog without deciding it.
  * Every skipped ask is closed with outcome `skipped` and a note saying
  * nothing was decided; access requests and PM decisions are left for an
- * answer. Skips wait behind Undo, then go out through the durable outbox.
+ * answer. Skips wait behind Undo, then go out through the durable outbox as
+ * chunks of POST /inbox/responses, or one respond per item where the route is
+ * not available.
  */
 const ACTOR = "actor-decide-skip-e2e";
 const LIST = "/o/local/w/local/decide";
@@ -18,7 +20,7 @@ const json = (route, body, status = 200) =>
     body: JSON.stringify(body),
   });
 
-async function setup(context) {
+async function setup(context, { batchRoute = true } = {}) {
   await context.addInitScript((actor) => {
     localStorage.setItem("anx_ui_actor_id:local", actor);
     localStorage.setItem("workspaceTourSeen.local", "1");
@@ -43,6 +45,22 @@ async function setup(context) {
       json(route, { ...brief, generated_at: new Date().toISOString() }),
   );
   const sent = [];
+  const batches = [];
+  await context.route(/\/inbox\/responses$/, (route) => {
+    if (!batchRoute)
+      return json(
+        route,
+        { error: { code: "route_not_available", message: "not available" } },
+        404,
+      );
+    const { items } = route.request().postDataJSON();
+    batches.push(items.length);
+    for (const { inbox_item_id: id, ...body } of items) sent.push({ id, body });
+    return json(route, {
+      results: items.map((_, index) => ({ index, status: "responded" })),
+    });
+  });
+  sent.batches = batches;
   await context.route(/\/inbox\/[^/]+\/respond$/, (route) => {
     const id = decodeURIComponent(
       new URL(route.request().url()).pathname.split("/").at(-2),
@@ -80,6 +98,8 @@ test.describe("wide", () => {
     expect(sent).toHaveLength(0);
 
     await expect.poll(() => sent.length, { timeout: 15_000 }).toBe(3);
+    // One request for the whole selection.
+    expect(sent.batches).toEqual([3]);
     expect(sent.map((s) => s.id).sort()).toEqual([...SKIPPABLE].sort());
     for (const { body } of sent) {
       expect(body.outcome).toBe("skipped");
@@ -88,6 +108,19 @@ test.describe("wide", () => {
     }
     await expect(page.locator("[data-decide-row]")).toHaveCount(2);
     await expect(page.locator("[data-decide-skip-toast]")).toHaveCount(0);
+  });
+
+  test("falls back to one respond per decision where the batch route is missing", async ({
+    page,
+    context,
+  }) => {
+    const sent = await setup(context, { batchRoute: false });
+    await page.goto(LIST);
+    await page.locator("[data-decide-bulk] [data-decide-skip-all]").click();
+    await expect.poll(() => sent.length, { timeout: 15_000 }).toBe(3);
+    expect(sent.batches).toEqual([]);
+    expect(sent.map((s) => s.id).sort()).toEqual([...SKIPPABLE].sort());
+    await expect(page.locator("[data-decide-row]")).toHaveCount(2);
   });
 
   test("select some with clicks and X, then Undo puts them back", async ({

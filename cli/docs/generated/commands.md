@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `280`
+- Commands: `281`
 
 ## `actors.create`
 
@@ -2227,6 +2227,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`, `write`
 - Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`, `quota_exceeded`
 - Output: Returns `{ event, notify }`.
+
+## `inbox.respond_many`
+
+- CLI path: `inbox respond-many`
+- HTTP: `POST /inbox/responses`
+- Stability: `beta`
+- Surface: `projection`
+- Input mode: `json-body`
+- Why: A human clears many asks at once (Decide's Skip all) in one request instead of one request per ask.
+- Concepts: `inbox`, `write`
+- Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`
+- Output: Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.
+- Agent notes: Needs a signed-in human session, like inbox respond. Each item replays by its own idempotency_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.
 
 ## `inbox.stream`
 

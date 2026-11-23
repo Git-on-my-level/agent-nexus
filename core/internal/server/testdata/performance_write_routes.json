@@ -451,6 +451,11 @@
   },
   {
     "method": "POST",
+    "path": "/inbox/responses",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
     "path": "/ops/blob-usage/rebuild",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },

@@ -9997,6 +9997,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.list",
       "inbox.respond",
+      "inbox.respond_many",
       "inbox.stream",
       "inbox.summary"
     ],
@@ -10026,6 +10027,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.get",
       "inbox.respond",
+      "inbox.respond_many",
       "inbox.stream",
       "inbox.summary"
     ],
@@ -10132,11 +10134,58 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "inbox.get",
       "inbox.list",
+      "inbox.respond_many",
       "inbox.stream",
       "inbox.summary"
     ],
     "go_method": "InboxRespond",
     "ts_method": "inboxRespond"
+  },
+  {
+    "command_id": "inbox.respond_many",
+    "cli_path": "inbox respond-many",
+    "group": "inbox",
+    "method": "POST",
+    "path": "/inbox/responses",
+    "operation_id": "respondInboxItems",
+    "summary": "Respond to many human attention inbox items",
+    "description": "Records one response per item, in order, through the same rules as POST /inbox/{inbox_id}/respond: authorization, idempotency replay, ask batches and requester wake are identical. Items are independent; one failing never rolls back another. At most 100 items per request. After a time budget the remaining items are returned as deferred without being attempted, so the caller sends them again in a later request.",
+    "why": "A human clears many asks at once (Decide's Skip all) in one request instead of one request per ask.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.",
+    "error_codes": [
+      "auth_required",
+      "human_required",
+      "invalid_request",
+      "invalid_token"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "projection",
+    "agent_notes": "Needs a signed-in human session, like inbox respond. Each item replays by its own idempotency_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "items",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "inbox.get",
+      "inbox.list",
+      "inbox.respond",
+      "inbox.stream",
+      "inbox.summary"
+    ],
+    "go_method": "InboxRespondMany",
+    "ts_method": "inboxRespondMany"
   },
   {
     "command_id": "inbox.stream",
@@ -10167,6 +10216,7 @@ export const commandRegistry: CommandSpec[] = [
       "inbox.get",
       "inbox.list",
       "inbox.respond",
+      "inbox.respond_many",
       "inbox.summary"
     ],
     "go_method": "InboxStream",
@@ -10201,6 +10251,7 @@ export const commandRegistry: CommandSpec[] = [
       "inbox.get",
       "inbox.list",
       "inbox.respond",
+      "inbox.respond_many",
       "inbox.stream"
     ],
     "go_method": "InboxSummary",
@@ -16689,6 +16740,10 @@ export class AnxClient {
 
   inboxRespond(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("inbox.respond", pathParams, options);
+  }
+
+  inboxRespondMany(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("inbox.respond_many", {}, options);
   }
 
   inboxStream(options: RequestOptions = {}): Promise<InvokeResult> {

@@ -561,6 +561,9 @@ commands:
   "inbox.respond":
     classification: unsupported_interactive
     reason: "human-only response submission requires human judgment"
+  "inbox.respond_many":
+    classification: unsupported_interactive
+    reason: "human-only bulk response submission requires human judgment"
   "inbox.stream":
     classification: unsupported_streaming
     reason: "SSE stream needs a bounded read adapter before MCP exposure"

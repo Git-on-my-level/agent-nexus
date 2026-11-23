@@ -38,6 +38,7 @@ vi.mock("$lib/briefStore.js", () => brief);
 
 import {
   SKIP,
+  SKIP_MANY,
   SKIP_REASON,
   SKIP_UNDO_MS,
   canSkip,
@@ -49,6 +50,7 @@ import {
   skipDecisions,
   skipTarget,
   skippingItemIds,
+  stuckSkipCount,
   stuckSkips,
   undoSkip,
 } from "../../src/lib/decideSkip.js";
@@ -97,7 +99,7 @@ describe("which decisions can be skipped", () => {
 });
 
 describe("skipping", () => {
-  it("waits behind Undo, then saves one skipped response per decision", async () => {
+  it("waits behind Undo, then saves the selection as one entry", async () => {
     const count = skipDecisions(
       [agentAsk, humanReview, { ...agentAsk, kind: "access" }],
       { href: "/decide" },
@@ -109,25 +111,27 @@ describe("skipping", () => {
     await vi.advanceTimersByTimeAsync(SKIP_UNDO_MS);
     expect(get(pendingSkip)).toBeNull();
     const entries = outbox.enqueueLocalMutation.mock.calls.map(([e]) => e);
-    expect(entries).toHaveLength(2);
+    expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
-      operation: SKIP,
-      target: skipTarget("inbox:a"),
-      request: {
-        item_id: "inbox:a",
-        body: {
-          outcome: "skipped",
-          response_text: SKIP_REASON,
-          notify_mode: "original",
-        },
+      operation: SKIP_MANY,
+      title: "Skip 2 decisions",
+    });
+    const items = entries[0].request.items;
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      item_id: "inbox:a",
+      body: {
+        outcome: "skipped",
+        response_text: SKIP_REASON,
+        notify_mode: "original",
       },
     });
     // Only an agent requester is woken; a human reads it from their asks.
-    expect(entries[1].request.body.notify_mode).toBe("none");
+    expect(items[1].body.notify_mode).toBe("none");
     // Every send has its own keys, and the quiet fallback never reuses one.
-    const keys = entries.flatMap((e) => [
-      e.request.body.idempotency_key,
-      e.request.quiet_key,
+    const keys = items.flatMap((item) => [
+      item.body.idempotency_key,
+      item.quiet_key,
     ]);
     expect(new Set(keys).size).toBe(4);
   });
@@ -157,7 +161,9 @@ describe("skipping", () => {
     skipDecisions([agentAsk]);
     const [record] = [...store.records.values()];
     expect(record).toMatchObject({ scope: "scope-a", kind: PENDING_KIND });
-    expect(record.value.entries[0].request.body.outcome).toBe("skipped");
+    expect(record.value.entries[0].request.items[0].body.outcome).toBe(
+      "skipped",
+    );
     undoSkip();
     expect(store.records.size).toBe(0);
   });
@@ -200,19 +206,43 @@ describe("skipping", () => {
   });
 
   it("hides rows while waiting, sending or confirmed, but not when stuck", () => {
+    const many = (target, state, ids, done = {}) => ({
+      operation: SKIP_MANY,
+      target,
+      state,
+      request: { items: ids.map((item_id) => ({ item_id })) },
+      receipt: { done },
+    });
     const outboxRows = [
       { operation: SKIP, target: skipTarget("inbox:c"), state: "pending" },
       { operation: SKIP, target: skipTarget("inbox:d"), state: "attention" },
       { operation: "asks.not_a_decision", target: "x", state: "pending" },
+      many("skip-many:1", "sending", ["inbox:g", "inbox:h"]),
+      // Stuck after sending one of two: only the unsent row comes back.
+      many("skip-many:2", "attention", ["inbox:i", "inbox:j"], {
+        "inbox:i": "responded",
+      }),
     ];
     const ids = skippingItemIds({ ids: ["inbox:a"] }, outboxRows, {
       [skipTarget("inbox:e")]: {},
       "not-a-decision:inbox:f": {},
+      "skip-many:3": many("skip-many:3", "sent", ["inbox:k"]),
     });
-    expect(ids.sort()).toEqual(["inbox:a", "inbox:c", "inbox:e"]);
-    expect(stuckSkips(outboxRows).map((e) => e.target)).toEqual([
-      skipTarget("inbox:d"),
+    expect(ids.sort()).toEqual([
+      "inbox:a",
+      "inbox:c",
+      "inbox:e",
+      "inbox:g",
+      "inbox:h",
+      "inbox:i",
+      "inbox:k",
     ]);
+    const stuck = stuckSkips(outboxRows);
+    expect(stuck.map((e) => e.target)).toEqual([
+      skipTarget("inbox:d"),
+      "skip-many:2",
+    ]);
+    expect(stuckSkipCount(stuck)).toBe(2);
   });
 
   it("reads the brief once after a burst of confirmations", async () => {
@@ -320,5 +350,145 @@ describe("sending a skip", () => {
     await expect(
       sendStandingMutation(client, { operation: SKIP, request }),
     ).rejects.toThrow(/incomplete/);
+  });
+});
+
+describe("sending many skips", () => {
+  const item = (n) => ({
+    item_id: `inbox:${n}`,
+    body: {
+      response_text: SKIP_REASON,
+      outcome: "skipped",
+      notify_mode: "original",
+      idempotency_key: `k${n}`,
+    },
+    quiet_key: `q${n}`,
+  });
+  const entry = (count, receipt) => ({
+    operation: SKIP_MANY,
+    request: { items: Array.from({ length: count }, (_, n) => item(n)) },
+    receipt,
+  });
+  const ok = (items) => ({
+    results: items.map((_, index) => ({ index, status: "responded" })),
+  });
+
+  it("sends chunks of the batch route with each item's keys", async () => {
+    const client = { respondInboxItems: vi.fn(async (items) => ok(items)) };
+    const checkpoint = vi.fn(async () => {});
+    const result = await sendStandingMutation(client, entry(30), checkpoint);
+    expect(result.skipped).toBe(30);
+    expect(client.respondInboxItems).toHaveBeenCalledTimes(2);
+    const [first] = client.respondInboxItems.mock.calls[0];
+    expect(first).toHaveLength(25);
+    expect(first[0]).toMatchObject({
+      inbox_item_id: "inbox:0",
+      idempotency_key: "k0",
+      quiet_idempotency_key: "q0",
+      outcome: "skipped",
+    });
+    expect(checkpoint).toHaveBeenCalledTimes(2);
+  });
+
+  it("resends only deferred items, and resumes after a checkpoint", async () => {
+    const client = {
+      respondInboxItems: vi
+        .fn()
+        .mockImplementationOnce(async () => ({
+          results: [
+            { index: 0, status: "responded" },
+            { index: 1, status: "deferred" },
+          ],
+        }))
+        .mockImplementation(async (items) => ok(items)),
+    };
+    await sendStandingMutation(
+      client,
+      entry(3, { done: { "inbox:0": "responded" } }),
+    );
+    const sent = client.respondInboxItems.mock.calls.map(([items]) =>
+      items.map((i) => i.inbox_item_id),
+    );
+    expect(sent).toEqual([["inbox:1", "inbox:2"], ["inbox:2"]]);
+  });
+
+  it("counts asks closed elsewhere as done", async () => {
+    const client = {
+      respondInboxItems: vi.fn(async () => ({
+        results: [{ index: 0, status: "closed", http_status: 409 }],
+      })),
+    };
+    await expect(sendStandingMutation(client, entry(1))).resolves.toMatchObject(
+      { skipped: 1 },
+    );
+  });
+
+  it("names the refused items and keeps the rest done", async () => {
+    const client = {
+      respondInboxItems: vi.fn(async () => ({
+        results: [
+          { index: 0, status: "responded" },
+          {
+            index: 1,
+            status: "failed",
+            http_status: 400,
+            error: { message: "inbox item is missing source event id" },
+          },
+        ],
+      })),
+    };
+    const checkpoint = vi.fn(async () => {});
+    const error = await sendStandingMutation(
+      client,
+      entry(2),
+      checkpoint,
+    ).catch((e) => e);
+    expect(error.status).toBe(400);
+    expect(error.publicMessage).toContain("1 skip could not be sent");
+    expect(error.publicMessage).toContain("missing source event id");
+    expect(checkpoint).toHaveBeenCalledWith({
+      done: { "inbox:0": "responded" },
+    });
+  });
+
+  it("retries with backoff when nothing was attempted", async () => {
+    const client = {
+      respondInboxItems: vi.fn(async () => ({
+        results: [{ index: 0, status: "deferred" }],
+      })),
+    };
+    const error = await sendStandingMutation(client, entry(1)).catch((e) => e);
+    expect(error.status).toBe(503);
+  });
+
+  it("falls back to one request per skip on a core without the route", async () => {
+    const client = {
+      respondInboxItems: vi.fn(async () => {
+        throw Object.assign(new Error("endpoint not found"), {
+          status: 404,
+          body: { error: { message: "endpoint not found" } },
+        });
+      }),
+      respondInboxItem: vi.fn(async () => ({ event: { id: "ev" } })),
+    };
+    await expect(sendStandingMutation(client, entry(2))).resolves.toMatchObject(
+      { skipped: 2 },
+    );
+    expect(client.respondInboxItem).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back too behind a proxy that has not classified the route", async () => {
+    const client = {
+      respondInboxItems: vi.fn(async () => {
+        throw Object.assign(new Error("route not available"), {
+          status: 404,
+          body: { error: { code: "route_not_available" } },
+        });
+      }),
+      respondInboxItem: vi.fn(async () => ({ event: { id: "ev" } })),
+    };
+    await expect(sendStandingMutation(client, entry(1))).resolves.toMatchObject(
+      { skipped: 1 },
+    );
   });
 });

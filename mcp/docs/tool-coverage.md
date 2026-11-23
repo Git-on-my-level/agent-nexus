@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 280
+- Command count: 281
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -31,7 +31,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | home | 2 |
 | hook | 1 |
 | host | 18 |
-| inbox | 5 |
+| inbox | 6 |
 | integrations | 7 |
 | lease | 4 |
 | meta | 9 |
@@ -67,7 +67,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_admin | 30 |
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
-| unsupported_interactive | 13 |
+| unsupported_interactive | 14 |
 | unsupported_other | 18 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
@@ -80,7 +80,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 72 | not represented as direct MCP tools in v1 |
+| unsupported | 73 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -258,6 +258,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | inbox.get | inbox | GET | /inbox/{inbox_id} | exposed_read | inbox item read |
 | inbox.list | inbox | GET | /inbox | exposed_read | bounded inbox inventory read |
 | inbox.respond | inbox | POST | /inbox/{inbox_id}/respond | unsupported_interactive | human-only response submission requires human judgment |
+| inbox.respond_many | inbox | POST | /inbox/responses | unsupported_interactive | human-only bulk response submission requires human judgment |
 | inbox.stream | inbox | GET | /stream/inbox | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |
 | inbox.summary | inbox | GET | /inbox/summary | exposed_read | workspace-local count and bounded human asks visible to the caller |
 | integrations.bind | integrations | LOCAL |  | unsupported_shell_shaped | Local opt-in harness/Git configuration or callback; never a remote MCP action. |

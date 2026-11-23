@@ -1,12 +1,18 @@
 <script>
   import { onMount } from "svelte";
-  import { mutationOutbox, retryMutation } from "$lib/mutationOutbox.js";
+  import {
+    discardMutation,
+    mutationOutbox,
+    retryMutation,
+  } from "$lib/mutationOutbox.js";
+  import { replayExpired } from "$lib/replayPolicy.js";
   import {
     canSkip,
     flushSkip,
     pendingSkip,
     skipDecisions,
     skipSaveFailures,
+    stuckSkipCount,
     stuckSkips,
     undoSkip,
     watchPendingSkips,
@@ -36,6 +42,9 @@
   );
   let some = $derived(picked.length > 0 && !all);
   let stuck = $derived(stuckSkips($mutationOutbox));
+  let stuckCount = $derived(stuckSkipCount(stuck));
+  // The newest reason, in the outbox's own reader-safe words.
+  let stuckReason = $derived(stuck.at(-1)?.failure?.message ?? "");
   let now = $state(Date.now());
   // The clock restarts with each skip, so the countdown starts at 5.
   $effect(() => {
@@ -61,7 +70,16 @@
   }
 
   function retryStuck() {
-    for (const entry of stuck) void retryMutation(entry.key).catch(() => {});
+    // A row too old for safe replay goes again as a new request; skipping
+    // twice is harmless, since core closes each ask once.
+    for (const entry of stuck)
+      void retryMutation(entry.key, {
+        asNew: replayExpired(entry.createdAt),
+      }).catch(() => {});
+  }
+
+  function discardStuck() {
+    for (const entry of stuck) void discardMutation(entry.key).catch(() => {});
   }
 
   onMount(() => {
@@ -127,10 +145,17 @@
         role="status"
         data-decide-skip-stuck
       >
-        {stuck.length}
-        {stuck.length === 1 ? "skip" : "skips"} didn’t go through.
+        {stuckCount}
+        {stuckCount === 1 ? "skip" : "skips"} didn’t go through.
+        {#if stuckReason}<span class="text-fg-muted">{stuckReason}</span>{/if}
         <button type="button" class="ui-prose-link" onclick={retryStuck}
           >Retry</button
+        >
+        <button
+          type="button"
+          class="ui-prose-link"
+          onclick={discardStuck}
+          data-decide-skip-discard>Discard</button
         >
       </span>
     {/if}

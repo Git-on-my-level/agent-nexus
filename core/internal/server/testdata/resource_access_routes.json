@@ -867,6 +867,11 @@
     "policy": "record"
   },
   {
+    "method": "POST",
+    "path": "/inbox/responses",
+    "policy": "record"
+  },
+  {
     "method": "GET",
     "path": "/livez",
     "policy": "independent",

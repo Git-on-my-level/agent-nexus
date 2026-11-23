@@ -98,12 +98,12 @@ Where things live. Generated; never hand-edited.
 | core/internal/secrets                      | 3     | Package secrets stores workspace secrets encrypted at rest.                                                                                                                                                                                                           |
 | core/internal/series                       | 4     | Package series owns push-only, workspace-local time series.                                                                                                                                                                                                           |
 | core/internal/seriesref                    | 2     | Package seriesref resolves bounded metric references through scoped readers.                                                                                                                                                                                          |
-| core/internal/server                       | 139   | Package server exposes core's HTTP API                                                                                                                                                                                                                                |
+| core/internal/server                       | 140   | Package server exposes core's HTTP API                                                                                                                                                                                                                                |
 | core/internal/server/stream                | 2     | Package stream registers core's long-lived HTTP endpoints (SSE, chunked streams) under a single /stream/ prefix so authentication and the route inventory classify them uniformly, and wraps each connection with its own authorization scope.                        |
 | core/internal/sidecar                      | 2     | Package sidecar hosts privileged in-process services inside anx-core                                                                                                                                                                                                  |
 | core/internal/sqliteutil                   | 2     | Package sqliteutil opens the bounded maintenance transactions used by background rebuild programs                                                                                                                                                                     |
 | core/internal/sqltext                      | 1     | Package sqltext provides deterministic projection keys shared by SQL and Go.                                                                                                                                                                                          |
-| core/internal/storage                      | 108   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
+| core/internal/storage                      | 111   | Package storage owns core's SQLite persistence                                                                                                                                                                                                                        |
 | core/internal/testsql                      | 1     | Package testsql instruments real SQLite reads in integration tests.                                                                                                                                                                                                   |
 | core/internal/testutil/perfguard           | 4     | Package perfguard contains synthetic data and SQL instrumentation for scale integration tests.                                                                                                                                                                        |
 | core/internal/textdiff                     | 1     | Package textdiff renders bounded line diffs.                                                                                                                                                                                                                          |
@@ -209,9 +209,9 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1714  | web-ui/src/routes/+layout.svelte                                                   |
 | 1594  | cli/dogfood/pi/seed/kids-lemonade-stand-chapters.mjs                               |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
-| 1541  | web-ui/src/lib/anxCoreClient.js                                                    |
+| 1546  | web-ui/src/lib/anxCoreClient.js                                                    |
 | 1527  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
-| 1461  | web-ui/src/lib/mutationOutbox.js                                                   |
+| 1459  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1451  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
 | 1397  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
 | 1346  | core/internal/primitives/brief.go                                                  |
@@ -221,8 +221,8 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1315  | core/internal/primitives/topics_store.go                                           |
 | 1271  | web-ui/src/lib/inboxResponseQueue.js                                               |
 | 1251  | web-ui/src/lib/server/authSession.js                                               |
-| 1249  | core/internal/storage/migrations.go                                                |
 | 1240  | core/internal/auth/hosts.go                                                        |
+| 1238  | core/internal/storage/migrations.go                                                |
 | 1197  | core/internal/primitives/derived_store.go                                          |
 | 1074  | web-ui/src/lib/visualReportCharts.js                                               |
 | 1039  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/+page.svelte                 |
@@ -236,7 +236,6 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 909   | cli/internal/app/host_bridge_install.go                                            |
 | 908   | core/internal/primitives/watch_trends.go                                           |
 | 908   | web-ui/src/lib/components/decide/DecisionCard.svelte                               |
-| 895   | core/cmd/anx-core/main.go                                                          |
 | 892   | mcp/executor/executor.go                                                           |
 | 891   | cli/internal/errnorm/enrich.go                                                     |
 | 887   | web-ui/src/lib/visualReports.js                                                    |
@@ -244,6 +243,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 881   | web-ui/src/lib/components/work/WorkViews.svelte                                    |
 | 879   | cli/internal/app/resource_messages.go                                              |
 | 877   | web-ui/src/lib/brief.js                                                            |
+| 844   | core/cmd/anx-core/main.go                                                          |
 | 834   | core/internal/server/report_handlers.go                                            |
 | 832   | core/internal/primitives/card_leases.go                                            |
 | 824   | web-ui/src/lib/components/reports/LiveReportPanel.svelte                           |

@@ -23,7 +23,8 @@ import {
   uploadedAttachments,
 } from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
-import { mutationFailure } from "$lib/mutationStatus.js";
+import { failureSubject, mutationFailure } from "$lib/mutationStatus.js";
+import { isKnownOperation, revivable } from "$lib/outboxOperations.js";
 import {
   MAX_DASHBOARD_PINS,
   PINS_OPERATION,
@@ -51,6 +52,7 @@ export const mutationConfirmations = writable({});
 const volatile = new Map();
 const inFlightInTab = new Set();
 const confirmedInTab = new Map();
+const revived = new Set();
 let timer;
 let running = false;
 let requested = false;
@@ -305,7 +307,10 @@ async function send(entry, lease = null) {
       throw new Error("Pins receipt is incomplete.");
     return result;
   }
-  const standing = await sendStandingMutation(client, entry);
+  const standing = await sendStandingMutation(client, entry, (receipt) => {
+    entry.receipt = receipt;
+    return persist(entry, lease);
+  });
   if (standing !== undefined) return standing;
   if (entry.operation === "curation.ungroup") {
     const result = await client.ungroupCurationBatch(entry.request.body);
@@ -1073,31 +1078,7 @@ async function attempt(entry) {
       volatile.delete(entry.key);
       return;
     }
-    entry.failure = mutationFailure(
-      error,
-      entry.operation === "artifacts.attachments.create"
-        ? "file"
-        : ["cards.move", "work.move", "pm.decisions.create"].includes(
-              entry.operation,
-            )
-          ? "move"
-          : entry.operation === "cards.patch"
-            ? "assignment"
-            : entry.operation === "inbox.controls"
-              ? "inbox action"
-              : entry.operation === "events.lifecycle"
-                ? "event action"
-                : entry.operation === "docs.lifecycle"
-                  ? "document action"
-                  : entry.operation === "topics.patch"
-                    ? "topic edit"
-                    : entry.operation === "notifications.settings.set"
-                      ? "notification settings"
-                      : entry.operation.startsWith("work.") &&
-                          entry.operation !== "work.create"
-                        ? "grouping change"
-                        : "response",
-    );
+    entry.failure = mutationFailure(error, failureSubject(entry.operation));
     entry.state = entry.failure.state;
     entry.nextAt =
       Date.now() +
@@ -1222,6 +1203,13 @@ export async function recoverMutations() {
         .filter((entry) => active(entry) && visible(entry))
         .sort((a, b) => a.createdAt - b.createdAt);
       for (const entry of entries) {
+        // An older tab gave up only because it lacked this operation. Once
+        // per row per tab, so a still-open old tab cannot ping-pong it.
+        if (revivable(entry) && !revived.has(entry.key)) {
+          revived.add(entry.key);
+          Object.assign(entry, { state: "pending", failure: null, nextAt: 0 });
+          await persist(entry).catch(() => {});
+        }
         if (replayExpired(entry.createdAt) && !entry.failure?.expired) {
           entry.state = "attention";
           entry.failure = mutationFailure(expiredReplayError());
@@ -1242,6 +1230,7 @@ export async function recoverMutations() {
         const due = entries.find(
           (entry) =>
             entry.state !== "attention" &&
+            isKnownOperation(entry.operation) &&
             entry.nextAt <= Date.now() &&
             !pinEditWaits(entry, entries),
         );
@@ -1252,7 +1241,7 @@ export async function recoverMutations() {
         }
       }
       const next = entries
-        .filter((entry) => entry.state !== "attention")
+        .filter((e) => e.state !== "attention" && isKnownOperation(e.operation))
         .map((entry) => entry.nextAt);
       if (next.length && navigator.onLine !== false)
         timer = setTimeout(
@@ -1318,6 +1307,15 @@ export async function retryMutation(key, { asNew = false } = {}) {
       Object.assign(error, { localPersistence: true }),
     );
   }
+  requestRecovery();
+}
+
+/** Drop a saved request the reader no longer wants sent (kept as history). */
+export async function discardMutation(key) {
+  const entry = get(mutationOutbox).find((row) => row.key === key);
+  if (!entry || !active(entry) || entry.state !== "attention") return;
+  await persist({ ...entry, state: "superseded", discarded: true });
+  volatile.delete(key);
   requestRecovery();
 }
 

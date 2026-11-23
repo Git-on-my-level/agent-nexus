@@ -297,11 +297,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `inbox`
 
-- Commands: `5`
+- Commands: `6`
 - Command IDs:
   - `inbox.get` (`inbox get`)
   - `inbox.list` (`inbox list`)
   - `inbox.respond` (`inbox respond`)
+  - `inbox.respond_many` (`inbox respond-many`)
   - `inbox.stream` (`inbox stream`)
   - `inbox.summary` (`inbox summary`)
 

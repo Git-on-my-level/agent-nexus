@@ -7361,6 +7361,49 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  /inbox/responses:
+    post:
+      operationId: respondInboxItems
+      summary: Respond to many human attention inbox items
+      description: >
+        Records one response per item, in order, through the same rules as
+        POST /inbox/{inbox_id}/respond: authorization, idempotency replay, ask
+        batches and requester wake are identical. Items are independent; one
+        failing never rolls back another. At most 100 items per request. After
+        a time budget the remaining items are returned as deferred without
+        being attempted, so the caller sends them again in a later request.
+      tags: [inbox]
+      x-anx-surface: projection
+      x-anx-command-id: inbox.respond_many
+      x-anx-cli-path: inbox respond-many
+      x-anx-why: A human clears many asks at once (Decide's Skip all) in one request instead of one request per ask.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order."
+      x-anx-error-codes: [auth_required, human_required, invalid_request, invalid_token]
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: Needs a signed-in human session, like inbox respond. Each item replays by its own idempotency_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespondInboxItemsRequest'
+      responses:
+        '200':
+          description: Per-item results, in request order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespondInboxItemsResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
   /livez:
     get:
       operationId: livenessCheck
@@ -14035,6 +14078,52 @@ components:
             When present, one entry per member, flat response_text/outcome must be empty, and
             notify overrides are rejected. Omit answers to apply one flat response_text, outcome
             and notify_mode to every open member instead. A curation batch id only accepts the flat form.
+
+    RespondInboxItemsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Each inbox_item_id at most once.
+          items: { $ref: '#/components/schemas/RespondInboxItemsItem' }
+
+    RespondInboxItemsItem:
+      allOf:
+        - $ref: '#/components/schemas/RespondInboxItemRequest'
+        - type: object
+          required: [inbox_item_id]
+          properties:
+            quiet_idempotency_key:
+              type: string
+              maxLength: 128
+              description: >
+                When the requester cannot be woken (notification_target_required),
+                record the response without a wake under this separate key.
+
+    RespondInboxItemsResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [index, status]
+            properties:
+              index: { type: integer, description: Position of the item in the request. }
+              status:
+                type: string
+                enum: [responded, closed, failed, deferred]
+                description: >
+                  responded: recorded or replayed. closed: the item was already
+                  answered or withdrawn some other way. failed: see error.
+                  deferred: not attempted within this request's time budget.
+              http_status: { type: integer, description: "What POST /inbox/{inbox_id}/respond would have returned." }
+              response: { $ref: '#/components/schemas/JsonValue' }
+              error: { $ref: '#/components/schemas/JsonValue' }
 
     RespondInboxItemAnswer:
       type: object
