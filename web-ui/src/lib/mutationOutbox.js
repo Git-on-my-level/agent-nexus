@@ -52,7 +52,9 @@ export const mutationConfirmations = writable({});
 const volatile = new Map();
 const inFlightInTab = new Set();
 const confirmedInTab = new Map();
+// Rows an older tab marked "Unknown saved operation", revived once per tab.
 const revived = new Set();
+const revive = (entry) => revivable(entry) && !revived.has(entry.key);
 let timer;
 let running = false;
 let requested = false;
@@ -935,8 +937,12 @@ async function attempt(entry) {
       return;
     }
     const saved = latest.value;
-    if (saved.state === "attention" || saved.nextAt > Date.now()) return;
-    entry = saved;
+    // Revive and send under one lock hold, so an older tab waiting on the lock
+    // finds the row sent rather than failing it again.
+    const again = revive(saved) && revived.add(entry.key);
+    if ((saved.state === "attention" && !again) || saved.nextAt > Date.now())
+      return;
+    entry = again ? { ...saved, failure: null } : saved;
     if (replayExpired(entry.createdAt)) throw expiredReplayError();
     const fingerprint = await intentFingerprint(entry.request);
     const records = await listLocalWork(entry.scope, "mutation", {
@@ -1203,13 +1209,6 @@ export async function recoverMutations() {
         .filter((entry) => active(entry) && visible(entry))
         .sort((a, b) => a.createdAt - b.createdAt);
       for (const entry of entries) {
-        // An older tab gave up only because it lacked this operation. Once
-        // per row per tab, so a still-open old tab cannot ping-pong it.
-        if (revivable(entry) && !revived.has(entry.key)) {
-          revived.add(entry.key);
-          Object.assign(entry, { state: "pending", failure: null, nextAt: 0 });
-          await persist(entry).catch(() => {});
-        }
         if (replayExpired(entry.createdAt) && !entry.failure?.expired) {
           entry.state = "attention";
           entry.failure = mutationFailure(expiredReplayError());
@@ -1229,7 +1228,7 @@ export async function recoverMutations() {
       if (navigator.onLine !== false) {
         const due = entries.find(
           (entry) =>
-            entry.state !== "attention" &&
+            (entry.state !== "attention" || revive(entry)) &&
             isKnownOperation(entry.operation) &&
             entry.nextAt <= Date.now() &&
             !pinEditWaits(entry, entries),
