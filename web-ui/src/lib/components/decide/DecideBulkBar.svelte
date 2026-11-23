@@ -78,8 +78,14 @@
       }).catch(() => {});
   }
 
-  function discardStuck() {
-    for (const entry of stuck) void discardMutation(entry.key).catch(() => {});
+  let discardFailed = $state(false);
+  async function discardStuck() {
+    discardFailed = false;
+    const results = await Promise.allSettled(
+      stuck.map((entry) => discardMutation(entry.key)),
+    );
+    // Storage refused: the rows are still saved here, so say so.
+    discardFailed = results.some((result) => result.status === "rejected");
   }
 
   onMount(() => {
@@ -157,6 +163,9 @@
           onclick={discardStuck}
           data-decide-skip-discard>Discard</button
         >
+        {#if discardFailed}<span class="text-danger-text" role="alert"
+            >Couldn’t discard on this device. Try again.</span
+          >{/if}
       </span>
     {/if}
     {#if $skipSaveFailures}

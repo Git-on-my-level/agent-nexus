@@ -19,14 +19,14 @@ import (
 	"time"
 )
 
-const (
-	// respondManyMaxItems bounds one request; clients chunk larger selections.
-	respondManyMaxItems = 100
-	// respondManyBudget stops starting new items once a request has run this
-	// long, so a slow store never pushes a request past proxy timeouts. Items
-	// not started are reported as deferred and are safe to send again.
-	respondManyBudget = 15 * time.Second
-)
+// respondManyMaxItems bounds one request; clients chunk larger selections.
+const respondManyMaxItems = 100
+
+// respondManyBudget stops starting new items once a request has run this
+// long, so a slow store never pushes a request past proxy timeouts. Items not
+// started are reported as deferred and are safe to send again. A variable
+// only so tests can force the deferred path.
+var respondManyBudget = 15 * time.Second
 
 // respondManyItem is one item's request: the single-item respond body plus
 // the item id and an optional quiet fallback key.
@@ -62,7 +62,8 @@ func handleRespondInboxItems(w http.ResponseWriter, r *http.Request, opts handle
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "only POST is supported")
 		return
 	}
-	if _, ok := requireHumanPrincipal(w, r, opts); !ok {
+	principal, ok := requireHumanPrincipal(w, r, opts)
+	if !ok {
 		return
 	}
 	var req respondManyRequest
@@ -93,13 +94,28 @@ func handleRespondInboxItems(w http.ResponseWriter, r *http.Request, opts handle
 
 	started := time.Now()
 	results := make([]map[string]any, 0, len(req.Items))
+	// The route middleware charged the write budget for the first item; every
+	// further item costs one more, so a batch never writes more than the same
+	// items sent one by one could. Once the budget is spent, or the time
+	// budget is, the rest are deferred for the client to send again.
+	limited := false
+	scope := routeRateLimitScopeForRequest(r)
 	// Results follow request order and carry the item's index, never its id,
 	// so a response discloses nothing the caller could not already see.
 	for index, item := range req.Items {
 		id := strings.TrimSpace(item.InboxItemID)
-		if r.Context().Err() != nil || time.Since(started) >= respondManyBudget {
+		if index > 0 && !limited && opts.rateLimiter != nil {
+			allowed, _ := opts.rateLimiter.allow("write", scope, time.Now().UTC())
+			limited = !allowed
+		}
+		if limited || r.Context().Err() != nil || time.Since(started) >= respondManyBudget {
 			results = append(results, map[string]any{"index": index, "status": respondManyDeferred})
 			continue
+		}
+		// The web UI's single respond always names the signed-in actor; name it
+		// here too so both routes hash the same request.
+		if strings.TrimSpace(item.ActorID) == "" {
+			item.ActorID = principal.ActorID
 		}
 		result := respondOneOfMany(r, opts, id, item)
 		result["index"] = index
@@ -111,8 +127,11 @@ func handleRespondInboxItems(w http.ResponseWriter, r *http.Request, opts handle
 // respondOneOfMany answers one item through the single-item handler and
 // classifies its outcome.
 func respondOneOfMany(r *http.Request, opts handlerOptions, id string, item respondManyItem) map[string]any {
+	// The path carries the id, as on the single route, so an item hashes
+	// exactly like the same request sent one by one: a retry through either
+	// route with the same key replays instead of conflicting.
 	single := item.inboxRespondRequest
-	single.InboxItemID = id
+	single.InboxItemID = ""
 	status, body := callRespondInboxItem(r, opts, id, single)
 	if errorCode(body) == "notification_target_required" {
 		if quiet := strings.TrimSpace(item.QuietIdempotencyKey); quiet != "" && single.NotifyMode != "none" {

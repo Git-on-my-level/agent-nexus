@@ -6,17 +6,19 @@ import {
   isKnownOperation,
   revivable,
 } from "../../src/lib/outboxOperations.js";
-import { SKIP, SKIP_MANY } from "../../src/lib/standingRulingSend.js";
+import * as standing from "../../src/lib/standingRulingSend.js";
+import { PINS_OPERATION } from "../../src/lib/dashboardPins.js";
+
+const { SKIP, SKIP_MANY } = standing;
+const source = (file) =>
+  readFileSync(new URL(`../../src/lib/${file}`, import.meta.url), "utf8");
 
 describe("operations this build can send", () => {
-  it("lists every operation send() handles", () => {
-    const source = readFileSync(
-      new URL("../../src/lib/mutationOutbox.js", import.meta.url),
-      "utf8",
-    );
+  it("lists exactly the operations send() handles", () => {
+    const outbox = source("mutationOutbox.js");
     const named = [
-      ...source.matchAll(/entry\.operation === "([a-z._]+)"/g),
-      ...source.matchAll(/\[([^\]]+)\]\.includes\(\s*entry\.operation/g),
+      ...outbox.matchAll(/entry\.operation === "([a-z._]+)"/g),
+      ...outbox.matchAll(/\[([^\]]+)\]\.includes\(\s*entry\.operation/g),
     ].flatMap((match) =>
       match[1].includes('"')
         ? [...match[1].matchAll(/"([a-z._]+)"/g)].map((m) => m[1])
@@ -25,6 +27,19 @@ describe("operations this build can send", () => {
     expect(named.length).toBeGreaterThan(15);
     for (const operation of named)
       expect(KNOWN_OPERATIONS.has(operation), operation).toBe(true);
+    // And the reverse: nothing is claimed that no sender handles, or a tab
+    // would take work it cannot send, the failure this list exists to stop.
+    const standingHandled = [
+      ...source("standingRulingSend.js").matchAll(
+        /entry\.operation === ([A-Z_]+)\)/g,
+      ),
+    ].map((match) => standing[match[1]]);
+    expect(standingHandled).toContain(SKIP_MANY);
+    const handled = new Set([...named, ...standingHandled]);
+    if (/entry\.operation === PINS_OPERATION/.test(outbox))
+      handled.add(PINS_OPERATION);
+    for (const operation of KNOWN_OPERATIONS)
+      expect(handled.has(operation), operation).toBe(true);
     expect(isKnownOperation(SKIP)).toBe(true);
     expect(isKnownOperation(SKIP_MANY)).toBe(true);
     expect(isKnownOperation("from.a.newer.build")).toBe(false);
