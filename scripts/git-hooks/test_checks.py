@@ -241,6 +241,39 @@ class RepoTest(unittest.TestCase):
         # Selected for a reason outside the module (VERSION feeds cli's build info).
         self.assertIn(("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./..."), self.fast_commands({"VERSION"}))
 
+    def test_prepush_contract_and_hook_changes_keep_focused_checks(self):
+        changed = {"contracts/visualreport/chart.go", "scripts/git-hooks/checks.py",
+                   "web-ui/src/lib/visualReportCharts.js", "Makefile"}
+        with patch.object(checks, "run") as run, patch.object(checks, "contract_drift") as drift, \
+                patch.object(checks, "go_module_dirs", return_value=["core", "cli",
+                                                                       "contracts/visualreport"]), \
+                patch.object(checks, "go_fast_tests") as go_fast, \
+                patch.object(checks, "ui_fast_tests") as ui:
+            checks.fast_tests(changed, "base", prepush=True)
+        go_fast.assert_not_called()
+        ui.assert_called_once_with(changed, False, "base")
+        drift.assert_called_once()
+        self.assertTrue(any(call.kwargs.get("cwd") == self.root / "contracts/visualreport"
+                            for call in run.call_args_list))
+        self.assertFalse(any(call.kwargs.get("cwd") == self.root / "core"
+                             for call in run.call_args_list))
+        self.assertTrue(any("scripts/git-hooks" in call.args for call in run.call_args_list))
+
+    def test_prepush_runs_direct_non_core_packages_without_reverse_dependencies(self):
+        with patch.object(checks, "run") as run, \
+                patch.object(checks, "go_module_dirs", return_value=["core", "cli"]), \
+                patch.object(checks, "go_affected", return_value=(["./leaf"], ["./importer"])):
+            checks.fast_tests({"core/a.go", "cli/a.go"}, "base", prepush=True)
+        run.assert_called_once_with("go", "test", "-short", "-timeout=2m", "./leaf",
+                                    cwd=self.root / "cli", slot="tests")
+
+    def test_prepush_full_override_uses_the_wider_local_suite(self):
+        with patch.dict(os.environ, {"ANX_PREPUSH_FULL": "1"}), \
+                patch.object(sys, "argv", ["checks.py", "prepush"]), \
+                patch.object(checks, "fast_tests") as fast:
+            checks.main()
+        self.assertFalse(fast.call_args.kwargs["prepush"])
+
     def test_module_docs_run_no_suite(self):
         self.write_go_module()
         with patch.object(checks, "run") as run:
@@ -649,6 +682,14 @@ class RepoTest(unittest.TestCase):
         result = self.push(update + deletion)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, update + deletion)
+
+    def test_push_without_precommit_uses_the_focused_tier(self):
+        self.write("scripts/git-hooks/checks.py", "import sys\nprint(sys.argv[1])\n")
+        head = self.git("rev-parse", "HEAD").decode().strip()
+        update = f"refs/heads/main {head} refs/heads/main {'0' * 40}\n"
+        result = self.push(update)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "prepush")
 
     def test_push_rejects_other_tree_and_accepts_annotated_tag_at_head(self):
         base = self.git("rev-parse", "HEAD").decode().strip()

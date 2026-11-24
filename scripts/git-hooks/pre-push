@@ -13,7 +13,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   [[ -z "${local_ref}" || "${local_sha}" =~ ^0+$ ]] && continue
   has_update=true
   if [[ "$(git rev-parse "${local_sha}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
-    echo "Check out ${local_ref} before pushing it so test-fast validates the pushed tree." >&2
+    echo "Check out ${local_ref} before pushing it so the push checks validate the pushed tree." >&2
     exit 1
   fi
 done <<< "${push_data}"
@@ -35,4 +35,4 @@ if ! command -v "${python}" >/dev/null 2>&1; then
   exit 1
 fi
 echo "No ${pre_commit}; running checks with ${python} (make setup installs the hook framework)." >&2
-exec "${python}" -B scripts/git-hooks/checks.py fast
+exec "${python}" -B scripts/git-hooks/checks.py prepush
