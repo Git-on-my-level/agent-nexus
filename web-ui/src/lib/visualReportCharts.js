@@ -324,7 +324,7 @@ export function validateReportChart(data, path = "data") {
         bar: ["xAxisIndex", "yAxisIndex", "stack", "barWidth", "markLine"],
         scatter: ["xAxisIndex", "yAxisIndex", "symbolSize", "markLine"],
         pie: ["radius", "center", "roseType"],
-        heatmap: ["xAxisIndex", "yAxisIndex"],
+        heatmap: ["xAxisIndex", "yAxisIndex", "showValues"],
         graph: ["layout", "links", "symbolSize", "categories"],
         sankey: ["links", "orient"],
         treemap: [],
@@ -334,7 +334,8 @@ export function validateReportChart(data, path = "data") {
     if (names.has(item.name)) add(`${at}.name`, "series names must be unique");
     names.add(item.name);
     optional(item, at, "stack", text);
-    optional(item, at, "smooth", boolean);
+    for (const key of ["smooth", "showValues"])
+      optional(item, at, key, boolean);
     optional(item, at, "step", (v, p) =>
       enumeration(v, p, ["start", "middle", "end"]),
     );
@@ -806,10 +807,9 @@ export function buildReportChartOption(data, appearance = {}) {
             borderRadius: 3,
           };
           base.label = {
-            show: series.data.length <= 60,
+            show: series.showValues ?? series.data.length <= 60,
             color: theme.fg,
             fontSize: 10,
-            // A soft shadow keeps values legible on both ends of the ramp.
             textShadowColor: "rgba(0, 0, 0, 0.7)",
             textShadowBlur: 3,
           };

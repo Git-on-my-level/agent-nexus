@@ -165,7 +165,7 @@ func (v *validator) chart(raw any, path string) {
 		}
 		typ, _ := item["type"].(string)
 		v.enum(item["type"], p+".type", chartTypes...)
-		supported := map[string][]string{"line": {"xAxisIndex", "yAxisIndex", "stack", "smooth", "step", "areaStyle", "symbolSize", "markLine"}, "bar": {"xAxisIndex", "yAxisIndex", "stack", "barWidth", "markLine"}, "scatter": {"xAxisIndex", "yAxisIndex", "symbolSize", "markLine"}, "pie": {"radius", "center", "roseType"}, "heatmap": {"xAxisIndex", "yAxisIndex"}, "graph": {"layout", "links", "symbolSize", "categories"}, "sankey": {"links", "orient"}}
+		supported := map[string][]string{"line": {"xAxisIndex", "yAxisIndex", "stack", "smooth", "step", "areaStyle", "symbolSize", "markLine"}, "bar": {"xAxisIndex", "yAxisIndex", "stack", "barWidth", "markLine"}, "scatter": {"xAxisIndex", "yAxisIndex", "symbolSize", "markLine"}, "pie": {"radius", "center", "roseType"}, "heatmap": {"xAxisIndex", "yAxisIndex", "showValues"}, "graph": {"layout", "links", "symbolSize", "categories"}, "sankey": {"links", "orient"}}
 		item, ok = object(item, p, []string{"type", "name", "data"}, supported[typ], v.add)
 		if !ok {
 			continue
@@ -182,6 +182,11 @@ func (v *validator) chart(raw any, path string) {
 		if x, ok := item["smooth"]; ok {
 			if _, good := x.(bool); !good {
 				v.add(p+".smooth", "must be a boolean")
+			}
+		}
+		if x, ok := item["showValues"]; ok {
+			if _, good := x.(bool); !good {
+				v.add(p+".showValues", "must be a boolean")
 			}
 		}
 		if x, ok := item["step"]; ok {
