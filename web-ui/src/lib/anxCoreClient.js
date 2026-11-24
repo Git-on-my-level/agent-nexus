@@ -345,6 +345,11 @@ const adapterCommandTable = [
     (filters = {}) => ({ options: q(filters) }),
   ],
   [
+    "respondInboxItems",
+    "inbox.respond_many",
+    (items) => ({ options: b({ items }) }),
+  ],
+  [
     "setWorkspaceDashboard",
     "workspace.dashboard.set",
     (payload) => ({ options: b(payload) }),

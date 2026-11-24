@@ -210,13 +210,26 @@ Decide's Skip (one decision, a selection, or Skip all) freezes one respond
 body per item, with its own idempotency key and a second key for the quiet
 resend used only when core reports the requester is unreachable. The frozen
 batch is journaled under `skip-pending` before the five-second Undo starts;
-Undo deletes it. When the window closes, each item becomes an `inbox.skip`
-outbox entry under the key frozen at skip time (`decideSkip.js`), and the
-journal entry is removed once all are in the outbox. A crash, killed tab or
-workspace switch inside the window leaves the journal; the next time the reader
-opens that workspace, any batch past its deadline is sent with the same keys,
-so a double recovery records each skip once. Sign-out moves the epoch and
-discards it. An ask or grouped batch already closed elsewhere confirms as done.
+Undo deletes it. When the window closes, the selection becomes one
+`inbox.skip_many` outbox entry under the keys frozen at skip time
+(`decideSkip.js`), and the journal entry is removed once it is in the outbox.
+The sender posts chunks of 25 to `POST /inbox/responses` and checkpoints a
+receipt per item, so a retry sends only items not yet done; items core defers
+past its time budget go in the next chunk. Refused items leave the entry
+needing attention with the count and core's reason, and Decide brings back only
+those rows. A core or hosted proxy without the route answers 404 and the sender
+falls back to one `POST /inbox/{id}/respond` per item. Entries saved as
+`inbox.skip` by earlier builds still send. A crash, killed tab or workspace
+switch inside the window leaves the journal; the next time the reader opens
+that workspace, any batch past its deadline is sent with the same keys, so a
+double recovery records each skip once. Sign-out moves the epoch and discards
+it. An ask or grouped batch already closed elsewhere confirms as done.
+
+Tabs of different builds share the device outbox. A tab sends only operations
+in `outboxOperations.js` and leaves others for a build that knows them; a build
+that knows an operation revives rows an older tab marked "Unknown saved
+operation". Stuck skips can be retried (as a new request when too old for safe
+replay) or discarded from Decide.
 
 ## Task and document authoring
 

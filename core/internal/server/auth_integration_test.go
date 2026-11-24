@@ -59,6 +59,8 @@ type authIntegrationOptions struct {
 	// wrapActorRegistry, if set, replaces the default *actors.Store passed to WithActorRegistry
 	// (use for tests that inject failures from ActorRegistry.Exists).
 	wrapActorRegistry func(base *actors.Store) ActorRegistry
+	// routeRateLimits overrides route budgets; zero fields keep the defaults.
+	routeRateLimits RouteRateLimits
 }
 
 type authIntegrationEnv struct {
@@ -144,6 +146,7 @@ func newAuthIntegrationEnv(t *testing.T, options authIntegrationOptions) authInt
 		WithEnableDevActorMode(options.enableDevActorMode),
 		WithAllowPasskeyDevBypass(options.allowPasskeyDevBypass),
 		WithAllowUnauthenticatedWrites(options.allowUnauthenticatedWrites),
+		WithRouteRateLimits(options.routeRateLimits),
 	)
 	server := httptest.NewServer(handler)
 

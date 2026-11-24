@@ -261,6 +261,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					if p.Path == "/agent-handoffs" {
 						payload["recipient_actor_id"] = rosterAgent.ActorID
 					}
+					if p.Path == "/inbox/responses" {
+						payload = map[string]any{"items": []any{map[string]any{"inbox_item_id": askID, "response_text": "attempt", "outcome": "skipped", "idempotency_key": "matrix-many"}}}
+					}
 					if p.Policy == "reference-read" {
 						if p.Path != "/refs/resolve" {
 							t.Fatalf("missing reference-read fixture: %s", p.Path)
@@ -370,6 +373,11 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 					} else if p.Policy == "collection" || p.Policy == "maintenance" {
 						if resp.StatusCode != 200 && !(resp.StatusCode == 404 && p.Path == "/work/resolve") && !(resp.StatusCode == 403 && (strings.HasPrefix(p.Path, "/agent-") || p.Path == "/agents/me" || p.Path == "/watch/trends" || p.Path == "/hosts/{host_id}" || strings.HasPrefix(p.Path, "/auth/access"))) {
 							t.Errorf("collection status %d: %s", resp.StatusCode, out)
+						}
+					} else if p.Path == "/inbox/responses" && resp.StatusCode == 200 {
+						// A batch answers per item: a private item must fail as not found.
+						if !bytes.Contains(out, []byte(`"http_status":404`)) || bytes.Contains(out, []byte(`"responded"`)) {
+							t.Errorf("private batch item: %s", out)
 						}
 					} else if resp.StatusCode != 404 && resp.StatusCode != 403 && !(resp.StatusCode == 401 && strings.HasPrefix(p.Path, "/agent-wakeups/")) {
 						t.Errorf("private resource status %d: %s", resp.StatusCode, out)

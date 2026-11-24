@@ -3705,7 +3705,7 @@ Generated Help: inbox get
 - Output: Returns `{ item, generated_at, projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `inbox`
-- Adjacent commands: `inbox list`, `inbox respond`, `inbox stream`, `inbox summary`
+- Adjacent commands: `inbox list`, `inbox respond`, `inbox respond-many`, `inbox stream`, `inbox summary`
 
 Inputs:
   Required:
@@ -3734,7 +3734,7 @@ Generated Help: inbox respond
 - Output: Returns `{ event, notify }`.
 - Error codes: `auth_required`, `human_required`, `invalid_request`, `invalid_token`, `notification_target_required`, `not_found`, `conflict`, `idempotency_conflict`, `quota_exceeded`
 - Concepts: `inbox`, `write`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox stream`, `inbox summary`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond-many`, `inbox stream`, `inbox summary`
 
 Inputs:
   Required:
@@ -3788,7 +3788,7 @@ Generated Help: inbox stream
 - Output: SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox respond-many`, `inbox summary`
 
 
 Global flags:
@@ -3814,7 +3814,7 @@ Generated Help: inbox tail
 - Output: SSE `inbox_item` events and `inbox_page` progress with partial/resume_cursor.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox summary`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox respond-many`, `inbox summary`
 
 
 Global flags:
@@ -6699,7 +6699,7 @@ Generated Help: inbox list
 - Why: Project human_attention_requested events into a queryable inbox view.
 - Output: Returns `{ status, items, generated_at }`; completed adds `{ next_cursor }`; open projection adds `{ projection_freshness }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
-- Adjacent commands: `inbox get`, `inbox respond`, `inbox stream`, `inbox summary`
+- Adjacent commands: `inbox get`, `inbox respond`, `inbox respond-many`, `inbox stream`, `inbox summary`
 
 
 View scoping:
@@ -6755,7 +6755,7 @@ Generated Help: inbox summary
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `inbox`
 - Agent notes: Uses current workspace permissions; limit 0 returns the count only. No cross-workspace identity.
-- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox stream`
+- Adjacent commands: `inbox get`, `inbox list`, `inbox respond`, `inbox respond-many`, `inbox stream`
 
 Local Help: inbox summary
 

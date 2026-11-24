@@ -4,9 +4,9 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Command operations: `280`
+- Command operations: `281`
 - Baseline-allowed required-field gaps: `120`
-- Missing recommended examples: `229`
+- Missing recommended examples: `230`
 
 ## Baseline gap counts
 
@@ -278,6 +278,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - `inbox.get` `GET /inbox/{inbox_id}`
 - `inbox.list` `GET /inbox`
 - `inbox.respond` `POST /inbox/{inbox_id}/respond`
+- `inbox.respond_many` `POST /inbox/responses`
 - `inbox.stream` `GET /stream/inbox`
 - `inbox.summary` `GET /inbox/summary`
 - `meta.commands.get` `GET /meta/commands/{command_id}`

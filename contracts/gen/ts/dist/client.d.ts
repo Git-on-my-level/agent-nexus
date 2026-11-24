@@ -213,6 +213,7 @@ export declare class AnxClient {
     inboxGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     inboxList(options?: RequestOptions): Promise<InvokeResult>;
     inboxRespond(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    inboxRespondMany(options?: RequestOptions): Promise<InvokeResult>;
     inboxStream(options?: RequestOptions): Promise<InvokeResult>;
     inboxSummary(options?: RequestOptions): Promise<InvokeResult>;
     leaseAcquire(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;

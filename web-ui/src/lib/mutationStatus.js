@@ -130,3 +130,22 @@ export function mutationFailure(error, subject = "response") {
     status,
   };
 }
+
+/** Which copy a saved operation's failure uses. */
+export function failureSubject(operation = "") {
+  if (operation === "artifacts.attachments.create") return "file";
+  if (["cards.move", "work.move", "pm.decisions.create"].includes(operation))
+    return "move";
+  const named = {
+    "cards.patch": "assignment",
+    "inbox.controls": "inbox action",
+    "events.lifecycle": "event action",
+    "docs.lifecycle": "document action",
+    "topics.patch": "topic edit",
+    "notifications.settings.set": "notification settings",
+  };
+  if (named[operation]) return named[operation];
+  return operation.startsWith("work.") && operation !== "work.create"
+    ? "grouping change"
+    : "response";
+}

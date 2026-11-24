@@ -2185,7 +2185,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox"},
-		Adjacent:   []string{"inbox.list", "inbox.respond", "inbox.stream", "inbox.summary"},
+		Adjacent:   []string{"inbox.list", "inbox.respond", "inbox.respond_many", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID: "inbox.list",
@@ -2194,7 +2194,7 @@ var CommandRegistry = []CommandSpec{
 		Method:    "GET",
 		Path:      "/inbox",
 		InputMode: "none",
-		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.stream", "inbox.summary"},
+		Adjacent:  []string{"inbox.get", "inbox.respond", "inbox.respond_many", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID:  "inbox.respond",
@@ -2206,7 +2206,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.stream", "inbox.summary"},
+		Adjacent:   []string{"inbox.get", "inbox.list", "inbox.respond_many", "inbox.stream", "inbox.summary"},
+	},
+	{
+		CommandID: "inbox.respond_many",
+		CLIPath:   "inbox respond-many",
+		Group:     "inbox",
+		Method:    "POST",
+		Path:      "/inbox/responses",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream", "inbox.summary"},
 	},
 	{
 		CommandID: "inbox.stream",
@@ -2217,7 +2228,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.summary"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.respond_many", "inbox.summary"},
 	},
 	{
 		CommandID: "inbox.summary",
@@ -2228,7 +2239,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "query",
 		Stability: "beta",
 		Concepts:  []string{"inbox"},
-		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.stream"},
+		Adjacent:  []string{"inbox.get", "inbox.list", "inbox.respond", "inbox.respond_many", "inbox.stream"},
 	},
 	{
 		CommandID: "integrations.bind",
@@ -4310,6 +4321,10 @@ func (c *Client) InboxList(ctx context.Context, opts RequestOptions) (*http.Resp
 
 func (c *Client) InboxRespond(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "inbox.respond", pathParams, opts)
+}
+
+func (c *Client) InboxRespondMany(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "inbox.respond_many", nil, opts)
 }
 
 func (c *Client) InboxStream(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {

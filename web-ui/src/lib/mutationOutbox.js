@@ -23,7 +23,8 @@ import {
   uploadedAttachments,
 } from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
-import { mutationFailure } from "$lib/mutationStatus.js";
+import { failureSubject, mutationFailure } from "$lib/mutationStatus.js";
+import { isKnownOperation, revivable } from "$lib/outboxOperations.js";
 import {
   MAX_DASHBOARD_PINS,
   PINS_OPERATION,
@@ -51,6 +52,9 @@ export const mutationConfirmations = writable({});
 const volatile = new Map();
 const inFlightInTab = new Set();
 const confirmedInTab = new Map();
+// Rows an older tab marked "Unknown saved operation", revived once per tab.
+const revived = new Set();
+const revive = (entry) => revivable(entry) && !revived.has(entry.key);
 let timer;
 let running = false;
 let requested = false;
@@ -305,7 +309,10 @@ async function send(entry, lease = null) {
       throw new Error("Pins receipt is incomplete.");
     return result;
   }
-  const standing = await sendStandingMutation(client, entry);
+  const standing = await sendStandingMutation(client, entry, (receipt) => {
+    entry.receipt = receipt;
+    return persist(entry, lease);
+  });
   if (standing !== undefined) return standing;
   if (entry.operation === "curation.ungroup") {
     const result = await client.ungroupCurationBatch(entry.request.body);
@@ -930,8 +937,12 @@ async function attempt(entry) {
       return;
     }
     const saved = latest.value;
-    if (saved.state === "attention" || saved.nextAt > Date.now()) return;
-    entry = saved;
+    // Revive and send under one lock hold, so an older tab waiting on the lock
+    // finds the row sent rather than failing it again.
+    const again = revive(saved) && revived.add(entry.key);
+    if ((saved.state === "attention" && !again) || saved.nextAt > Date.now())
+      return;
+    entry = again ? { ...saved, failure: null } : saved;
     if (replayExpired(entry.createdAt)) throw expiredReplayError();
     const fingerprint = await intentFingerprint(entry.request);
     const records = await listLocalWork(entry.scope, "mutation", {
@@ -1073,31 +1084,7 @@ async function attempt(entry) {
       volatile.delete(entry.key);
       return;
     }
-    entry.failure = mutationFailure(
-      error,
-      entry.operation === "artifacts.attachments.create"
-        ? "file"
-        : ["cards.move", "work.move", "pm.decisions.create"].includes(
-              entry.operation,
-            )
-          ? "move"
-          : entry.operation === "cards.patch"
-            ? "assignment"
-            : entry.operation === "inbox.controls"
-              ? "inbox action"
-              : entry.operation === "events.lifecycle"
-                ? "event action"
-                : entry.operation === "docs.lifecycle"
-                  ? "document action"
-                  : entry.operation === "topics.patch"
-                    ? "topic edit"
-                    : entry.operation === "notifications.settings.set"
-                      ? "notification settings"
-                      : entry.operation.startsWith("work.") &&
-                          entry.operation !== "work.create"
-                        ? "grouping change"
-                        : "response",
-    );
+    entry.failure = mutationFailure(error, failureSubject(entry.operation));
     entry.state = entry.failure.state;
     entry.nextAt =
       Date.now() +
@@ -1241,7 +1228,8 @@ export async function recoverMutations() {
       if (navigator.onLine !== false) {
         const due = entries.find(
           (entry) =>
-            entry.state !== "attention" &&
+            (entry.state !== "attention" || revive(entry)) &&
+            isKnownOperation(entry.operation) &&
             entry.nextAt <= Date.now() &&
             !pinEditWaits(entry, entries),
         );
@@ -1252,7 +1240,7 @@ export async function recoverMutations() {
         }
       }
       const next = entries
-        .filter((entry) => entry.state !== "attention")
+        .filter((e) => e.state !== "attention" && isKnownOperation(e.operation))
         .map((entry) => entry.nextAt);
       if (next.length && navigator.onLine !== false)
         timer = setTimeout(
@@ -1318,6 +1306,15 @@ export async function retryMutation(key, { asNew = false } = {}) {
       Object.assign(error, { localPersistence: true }),
     );
   }
+  requestRecovery();
+}
+
+/** Drop a saved request the reader no longer wants sent (kept as history). */
+export async function discardMutation(key) {
+  const entry = get(mutationOutbox).find((row) => row.key === key);
+  if (!entry || !active(entry) || entry.state !== "attention") return;
+  await persist({ ...entry, state: "superseded", discarded: true });
+  volatile.delete(key);
   requestRecovery();
 }
 
