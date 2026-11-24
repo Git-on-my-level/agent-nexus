@@ -264,8 +264,25 @@ class RepoTest(unittest.TestCase):
                 patch.object(checks, "go_module_dirs", return_value=["core", "cli"]), \
                 patch.object(checks, "go_affected", return_value=(["./leaf"], ["./importer"])):
             checks.fast_tests({"core/a.go", "cli/a.go"}, "base", prepush=True)
-        run.assert_called_once_with("go", "test", "-short", "-timeout=2m", "./leaf",
+        run.assert_called_once_with("go", "test", "-short", FAST_TIER_GO_TIMEOUT, "./leaf",
                                     cwd=self.root / "cli", slot="tests")
+
+    def test_prepush_explains_module_wide_and_version_deferrals(self):
+        for changed in ({"cli/go.mod"}, {"VERSION"}):
+            with self.subTest(changed=changed), \
+                    patch.object(checks, "go_module_dirs", return_value=["cli"]), \
+                    patch.object(checks, "run") as run, \
+                    patch.object(sys, "stdout", new_callable=io.StringIO) as output:
+                checks.fast_tests(changed, "base", prepush=True)
+            self.assertIn("cli: broad Go checks deferred", output.getvalue())
+            run.assert_not_called()
+
+    def test_prepush_defaults_to_the_focused_suite(self):
+        with patch.dict(os.environ, {"ANX_PREPUSH_FULL": ""}), \
+                patch.object(sys, "argv", ["checks.py", "prepush"]), \
+                patch.object(checks, "fast_tests") as fast:
+            checks.main()
+        self.assertTrue(fast.call_args.kwargs["prepush"])
 
     def test_prepush_full_override_uses_the_wider_local_suite(self):
         with patch.dict(os.environ, {"ANX_PREPUSH_FULL": "1"}), \

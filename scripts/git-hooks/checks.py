@@ -67,7 +67,7 @@ def changed_paths(tier, all_files=False, base=None):
         return paths(git("diff", "--cached", "--name-only", "-z", "--no-renames"))
     found = merge_base(base)
     if found is None:
-        print("No origin/main merge base; checking every module (no fetch).", flush=True)
+        print("No origin/main merge base; selecting from all tracked paths (no fetch).", flush=True)
         return paths(git("ls-files", "-z")) | SHARED
     # Include commits AND staged/unstaged/new work for standalone invocations.
     return (paths(git("diff", "--name-only", "-z", "--no-renames", found, "HEAD"))
@@ -681,8 +681,11 @@ def fast_tests(changed, base=None, *, prepush=False):
             continue
         owned = {p for p in changed if p.startswith(module + "/")}
         affected = go_affected(module, owned) if owned else None
-        if affected and affected[0]:
-            run("go", "test", "-short", "-timeout=2m", *affected[0], cwd=ROOT / module, slot="tests")
+        if affected is None:
+            if owned or (module == "cli" and "VERSION" in changed):
+                print(f"{module}: broad Go checks deferred; run make test-fast to check locally.", flush=True)
+        elif affected[0]:
+            run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *affected[0], cwd=ROOT / module, slot="tests")
     ui_shared = {"package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"}
     if "web-ui" in modules and (not prepush or changed & ui_shared
                                  or any(p.startswith("web-ui/") for p in changed)):
