@@ -79,6 +79,7 @@ func TestKnownAskVisibilityAcrossOwnerSessions(t *testing.T) {
 			{"same_agent_first_session", requester.AccessToken},
 			{"same_agent_second_session", requester.AccessToken},
 			{"different_authorized_agent", observer.AccessToken},
+			{"authorized_human", human.AccessToken},
 		} {
 			t.Run(state+"/"+reader.name, func(t *testing.T) {
 				for _, ref := range []string{id, "event:" + id} {
@@ -92,9 +93,15 @@ func TestKnownAskVisibilityAcrossOwnerSessions(t *testing.T) {
 		}
 	}
 	t.Run("subscription_stays_requester_only", func(t *testing.T) {
-		status, _ := hostHTTP(t, http.MethodPost, env.server.URL+"/asks/"+id+"/subscriptions", observer.AccessToken, map[string]any{"kind": "await", "label": "observer"})
+		path := env.server.URL + "/asks/" + id + "/subscriptions"
+		payload := map[string]any{"kind": "await", "label": "observer"}
+		status, _ := hostHTTP(t, http.MethodPost, path, observer.AccessToken, payload)
 		if status != http.StatusNotFound {
 			t.Fatalf("observer subscription status %d", status)
+		}
+		status, body := hostHTTP(t, http.MethodPost, path, human.AccessToken, payload)
+		if status != http.StatusForbidden || asMap(body["error"])["code"] != "agent_required" {
+			t.Fatalf("human subscription status %d, body %#v", status, body)
 		}
 	})
 	t.Run("unknown_id", func(t *testing.T) {

@@ -111,6 +111,35 @@ func TestAwaitKnownAskAcrossSessionsAndReaders(t *testing.T) {
 	}
 }
 
+func TestAwaitKnownAskWithHumanBearer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer human-token" {
+			t.Error("unexpected reader credential")
+		}
+		switch r.Method + " " + r.URL.Path {
+		case "GET /asks/legacy-ask":
+			fmt.Fprint(w, `{"status":"open"}`)
+		case "POST /asks/legacy-ask/subscriptions":
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":{"code":"agent_required","message":"only an agent can subscribe to its asks"}}`)
+		case "GET /stream/asks/legacy-ask":
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "event: outcome\ndata: {\"status\":\"answered\",\"response\":{\"outcome\":\"answered\",\"response_text\":\"Recorded answer\"}}\n\n")
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	env := map[string]string{"ANX_ACCESS_TOKEN": "human-token"}
+	raw := runCLIForTest(t, t.TempDir(), env, nil, []string{"--json", "--base-url", server.URL, "await", "event:legacy-ask", "--timeout", "2s"})
+	result := asMap(assertEnvelopeOK(t, raw)["result"])
+	if result["answer"] != "Recorded answer" || result["delivery_acknowledged"] != nil {
+		t.Fatalf("unexpected human reader result: %#v", result)
+	}
+}
+
 func TestAwaitInvisibleAskDoesNotSubscribeOrStream(t *testing.T) {
 	for _, tc := range []struct{ name, actor, askID, token string }{
 		{"unknown_id", "worker", "missing-ask", "test-token"},

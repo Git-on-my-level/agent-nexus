@@ -57,7 +57,13 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		// delivery receipts remain requester-only; the stream independently
 		// authorizes read access, including revocation since the initial GET.
 		var remote *errnorm.Error
-		if !errors.As(err, &remote) || remote.Code != "not_found" {
+		if !errors.As(err, &remote) {
+			return nil, err
+		}
+		switch remote.Code {
+		case "not_found", "agent_required":
+			// Another agent or a human can use the read-only outcome stream.
+		default:
 			return nil, err
 		}
 	} else {
