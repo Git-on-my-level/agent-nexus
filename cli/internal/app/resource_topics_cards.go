@@ -285,6 +285,12 @@ func (a *App) runCardsCommand(ctx context.Context, args []string, cfg config.Res
 			return nil, "cards timeline", err
 		}
 		result, callErr := a.invokeTypedJSONWithIDResolution(ctx, cfg, "cards timeline", "cards.timeline", "card_id", id, cardIDLookupSpec, nil, nil)
+		if callErr == nil {
+			body := commandResultBody(result)
+			a.attachCardNotes(ctx, cfg, id, body)
+			data := asMap(result.Data)
+			result.Text = formatTypedCommandText("cards.timeline", intValue(data["status_code"]), headerValues(data["headers"]), body, cfg.Verbose, cfg.Headers)
+		}
 		return result, "cards timeline", callErr
 	case "message":
 		body, card, dryRun, err := a.parseCardMessageInput(ctx, args[1:], cfg, "cards message", "")

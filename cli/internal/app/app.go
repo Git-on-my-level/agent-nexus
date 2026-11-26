@@ -321,12 +321,18 @@ func (a *App) Run(args []string) int {
 	}
 	a.writeAskAutoCreatedWarning(warnings)
 	openURL := a.decorateWebURL(resolved, identity.Command, value)
+	textProjection := ""
+	if result != nil && identity.Command == "context" && !resolved.JSON && !resolved.Verbose && !resolved.Headers {
+		// context has a compact text projection that is smaller than the
+		// composed body; keep it while still rendering open/warning/next lines.
+		textProjection = result.Text
+	}
 	if root, ok := value.(map[string]any); ok {
 		if ref := ensureCreatedRef(identity.Command, root); ref != "" && !resolved.JSON {
 			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL, Text: textProjection}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return 0
