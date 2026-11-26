@@ -58,6 +58,20 @@ it("offers retry or keep for a stuck skip, never a saved message to edit", async
   expect(h.discarded).toEqual(["a"]);
 });
 
+it("says so when discarding a stuck skip fails on this device", async () => {
+  const { discardMutation } = await import("$lib/mutationOutbox.js");
+  discardMutation.mockRejectedValueOnce(new Error("storage unavailable"));
+  render(MutationSendStatus, { entry: stuck("d") });
+  const keep = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent === "Don't skip",
+  );
+  await fireEvent.click(keep);
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(document.querySelector('[role="alert"]').textContent).toContain(
+    "Couldn’t discard",
+  );
+});
+
 it("keeps the saved message for work the reader wrote", () => {
   render(MutationSendStatus, {
     entry: { ...stuck("c", "events.create"), text: "My comment" },

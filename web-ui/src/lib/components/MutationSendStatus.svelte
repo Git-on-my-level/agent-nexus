@@ -24,6 +24,14 @@
   let isSkip = $derived(
     entry?.operation === SKIP || entry?.operation === SKIP_MANY,
   );
+  async function keepInDecide() {
+    try {
+      await discardMutation(entry.key);
+      localError = "";
+    } catch {
+      localError = "Couldn’t discard on this device. Try again.";
+    }
+  }
   /** An older open tab, which lacked this operation, gave up on it. */
   let olderTab = $derived(entry?.failure?.detail === UNKNOWN_OPERATION);
   function download() {
@@ -105,10 +113,13 @@
           <button
             type="button"
             class="rounded border border-line px-2 py-1 text-fg"
-            onclick={() => discardMutation(entry.key)}
+            onclick={keepInDecide}
             title="Keep these decisions in Decide">Don't skip</button
           >
         </div>
+        {#if localError}<p class="mt-1 text-danger-text" role="alert">
+            {localError}
+          </p>{/if}
       {/if}
     {:else if entry.state !== "sent"}
       <p class="mt-1 text-fg-muted">
