@@ -229,7 +229,13 @@ Tabs of different builds share the device outbox. A tab sends only operations
 in `outboxOperations.js` and leaves others for a build that knows them; a build
 that knows an operation revives rows an older tab marked "Unknown saved
 operation". Stuck skips can be retried (as a new request when too old for safe
-replay) or discarded from Decide.
+replay) or discarded from Decide, and from the unsent list, where a skip offers
+Retry skip or Don't skip instead of a saved message, and several stuck rows
+share one Retry all. The open unsent list floats over the page; it never pushes
+the page down. Tabs poll for a newer build every five minutes
+(`kit.version.pollInterval`); once one is deployed, an old tab shows a Reload
+prompt and its next in-app navigation is a full page load, so a long-open
+window does not keep running the old build.
 
 ## Task and document authoring
 

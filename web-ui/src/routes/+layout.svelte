@@ -1,9 +1,9 @@
 <script>
   import UnsentIndicator from "$lib/components/inbox/UnsentIndicator.svelte";
+  import UpdateAvailable from "$lib/components/UpdateAvailable.svelte";
   import LocalSaveWarning from "$lib/components/LocalSaveWarning.svelte";
   import {
     recoverStaleChunk,
-    staleChunkRecoveryNeeded,
     isStaleChunkError,
     warnOverviewRecovery,
   } from "$lib/chunkRecovery.js";
@@ -1545,6 +1545,7 @@
       </aside>
 
       <div class="shell-main">
+        <UpdateAvailable />
         {#if identityReady && !renderLoginOnly && !gateVisible}
           <UnsentIndicator />
         {/if}
@@ -1553,16 +1554,6 @@
             class={`shell-content shell-content--${shellContentConfig.mode}`}
             style={`--shell-content-max: ${shellContentConfig.maxWidth}`}
           >
-            {#if $staleChunkRecoveryNeeded}
-              <div class="p-6" role="alert" data-workspace-update-error>
-                <p>This page could not be loaded. Reload to try again.</p>
-                <button
-                  class="btn-secondary mt-3"
-                  type="button"
-                  onclick={() => window.location.reload()}>Retry</button
-                >
-              </div>
-            {/if}
             {#if activationError}
               <WorkspaceActivationAlert
                 message={activationError}

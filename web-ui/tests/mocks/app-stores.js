@@ -4,3 +4,10 @@ export const page = {
     return () => {};
   },
 };
+export const updated = {
+  subscribe: (fn) => {
+    fn(false);
+    return () => {};
+  },
+  check: async () => false,
+};
