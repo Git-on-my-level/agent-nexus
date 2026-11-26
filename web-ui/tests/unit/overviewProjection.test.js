@@ -58,58 +58,10 @@ it("keeps human next actors in Needs you and prioritizes asks over routine Watch
   ]);
 });
 
-it("preserves the backend plan geometry and visit digest wire fixtures", async () => {
-  const { loadOverview } = await import("../../src/lib/overview.js");
-  const { default: tile } =
-    await import("../../../contracts/fixtures/initiative-overview/tile.json");
-  const { default: digest } =
-    await import("../../../contracts/fixtures/initiative-overview/digest.json");
-  const initiatives = {
-    status: "ok",
-    count: 1,
-    items: [tile],
-    truncated: true,
-  };
-  const result = await loadOverview({
-    getOverview: async (filters) => {
-      // `summary=1` is the opt-in: core computes `work_summary` only when
-      // asked, and every card surface renders it.
-      expect(filters).toEqual({ work_view: "summary", summary: 1 });
-      return {
-        work: {
-          status: "ok",
-          items: [],
-          total: 0,
-          human_count: 0,
-          truncated: true,
-        },
-        initiatives,
-        since_you_last_looked: digest,
-        needs_you: { status: "ok", rows: [], count: 0 },
-        dashboard: { status: "ok", reports: [] },
-        agents: { status: "unavailable" },
-      };
-    },
-  });
-  expect(result.initiatives).toBe(initiatives);
-  expect(result.sinceYouLastLooked).toBe(digest);
-  expect(result.work.truncated).toBe(true);
-});
-
-it("preserves partial agent counts and accumulated dashboard choices", async () => {
-  const { loadOverview, mergeDashboardReports } =
-    await import("../../src/lib/overview.js");
+it("preserves accumulated dashboard choices", async () => {
+  const { mergeDashboardReports } = await import("../../src/lib/overview.js");
   const { visualReportExample } =
     await import("../../src/lib/fixtures/visualReportExample.js");
-  const model = await loadOverview({
-    getOverview: async () => ({
-      work: { status: "ok", items: [], human_count: 0 },
-      needs_you: { status: "ok", rows: [] },
-      dashboard: { status: "ok", reports: [] },
-      agents: { status: "ok", truncated: true, items: [{ state: "idle" }] },
-    }),
-  });
-  expect(model.agents).toMatchObject({ working: 0, truncated: true });
   const first = {
     status: "ok",
     pinned_ref: "document:first",

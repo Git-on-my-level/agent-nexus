@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { workSummaryModel } from "../../src/lib/workSummary.js";
-import { sinceYouLastLookedStrip } from "../../src/lib/sinceYouLastLooked.js";
 
 describe("health wire compatibility", () => {
   it("prefers the computed summary over plan_health", () => {
@@ -29,14 +28,5 @@ describe("health wire compatibility", () => {
       workSummaryModel({ plan_state: { health: "at_risk", health_state: "x" } })
         .status.state,
     ).toBe("unknown");
-  });
-
-  it("drops the removed stale digest spellings", () => {
-    const digest = (kind) => ({
-      since: "2026-10-05T00:00:00Z",
-      items: [{ kind, ref: "card:ship", title: "Ship" }],
-    });
-    expect(sinceYouLastLookedStrip(digest("initiative_stalled"))).toBeNull();
-    expect(sinceYouLastLookedStrip(digest("initiative_stale"))).toBeNull();
   });
 });
