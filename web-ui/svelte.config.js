@@ -22,6 +22,8 @@ const config = {
     paths: {
       base: basePath,
     },
+    // Tell open tabs when a newer build is deployed (UpdateAvailable.svelte).
+    version: { pollInterval: 5 * 60_000 },
   },
 };
 

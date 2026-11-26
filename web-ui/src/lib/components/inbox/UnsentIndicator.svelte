@@ -3,7 +3,7 @@
     inboxResponseToast,
     inboxUnsentResponses,
   } from "$lib/inboxResponseQueue.js";
-  import { mutationOutbox } from "$lib/mutationOutbox.js";
+  import { mutationOutbox, retryMutation } from "$lib/mutationOutbox.js";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import InboxSendStatus from "./InboxSendStatus.svelte";
   import { workspacePath } from "$lib/workspacePaths.js";
@@ -45,6 +45,24 @@
     return () => clearTimeout(timer);
   });
 
+  /*
+   * Saved work that needs the reader. Many at once (a bulk skip an older tab
+   * stranded, an outage) must not mean one click per row.
+   */
+  let attention = $derived(
+    $mutationOutbox.filter((entry) => entry.state === "attention"),
+  );
+  let retryingAll = $state(false);
+  async function retryAll() {
+    retryingAll = true;
+    try {
+      for (const entry of attention)
+        await retryMutation(entry.key, { asNew: !!entry.failure?.expired });
+    } finally {
+      retryingAll = false;
+    }
+  }
+
   /** A saved response belongs to the workspace it was written in. */
   function decideHref(entry) {
     const path = `/decide/${encodeURIComponent(entry.itemId)}`;
@@ -58,8 +76,13 @@
 </script>
 
 {#if count && (settled || urgent)}
+  <!--
+    The chip sits in the page flow; the open list floats over the page
+    instead of pushing it down. A long list used to take most of the screen
+    above Decide.
+  -->
   <details
-    class="m-3 self-end shrink-0 max-h-[70vh] w-fit open:w-80 max-w-[calc(100vw-2rem)] overflow-auto rounded-md border border-line bg-panel p-3 shadow-[var(--shadow-menu)]"
+    class="relative z-30 m-3 self-end shrink-0 rounded-md border border-line bg-panel px-3 py-2 shadow-[var(--shadow-menu)]"
     bind:open
     data-unsent-indicator
   >
@@ -67,7 +90,22 @@
       >{count} unsent</summary
     >
     {#if open}
-      <div class="mt-3 space-y-3">
+      <div
+        class="absolute right-0 top-full mt-1 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto rounded-md border border-line bg-panel p-3 shadow-[var(--shadow-menu)]"
+        data-unsent-list
+      >
+        {#if attention.length > 1}
+          <div class="flex items-center justify-between gap-2 text-meta">
+            <span class="text-fg-muted">{attention.length} need you</span>
+            <button
+              type="button"
+              class="rounded border border-line px-2 py-1 text-fg"
+              disabled={retryingAll}
+              onclick={retryAll}
+              data-unsent-retry-all>Retry all</button
+            >
+          </div>
+        {/if}
         {#each responses as entry (entry.request.idempotency_key)}
           <div>
             <a

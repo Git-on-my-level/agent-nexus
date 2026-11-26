@@ -206,7 +206,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |
 | 1946  | cli/dogfood/pi/run.mjs                                                             |
 | 1893  | web-ui/scripts/seed-core-from-mock.mjs                                             |
-| 1714  | web-ui/src/routes/+layout.svelte                                                   |
+| 1705  | web-ui/src/routes/+layout.svelte                                                   |
 | 1594  | cli/dogfood/pi/seed/kids-lemonade-stand-chapters.mjs                               |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
 | 1546  | web-ui/src/lib/anxCoreClient.js                                                    |

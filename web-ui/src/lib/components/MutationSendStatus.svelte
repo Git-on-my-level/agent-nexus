@@ -2,9 +2,12 @@
   import {
     mutationOutbox,
     mutationConfirmations,
+    discardMutation,
     editMutation,
     retryMutation,
   } from "$lib/mutationOutbox.js";
+  import { SKIP, SKIP_MANY } from "$lib/standingRulingSend.js";
+  import { UNKNOWN_OPERATION } from "$lib/outboxOperations.js";
   import Time from "$lib/time/Time.svelte";
   import { attachmentFile } from "$lib/attachmentWork.js";
   let { target = "", entry: provided = null } = $props();
@@ -14,6 +17,23 @@
       $mutationConfirmations[target],
   );
   let localError = $state("");
+  /*
+   * A skip carries no text the reader wrote: no saved message to copy or
+   * edit. It is sent again, or the decisions go back to Decide.
+   */
+  let isSkip = $derived(
+    entry?.operation === SKIP || entry?.operation === SKIP_MANY,
+  );
+  async function keepInDecide() {
+    try {
+      await discardMutation(entry.key);
+      localError = "";
+    } catch {
+      localError = "Couldn’t discard on this device. Try again.";
+    }
+  }
+  /** An older open tab, which lacked this operation, gave up on it. */
+  let olderTab = $derived(entry?.failure?.detail === UNKNOWN_OPERATION);
   function download() {
     const url = URL.createObjectURL(attachmentFile(entry.request));
     const link = document.createElement("a");
@@ -73,7 +93,35 @@
         confirmed.
       </p>
     {/if}
-    {#if entry.state !== "sent"}
+    {#if entry.state !== "sent" && isSkip}
+      <p class="mt-1 text-fg-muted">
+        {olderTab
+          ? "An older open tab of this app could not send this skip. Reload your other tabs and windows, then retry."
+          : entry.state === "attention"
+            ? entry.failure?.message || "This skip did not go through."
+            : "Saved on this device. Waiting for confirmation."}
+      </p>
+      {#if entry.state === "attention"}
+        <div class="mt-2 flex gap-2">
+          <button
+            type="button"
+            class="rounded border border-line px-2 py-1 text-fg"
+            onclick={() =>
+              retryMutation(entry.key, { asNew: !!entry.failure?.expired })}
+            >Retry skip</button
+          >
+          <button
+            type="button"
+            class="rounded border border-line px-2 py-1 text-fg"
+            onclick={keepInDecide}
+            title="Keep these decisions in Decide">Don't skip</button
+          >
+        </div>
+        {#if localError}<p class="mt-1 text-danger-text" role="alert">
+            {localError}
+          </p>{/if}
+      {/if}
+    {:else if entry.state !== "sent"}
       <p class="mt-1 text-fg-muted">
         {entry.failure?.message ||
           "Saved on this device. Waiting for confirmation."}
