@@ -182,6 +182,8 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 	}
 	stale := staleRulingProjectionWarning("https://workspace.example.com", rulingProjection{})
 	messages[stale.Code] = stale.Message
+	unavailable := unavailableRulingProjectionWarning("https://workspace.example.com")
+	messages[unavailable.Code] = unavailable.Message
 
 	ruling := map[string]any{"ref": "ruling:r1", "question": "Rerun the diagnostic?", "answer": "Yes"}
 	covered, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "card:x", "ask")

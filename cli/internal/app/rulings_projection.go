@@ -42,7 +42,7 @@ type rulingCollection struct {
 	warnings    []output.Warning
 }
 
-func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force bool) (rulingCollection, error) {
+func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, allowPartial bool) (rulingCollection, error) {
 	out := rulingCollection{names: map[string]map[string]any{}, namespaces: map[string]string{}}
 	catalog, dir, err := a.workspaceCatalog(cfg)
 	if err != nil {
@@ -90,9 +90,13 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force boo
 	}
 	sort.Strings(bases)
 	for _, base := range append([]string{selected}, bases...) {
-		projection, stale, err := a.loadRulingProjection(ctx, configs[base], dir, ttl, force)
+		projection, stale, err := a.loadRulingProjection(ctx, configs[base], dir, ttl, force, allowPartial && base == selected)
 		if err != nil {
-			return out, err
+			if base == selected || !allowPartial {
+				return out, err
+			}
+			out.warnings = append(out.warnings, unavailableRulingProjectionWarning(base))
+			continue
 		}
 		if stale {
 			out.warnings = append(out.warnings, staleRulingProjectionWarning(base, projection))
@@ -125,6 +129,13 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force boo
 	return out, nil
 }
 
+func unavailableRulingProjectionWarning(base string) output.Warning {
+	return output.Warning{
+		Code: "rulings_projection_unavailable", Message: "cannot read rulings for " + base,
+		Details: map[string]any{"workspace_url": base},
+	}
+}
+
 func staleRulingProjectionWarning(base string, projection rulingProjection) output.Warning {
 	return output.Warning{
 		Code: rulingProjectionStale, Message: "using cached rulings for " + base,
@@ -153,23 +164,46 @@ func (c rulingCollection) claimRulingNames(ruling map[string]any, id, base strin
 	return nil
 }
 
-func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir string, ttl time.Duration, force bool) (rulingProjection, bool, error) {
+func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir string, ttl time.Duration, force, liveLegacy bool) (rulingProjection, bool, error) {
 	workspace, principal, err := a.rulingCacheIdentity(cfg)
 	if err != nil {
 		return rulingProjection{}, false, err
 	}
 	base := strings.TrimRight(cfg.BaseURL, "/")
-	path := filepath.Join(dir, "rulings", workspace+".json")
+	path := rulingProjectionPath(dir, workspace, principal)
 	start := a.clockNow().UTC()
 	cached, cacheErr := readRulingProjection(path, base, principal)
+	if os.IsNotExist(cacheErr) {
+		cached, cacheErr = readRulingProjection(filepath.Join(dir, "rulings", workspace+".json"), base, principal)
+	}
 	hasCache := cacheErr == nil && !cached.FetchedAt.After(start)
 	if hasCache && !force && start.Sub(cached.FetchedAt) < ttl {
-		return cached, false, nil
+		if !liveLegacy {
+			return cached, false, nil
+		}
+		authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
+		if err == nil {
+			var legacy []map[string]any
+			legacy, err = a.fetchLegacyRulings(ctx, authCfg)
+			if err == nil {
+				rows := make([]map[string]any, 0, len(cached.Rulings)+len(legacy))
+				for _, row := range cached.Rulings {
+					if row["kind"] == "operating" {
+						rows = append(rows, row)
+					}
+				}
+				cached.Rulings = append(rows, legacy...)
+				return cached, false, nil
+			}
+		}
+		if canUseStaleRulings(err) {
+			return cached, true, nil
+		}
+		return rulingProjection{}, false, err
 	}
 	projection, err := a.fetchRulingProjection(ctx, cfg)
 	if err != nil {
-		failure := errnorm.Normalize(err)
-		if hasCache && !force && (failure.Kind == errnorm.KindNetwork || errnorm.ExitCode(err) == 6 || errnorm.ExitCode(err) == 8) {
+		if hasCache && !force && canUseStaleRulings(err) {
 			return cached, true, nil
 		}
 		return rulingProjection{}, false, err
@@ -179,6 +213,15 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		return rulingProjection{}, false, errnorm.Wrap(errnorm.KindLocal, "rulings_cache_write_failed", "cannot save the ruling projection", err)
 	}
 	return projection, false, nil
+}
+
+func canUseStaleRulings(err error) bool {
+	return errnorm.Normalize(err).Kind == errnorm.KindNetwork || errnorm.ExitCode(err) == 6 || errnorm.ExitCode(err) == 8
+}
+
+func rulingProjectionPath(dir, workspace, principal string) string {
+	key := sha256.Sum256([]byte(principal))
+	return filepath.Join(dir, "rulings", fmt.Sprintf("%s-%x.json", workspace, key[:16]))
 }
 
 func (a *App) rulingCacheIdentity(cfg config.Resolved) (string, string, error) {
@@ -279,26 +322,33 @@ func (a *App) fetchRulingProjection(ctx context.Context, cfg config.Resolved) (r
 		if changed {
 			continue
 		}
-		// The legacy history page is capped independently. Fetch its live
-		// page too so newer revocations cannot crowd out active answers.
-		seen := map[string]bool{}
-		for _, path := range []string{"/rulings?include_revoked=true", "/rulings"} {
-			legacy, err := a.invokeRawJSON(ctx, authCfg, "rulings list", http.MethodGet, path, nil)
-			if err != nil {
-				return p, err
-			}
-			for _, raw := range asSlice(commandResultBody(legacy)["rulings"]) {
-				row := asMap(raw)
-				ref := firstNonEmpty(anyString(row["ref"]), anyString(row["id"]))
-				if !seen[ref] {
-					seen[ref] = true
-					p.Rulings = append(p.Rulings, row)
-				}
-			}
-		}
-		return p, nil
+		legacy, err := a.fetchLegacyRulings(ctx, authCfg)
+		p.Rulings = append(p.Rulings, legacy...)
+		return p, err
 	}
 	return rulingProjection{}, errnorm.Network("request_failed", "rulings changed during refresh; retry the read")
+}
+
+func (a *App) fetchLegacyRulings(ctx context.Context, cfg config.Resolved) ([]map[string]any, error) {
+	// The history page is capped independently. Fetch the live page too so
+	// newer revocations cannot crowd out active answers.
+	seen := map[string]bool{}
+	var rows []map[string]any
+	for _, path := range []string{"/rulings?include_revoked=true", "/rulings"} {
+		legacy, err := a.invokeRawJSON(ctx, cfg, "rulings list", http.MethodGet, path, nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, raw := range asSlice(commandResultBody(legacy)["rulings"]) {
+			row := asMap(raw)
+			ref := firstNonEmpty(anyString(row["ref"]), anyString(row["id"]))
+			if !seen[ref] {
+				seen[ref] = true
+				rows = append(rows, row)
+			}
+		}
+	}
+	return rows, nil
 }
 
 func (a *App) fetchOperatingRulingPages(ctx context.Context, cfg config.Resolved) (rulingProjection, bool, error) {

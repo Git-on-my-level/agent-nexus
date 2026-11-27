@@ -20,7 +20,8 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 )
 
-var bareRuling = regexp.MustCompile(`R-[0-9]{8}-[0-9]{2}|W3-R[0-9]+|hostctl-R[0-9]+|R17 exception|SCA-2104-table|R[0-9]+(?:\.[0-9]+)?`)
+const bareRulingID = `R-[0-9]{8}-[0-9]{2}|R[0-9]+(?:\.[0-9]+)?`
+
 var rulingTag = regexp.MustCompile(`ruling["']?[ \t]*[:=][ \t]*["']?`)
 var legacyRuling = regexp.MustCompile(`^R[0-9]+$`)
 var lineBoundaries = strings.NewReplacer("\r\n", "\n", "\r", "\n", "\v", "\n", "\f", "\n", "\x1c", "\n", "\x1d", "\n", "\x1e", "\n", "\u0085", "\n", "\u2028", "\n", "\u2029", "\n")
@@ -32,6 +33,7 @@ type rulingReference struct {
 
 type rulingReferenceScanner struct {
 	names *regexp.Regexp
+	bare  *regexp.Regexp
 }
 
 func newRulingReferenceScanner(names map[string]map[string]any) rulingReferenceScanner {
@@ -50,8 +52,17 @@ func newRulingReferenceScanner(names map[string]map[string]any) rulingReferenceS
 	for i := range aliases {
 		aliases[i] = regexp.QuoteMeta(aliases[i])
 	}
+	// Special legacy spellings come from the index. Keep them ahead of the
+	// generic R-number grammar so a longer alias wins over its prefix.
+	bare := make([]string, 0, len(aliases)+1)
+	for _, alias := range aliases {
+		if !legacyRuling.MatchString(alias) && !rulingDateID.MatchString(alias) && strings.ContainsAny(alias, "0123456789") {
+			bare = append(bare, alias)
+		}
+	}
+	bare = append(bare, bareRulingID)
 	aliases = append(aliases, rulingDateID.String()[1:len(rulingDateID.String())-1])
-	return rulingReferenceScanner{names: regexp.MustCompile("^(?:" + strings.Join(aliases, "|") + ")")}
+	return rulingReferenceScanner{names: regexp.MustCompile("^(?:" + strings.Join(aliases, "|") + ")"), bare: regexp.MustCompile(strings.Join(bare, "|"))}
 }
 
 func (s rulingReferenceScanner) references(line string) []rulingReference {
@@ -69,7 +80,7 @@ func (s rulingReferenceScanner) references(line string) []rulingReference {
 		}
 		// Preserve the clause token where bare scanning would report it.
 		if end < len(line) && line[end] == '.' && legacyRuling.MatchString(token) {
-			if clause := bareRuling.FindString(line[start:]); strings.HasPrefix(clause, token+".") {
+			if clause := s.bare.FindString(line[start:]); strings.HasPrefix(clause, token+".") {
 				token, end = clause, start+len(clause)
 			}
 		}
@@ -80,7 +91,7 @@ func (s rulingReferenceScanner) references(line string) []rulingReference {
 		taggedSpans = append(taggedSpans, [2]int{start, end})
 		byStart[start] = rulingReference{token: token, name: name, tagged: true}
 	}
-	for _, span := range bareRuling.FindAllStringIndex(line, -1) {
+	for _, span := range s.bare.FindAllStringIndex(line, -1) {
 		start, end := span[0], span[1]
 		covered := false
 		for _, tag := range taggedSpans {
@@ -261,16 +272,14 @@ func rulingCheckFiles(ctx context.Context, cwd, root string, args rulingsArgs) (
 				target = filepath.Join(cwd, target)
 			}
 			info, err := os.Stat(target)
-			if os.IsNotExist(err) {
-				continue
-			}
 			if err != nil {
 				return nil, nil, err
 			}
 			if !info.IsDir() {
-				if info.Mode().IsRegular() {
-					files = append(files, rulingFile{filepath.Clean(raw), target})
+				if !info.Mode().IsRegular() {
+					return nil, nil, fmt.Errorf("%s is not a regular file or directory", raw)
 				}
+				files = append(files, rulingFile{filepath.Clean(raw), target})
 				continue
 			}
 			err = filepath.WalkDir(target, func(file string, d fs.DirEntry, err error) error {
@@ -332,7 +341,13 @@ func (a *App) checkRulings(ctx context.Context, cfg config.Resolved, args ruling
 	used := make(map[int]bool, len(allow))
 	for _, file := range files {
 		raw, err := os.ReadFile(file.path)
-		if err != nil || bytes.IndexByte(raw[:min(len(raw), 4096)], 0) >= 0 {
+		if err != nil {
+			if len(args.paths) > 0 || !os.IsNotExist(err) {
+				return nil, errnorm.Usage("rulings_input_unreadable", err.Error())
+			}
+			continue
+		}
+		if bytes.IndexByte(raw[:min(len(raw), 4096)], 0) >= 0 {
 			continue
 		}
 		text := strings.ToValidUTF8(string(raw), "\ufffd")
@@ -360,7 +375,7 @@ func (a *App) checkRulings(ctx context.Context, cfg config.Resolved, args ruling
 		}
 	}
 	count := len(findings) + len(unused)
-	output = append(output, fmt.Sprintf("omi-rulings-check: %d finding(s) in %d file(s)", count, len(files)))
+	output = append(output, fmt.Sprintf("anx rulings check: %d finding(s) in %d file(s)", count, len(files)))
 	result := a.rulingsOutput(cfg, map[string]any{"findings": findings, "unused_allowlist": unused, "finding_count": count, "file_count": len(files)}, output, snapshot)
 	if count > 0 {
 		result.ExitCode = 1

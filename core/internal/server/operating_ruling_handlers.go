@@ -131,6 +131,8 @@ func writeOperatingRulingResult(w http.ResponseWriter, r *http.Request, status i
 		writeError(w, http.StatusNotFound, "not_found", "ruling or relation target not found")
 	case errors.Is(err, primitives.ErrInvalidWorkRequest):
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	case errors.Is(err, primitives.ErrMutationReplayConflict):
+		writeError(w, http.StatusConflict, "idempotency_conflict", "request key conflicts with an existing receipt")
 	case errors.Is(err, primitives.ErrConflict):
 		writeError(w, http.StatusConflict, "conflict", "the ruling, alias, relation state or request key conflicts")
 	default:

@@ -203,6 +203,20 @@ func (s *Store) ProposeOperatingRuling(ctx context.Context, actor string, p Oper
 	if err := checkOperatingRulingCoverage(ctx, tx, p); err != nil {
 		return OperatingRuling{}, err
 	}
+	// Imports can refer to rows later in the index. Ordinary proposals must
+	// resolve their targets through the caller's scoped view before submission.
+	if p.StatusHint == "" {
+		for _, rel := range p.Relations {
+			var target string
+			err := tx.QueryRowContext(ctx, `SELECT ruling_id FROM standing_rulings WHERE ruling_id=?`, rel.RulingID).Scan(&target)
+			if errors.Is(err, sql.ErrNoRows) {
+				return OperatingRuling{}, ErrNotFound
+			}
+			if err != nil {
+				return OperatingRuling{}, err
+			}
+		}
+	}
 	created := now.UTC().Format(time.RFC3339Nano)
 	_, err = tx.ExecContext(ctx, `INSERT INTO standing_rulings
 	 (id,title_key,kind,question,created_by,created_at,ruling_id,ruling_title,aliases_json,scope,topic,body,source_quote,source,relations_json,status,status_hint,superseded_by_hint)
@@ -232,7 +246,9 @@ func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, no
 	if err != nil {
 		return r, err
 	}
-	if r.Status == "active" || (r.Status == "revoked" && r.DecidedAt != "" && (r.StatusHint == "revoked" || r.StatusHint == "spent")) {
+	confirmedImport := r.DecidedAt != "" && ((r.Status == "superseded" && r.StatusHint == "superseded") ||
+		(r.Status == "revoked" && (r.StatusHint == "revoked" || r.StatusHint == "spent")))
+	if r.Status == "active" || confirmedImport {
 		return r, nil
 	}
 	if r.Status != "proposed" {
@@ -241,9 +257,10 @@ func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, no
 	if err := checkOperatingRulingCoverage(ctx, tx, r.OperatingRulingProposal); err != nil {
 		return r, err
 	}
+	decidedAt := now.UTC().Format(time.RFC3339Nano)
 	for _, rel := range r.Relations {
-		var scope, status, hint, successor string
-		err := tx.QueryRowContext(ctx, `SELECT scope,status,status_hint,superseded_by_hint FROM standing_rulings WHERE ruling_id=?`, rel.RulingID).Scan(&scope, &status, &hint, &successor)
+		var scope, status, hint, successorHint, successor string
+		err := tx.QueryRowContext(ctx, `SELECT scope,status,status_hint,superseded_by_hint,superseded_by FROM standing_rulings WHERE ruling_id=?`, rel.RulingID).Scan(&scope, &status, &hint, &successorHint, &successor)
 		if errors.Is(err, sql.ErrNoRows) {
 			return r, ErrNotFound
 		}
@@ -253,21 +270,27 @@ func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, no
 		if rel.Kind != "supersedes" {
 			continue
 		}
-		importedPredecessor := status == "proposed" && hint == "superseded" && successor == id
+		if scope == r.Scope && status == "superseded" && successor == id {
+			continue
+		}
+		importedPredecessor := status == "proposed" && hint == "superseded" && successorHint == id
 		if scope != r.Scope || (status != "active" && !importedPredecessor) {
 			return r, fmt.Errorf("%w: superseded target %s must be active and have the same scope", ErrConflict, rel.RulingID)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status='superseded',superseded_by=? WHERE ruling_id=?`, id, rel.RulingID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status='superseded',superseded_by=?,decided_by=COALESCE(NULLIF(decided_by,''),?),decided_at=COALESCE(NULLIF(decided_at,''),?) WHERE ruling_id=?`, id, actor, decidedAt, rel.RulingID); err != nil {
 			return r, err
 		}
 	}
-	r.Status, r.DecidedBy, r.DecidedAt = "active", actor, now.UTC().Format(time.RFC3339Nano)
+	r.Status, r.DecidedBy, r.DecidedAt = "active", actor, decidedAt
 	var revokedAt any
-	if r.StatusHint == "revoked" || r.StatusHint == "spent" {
+	switch r.StatusHint {
+	case "superseded":
+		r.Status, r.SupersededBy = "superseded", r.SupersededByHint
+	case "revoked", "spent":
 		r.Status, r.RevokedBy, r.RevokedAt = "revoked", actor, r.DecidedAt
 		revokedAt = r.RevokedAt
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status=?,decided_by=?,decided_at=?,revoked_by=?,revoked_at=? WHERE ruling_id=?`, r.Status, r.DecidedBy, r.DecidedAt, r.RevokedBy, revokedAt, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status=?,decided_by=?,decided_at=?,superseded_by=?,revoked_by=?,revoked_at=? WHERE ruling_id=?`, r.Status, r.DecidedBy, r.DecidedAt, r.SupersededBy, r.RevokedBy, revokedAt, id); err != nil {
 		return r, operatingRulingError(err)
 	}
 	return r, tx.Commit()

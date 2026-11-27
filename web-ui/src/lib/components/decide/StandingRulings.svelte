@@ -24,6 +24,7 @@
   let rulings = $state([]);
   let saveError = $state("");
   let cursor = $state("");
+  let revision = $state("");
   let loadingMore = $state(false);
   let pageError = $state(false);
 
@@ -39,6 +40,7 @@
       ]);
       rulings = [...(legacy?.rulings ?? []), ...(operating?.rulings ?? [])];
       cursor = operating?.next_cursor ?? "";
+      revision = operating?.source_revision ?? "";
       pageError = false;
       state = "ready";
     } catch {
@@ -52,6 +54,10 @@
     pageError = false;
     try {
       const result = await coreClient.rulingsProjection({ after: cursor });
+      if (result?.source_revision !== revision) {
+        await load();
+        return;
+      }
       const already = new Set(rulings.map((ruling) => ruling.id));
       rulings = [
         ...rulings,

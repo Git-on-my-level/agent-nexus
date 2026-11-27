@@ -97,7 +97,7 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 	case "import":
 		return a.importRulings(ctx, cfg, p.file)
 	}
-	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull")
+	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull", p.verb == "list" || p.verb == "show")
 	if err != nil {
 		if p.verb == "check" {
 			return nil, errnorm.Usage("rulings_index_unavailable", err.Error())
@@ -133,7 +133,10 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 		if len(lines) == 0 {
 			lines = append(lines, "no active standing rulings")
 		}
-		return a.rulingsOutput(cfg, map[string]any{"rulings": rows}, lines, snapshot), nil
+		// Keep the original list response path for scripts that read
+		// data.body.rulings. A combined projection has no single header set.
+		data := map[string]any{"rulings": rows, "status_code": 200, "headers": map[string]string{}, "body": map[string]any{"rulings": rows}}
+		return a.rulingsOutput(cfg, data, lines, snapshot), nil
 	}
 }
 

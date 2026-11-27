@@ -93,7 +93,7 @@ func AskTitlePattern(title string) string {
 // who cannot read the source ask neither lists the ruling nor has it applied.
 const standingRulingColumns = `r.id,r.kind,r.question,r.answer,r.requester,r.source_ask_id,r.created_by,r.created_at,r.uses,COALESCE(r.last_used_at,''),COALESCE(r.revoked_at,''),r.revoked_by`
 
-const standingRulingFrom = ` FROM standing_rulings r JOIN events e ON e.id=r.source_ask_id AND COALESCE(e.trashed_at,'')=''`
+const standingRulingFrom = ` FROM standing_rulings r JOIN events e ON e.id=r.source_ask_id`
 
 func scanStandingRuling(row interface{ Scan(...any) error }) (StandingRuling, error) {
 	var r StandingRuling

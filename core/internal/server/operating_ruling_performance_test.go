@@ -22,7 +22,7 @@ func TestPerformanceOperatingRulingsRoutes(t *testing.T) {
 	for i := 0; i < 4096; i++ {
 		id := fmt.Sprintf("R-%s-%02d", start.AddDate(0, 0, i/99).Format("20060102"), i%99+1)
 		status := "active"
-		if i > 4080 {
+		if i >= 2048 {
 			status = "proposed"
 		}
 		if _, err := tx.Exec(`INSERT INTO standing_rulings(id,title_key,kind,question,created_by,created_at,ruling_id,ruling_title,body,source_quote,status,topic)

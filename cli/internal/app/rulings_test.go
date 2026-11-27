@@ -114,6 +114,9 @@ func TestRulingsProjectionAliasRefreshAndOffline(t *testing.T) {
 	if code != 1 || !strings.Contains(out, "R41 -> R-20261126-08 (superseded) superseded_by R-20261127-01") {
 		t.Fatalf("check exit=%d output=%q", code, out)
 	}
+	if code, _, stderr := runRulingCLI(t, home, cwd, base, nil, "rulings", "check", "misspelled.md"); code != 2 || !strings.Contains(stderr, "misspelled.md") {
+		t.Fatalf("missing explicit input exit=%d error=%q", code, stderr)
+	}
 	server.Close()
 	code, stale, stderr := runRulingCLI(t, home, cwd, base, map[string]string{"ANX_RULINGS_TTL": "0s"}, "rulings", "show", "R41")
 	if code != 0 || !strings.Contains(stale, "superseded") || !strings.Contains(stderr, "warning code=rulings_projection_stale") {
@@ -192,6 +195,29 @@ func TestRulingsImportReusesKeysAndPreservesIndex(t *testing.T) {
 	}
 }
 
+func TestRulingsProposeReportsRelationRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rulings/projection":
+			_, _ = w.Write([]byte(`{"rulings":[],"source_revision":"fixture"}`))
+		case "/rulings":
+			_, _ = w.Write([]byte(`{"rulings":[]}`))
+		case "/rulings/propose":
+			_, _ = w.Write([]byte(`{"redirected":"needs_relation","missing_relations":["R-20261127-01"]}`))
+		}
+	}))
+	defer server.Close()
+	home, cwd := t.TempDir(), t.TempDir()
+	file := filepath.Join(cwd, "body.md")
+	if err := os.WriteFile(file, []byte("Use the enrolled host."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	code, _, stderr := runRulingCLI(t, home, cwd, server.URL, nil, "rulings", "propose", "--id-date", "2026-11-27", "--scope", "workspace", "--topic", "routing", "--quote", "Use the enrolled host.", "--body-file", file)
+	if code != 2 || !strings.Contains(stderr, "R-20261127-01") {
+		t.Fatalf("redirect reported as successful submission: %d %q", code, stderr)
+	}
+}
+
 func TestRulingsOfflineHostAssertionAndAccountFanout(t *testing.T) {
 	home, cwd := t.TempDir(), t.TempDir()
 	dir := filepath.Join(home, ".config", "anx")
@@ -220,6 +246,9 @@ func TestRulingsOfflineHostAssertionAndAccountFanout(t *testing.T) {
 	host := hostidentity.Host{ID: "host-second", KeyID: "key-second", WorkspaceID: "second", BaseURL: secondary.URL}
 	if err := hostidentity.SaveAt(dir, host, key); err != nil {
 		t.Fatal(err)
+	}
+	if code, _, stderr := runRulingCLI(t, home, cwd, primary.URL, nil, "--as", "reviewer", "rulings", "list"); code != 0 || !strings.Contains(stderr, "rulings_projection_unavailable") {
+		t.Fatalf("secondary with no usable cache blocked selected read: %d %q", code, stderr)
 	}
 	p := rulingProjection{
 		FetchedAt: time.Now().Add(-time.Hour), Revision: "secondary", BaseURL: secondary.URL,

@@ -124,16 +124,23 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 		kind, id, _ := strings.Cut(raw, ":")
 		req.Relations = append(req.Relations, rulingRelation{Kind: kind, ID: id})
 	}
-	snapshot, err := a.collectRulings(ctx, cfg, true)
+	snapshot, err := a.collectRulings(ctx, cfg, true, false)
 	if err != nil {
 		return nil, err
 	}
 	selected := anyString(snapshot.projections[0]["workspace_url"])
 	if !validRulingDateID(req.ID) {
 		prefix := "R-" + strings.ReplaceAll(req.ID, "-", "") + "-"
+		targets := make(map[string]bool, len(req.Relations))
+		for _, rel := range req.Relations {
+			targets[rel.ID] = true
+		}
 		req.ID = ""
 		for n := 1; n <= 99; n++ {
 			id := fmt.Sprintf("%s%02d", prefix, n)
+			if targets[id] {
+				continue
+			}
 			if home := snapshot.namespaces[id]; home == "" {
 				if req.ID == "" {
 					req.ID = id
@@ -150,7 +157,11 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 	if err := checkRulingWriteNames(snapshot, req, selected); err != nil {
 		return nil, err
 	}
-	return a.sendRulingProposal(ctx, cfg, "rulings propose", req)
+	ruling, err := a.sendRulingProposal(ctx, cfg, "rulings propose", req)
+	if err != nil {
+		return nil, err
+	}
+	return a.rulingsOutput(cfg, map[string]any{"ruling": ruling}, []string{formatRuling(ruling, false)}, snapshot), nil
 }
 
 func sameRulingProposal(row map[string]any, req rulingWrite) bool {
@@ -185,13 +196,33 @@ func checkRulingWriteNames(snapshot rulingCollection, req rulingWrite, selected 
 	return nil
 }
 
-func (a *App) sendRulingProposal(ctx context.Context, cfg config.Resolved, command string, req rulingWrite) (*commandResult, error) {
+func (a *App) sendRulingProposal(ctx context.Context, cfg config.Resolved, command string, req rulingWrite) (map[string]any, error) {
 	canonical, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
 	req.RequestKey = fmt.Sprintf("ruling:%x", sha256.Sum256(canonical))
-	return a.invokeRawJSON(ctx, cfg, command, http.MethodPost, "/rulings/propose", req)
+	result, err := a.invokeRawJSON(ctx, cfg, command, http.MethodPost, "/rulings/propose", req)
+	if err != nil {
+		return nil, err
+	}
+	body := commandResultBody(result)
+	if body["redirected"] == "needs_relation" {
+		var missing []string
+		for _, raw := range asSlice(body["missing_relations"]) {
+			missing = append(missing, anyString(raw))
+		}
+		message := "proposal requires a relation to an active ruling in this topic"
+		if len(missing) > 0 {
+			message = "proposal requires relations to " + strings.Join(missing, ", ")
+		}
+		return nil, errnorm.Usage("ruling_relation_required", message)
+	}
+	ruling := asMap(body["ruling"])
+	if ruling == nil {
+		return nil, errnorm.Local("rulings_proposal_invalid", "proposal response is missing the ruling")
+	}
+	return ruling, nil
 }
 
 type rulingIndexEntry struct {
@@ -271,7 +302,7 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 	if err != nil {
 		return nil, errnorm.Usage("invalid_rulings_index", err.Error())
 	}
-	snapshot, err := a.collectRulings(ctx, cfg, true)
+	snapshot, err := a.collectRulings(ctx, cfg, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -299,11 +330,7 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 		if err != nil {
 			return nil, fmt.Errorf("import %s after %d successful submissions (safe to retry the same index): %w", req.ID, len(result), err)
 		}
-		body := commandResultBody(sent)
-		if body["ruling"] == nil {
-			return nil, errnorm.Usage("ruling_relation_required", "import "+req.ID+" requires relations; no proposal was written for it")
-		}
-		result = append(result, body["ruling"])
+		result = append(result, sent)
 	}
 	return &commandResult{Data: map[string]any{"rulings": result, "submitted": len(result)}}, nil
 }

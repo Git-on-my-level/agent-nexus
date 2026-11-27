@@ -114,13 +114,20 @@ func (s *Store) readOperatingRulings(ctx context.Context, suffix string, args ..
 // OperatingRulingDecisions projects pending rows directly. A proposal and
 // its decision are the same durable record, with no second inbox lifecycle.
 func (s *Store) OperatingRulingDecisions(ctx context.Context, now time.Time) ([]map[string]any, bool, error) {
-	rulings, err := s.readOperatingRulings(ctx, `WHERE status='proposed' AND ruling_id IS NOT NULL ORDER BY created_at DESC,ruling_id LIMIT ?`, BriefSectionLimit+1)
-	if err != nil {
+	// Bound candidate traversal before checking reader access. A restrictive
+	// reader can otherwise force SQLite to walk every proposal to fill a page.
+	ids, err := s.operatingRulingPositions(ctx, `WHERE status='proposed' ORDER BY created_at DESC,ruling_id LIMIT ?`, BriefSectionLimit+1)
+	if err != nil || len(ids) == 0 {
 		return nil, false, err
 	}
-	partial := len(rulings) > BriefSectionLimit
+	partial := len(ids) > BriefSectionLimit
 	if partial {
-		rulings = rulings[:BriefSectionLimit]
+		ids = ids[:BriefSectionLimit]
+	}
+	raw, _ := json.Marshal(ids)
+	rulings, err := s.readOperatingRulings(ctx, `WHERE ruling_id IN (SELECT value FROM json_each(?))`, string(raw))
+	if err != nil {
+		return nil, false, err
 	}
 	items := make([]map[string]any, 0, len(rulings))
 	for _, r := range rulings {

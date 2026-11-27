@@ -179,6 +179,8 @@ directory. `list`, `show` and `check` refresh after 15 minutes by default
 (`ANX_RULINGS_TTL` accepts a Go duration). If a workspace is unreachable,
 these commands use its matching local snapshot and warn with
 `rulings_projection_stale`. Use `ruling: R-YYYYMMDD-NN` in instructions.
+Run `anx rulings check <path>` for an explicit scan. Checking without paths
+requires a tracked `rulings/surfaces.json` with an `include` array.
 `anx rulings check` reports obsolete references and allows the direct superseder
 on the same line.
 

@@ -73,3 +73,51 @@ test("one tap confirms a ruling and retries the saved key after a lost receipt",
   expect(requests[1]).toEqual(requests[0]);
   await expect(page.locator("[data-decide-row]")).toHaveCount(0);
 });
+
+test("standing rulings restart pagination when the revision changes", async ({
+  page,
+  context,
+}, testInfo) => {
+  await setup(context, (route) => route.abort());
+  const calls = [];
+  const row = (label) => ({
+    id,
+    kind: "operating",
+    question: label,
+    active: true,
+  });
+  await context.route(
+    (url) => url.pathname === "/rulings",
+    (route) => json(route, { rulings: [] }),
+  );
+  await context.route(
+    (url) => url.pathname === "/rulings/projection",
+    (route) => {
+      const after = new URL(route.request().url()).searchParams.get("after");
+      calls.push(after);
+      if (calls.length === 1) {
+        return json(route, {
+          rulings: [row("Original ruling page")],
+          source_revision: "1.0",
+          next_cursor: "first",
+        });
+      }
+      return json(route, {
+        rulings: [row(after ? "Mixed revision page" : "Refreshed ruling page")],
+        source_revision: "2.0",
+      });
+    },
+  );
+  await page.goto(LIST);
+  await page.getByRole("button", { name: /Standing rulings/ }).click();
+  await expect(page.getByText("Original ruling page")).toBeVisible();
+  await page.getByRole("button", { name: "Load more rulings" }).click();
+  await expect(page.getByText("Refreshed ruling page")).toBeVisible();
+  await expect(page.getByText("Mixed revision page")).toHaveCount(0);
+  await expect(page.getByText("Original ruling page")).toHaveCount(0);
+  expect(calls).toEqual([null, "first", null]);
+  await testInfo.attach("ruling-revision", {
+    body: JSON.stringify(calls),
+    contentType: "application/json",
+  });
+});

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,11 @@ func TestOperatingRulingDecideAndProjection(t *testing.T) {
 	hostStatus(t, status, 201, replay)
 	if !reflect.DeepEqual(made, replay) {
 		t.Fatalf("proposal replay changed: %v %v", made, replay)
+	}
+	status, reused := propose(second, "new-rule")
+	hostStatus(t, status, 409, reused)
+	if !strings.Contains(fmt.Sprint(reused), "idempotency_conflict") {
+		t.Fatalf("different content reused a request key: %v", reused)
 	}
 	brief := read("/brief", human.AccessToken)
 	decisions := brief["decisions"].([]any)
@@ -86,6 +92,13 @@ func TestOperatingRulingDecideAndProjection(t *testing.T) {
 	if !reflect.DeepEqual(accepted, replay) {
 		t.Fatalf("confirm must replay the saved receipt even after revoke: %v", replay)
 	}
+	dismissed := "R-20261127-03"
+	status, pending = propose(dismissed, "dismissed-proposal")
+	hostStatus(t, status, 201, pending)
+	status, revoked = hostHTTP(t, "POST", env.server.URL+"/rulings/"+dismissed+"/revoke", human.AccessToken, map[string]any{})
+	hostStatus(t, status, 200, revoked)
+	status, denied = confirm(dismissed, "dismissed-confirmation", human.AccessToken)
+	hostStatus(t, status, 409, denied)
 }
 
 func TestOperatingRulingPageAndConcurrentAliases(t *testing.T) {
@@ -141,5 +154,49 @@ func TestOperatingRulingPageAndConcurrentAliases(t *testing.T) {
 	var missing *primitives.RulingRelationsRequired
 	if second != nil || !errors.As(first, &missing) || len(missing.Missing) != 1 {
 		t.Fatalf("one confirmation must seek a relation to the winner: %v, %v", first, second)
+	}
+}
+
+func TestOperatingRulingImportedHistory(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	store := env.primitiveStore.(*primitives.Store)
+	ctx, now := context.Background(), time.Now()
+	propose := func(id, hint, successor string, relations ...primitives.OperatingRulingRelation) {
+		t.Helper()
+		_, err := store.ProposeOperatingRuling(ctx, "importer", primitives.OperatingRulingProposal{
+			RulingID: id, Scope: "account", Topic: "import-" + id[2:], Title: id, Body: "Rule", SourceQuote: "Quote",
+			StatusHint: hint, SupersededByHint: successor, Relations: relations,
+		}, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	confirm := func(id, status, successor string) {
+		t.Helper()
+		r, err := store.ConfirmOperatingRuling(ctx, "human", id, now)
+		if err != nil || r.Status != status || r.SupersededBy != successor || r.DecidedAt == "" {
+			t.Fatalf("confirm %s: status %q, successor %q, decided at %q, err %v", id, r.Status, r.SupersededBy, r.DecidedAt, err)
+		}
+	}
+	retired, current := "R-20261126-01", "R-20261126-02"
+	propose(retired, "superseded", current)
+	propose(current, "active", "", primitives.OperatingRulingRelation{Kind: "supersedes", RulingID: retired})
+	confirm(retired, "superseded", current)
+	confirm(current, "active", "")
+	confirm(retired, "superseded", current)
+	retired, current = "R-20261126-03", "R-20261126-04"
+	propose(retired, "superseded", current)
+	propose(current, "active", "", primitives.OperatingRulingRelation{Kind: "supersedes", RulingID: retired})
+	confirm(current, "active", "")
+	confirm(retired, "superseded", current)
+	for i, hint := range []string{"revoked", "spent", "historical"} {
+		id := fmt.Sprintf("R-20261127-%02d", i+1)
+		propose(id, hint, "")
+		status := "revoked"
+		if hint == "historical" {
+			status = "active" // Explicit human approval of an unresolved historical entry.
+		}
+		confirm(id, status, "")
 	}
 }
