@@ -1,0 +1,130 @@
+[
+  {
+    "sql_sha256": "4b6a3b86fc29a880a62d0dc16c7de4f9d460c73c20fc127467549e3ec62d80dd",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "4d60c0dfdf0ea9237183679ab99f4edd3ffcdda99ba6ec83ae40f6122debfd43",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "5e86e629473ed30d1f9273c92170b091b6421cfc0d4fd9b9acc8d3a3fdb32302",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "71e5cfcd89741437d45b00b7c4d84226e8d6b7b0a28aa71eeeb6da6fb34f8325",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "76a71ad62a670e10b28ddad927b19436f69b634224ecf455c2e30f2a274b45c4",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "87df4000100b1aeab4b8147dbff60974dfa4eb54202f14a2222cebc5f900c8a7",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "b2142a81a6ec106dfa54c7c9578d74da82910c2fa14554c399a5844946e3fe5e",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "b488928d31c8b19da4dce548d0aad6de2974620036ba8655787f6f39440d5f17",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "bcccd8528bd26a6c05afc9637b3bc1e7a4120a9d8f77f4d4a08adc999f5411b7",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "dbc2401b8015d95d518caef225a909b21deb87d154e8cf21ca3f9e2303c60c7d",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "e7e2c19491bdc2c90745f4c5b9e2c8dea4bd4cb88e86425149bc9aaa2217d385",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "e9a13399ce115e6ee16797614e66f37bcb7dbdcc44f4f4de687ad86265117edd",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "ea6840ec6de646e384cc56ea2fab54587086327d50200b4624b0007eb2ba15da",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "efeb79f2288746016b5cafea8ff7e0e69343753f577167960832f537099f9259",
+    "plan_sha256": "1bba1d2e496a3e59ca42f4d5f93f53ea9608baee82e4b99ed4632cc01888218b",
+    "findings": ["custom SQL function in WHERE over a large relation"],
+    "reason": "The position index bounds the page before scoped hydration. The ruling-ID index seeks at most 100 JSON bind values; the flagged function is the existing access membership predicate on those candidates. Each exact ordered plan retains the standard route budget.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "87948c251bc2ea539485e8375b15a76706d26fc49304e6dd793b30d65fd80401",
+    "plan_sha256": "f70a4fd4e8e7a2e61833210f8dab97f399e1b00c8835c4e2c827c7cef76ae07b",
+    "findings": ["SCAN _row USING INDEX idx_standing_rulings_live"],
+    "reason": "The legacy live-rulings route retains its existing ordered LIMIT and source-ask access join. The partial live index omits every operating row, so the new ruling registry cannot increase this scan. The existing route budget is unchanged.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  },
+  {
+    "sql_sha256": "f043f3be636fe3736073d8de4adcc0ff835b047addf56c88b771a0dca48151e2",
+    "plan_sha256": "f70a4fd4e8e7a2e61833210f8dab97f399e1b00c8835c4e2c827c7cef76ae07b",
+    "findings": ["SCAN _row USING INDEX idx_standing_rulings_live"],
+    "reason": "The legacy live-rulings route retains its existing ordered LIMIT and source-ask access join. The partial live index omits every operating row, so the new ruling registry cannot increase this scan. The existing route budget is unchanged.",
+    "issue": "SCA-5218",
+    "issue_url": "https://github.com/Git-on-my-level/agent-nexus/pull/578"
+  }
+]
