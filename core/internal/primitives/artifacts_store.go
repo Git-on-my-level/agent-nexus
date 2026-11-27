@@ -183,7 +183,7 @@ func (s *Store) CreateArtifactAndEvent(ctx context.Context, actorID string, arti
 	if s.blob == nil {
 		return nil, nil, fmt.Errorf("blob backend is not configured")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

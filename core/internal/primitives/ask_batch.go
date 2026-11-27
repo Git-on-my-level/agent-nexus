@@ -99,7 +99,7 @@ func (s *Store) AppendTaskAttentionEventBatch(ctx context.Context, actor, reques
 		payload["batch_id"] = batchID
 		body["payload"] = payload
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
@@ -229,7 +229,7 @@ func (s *Store) appendHumanAttentionBatchResponse(
 	if strings.TrimSpace(batchID) == "" || len(members) == 0 {
 		return nil, false, fmt.Errorf("batch id and members are required")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

@@ -297,7 +297,7 @@ func (s *Store) CurationProposalByEvent(ctx context.Context, eventID string) (Cu
 // Accepted keys can start a new generation when the candidate returns after undo;
 // open and dismissed keys keep their existing generation.
 func (s *Store) FileCurationProposal(ctx context.Context, actor string, c curation.Candidate, source string, event map[string]any) (rec CurationProposalRecord, created bool, err error) {
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

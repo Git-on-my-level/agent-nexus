@@ -12,6 +12,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -27,6 +28,11 @@ const respondManyMaxItems = 100
 // started are reported as deferred and are safe to send again. A variable
 // only so tests can force the deferred path.
 var respondManyBudget = 15 * time.Second
+
+// respondManyLockBudget stops starting items once the batch transaction has
+// held the workspace write lock this long, so a bulk skip never stalls other
+// writers; deferred items come straight back in the client's next chunk.
+var respondManyLockBudget = 2 * time.Second
 
 // respondManyItem is one item's request: the single-item respond body plus
 // the item id and an optional quiet fallback key.
@@ -94,6 +100,10 @@ func handleRespondInboxItems(w http.ResponseWriter, r *http.Request, opts handle
 
 	started := time.Now()
 	results := make([]map[string]any, 0, len(req.Items))
+	// One write transaction for the whole request when the store offers it:
+	// each item joins it as a savepoint, so the batch waits for the write lock
+	// once and commits once instead of once per item, and an item that fails
+	// rolls back only its own savepoint.
 	// The route middleware charged the write budget for the first item; every
 	// further item costs one more, so a batch never writes more than the same
 	// items sent one by one could. Once the budget is spent, or the time
@@ -102,24 +112,35 @@ func handleRespondInboxItems(w http.ResponseWriter, r *http.Request, opts handle
 	scope := routeRateLimitScopeForRequest(r)
 	// Results follow request order and carry the item's index, never its id,
 	// so a response discloses nothing the caller could not already see.
-	for index, item := range req.Items {
-		id := strings.TrimSpace(item.InboxItemID)
-		if index > 0 && !limited && opts.rateLimiter != nil {
-			allowed, _ := opts.rateLimiter.allow("write", scope, time.Now().UTC())
-			limited = !allowed
+	err := runInStoreBatch(r.Context(), opts, func(ctx context.Context) error {
+		inBatch := r.WithContext(ctx)
+		locked := time.Now()
+		for index, item := range req.Items {
+			id := strings.TrimSpace(item.InboxItemID)
+			if index > 0 && !limited && opts.rateLimiter != nil {
+				allowed, _ := opts.rateLimiter.allow("write", scope, time.Now().UTC())
+				limited = !allowed
+			}
+			if limited || ctx.Err() != nil || time.Since(started) >= respondManyBudget || (index > 0 && time.Since(locked) >= respondManyLockBudget) {
+				results = append(results, map[string]any{"index": index, "status": respondManyDeferred})
+				continue
+			}
+			// The web UI's single respond always names the signed-in actor; name
+			// it here too so both routes hash the same request.
+			if strings.TrimSpace(item.ActorID) == "" {
+				item.ActorID = principal.ActorID
+			}
+			result := respondOneOfMany(inBatch, opts, id, item)
+			result["index"] = index
+			results = append(results, result)
 		}
-		if limited || r.Context().Err() != nil || time.Since(started) >= respondManyBudget {
-			results = append(results, map[string]any{"index": index, "status": respondManyDeferred})
-			continue
-		}
-		// The web UI's single respond always names the signed-in actor; name it
-		// here too so both routes hash the same request.
-		if strings.TrimSpace(item.ActorID) == "" {
-			item.ActorID = principal.ActorID
-		}
-		result := respondOneOfMany(r, opts, id, item)
-		result["index"] = index
-		results = append(results, result)
+		return nil
+	})
+	if err != nil {
+		// The batch did not commit, so no item took effect; every one is safe
+		// to send again under its own key.
+		writeError(w, http.StatusServiceUnavailable, "batch_failed", "the batch could not be saved; send it again")
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }

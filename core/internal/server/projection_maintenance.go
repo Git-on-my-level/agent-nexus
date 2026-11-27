@@ -307,18 +307,25 @@ func (m *ProjectionMaintainer) processDirtyQueue(ctx context.Context, now time.T
 			startedAt = time.Now().UTC()
 		}
 		m.stepMu.Lock()
-		startedGeneration, err := m.opts.primitiveStore.MarkTopicProjectionRefreshStarted(ctx, entry.ThreadID, startedAt)
-		if err != nil {
-			m.stepMu.Unlock()
-			m.recordError("start_dirty_projection", startedAt, err)
-			return processed, fmt.Errorf("mark dirty projection %s started: %w", entry.ThreadID, err)
-		}
-		if err := m.opts.primitiveStore.ClearDerivedTopicProjectionDirty(ctx, entry.ThreadID); err != nil {
-			m.stepMu.Unlock()
-			m.recordError("clear_dirty_projection", startedAt, err)
-			return processed, fmt.Errorf("clear dirty projection %s: %w", entry.ThreadID, err)
-		}
+		var startedGeneration int64
+		stage := "start_dirty_projection"
+		// Claiming the refresh and clearing the dirty mark commit together.
+		err := runInStoreBatch(ctx, m.opts, func(ctx context.Context) error {
+			generation, err := m.opts.primitiveStore.MarkTopicProjectionRefreshStarted(ctx, entry.ThreadID, startedAt)
+			if err != nil {
+				return fmt.Errorf("mark dirty projection %s started: %w", entry.ThreadID, err)
+			}
+			startedGeneration, stage = generation, "clear_dirty_projection"
+			if err := m.opts.primitiveStore.ClearDerivedTopicProjectionDirty(ctx, entry.ThreadID); err != nil {
+				return fmt.Errorf("clear dirty projection %s: %w", entry.ThreadID, err)
+			}
+			return nil
+		})
 		m.stepMu.Unlock()
+		if err != nil {
+			m.recordError(stage, startedAt, err)
+			return processed, err
+		}
 
 		if startedGeneration == 0 {
 			processed++

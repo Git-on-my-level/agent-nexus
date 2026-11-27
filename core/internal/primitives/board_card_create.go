@@ -151,7 +151,7 @@ func (s *Store) CreateBoardCardsBatch(ctx context.Context, actorID, boardID stri
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("primitives store database is not initialized")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {
