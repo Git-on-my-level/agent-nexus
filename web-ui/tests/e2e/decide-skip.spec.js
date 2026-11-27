@@ -170,7 +170,16 @@ test.describe("phone", () => {
     const sent = await setup(context);
     await page.goto(LIST);
     await expect(page.locator("[data-decide-stack]")).toBeVisible();
+    // Cards carry no checkbox until the reader starts selecting.
+    await expect(page.locator("[data-decide-pick]")).toHaveCount(0);
+    await page.locator("[data-decide-select-mode]").click();
+    await expect(page.locator("[data-decide-pick]")).toHaveCount(3);
     await page.locator('[data-decide-pick="ask-93"]').check();
+    // The bar stays in reach while picking.
+    await expect(page.locator("[data-decide-bulk]")).toHaveCSS(
+      "position",
+      "sticky",
+    );
     await page.locator("[data-decide-skip-selected]").click();
     await expect(page.locator('[data-decide-card="ask-93"]')).toHaveCount(0);
     await testInfo.attach("decide-skip-phone", {

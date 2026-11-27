@@ -10,6 +10,7 @@
  *
  * Add an operation here in the same change that teaches `send` it.
  */
+import { writable } from "svelte/store";
 import { PINS_OPERATION } from "$lib/dashboardPins.js";
 import {
   NOT_A_DECISION,
@@ -65,4 +66,54 @@ export function revivable(entry) {
     entry.failure?.detail === UNKNOWN_OPERATION &&
     isKnownOperation(entry.operation)
   );
+}
+
+/**
+ * Who recorded a failure. A row this page failed itself is not revived by it
+ * again (core said no; the reader decides). A row an older tab marked is
+ * revived every time that tab marks it, after the backoff that tab set.
+ */
+const TAB = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+export const stampFailure = (failure) => ({ ...failure, tab: TAB });
+
+/**
+ * Retry for a skip never writes "pending" outside the send lock: an older
+ * tab that lacks the operation would claim the row and fail it again. The
+ * key waits here, in memory, and the next hold of the lock sends it.
+ */
+const retrying = new Set();
+const sentHere = new Set();
+export const retryInLock = (entry) =>
+  [SKIP, SKIP_MANY].includes(entry?.operation) || revivable(entry);
+export const requestRetry = (key) => void retrying.add(key);
+export const retryRequested = (entry) => retrying.has(entry?.key);
+
+/** What the reader can do about an older tab that keeps failing sends. */
+export const OLDER_TAB_HELP =
+  "An older open tab of this app could not send this. Reload or close your other tabs and windows of this app, then retry.";
+
+/** An older open tab failed a row this page had already sent. */
+export const olderTabBlocking = writable(false);
+
+/** An attention row the outbox may send: retried here, or revived. */
+export const sendableAttention = (entry) =>
+  entry?.state === "attention" &&
+  isKnownOperation(entry.operation) &&
+  (retrying.has(entry.key) || (revivable(entry) && entry.failure?.tab !== TAB));
+
+/**
+ * Under the send lock: take a due row for sending, or leave it. A retry
+ * request is spent on the one send it admits, whatever state another tab
+ * left the row in, so later failures back off again.
+ */
+export function claimSend(entry) {
+  if (entry?.state !== "attention") {
+    retrying.delete(entry?.key);
+    return true;
+  }
+  if (!sendableAttention(entry)) return false;
+  const retried = retrying.delete(entry.key);
+  if (!retried && sentHere.has(entry.key)) olderTabBlocking.set(true);
+  sentHere.add(entry.key);
+  return true;
 }

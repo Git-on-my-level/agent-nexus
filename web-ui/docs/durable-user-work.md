@@ -228,14 +228,25 @@ it. An ask or grouped batch already closed elsewhere confirms as done.
 Tabs of different builds share the device outbox. A tab sends only operations
 in `outboxOperations.js` and leaves others for a build that knows them; a build
 that knows an operation revives rows an older tab marked "Unknown saved
-operation". Stuck skips can be retried (as a new request when too old for safe
+operation", inside one hold of the send lock, and again each time an older tab
+marks them, after the backoff that tab set; a row this tab failed itself waits
+for the reader. Retrying a skip never writes it "pending" outside the lock,
+where an older tab would claim and fail it: the retry waits in memory for the
+next lock hold. When an older tab fails a row this tab already sent, Decide and
+the unsent list say to reload or close the other tabs. A skip whose own
+idempotency key already answered the ask confirms as done. The drain never
+stops silently: an unexpected error is logged and the drain resumes after five
+seconds. Stuck skips can be retried (as a new request when too old for safe
 replay) or discarded from Decide, and from the unsent list, where a skip offers
 Retry skip or Don't skip instead of a saved message, and several stuck rows
 share one Retry all. The open unsent list floats over the page; it never pushes
 the page down. Tabs poll for a newer build every five minutes
 (`kit.version.pollInterval`); once one is deployed, an old tab shows a Reload
 prompt and its next in-app navigation is a full page load, so a long-open
-window does not keep running the old build.
+window does not keep running the old build. A tab that loads announces its
+build on a BroadcastChannel; an open tab of another build checks for an update
+at once. On a phone, Decide's cards carry no checkbox until the reader taps
+Select, and the bar stays pinned at the top while selecting.
 
 ## Task and document authoring
 

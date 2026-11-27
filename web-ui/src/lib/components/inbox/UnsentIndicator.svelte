@@ -4,6 +4,7 @@
     inboxUnsentResponses,
   } from "$lib/inboxResponseQueue.js";
   import { mutationOutbox, retryMutation } from "$lib/mutationOutbox.js";
+  import { OLDER_TAB_HELP, olderTabBlocking } from "$lib/outboxOperations.js";
   import MutationSendStatus from "$lib/components/MutationSendStatus.svelte";
   import InboxSendStatus from "./InboxSendStatus.svelte";
   import { workspacePath } from "$lib/workspacePaths.js";
@@ -94,6 +95,11 @@
         class="absolute right-0 top-full mt-1 max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] space-y-3 overflow-auto rounded-md border border-line bg-panel p-3 shadow-[var(--shadow-menu)]"
         data-unsent-list
       >
+        {#if $olderTabBlocking}
+          <p class="text-meta text-warn-text" role="status" data-older-tab>
+            {OLDER_TAB_HELP}
+          </p>
+        {/if}
         {#if attention.length > 1}
           <div class="flex items-center justify-between gap-2 text-meta">
             <span class="text-fg-muted">{attention.length} need you</span>
