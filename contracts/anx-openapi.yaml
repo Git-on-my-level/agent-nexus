@@ -3524,6 +3524,51 @@ paths:
         '409':
           $ref: '#/components/responses/ErrorResponse'
 
+  /docs/lifecycle:
+    post:
+      operationId: changeDocumentsLifecycle
+      summary: Archive, unarchive, trash or restore many documents
+      description: >
+        Applies one lifecycle action per item, in order, through the same rules
+        as POST /docs/{document_id}/{action}: authorization, request_key replay
+        and the replay hash are identical, so a retry through either route
+        replays instead of conflicting. Items commit together as one write
+        transaction, but each is independent: one failing never rolls back
+        another. At most 100 items per request. After a time budget the
+        remaining items are returned as deferred without being attempted, so
+        the caller sends them again in a later request.
+      tags: [docs]
+      x-anx-surface: canonical
+      x-anx-command-id: docs.lifecycle_many
+      x-anx-cli-path: docs lifecycle-many
+      x-anx-why: A bulk archive, trash, restore or unarchive of a document selection is one request instead of one per document.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, storage_unavailable]
+      x-anx-concepts: [docs, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentLifecycleBatchRequest'
+      responses:
+        '200':
+          description: Per-item results, in request order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleBatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/ErrorResponse'
+
   /docs/{document_id}/purge:
     post:
       operationId: purgeDocument
@@ -6161,6 +6206,51 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /events/lifecycle:
+    post:
+      operationId: changeEventsLifecycle
+      summary: Archive, unarchive, trash or restore many events
+      description: >
+        Applies one lifecycle action per item, in order, through the same rules
+        as POST /events/{event_id}/{action}: authorization, request_key replay
+        and the replay hash are identical, so a retry through either route
+        replays instead of conflicting. Items commit together as one write
+        transaction, but each is independent: one failing never rolls back
+        another. At most 100 items per request. After a time budget the
+        remaining items are returned as deferred without being attempted, so
+        the caller sends them again in a later request.
+      tags: [events]
+      x-anx-surface: canonical
+      x-anx-command-id: events.lifecycle_many
+      x-anx-cli-path: events lifecycle-many
+      x-anx-why: A bulk archive, trash, restore or unarchive of a timeline selection is one request instead of one per event.
+      x-anx-input-mode: json-body
+      x-anx-streaming: { mode: none }
+      x-anx-output-envelope: "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order."
+      x-anx-error-codes: [auth_required, invalid_request, invalid_token, storage_unavailable]
+      x-anx-concepts: [events, write]
+      x-anx-stability: beta
+      x-anx-agent-notes: Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again. A top-level selected_bases applies to every item without its own.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventLifecycleBatchRequest'
+      responses:
+        '200':
+          description: Per-item results, in request order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleBatchResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
           $ref: '#/components/responses/ErrorResponse'
 
   /artifacts:
@@ -14360,6 +14450,75 @@ components:
           properties:
             archived_at: { type: string, nullable: true }
             trashed_at: { type: string, nullable: true }
+
+    EventLifecycleBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Each id at most once.
+          items:
+            allOf:
+              - $ref: '#/components/schemas/EventLifecycleMutationRequest'
+              - type: object
+                required: [id, action]
+                properties:
+                  id: { type: string, description: Event id, as in the single route's path. }
+                  action: { type: string, enum: [archive, unarchive, trash, restore] }
+        selected_bases:
+          type: object
+          maxProperties: 2000
+          description: Applied to every item that has no selected_bases of its own, exactly as if each item had sent it.
+          additionalProperties:
+            type: object
+            required: [archived_at, trashed_at]
+            properties:
+              archived_at: { type: string, nullable: true }
+              trashed_at: { type: string, nullable: true }
+
+    DocumentLifecycleBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Each id at most once.
+          items:
+            allOf:
+              - $ref: '#/components/schemas/DocumentLifecycleMutationRequest'
+              - type: object
+                required: [id, action]
+                properties:
+                  id: { type: string, description: Document id, as in the single route's path. }
+                  action: { type: string, enum: [archive, unarchive, trash, restore] }
+                  reason: { type: string }
+
+    LifecycleBatchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [index, status]
+            properties:
+              index: { type: integer, description: Position of the item in the request. }
+              status:
+                type: string
+                enum: [done, failed, deferred]
+                description: >
+                  done: applied or replayed; response is the single route's
+                  body. failed: see error. deferred: not attempted within this
+                  request's budgets; send it again.
+              http_status: { type: integer, description: What the single lifecycle route would have returned. }
+              response: { $ref: '#/components/schemas/JsonValue' }
+              error: { $ref: '#/components/schemas/JsonValue' }
 
     TopicLifecycleMutationRequest:
       type: object

@@ -89,13 +89,22 @@
       "getHostBridgeStatus": 1
     }
   },
+  "lib/lifecycleBatchSend.js": {
+    "classification": "outbox",
+    "reason": "Audited persisted-request senders for bulk event and document lifecycle: chunks through the batch lifecycle routes with frozen per-item request keys and per-chunk receipts, or finite single-route method selection on a core without them; called only by the mutation outbox.",
+    "followup": "durable-user-work.md#stage-2-handoff",
+    "references": {
+      "changeDocumentsLifecycle": 1,
+      "changeEventsLifecycle": 1,
+      "computed-dispatch": 2
+    }
+  },
   "lib/mutationOutbox.js": {
     "classification": "outbox",
-    "reason": "Audited persisted-request adapters, including finite document lifecycle method selection; not a direct form sender.",
+    "reason": "Audited persisted-request adapters; not a direct form sender.",
     "followup": "durable-user-work.md#stage-2-handoff",
     "references": {
       "answerPmDecision": 1,
-      "computed-dispatch": 2,
       "createArtifactAttachment": 1,
       "createDocument": 1,
       "createEvent": 1,

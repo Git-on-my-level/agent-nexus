@@ -221,7 +221,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `19`
+- Commands: `20`
 - Command IDs:
   - `docs.archive` (`docs archive`)
   - `docs.comments.create` (`docs comment`)
@@ -231,6 +231,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.comments.update` (`docs comments edit`)
   - `docs.create` (`docs create`)
   - `docs.get` (`docs get`)
+  - `docs.lifecycle_many` (`docs lifecycle-many`)
   - `docs.list` (`docs list`)
   - `docs.patch` (`docs patch`)
   - `docs.purge` (`docs purge`)
@@ -245,11 +246,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `events`
 
-- Commands: `8`
+- Commands: `9`
 - Command IDs:
   - `events.archive` (`events archive`)
   - `events.create` (`events create`)
   - `events.get` (`events get`)
+  - `events.lifecycle_many` (`events lifecycle-many`)
   - `events.list` (`events list`)
   - `events.restore` (`events restore`)
   - `events.stream` (`events stream`)

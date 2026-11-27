@@ -686,6 +686,11 @@
   },
   {
     "method": "POST",
+    "path": "/docs/lifecycle",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
     "path": "/docs/{document_id}/archive",
     "policy": "record"
   },
@@ -767,6 +772,11 @@
   {
     "method": "GET",
     "path": "/events/{event_id}",
+    "policy": "record"
+  },
+  {
+    "method": "POST",
+    "path": "/events/lifecycle",
     "policy": "record"
   },
   {

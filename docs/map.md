@@ -98,7 +98,7 @@ Where things live. Generated; never hand-edited.
 | core/internal/secrets                      | 3     | Package secrets stores workspace secrets encrypted at rest.                                                                                                                                                                                                           |
 | core/internal/series                       | 4     | Package series owns push-only, workspace-local time series.                                                                                                                                                                                                           |
 | core/internal/seriesref                    | 2     | Package seriesref resolves bounded metric references through scoped readers.                                                                                                                                                                                          |
-| core/internal/server                       | 141   | Package server exposes core's HTTP API                                                                                                                                                                                                                                |
+| core/internal/server                       | 142   | Package server exposes core's HTTP API                                                                                                                                                                                                                                |
 | core/internal/server/stream                | 2     | Package stream registers core's long-lived HTTP endpoints (SSE, chunked streams) under a single /stream/ prefix so authentication and the route inventory classify them uniformly, and wraps each connection with its own authorization scope.                        |
 | core/internal/sidecar                      | 2     | Package sidecar hosts privileged in-process services inside anx-core                                                                                                                                                                                                  |
 | core/internal/sqliteutil                   | 2     | Package sqliteutil opens the bounded maintenance transactions used by background rebuild programs                                                                                                                                                                     |
@@ -209,12 +209,12 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | 1705  | web-ui/src/routes/+layout.svelte                                                   |
 | 1594  | cli/dogfood/pi/seed/kids-lemonade-stand-chapters.mjs                               |
 | 1550  | web-ui/src/lib/components/timeline/MessagesTab.svelte                              |
-| 1546  | web-ui/src/lib/anxCoreClient.js                                                    |
+| 1548  | web-ui/src/lib/anxCoreClient.js                                                    |
 | 1527  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/[workId]/+page.svelte |
 | 1451  | web-ui/src/routes/o/[organization]/w/[workspace]/access/+page.svelte               |
-| 1431  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1397  | web-ui/src/routes/o/[organization]/w/[workspace]/initiatives/+page.svelte          |
 | 1346  | core/internal/primitives/brief.go                                                  |
+| 1343  | web-ui/src/lib/mutationOutbox.js                                                   |
 | 1321  | web-ui/src/lib/components/DiscussionDrawer.svelte                                  |
 | 1320  | web-ui/src/lib/components/work/SwimlaneBoard.svelte                                |
 | 1319  | web-ui/src/lib/components/CommandPalette.svelte                                    |

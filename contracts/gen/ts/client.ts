@@ -6549,6 +6549,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -6631,6 +6632,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -6693,6 +6695,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -6751,6 +6754,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -6834,6 +6838,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -6910,6 +6915,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7060,6 +7066,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.comments.reply",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7117,6 +7124,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.comments.reply",
       "docs.create",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7130,6 +7138,66 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "DocsGet",
     "ts_method": "docsGet"
+  },
+  {
+    "command_id": "docs.lifecycle_many",
+    "cli_path": "docs lifecycle-many",
+    "group": "docs",
+    "method": "POST",
+    "path": "/docs/lifecycle",
+    "operation_id": "changeDocumentsLifecycle",
+    "summary": "Archive, unarchive, trash or restore many documents",
+    "description": "Applies one lifecycle action per item, in order, through the same rules as POST /docs/{document_id}/{action}: authorization, request_key replay and the replay hash are identical, so a retry through either route replays instead of conflicting. Items commit together as one write transaction, but each is independent: one failing never rolls back another. At most 100 items per request. After a time budget the remaining items are returned as deferred without being attempted, so the caller sends them again in a later request.",
+    "why": "A bulk archive, trash, restore or unarchive of a document selection is one request instead of one per document.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "storage_unavailable"
+    ],
+    "concepts": [
+      "docs",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "items",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "docs.archive",
+      "docs.comments.create",
+      "docs.comments.list",
+      "docs.comments.delete",
+      "docs.comments.update",
+      "docs.comments.reply",
+      "docs.create",
+      "docs.get",
+      "docs.revisions.list",
+      "docs.list",
+      "docs.patch",
+      "docs.purge",
+      "docs.put",
+      "docs.restore",
+      "docs.revisions.create",
+      "docs.revisions.get",
+      "docs.search",
+      "docs.trash",
+      "docs.unarchive"
+    ],
+    "go_method": "DocsLifecycleMany",
+    "ts_method": "docsLifecycleMany"
   },
   {
     "command_id": "docs.list",
@@ -7171,6 +7239,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.patch",
       "docs.purge",
       "docs.put",
@@ -7274,6 +7343,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.purge",
       "docs.put",
@@ -7342,6 +7412,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.put",
@@ -7473,6 +7544,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7553,6 +7625,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7665,6 +7738,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7717,6 +7791,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7773,6 +7848,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.comments.reply",
       "docs.create",
       "docs.get",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7829,6 +7905,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7911,6 +7988,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -7987,6 +8065,7 @@ export const commandRegistry: CommandSpec[] = [
       "docs.create",
       "docs.get",
       "docs.revisions.list",
+      "docs.lifecycle_many",
       "docs.list",
       "docs.patch",
       "docs.purge",
@@ -8062,6 +8141,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.stream",
@@ -8199,6 +8279,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "events.archive",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.stream",
@@ -8238,6 +8319,7 @@ export const commandRegistry: CommandSpec[] = [
     "adjacent_commands": [
       "events.archive",
       "events.create",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.stream",
@@ -8246,6 +8328,61 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "go_method": "EventsGet",
     "ts_method": "eventsGet"
+  },
+  {
+    "command_id": "events.lifecycle_many",
+    "cli_path": "events lifecycle-many",
+    "group": "events",
+    "method": "POST",
+    "path": "/events/lifecycle",
+    "operation_id": "changeEventsLifecycle",
+    "summary": "Archive, unarchive, trash or restore many events",
+    "description": "Applies one lifecycle action per item, in order, through the same rules as POST /events/{event_id}/{action}: authorization, request_key replay and the replay hash are identical, so a retry through either route replays instead of conflicting. Items commit together as one write transaction, but each is independent: one failing never rolls back another. At most 100 items per request. After a time budget the remaining items are returned as deferred without being attempted, so the caller sends them again in a later request.",
+    "why": "A bulk archive, trash, restore or unarchive of a timeline selection is one request instead of one per event.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.",
+    "error_codes": [
+      "auth_required",
+      "invalid_request",
+      "invalid_token",
+      "storage_unavailable"
+    ],
+    "concepts": [
+      "events",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again. A top-level selected_bases applies to every item without its own.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "items",
+          "type": "list\u003cany\u003e"
+        }
+      ],
+      "optional": [
+        {
+          "name": "selected_bases",
+          "type": "object"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "events.archive",
+      "events.create",
+      "events.get",
+      "events.list",
+      "events.restore",
+      "events.stream",
+      "events.trash",
+      "events.unarchive"
+    ],
+    "go_method": "EventsLifecycleMany",
+    "ts_method": "eventsLifecycleMany"
   },
   {
     "command_id": "events.list",
@@ -8275,6 +8412,7 @@ export const commandRegistry: CommandSpec[] = [
       "events.archive",
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.restore",
       "events.stream",
       "events.trash",
@@ -8346,6 +8484,7 @@ export const commandRegistry: CommandSpec[] = [
       "events.archive",
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.stream",
       "events.trash",
@@ -8383,6 +8522,7 @@ export const commandRegistry: CommandSpec[] = [
       "events.archive",
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.trash",
@@ -8453,6 +8593,7 @@ export const commandRegistry: CommandSpec[] = [
       "events.archive",
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.stream",
@@ -8524,6 +8665,7 @@ export const commandRegistry: CommandSpec[] = [
       "events.archive",
       "events.create",
       "events.get",
+      "events.lifecycle_many",
       "events.list",
       "events.restore",
       "events.stream",
@@ -16574,6 +16716,10 @@ export class AnxClient {
     return this.invoke("docs.get", pathParams, options);
   }
 
+  docsLifecycleMany(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("docs.lifecycle_many", {}, options);
+  }
+
   docsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("docs.list", {}, options);
   }
@@ -16628,6 +16774,10 @@ export class AnxClient {
 
   eventsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("events.get", pathParams, options);
+  }
+
+  eventsLifecycleMany(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("events.lifecycle_many", {}, options);
   }
 
   eventsList(options: RequestOptions = {}): Promise<InvokeResult> {

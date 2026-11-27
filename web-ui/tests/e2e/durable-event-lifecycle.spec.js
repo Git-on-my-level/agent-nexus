@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { setup } from "./helpers/durable-discussion.js";
+import { routeLifecycleBatch } from "./helpers/lifecycle-batch.js";
 
 const thread = "thread-durable-comment";
 const href = `/o/local/w/local/threads/${thread}?tab=timeline`;
@@ -10,7 +11,7 @@ const json = (route, body, status = 200) =>
     contentType: "application/json",
     body: JSON.stringify(body),
   });
-async function prepare(context, send, replies = false) {
+async function prepare(context, send, replies = false, batchRoute = true) {
   await setup(context, (route) => json(route, { events: [] }));
   const events = ["parent", "second"].map((id, index) => ({
     id,
@@ -32,20 +33,27 @@ async function prepare(context, send, replies = false) {
   await context.route(`**/${thread}/timeline`, (route) =>
     json(route, { events }),
   );
+  const single = (route) => {
+    const [, id, action] = new URL(route.request().url()).pathname.match(
+      /\/events\/([^/]+)(?:\/([^/]+))?$/,
+    );
+    const event = events.find((row) => row.id === id);
+    if (!action) return json(route, { event });
+    const body = route.request().postDataJSON();
+    writes.push({ id, action, body });
+    return send(route, { id, action, body, event, events });
+  };
   await context.route(
     /\/events\/(parent|second)(?:\/(archive|unarchive|trash|restore))?$/,
-    (route) => {
-      const [, id, action] = new URL(route.request().url()).pathname.match(
-        /\/events\/([^/]+)(?:\/([^/]+))?$/,
-      );
-      const event = events.find((row) => row.id === id);
-      if (!action) return json(route, { event });
-      const body = route.request().postDataJSON();
-      writes.push({ id, action, body });
-      return send(route, { id, action, body, event, events });
-    },
+    single,
   );
-  return { writes, events };
+  const batches = await routeLifecycleBatch(
+    context,
+    "events",
+    single,
+    () => batchRoute,
+  );
+  return { writes, events, batches };
 }
 async function archive(page, ids = ["parent"]) {
   if (ids.length === 1)
@@ -147,13 +155,17 @@ test("bulk progress survives reload and never resends the confirmed first item",
   for (const write of second) expect(write).toEqual(second[0]);
 });
 
-test("a parent receipt confirms its selected reply without a stale second send", async ({
+test("a bulk archive is one batch request, and a parent receipt confirms its selected reply", async ({
   page,
   context,
 }) => {
-  const { writes } = await prepare(
+  const { writes, batches } = await prepare(
     context,
     (route, { event, events }) => {
+      // As core: the reply's own attempt conflicts once its parent's
+      // cascade has archived it.
+      if (event.archived_at)
+        return json(route, { error: { code: "conflict" } }, 409);
       for (const row of events) row.archived_at = stamp;
       return json(route, { event, affected_event_ids: ["parent", "second"] });
     },
@@ -162,6 +174,33 @@ test("a parent receipt confirms its selected reply without a stale second send",
   await page.goto(href);
   await archive(page, ["parent", "second"]);
   await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
+  expect(batches).toHaveLength(1);
+  expect(batches[0].items.map((item) => item.id)).toEqual(["parent", "second"]);
+  expect(batches[0].selected_bases.second).toEqual({
+    archived_at: null,
+    trashed_at: null,
+  });
+  // Every write came through the batch: no single-event request was sent.
+  expect(writes).toHaveLength(2);
+});
+
+test("without the batch route a bulk archive falls back to single sends, and a parent receipt covers its reply", async ({
+  page,
+  context,
+}) => {
+  const { writes, batches } = await prepare(
+    context,
+    (route, { event, events }) => {
+      for (const row of events) row.archived_at = stamp;
+      return json(route, { event, affected_event_ids: ["parent", "second"] });
+    },
+    true,
+    false,
+  );
+  await page.goto(href);
+  await archive(page, ["parent", "second"]);
+  await expect(page.locator('[data-mutation-state="sent"]')).toBeVisible();
+  expect(batches).toHaveLength(1);
   expect(writes).toHaveLength(1);
   expect(writes[0].id).toBe("parent");
   expect(writes[0].body.selected_bases.second).toEqual({
@@ -235,7 +274,7 @@ test("denied local persistence keeps the selected request visible and sends noth
 test("offline bulk request survives closing the tab before any send", async ({
   context,
 }) => {
-  const { writes } = await prepare(context, (route, { event, id }) =>
+  const { writes, batches } = await prepare(context, (route, { event, id }) =>
     json(route, {
       event: { ...event, archived_at: stamp },
       affected_event_ids: [id],
@@ -256,6 +295,7 @@ test("offline bulk request survives closing the tab before any send", async ({
   await recovered.goto(href);
   await expect(recovered.locator('[data-mutation-state="sent"]')).toBeVisible();
   expect(writes).toHaveLength(2);
+  expect(batches).toHaveLength(1);
 });
 
 test("partial definitive failure edits only unfinished items and retains the complete reason", async ({

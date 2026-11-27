@@ -1431,7 +1431,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Archive a document",
@@ -1449,7 +1449,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Post a comment",
@@ -1467,7 +1467,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Delete own comment",
@@ -1485,7 +1485,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "List comments",
@@ -1503,7 +1503,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Reply in thread",
@@ -1521,7 +1521,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Edit own comment",
@@ -1538,7 +1538,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"docs", "write"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Create from a local file",
@@ -1556,13 +1556,24 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Print markdown body",
 				Command: "anx docs get kb-shared --format md",
 			},
 		},
+	},
+	{
+		CommandID: "docs.lifecycle_many",
+		CLIPath:   "docs lifecycle-many",
+		Group:     "docs",
+		Method:    "POST",
+		Path:      "/docs/lifecycle",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"docs", "write"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID: "docs.list",
@@ -1573,7 +1584,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "List knowledge docs",
@@ -1591,7 +1602,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write", "concurrency"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Patch knowledge hosts",
@@ -1609,7 +1620,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Purge a trashed document",
@@ -1627,7 +1638,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Publish from stdin",
@@ -1645,7 +1656,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Restore a trashed document",
@@ -1663,7 +1674,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Revise from a local file",
@@ -1681,7 +1692,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.search", "docs.trash", "docs.unarchive"},
 	},
 	{
 		CommandID:  "docs.revisions.list",
@@ -1693,7 +1704,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "revisions"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "List revision history",
@@ -1710,7 +1721,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"docs"},
-		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
+		Adjacent:  []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.trash", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Search knowledge",
@@ -1728,7 +1739,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.unarchive"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.unarchive"},
 		Examples: []Example{
 			{
 				Title:   "Trash a document",
@@ -1746,7 +1757,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"docs", "write"},
-		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash"},
+		Adjacent:   []string{"docs.archive", "docs.comments.create", "docs.comments.list", "docs.comments.delete", "docs.comments.update", "docs.comments.reply", "docs.create", "docs.get", "docs.revisions.list", "docs.lifecycle_many", "docs.list", "docs.patch", "docs.purge", "docs.put", "docs.restore", "docs.revisions.create", "docs.revisions.get", "docs.search", "docs.trash"},
 		Examples: []Example{
 			{
 				Title:   "Unarchive a document",
@@ -1764,7 +1775,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.create", "events.get", "events.lifecycle_many", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.create",
@@ -1775,7 +1786,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"events", "write"},
-		Adjacent:  []string{"events.archive", "events.get", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.get", "events.lifecycle_many", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.get",
@@ -1787,7 +1798,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"events"},
-		Adjacent:   []string{"events.archive", "events.create", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.lifecycle_many", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+	},
+	{
+		CommandID: "events.lifecycle_many",
+		CLIPath:   "events lifecycle-many",
+		Group:     "events",
+		Method:    "POST",
+		Path:      "/events/lifecycle",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"events", "write"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.list",
@@ -1798,7 +1820,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events"},
-		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.restore", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.lifecycle_many", "events.restore", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.restore",
@@ -1810,7 +1832,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.stream", "events.trash", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.lifecycle_many", "events.list", "events.stream", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID: "events.stream",
@@ -1821,7 +1843,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"events"},
-		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.trash", "events.unarchive"},
+		Adjacent:  []string{"events.archive", "events.create", "events.get", "events.lifecycle_many", "events.list", "events.restore", "events.trash", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.trash",
@@ -1833,7 +1855,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.unarchive"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.lifecycle_many", "events.list", "events.restore", "events.stream", "events.unarchive"},
 	},
 	{
 		CommandID:  "events.unarchive",
@@ -1845,7 +1867,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"events", "write"},
-		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.list", "events.restore", "events.stream", "events.trash"},
+		Adjacent:   []string{"events.archive", "events.create", "events.get", "events.lifecycle_many", "events.list", "events.restore", "events.stream", "events.trash"},
 	},
 	{
 		CommandID: "git.binding.export",
@@ -4155,6 +4177,10 @@ func (c *Client) DocsGet(ctx context.Context, pathParams map[string]string, opts
 	return c.Invoke(ctx, "docs.get", pathParams, opts)
 }
 
+func (c *Client) DocsLifecycleMany(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "docs.lifecycle_many", nil, opts)
+}
+
 func (c *Client) DocsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "docs.list", nil, opts)
 }
@@ -4209,6 +4235,10 @@ func (c *Client) EventsCreate(ctx context.Context, opts RequestOptions) (*http.R
 
 func (c *Client) EventsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "events.get", pathParams, opts)
+}
+
+func (c *Client) EventsLifecycleMany(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "events.lifecycle_many", nil, opts)
 }
 
 func (c *Client) EventsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
