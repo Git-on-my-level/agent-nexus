@@ -13,7 +13,7 @@ const agentGuideSkillName = "anx-participant"
 
 const agentGuideSkillDescription = "Participate in Agent Nexus work with source authority, scoped session identity, meaningful updates, and evidence-backed completion."
 
-const agentGuideSkillVersion = "anx.participant.v43"
+const agentGuideSkillVersion = "anx.participant.v44"
 
 type guideSection struct {
 	Title string
@@ -54,7 +54,7 @@ func agentGuideSections() []guideSection {
 		}},
 		{Title: "Asking for decisions", Lines: []string{
 			"- Decide is for choices only a human can make. For anything else a human should know (a digest, a finding, a heads-up) use `anx tell card:<slug> \"<headline>\" [--body <text>]`: it shows on Watch and never in Decide. One question is one row: core returns your open ask when you repeat it, and `--supersedes event:<old-ask>` closes the ask it replaces.",
-			"- Check `anx rulings list` before asking. A standing ruling is an answer a human made durable; an ask one covers returns that answer at once and reaches nobody. Act on it and cite the ruling ref. Pass `--again` only when the facts changed. Size the decision for the reader with `--irreversible` and `--cost \"<text>\"`.",
+			"- Check `anx rulings list` before asking. Use `anx rulings show <id-or-alias>` for operating rules. Submit changes with `anx rulings propose`; a human confirms in Decide. Tag instructions with `ruling: R-YYYYMMDD-NN` and verify them with `anx rulings check`. An ask covered by an answer ruling returns the answer immediately. Pass `--again` only when the facts changed. Size the decision for the reader with `--irreversible` and `--cost \"<text>\"`.",
 			"- Any agent may retire a stale ask with `anx ask retire <ask> --reason <why> --evidence <ref>`; the asker is told in `anx orient` under \"returned to you\" and may undo it. `anx orient` lists the upkeep suggestions about your own work; `anx orient --upkeep` lists all of them.",
 			"- Every ask, review and escalation belongs to a work card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.",
 			"- Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.",

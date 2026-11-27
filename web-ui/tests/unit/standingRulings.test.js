@@ -22,6 +22,7 @@ import {
   NOT_A_DECISION_REASON,
   canRuleOn,
   enqueueNotADecision,
+  enqueueRulingConfirm,
   intend,
   notADecisionTarget,
   resetStandingAnswers,
@@ -31,6 +32,7 @@ import {
 } from "../../src/lib/standingRulings.js";
 import {
   NOT_A_DECISION,
+  RULING_CONFIRM,
   RULING_CREATE,
   RULING_REVOKE,
   sendStandingMutation,
@@ -205,4 +207,33 @@ describe("outbox senders", () => {
       ),
     ).rejects.toThrow("Ruling receipt is incomplete.");
   });
+});
+
+it("persists the confirmation key and requires a matching committed receipt", async () => {
+  await enqueueRulingConfirm({
+    id: "R-20261127-01",
+    question: "Use the new routing rule",
+    href: "/decide/ruling:R-20261127-01",
+  });
+  const entry = outbox.enqueueLocalMutation.mock.calls[0][0];
+  expect(entry.operation).toBe(RULING_CONFIRM);
+  expect(entry.request.body.idempotency_key).toBe(entry.key);
+  const client = {
+    rulingsConfirm: vi
+      .fn()
+      .mockResolvedValueOnce({
+        ruling: { ruling_id: entry.request.id, status: "proposed" },
+      })
+      .mockResolvedValueOnce({
+        ruling: { ruling_id: entry.request.id, status: "active" },
+      }),
+  };
+  await expect(sendStandingMutation(client, entry)).rejects.toThrow("receipt");
+  await expect(sendStandingMutation(client, entry)).resolves.toMatchObject({
+    ruling: { status: "active" },
+  });
+  expect(client.rulingsConfirm.mock.calls).toEqual([
+    [entry.request.id, entry.request.body],
+    [entry.request.id, entry.request.body],
+  ]);
 });

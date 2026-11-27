@@ -210,9 +210,16 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO standing_rulings(id,title_key,requester,kind,question,answer,source_ask_id,created_by,created_at) VALUES('matrix-private-ruling','confidential ruling','','answer','Confidential ruling question','Confidential ruling answer',?,?,?)`, askID, stranger.ActorID, now.Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}
+	const privateDateRuling = "R-20261129-01"
+	if _, err = store.ProposeOperatingRuling(ctx, owner.ActorID, primitives.OperatingRulingProposal{
+		RulingID: privateDateRuling, Scope: "account", Topic: "matrix", Title: "Confidential operating ruling",
+		Body: "See card:" + cardID, SourceQuote: "Confidential quote.",
+	}, now); err != nil {
+		t.Fatal(err)
+	}
 	handoffID := seedHandoffFixture(t, store, owner.ActorID, rosterAgent.ActorID, []string{"event:" + anyString(event["id"])})
 	replacements := strings.NewReplacer("{handoff_id}", handoffID, "{ruling_id}", "matrix-private-ruling", "{ask_id}", "matrix-task-ask", "{request_id}", "matrix-private-access", "{host_id}", rosterAgent.Host.ID, "{run_id}", "matrix-private-run", "{agent_id}", agent.AgentID, "{decision_id}", "matrix-private-decision", "{action_id}", "matrix-private-action", "{document_id}", anyString(document["id"]), "{topic_id}", anyString(topic.Topic["id"]), "{comment_id}", anyString(event["id"]), "{board_id}", boardID, "{card_id}", cardID, "{card_ref}", "card:"+cardID, "{thread_id}", threadID, "{artifact_id}", anyString(artifact["id"]), "{event_id}", anyString(event["id"]), "{inbox_id}", askID, "{revision_id}", anyString(card.Card["head_revision_id"]))
-	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "matrix-private-ruling", "Confidential"}
+	hidden := []string{boardID, cardID, threadID, boardThread, anyString(event["id"]), anyString(artifact["id"]), askID, "matrix-private-decision", "matrix-private-action", "matrix-private-run", "matrix-private-ruling", privateDateRuling, "Confidential"}
 	snapshot := func() string {
 		var v string
 		if err := db.QueryRowContext(ctx, `SELECT json_object('cards',(SELECT json_group_array(json_object('id',id,'updated_at',updated_at,'due_at',due_at,'summary',summary)) FROM cards),'events',(SELECT COUNT(*) FROM events),'wakeups',(SELECT COUNT(*) FROM agent_wakeups))`).Scan(&v); err != nil {
@@ -230,6 +237,9 @@ func TestResourceAccessRouteMatrix(t *testing.T) {
 				}
 				t.Run(p.Method+" "+p.Path, func(t *testing.T) {
 					path := replacements.Replace(p.Path)
+					if p.Path == "/rulings/{ruling_id}/confirm" {
+						path = "/rulings/" + privateDateRuling + "/confirm"
+					}
 					personaRoute := strings.HasPrefix(p.Path, "/hosts/{host_id}/agents/{agent_name}/")
 					if personaRoute {
 						path = personaPaths.Replace(p.Path)
@@ -469,6 +479,10 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"request_key": "private-retirement", "reason": "stale", "evidence": refs}
 	case "/rulings":
 		return map[string]any{"ask_ref": "event:" + event, "kind": "not_a_decision"}
+	case "/rulings/propose":
+		return map[string]any{"ruling_id": "R-20261129-02", "scope": "workspace", "topic": "matrix", "title": "Attempt", "body": "See card:" + card, "source_quote": "Attempt", "idempotency_key": "matrix-ruling-propose"}
+	case "/rulings/{ruling_id}/confirm":
+		return map[string]any{"idempotency_key": "matrix-ruling-confirm"}
 	case "/rulings/{ruling_id}/revoke", "/rulings/{ruling_id}/applied":
 		return map[string]any{}
 	case "/asks/{ask_id}/revise":

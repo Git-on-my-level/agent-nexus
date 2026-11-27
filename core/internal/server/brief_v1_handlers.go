@@ -46,6 +46,12 @@ func handleGetBriefV1(w http.ResponseWriter, r *http.Request, opts handlerOption
 		return
 	}
 	if reader.Kind == "human" {
+		if reader.ActorID != "" {
+			if err := appendOperatingRulingDecisions(ctx, opts.primitiveStore, brief); err != nil {
+				writeReadInternalError(w, r, err, "brief could not be loaded")
+				return
+			}
+		}
 		appendBriefPMDecisions(r, opts, brief)
 	}
 	writeJSON(w, http.StatusOK, brief)

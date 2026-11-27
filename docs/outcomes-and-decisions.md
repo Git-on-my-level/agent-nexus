@@ -155,3 +155,34 @@ Every read added here is bounded and indexed.
 | `curation_suggestions.yours` | two batched lookups over the page's targets                                             |
 | `brief.upkeep`               | 51 rows of the open-suggestion ledger; omitted for principal-scoped readers             |
 | superseded batch suggestions | newest 200 open batch suggestions, once per formula run                                 |
+
+### Operating rulings
+
+A standing ruling with `kind: operating` records a decision about workspace or
+account operations. An agent proposes it with a pinned date ID, Markdown body,
+source quote and an explicit relation to every active ruling in the same topic
+and scope. Decide shows that proposal once. A human confirms it in one action.
+Core records the confirmation and the affected statuses in one transaction with
+a replay receipt. An agent who receives `needs_relation` can add the missing
+declarations and resubmit. Confirmation checks for new active peers before
+applying the proposal.
+
+Core owns workspace state and enforces uniqueness in that workspace. The CLI
+reads authorized workspaces from its local enrollment catalog and combines
+their account-scope rulings with the selected workspace's rulings. It fails
+on duplicate IDs or aliases. Workspaces that share a topic should publish its
+rulings together so one transaction can supersede them. The cache is advisory.
+The live ask path continues to apply answer and not-a-decision rulings.
+
+`anx rulings pull` refreshes the projection under the CLI configuration
+directory. `list`, `show` and `check` refresh after 15 minutes by default
+(`ANX_RULINGS_TTL` accepts a Go duration). If a workspace is unreachable,
+these commands use its matching local snapshot and warn with
+`rulings_projection_stale`. Use `ruling: R-YYYYMMDD-NN` in instructions.
+`anx rulings check` reports obsolete references and allows the direct superseder
+on the same line.
+
+`anx rulings import --file index.json` preserves IDs, aliases, source locations,
+lifecycle hints and supersession declarations. The generated index contains
+headings and source locations. Proposals from it show the heading and source
+location so the human can consult the original context before confirmation.

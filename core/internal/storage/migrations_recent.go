@@ -101,6 +101,7 @@ var recentMigrations = []migration{
 	// the compact ledger in both directions, then dropped. A mismatch aborts the
 	// upgrade instead of repairing or guessing.
 	{Version: 150, ApplyChunk: retireLegacyAccessLedgerChunk, BetweenChunks: checkpointMigrationWAL, Verify: verifyRetiredAccessLedger},
+	{Version: 151, AfterApply: installOperatingRulings},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

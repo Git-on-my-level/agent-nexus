@@ -80,6 +80,9 @@ func TestTellPostsAnFYIAndRulingsListReads(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/cards/"):
 			fmt.Fprint(w, `{"card":{"id":"c1","ref":"card:support","thread_id":"thread-1"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/rulings/projection":
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":{"code":"not_found"}}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/rulings":
 			fmt.Fprint(w, `{"rulings":[{"ref":"ruling:r1","kind":"answer","question":"Rerun?","answer":"Yes","uses":3,"active":true},{"ref":"ruling:r2","kind":"not_a_decision","question":"Digest 1","requester":"guard","uses":1,"active":true}]}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/events":

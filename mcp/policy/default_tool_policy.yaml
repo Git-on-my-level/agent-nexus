@@ -829,6 +829,15 @@ commands:
   "rulings.list":
     classification: exposed_read
     reason: "One bounded page of standing rulings, scoped to rulings whose source ask the caller can read; an agent checks it before asking."
+  "rulings.projection":
+    classification: unsupported_other
+    reason: "Internal page of the CLI projection; the CLI owns workspace fan-out, identity binding and cache consistency."
+  "rulings.propose":
+    classification: unsupported_other
+    reason: "Use the CLI proposal command for date-ID selection, file input and workspace collision checks."
+  "rulings.confirm":
+    classification: unsupported_other
+    reason: "Human-only confirmation in Decide."
   "rulings.create":
     classification: unsupported_other
     reason: "Human-only: a standing ruling answers later asks in the human's name, so an agent tool must not create one."

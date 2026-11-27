@@ -14,7 +14,10 @@ func commandSideEffectClass(command string) string {
 	if command == "ask presentation" {
 		return "read_only"
 	}
-	if command == "work briefing" || command == "rulings list" {
+	if command == "rulings pull" {
+		return "local_operational_write"
+	}
+	if command == "work briefing" || command == "rulings list" || command == "rulings show" || command == "rulings check" {
 		return "read_only"
 	}
 	if command == "work checkpoint" {

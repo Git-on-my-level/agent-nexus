@@ -6855,6 +6855,127 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+  /rulings/projection:
+    get:
+      operationId: listOperatingRulings
+      summary: Read a page of the operating ruling projection
+      description: Authenticated workspace members receive a bounded page of visible operating rulings, including proposals and inactive history.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.projection
+      x-anx-agent-notes: Pages include the revision used for cache consistency.
+      x-anx-error-codes: [auth_required, invalid_token, invalid_request]
+      x-anx-output-envelope: "Returns `{ rulings, source_revision, next_cursor? }`."
+      x-anx-cli-path: rulings pull
+      x-anx-why: Refresh the advisory cache for local ruling lookup and checks.
+      x-anx-input-mode: query
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, read]
+      x-anx-stability: beta
+      parameters:
+        - { name: after, in: query, description: Opaque cursor from the previous page., schema: { type: string } }
+      responses:
+        '200':
+          description: One projection page. A page can be empty and still carry a continuation cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rulings, source_revision]
+                properties:
+                  rulings: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/StandingRuling' } }
+                  source_revision: { type: string }
+                  next_cursor: { type: string }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+  /rulings/propose:
+    post:
+      operationId: proposeOperatingRuling
+      summary: Propose a standing operating ruling in Decide
+      description: Authenticated members can propose. A successful proposal is pending human confirmation. A missing same-topic relation returns a usage redirect with the visible ruling IDs.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.propose
+      x-anx-agent-notes: Keep the same idempotency key when retrying an uncertain submission.
+      x-anx-output-envelope: "Returns `{ ruling }` or a relation redirect."
+      x-anx-cli-path: rulings propose
+      x-anx-why: Put a proposed operating rule before a human.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-error-codes: [invalid_request, not_found, conflict, idempotency_conflict]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperatingRulingProposal' }
+      responses:
+        '201':
+          description: The recorded proposal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatingRulingResult' }
+        '200':
+          description: Usage redirect. No proposal was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatingRulingRedirect' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /rulings/{ruling_id}/confirm:
+    post:
+      operationId: confirmOperatingRuling
+      summary: Confirm a standing operating ruling
+      description: Human only. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.confirm
+      x-anx-agent-notes: Human principals only. Confirm from Decide.
+      x-anx-output-envelope: "Returns `{ ruling }`."
+      x-anx-cli-path: rulings confirm
+      x-anx-why: Make the proposed rule authoritative.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-error-codes: [invalid_request, human_required, not_found, conflict, idempotency_conflict, needs_relation]
+      parameters:
+        - { name: ruling_id, in: path, required: true, schema: { $ref: '#/components/schemas/OperatingRulingID' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotency_key]
+              properties:
+                idempotency_key: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: The confirmed ruling.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperatingRulingResult' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
   /rulings/{ruling_id}/revoke:
     post:
       operationId: revokeStandingRuling
@@ -15350,13 +15471,52 @@ components:
       properties:
         irreversible: { type: boolean }
         cost: { type: string, maxLength: 80 }
+    OperatingRulingID:
+      type: string
+      pattern: '^R-[0-9]{8}-[0-9]{2}$'
+      description: Caller-pinned immutable date ID, unique within one workspace.
+    OperatingRulingRelation:
+      type: object
+      additionalProperties: false
+      required: [kind, ruling_id]
+      properties:
+        kind: { type: string, enum: [supersedes, amends, independent] }
+        ruling_id: { $ref: '#/components/schemas/OperatingRulingID' }
+    OperatingRulingProposal:
+      type: object
+      additionalProperties: false
+      required: [ruling_id, scope, topic, title, body, source_quote, idempotency_key]
+      properties:
+        ruling_id: { $ref: '#/components/schemas/OperatingRulingID' }
+        aliases: { type: array, maxItems: 32, items: { type: string, minLength: 1, maxLength: 96 } }
+        scope: { type: string, enum: [workspace, account] }
+        topic: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,63}$' }
+        title: { type: string, minLength: 1, maxLength: 1024 }
+        body: { type: string, minLength: 1, maxLength: 32768 }
+        source_quote: { type: string, minLength: 1, maxLength: 8192 }
+        source: { type: string, maxLength: 2048 }
+        status_hint: { type: string, enum: [active, superseded, revoked, spent, historical] }
+        superseded_by_hint: { $ref: '#/components/schemas/OperatingRulingID' }
+        relations: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/OperatingRulingRelation' } }
+        idempotency_key: { type: string, minLength: 1, maxLength: 256 }
+    OperatingRulingResult:
+      type: object
+      required: [ruling]
+      properties:
+        ruling: { $ref: '#/components/schemas/StandingRuling' }
+    OperatingRulingRedirect:
+      type: object
+      required: [redirected, missing_relations]
+      properties:
+        redirected: { type: string, enum: [needs_relation] }
+        missing_relations: { type: array, items: { $ref: '#/components/schemas/OperatingRulingID' } }
     StandingRuling:
       type: object
       required: [id, ref, kind, question, answer, created_by, created_at, uses, active]
       properties:
         id: { type: string }
         ref: { type: string }
-        kind: { type: string, enum: [answer, not_a_decision] }
+        kind: { type: string, enum: [answer, not_a_decision, operating] }
         question: { type: string }
         answer: { type: string }
         requester: { type: string, description: Set for not_a_decision rulings, which bind one requester. }
@@ -15368,6 +15528,20 @@ components:
         active: { type: boolean }
         revoked_at: { type: string, format: date-time }
         revoked_by: { type: string }
+        ruling_id: { $ref: '#/components/schemas/OperatingRulingID' }
+        aliases: { type: array, items: { type: string } }
+        scope: { type: string, enum: [workspace, account] }
+        topic: { type: string }
+        body: { type: string }
+        source_quote: { type: string }
+        source: { type: string }
+        status: { type: string, enum: [proposed, active, superseded, revoked] }
+        status_hint: { type: string, enum: [active, superseded, revoked, spent, historical] }
+        superseded_by_hint: { $ref: '#/components/schemas/OperatingRulingID' }
+        superseded_by: { $ref: '#/components/schemas/OperatingRulingID' }
+        relations: { type: array, items: { $ref: '#/components/schemas/OperatingRulingRelation' } }
+        decided_by: { type: string }
+        decided_at: { type: string, format: date-time }
     TrackingDigestCard:
       type: object
       required: [ref, title, reason]
@@ -15404,7 +15578,7 @@ components:
         event_ref:
           type: string
           description: "Authoritative ask event reference (event:<id>) when backed by a canonical ask event."
-        kind: { type: string, enum: [ask, review, access, host, pm_proposal] }
+        kind: { type: string, enum: [ask, review, access, host, pm_proposal, ruling_proposal] }
         title: { type: string }
         body: { type: string }
         presentation_revision: {type: integer, minimum: 0}
@@ -15427,6 +15601,7 @@ components:
         blocks_count: { type: integer }
         priority: { type: string }
         proposals: { type: array, maxItems: 6, items: { type: string }, description: First is the recommended response. }
+        ruling_proposal: { $ref: '#/components/schemas/StandingRuling' }
         pm_decision:
           type: object
           description: Present on a PM decision record awaiting this human; answer it through the PM decision answer route with this revision.

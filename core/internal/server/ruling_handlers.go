@@ -91,6 +91,16 @@ func handleRevokeRuling(w http.ResponseWriter, r *http.Request, opts handlerOpti
 	if !ok {
 		return
 	}
+	dateID := strings.TrimPrefix(strings.TrimSpace(id), "ruling:")
+	if primitives.ValidOperatingRulingID(dateID) {
+		store, ok := operatingRulingStoreFrom(w, opts)
+		if !ok {
+			return
+		}
+		ruling, err := store.RevokeOperatingRuling(r.Context(), principal.ActorID, dateID, time.Now())
+		writeOperatingRulingResult(w, r, http.StatusOK, map[string]any{"ruling": ruling.JSON()}, err)
+		return
+	}
 	store, ok := rulingStoreFrom(w, opts)
 	if !ok {
 		return

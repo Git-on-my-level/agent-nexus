@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `283`
+- Commands: `286`
 
 ## `actors.create`
 
@@ -2874,6 +2874,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Output: Returns `{ recorded }`.
 - Agent notes: Any authenticated member who can read the ruling. anx ask calls it for you.
 
+## `rulings.confirm`
+
+- CLI path: `rulings confirm`
+- HTTP: `POST /rulings/{ruling_id}/confirm`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Make the proposed rule authoritative.
+- Concepts: `inbox`, `write`
+- Error codes: `invalid_request`, `human_required`, `not_found`, `conflict`, `idempotency_conflict`, `needs_relation`
+- Output: Returns `{ ruling }`.
+- Agent notes: Human principals only. Confirm from Decide.
+
 ## `rulings.create`
 
 - CLI path: `rulings create`
@@ -2899,6 +2912,32 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`
 - Output: Returns `{ rulings }`.
 - Agent notes: Any authenticated member. One indexed page; pass include_revoked=true for history.
+
+## `rulings.projection`
+
+- CLI path: `rulings pull`
+- HTTP: `GET /rulings/projection`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `query`
+- Why: Refresh the advisory cache for local ruling lookup and checks.
+- Concepts: `inbox`, `read`
+- Error codes: `auth_required`, `invalid_token`, `invalid_request`
+- Output: Returns `{ rulings, source_revision, next_cursor? }`.
+- Agent notes: Pages include the revision used for cache consistency.
+
+## `rulings.propose`
+
+- CLI path: `rulings propose`
+- HTTP: `POST /rulings/propose`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Put a proposed operating rule before a human.
+- Concepts: `inbox`, `write`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `idempotency_conflict`
+- Output: Returns `{ ruling }` or a relation redirect.
+- Agent notes: Keep the same idempotency key when retrying an uncertain submission.
 
 ## `rulings.revoke`
 

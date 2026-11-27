@@ -1598,7 +1598,7 @@ brief:
       description: Locally resolved workspace identity, selection source and other configured aliases. Adds no core read.
   sections: [decisions, initiatives, daily_digest, your_asks, answered_for_you, curation_suggestions]
   section_limit: 50
-  decision_kinds: [ask, review, access, host, pm_proposal]
+  decision_kinds: [ask, review, access, host, pm_proposal, ruling_proposal]
   initiative_outcome: Goal annotation label or metric, otherwise first summary line, trimmed to 280 Unicode code points.
   initiative_proposed: Computed boolean; true exactly for backlog placement, independent of promise health. No new phase or column.
   initiative_owner: Nullable first canonical assignee ref, matching work list, including implicit creator and assigned fallback responsibility; never inferred from the promise author. Unowned and fallback work is routed to daily_digest.

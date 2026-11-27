@@ -1,0 +1,6 @@
+fixture.md:1: R17 -> R-20261114-01 (superseded) superseded_by R-20261126-08
+fixture.md:2: R-20261121-01 -> R-20261121-01 (superseded) superseded_by R-20261126-08
+fixture.md:4: R17.3 -> R-20261114-01 (superseded) superseded_by R-20261126-08
+fixture.md:5: R17 exception -> R-20261121-01 (superseded) superseded_by R-20261126-08
+fixture.md:7: R-20261127-99 -> ? (unknown ruling ID) superseded_by none
+fixture.md:8: R3 -> R-20261112-03 (spent) superseded_by none

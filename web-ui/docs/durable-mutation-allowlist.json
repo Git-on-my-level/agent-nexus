@@ -153,6 +153,7 @@
       "asksRetire": 1,
       "respondInboxItem": 2,
       "respondInboxItems": 1,
+      "rulingsConfirm": 1,
       "rulingsCreate": 2,
       "rulingsRevoke": 1
     }

@@ -14,6 +14,7 @@ import { writable } from "svelte/store";
 import { PINS_OPERATION } from "$lib/dashboardPins.js";
 import {
   NOT_A_DECISION,
+  RULING_CONFIRM,
   RULING_CREATE,
   RULING_REVOKE,
   SKIP,
@@ -31,6 +32,7 @@ export const KNOWN_OPERATIONS = Object.freeze(
     "cards.patch",
     PINS_OPERATION,
     NOT_A_DECISION,
+    RULING_CONFIRM,
     RULING_CREATE,
     RULING_REVOKE,
     SKIP,

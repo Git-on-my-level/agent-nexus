@@ -5,7 +5,7 @@ description: Keep substantive work visible with scoped identity, explicit refs a
 
 # ANX participant
 
-Skill contract: anx.participant.v43.
+Skill contract: anx.participant.v44.
 
 ## Daily loop
 
@@ -16,9 +16,9 @@ Set `--as <name>` / `ANX_AS`; enroll (`anx help enroll`). Pick `--workspace <ali
 
 `anx work create --title "<outcome>" --under card:<parent>` creates; `anx work start <card>` takes native work. `anx note <card> "<text>" --evidence <ref>` posts progress and starts unowned work. `anx done <card> --evidence <ref>` finishes; `anx plan` makes checklists; `anx work measure` gives a goal its number.
 
-Follow warnings. Promise `--next <when> "<what>"`; renew within two days. Only a human can choose: `anx ask`. Otherwise (digest, finding): `anx tell <card> "<headline>"`. Check `anx rulings list` first. Record rulings with `anx note <card> "<text>" --decided-by <who>`. Cite blockers `event:<ask-id>`; share `anx link`.
+Promise `--next <when> "<what>"`; renew within two days. `anx ask` for human choices; `anx tell <card> "<headline>"` for FYIs. Read `anx rulings list` / `anx rulings show <id-or-alias>`. Submit via `anx rulings propose`; humans confirm in Decide. Tag instructions `ruling: R-YYYYMMDD-NN`; verify with `anx rulings check`. Cite blockers `event:<ask-id>`; share `anx link`.
 
-One parent per card; depth ≤3 (initiative → workstream → task). Without `--under` or `--initiative`, creation enters Unsorted. `where` suggests; confirm with `anx mv <ref|path> --under <ref|path>`. Humans set top-level goals; only when one asked: `anx mv <card> --root --reason "<why>" --requested-by <human>`. Return with `anx mv <card> --unsorted`. Store card refs, not paths. One owner per card; no owner is empty.
+One parent, depth ≤3 (initiative → workstream → task). Without `--under` or `--initiative`, creation enters Unsorted. `where` suggests; confirm with `anx mv <ref|path> --under <ref|path>`. Humans set top-level goals; only when one asked: `anx mv <card> --root --reason "<why>" --requested-by <human>`. Return with `anx mv <card> --unsorted`. Store card refs, not paths. One owner per card; no owner is empty.
 
 ## Write for a busy boss
 
@@ -26,9 +26,9 @@ One parent per card; depth ≤3 (initiative → workstream → task). Without `-
 - Recommendation: `{action, why}`, tradeoff and known cost. List real alternatives and consequences.
 - `if_no_answer`: known default or blocker.
 
-Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused fields.
+Preserve uncertainty. Omit unused fields.
 
-`anx ask --template decision` is a fictional narrative. Edit frontmatter; preview `anx ask --from-file ask.md --preview`. Supply `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`. Withdraw stale asks; act on answers or re-ask. `anx orient` lists your upkeep.
+`anx ask --template decision` prints a template; preview `anx ask --from-file ask.md --preview`. Supply `--subject-ref card:<slug>`, `--recommend`, `--alt`, `--body`, `--by <when>`, `--blocks <ref>`. Withdraw stale asks; act on answers or re-ask. `anx orient` lists your upkeep.
 
 Arm `anx await <ask|card>` or `anx await --answers --deadline <time>`; re-arm on return; cards return `resolution`. Mark only your asks read. Report issues with `anx feedback "<text>"`.
 

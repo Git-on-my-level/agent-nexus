@@ -1624,5 +1624,16 @@
     "reason": "One page of at most 200 standing rulings, newest first through idx_standing_rulings_recent, joined to the reader's scoped events relation by primary key so a ruling made from an ask the reader cannot see is withheld. No refill after filtering.",
     "latency_ms": 500,
     "max_vm_steps": 50000
+  },
+  {
+    "method": "GET",
+    "path": "/rulings/projection",
+    "max_queries": 100,
+    "max_rows": 1024,
+    "authorized_status": 200,
+    "unauthorized_status": 200,
+    "reason": "One indexed date-ID page of at most 101 traversal positions, at most 100 scoped hydration seeks, and singleton revision reads.",
+    "latency_ms": 500,
+    "max_vm_steps": 50000
   }
 ]

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 263,
+  "route_count": 266,
   "routes": [
     {
       "method": "GET",
@@ -993,8 +993,23 @@
       "access_class": "workspace_business_surface"
     },
     {
+      "method": "GET",
+      "path": "/rulings/projection",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/propose",
+      "access_class": "workspace_business_surface"
+    },
+    {
       "method": "POST",
       "path": "/rulings/{ruling_id}/applied",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/{ruling_id}/confirm",
       "access_class": "workspace_business_surface"
     },
     {

@@ -38,7 +38,7 @@ var runtimeGeneratedTopics = []runtimeHelpTopic{
 	{Path: "deliveries", Description: "List, claim and receipt durable notification and wake deliveries"},
 	{Path: "lease", Description: "Claim a card with a TTL work lease before starting work on it"},
 	{Path: "feedback", Description: "Report a problem with ANX itself to the people who run it"},
-	{Path: "rulings", Description: "List the answers a human made durable; check before you ask"},
+	{Path: "rulings", Description: "Read and propose standing rulings; check ruling citations"},
 	{Path: "tell", Description: "Tell a human something that wants no answer; it shows on Watch, never in Decide"},
 	{Path: "work", Description: "Query commitments, evidence, freshness and refresh state"},
 	{Path: "pm", Description: "Read and operate durable PM conversations, decisions and action receipts"},
@@ -1066,7 +1066,7 @@ Loop (stable):
   note <card> ["<text>"] [--next <when> "<what>"] [--evidence <ref>]  Post progress and renew the promise (remote_coordination_write)
   ask <title> --situation <text> --impact <text> --recommend <text> --why <text> [--preview]  Request a human decision (remote_coordination_write)
   tell <card> "<headline>" [--body <text>]  Tell a human something that wants no answer; shows on Watch (remote_coordination_write)
-  rulings list            Answers a human made durable; check before you ask (read_only)
+  rulings                Read, check and propose standing rulings
   await <ask-id|card-ref|access-request:<id>>  Wait for an answer or access decision (read_only)
   done [card] --evidence <url|ref>  Resolve with evidence (remote_coordination_write)
   link <ref>...           Browser link to share with a human (read_only)
@@ -1226,8 +1226,8 @@ func helpTopicTextRaw(topic string) (string, bool) {
 	if topic == "measure" || topic == "work measure" {
 		return "anx work measure <card> --label \"<plain name>\" --direction up|down --target <n> [--series series:<name>] [--unit <unit>] [--baseline <n>] | --clear: set the number an initiative is judged by (remote_coordination_write).\n  Watch shows the latest reading against the target, the change over about a week and how old the reading is. With no reading it says so, which is the loudest state a goal can be in.\n  The reading comes from the series: a producer publishes it with anx series push <name> <value> (declare the series once with anx adapters declare; see anx help series). A measure without --series records the target and shows \"no reading\".\n  A measure does not make the card recurring work. For a loop scored by run receipts use anx work goal with anx work cadence.\nStability: beta\n", true
 	}
-	if topic == "rulings" || topic == "rulings list" {
-		return "anx rulings list [--include-revoked]: list standing rulings, newest first (read_only).\n  A standing ruling is an answer a human made durable. An ask a ruling covers is not filed: anx ask returns the answer at once and nothing reaches Decide, so check here before you ask.\n  Act on a ruling that covers your question and cite its ref (ruling:<id>) in your note. If the facts changed, ask with --again.\n  A \"not a decision\" ruling names a requester: that agent's asks with the same title (numbers aside) are stored as an fyi instead; use anx tell for them.\n  Only a human makes or revokes a ruling, in Decide.\nStability: beta\n", true
+	if text, ok := rulingHelp(topic); ok {
+		return text, true
 	}
 	if topic == "ask retire" {
 		return askRetireUsageText() + "\n", true

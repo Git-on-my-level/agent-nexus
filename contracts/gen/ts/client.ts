@@ -12478,12 +12478,67 @@ export const commandRegistry: CommandSpec[] = [
       "ruling_id"
     ],
     "adjacent_commands": [
+      "rulings.confirm",
       "rulings.create",
       "rulings.list",
+      "rulings.propose",
+      "rulings.projection",
       "rulings.revoke"
     ],
     "go_method": "RulingsApplied",
     "ts_method": "rulingsApplied"
+  },
+  {
+    "command_id": "rulings.confirm",
+    "cli_path": "rulings confirm",
+    "group": "rulings",
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/confirm",
+    "operation_id": "confirmOperatingRuling",
+    "summary": "Confirm a standing operating ruling",
+    "description": "Human only. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.",
+    "why": "Make the proposed rule authoritative.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ruling }`.",
+    "error_codes": [
+      "invalid_request",
+      "human_required",
+      "not_found",
+      "conflict",
+      "idempotency_conflict",
+      "needs_relation"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Human principals only. Confirm from Decide.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "idempotency_key",
+          "type": "string"
+        }
+      ]
+    },
+    "path_params": [
+      "ruling_id"
+    ],
+    "adjacent_commands": [
+      "rulings.applied",
+      "rulings.create",
+      "rulings.list",
+      "rulings.propose",
+      "rulings.projection",
+      "rulings.revoke"
+    ],
+    "go_method": "RulingsConfirm",
+    "ts_method": "rulingsConfirm"
   },
   {
     "command_id": "rulings.create",
@@ -12539,7 +12594,10 @@ export const commandRegistry: CommandSpec[] = [
     },
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.list",
+      "rulings.propose",
+      "rulings.projection",
       "rulings.revoke"
     ],
     "go_method": "RulingsCreate",
@@ -12573,11 +12631,156 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Any authenticated member. One indexed page; pass include_revoked=true for history.",
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
+      "rulings.propose",
+      "rulings.projection",
       "rulings.revoke"
     ],
     "go_method": "RulingsList",
     "ts_method": "rulingsList"
+  },
+  {
+    "command_id": "rulings.projection",
+    "cli_path": "rulings pull",
+    "group": "rulings",
+    "method": "GET",
+    "path": "/rulings/projection",
+    "operation_id": "listOperatingRulings",
+    "summary": "Read a page of the operating ruling projection",
+    "description": "Authenticated workspace members receive a bounded page of visible operating rulings, including proposals and inactive history.",
+    "why": "Refresh the advisory cache for local ruling lookup and checks.",
+    "input_mode": "query",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ rulings, source_revision, next_cursor? }`.",
+    "error_codes": [
+      "auth_required",
+      "invalid_token",
+      "invalid_request"
+    ],
+    "concepts": [
+      "inbox",
+      "read"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Pages include the revision used for cache consistency.",
+    "adjacent_commands": [
+      "rulings.applied",
+      "rulings.confirm",
+      "rulings.create",
+      "rulings.list",
+      "rulings.propose",
+      "rulings.revoke"
+    ],
+    "go_method": "RulingsProjection",
+    "ts_method": "rulingsProjection"
+  },
+  {
+    "command_id": "rulings.propose",
+    "cli_path": "rulings propose",
+    "group": "rulings",
+    "method": "POST",
+    "path": "/rulings/propose",
+    "operation_id": "proposeOperatingRuling",
+    "summary": "Propose a standing operating ruling in Decide",
+    "description": "Authenticated members can propose. A successful proposal is pending human confirmation. A missing same-topic relation returns a usage redirect with the visible ruling IDs.",
+    "why": "Put a proposed operating rule before a human.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ ruling }` or a relation redirect.",
+    "error_codes": [
+      "invalid_request",
+      "not_found",
+      "conflict",
+      "idempotency_conflict"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Keep the same idempotency key when retrying an uncertain submission.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "body",
+          "type": "string"
+        },
+        {
+          "name": "idempotency_key",
+          "type": "string"
+        },
+        {
+          "name": "ruling_id",
+          "type": "string"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "enum_values": [
+            "account",
+            "workspace"
+          ]
+        },
+        {
+          "name": "source_quote",
+          "type": "string"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "topic",
+          "type": "string"
+        }
+      ],
+      "optional": [
+        {
+          "name": "aliases",
+          "type": "list\u003cstring\u003e"
+        },
+        {
+          "name": "relations",
+          "type": "list\u003cany\u003e"
+        },
+        {
+          "name": "source",
+          "type": "string"
+        },
+        {
+          "name": "status_hint",
+          "type": "string",
+          "enum_values": [
+            "active",
+            "historical",
+            "revoked",
+            "spent",
+            "superseded"
+          ]
+        },
+        {
+          "name": "superseded_by_hint",
+          "type": "string"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "rulings.applied",
+      "rulings.confirm",
+      "rulings.create",
+      "rulings.list",
+      "rulings.projection",
+      "rulings.revoke"
+    ],
+    "go_method": "RulingsPropose",
+    "ts_method": "rulingsPropose"
   },
   {
     "command_id": "rulings.revoke",
@@ -12612,8 +12815,11 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
-      "rulings.list"
+      "rulings.list",
+      "rulings.propose",
+      "rulings.projection"
     ],
     "go_method": "RulingsRevoke",
     "ts_method": "rulingsRevoke"
@@ -17052,12 +17258,24 @@ export class AnxClient {
     return this.invoke("rulings.applied", pathParams, options);
   }
 
+  rulingsConfirm(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("rulings.confirm", pathParams, options);
+  }
+
   rulingsCreate(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("rulings.create", {}, options);
   }
 
   rulingsList(options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("rulings.list", {}, options);
+  }
+
+  rulingsProjection(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("rulings.projection", {}, options);
+  }
+
+  rulingsPropose(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("rulings.propose", {}, options);
   }
 
   rulingsRevoke(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

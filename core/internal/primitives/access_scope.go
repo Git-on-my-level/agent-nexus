@@ -128,7 +128,7 @@ func accessSnapshotCTEs(scope AccessScope, query string, snapshot *denialSnapsho
 			return
 		}
 		materialization := ""
-		if snapshot != nil && snapshot.candidates || table == "document_search_postings" || table == "series_points" || strings.HasPrefix(table, "brief_") || table == "attention_placements" {
+		if snapshot != nil && snapshot.candidates || table == "document_search_postings" || table == "series_points" || strings.HasPrefix(table, "brief_") || table == "attention_placements" || table == "standing_rulings" {
 			// Repeated endpoint and projection probes must retain indexed seeks
 			// through the privacy predicate. Materializing these shadows would
 			// copy workspace relations before candidate selection.

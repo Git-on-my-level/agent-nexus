@@ -2839,7 +2839,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.create", "rulings.list", "rulings.revoke"},
+		Adjacent:   []string{"rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
+	},
+	{
+		CommandID:  "rulings.confirm",
+		CLIPath:    "rulings confirm",
+		Group:      "rulings",
+		Method:     "POST",
+		Path:       "/rulings/{ruling_id}/confirm",
+		PathParams: []string{"ruling_id"},
+		InputMode:  "json-body",
+		Stability:  "beta",
+		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.create",
@@ -2850,7 +2862,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.applied", "rulings.list", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.list",
@@ -2861,7 +2873,29 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.propose", "rulings.projection", "rulings.revoke"},
+	},
+	{
+		CommandID: "rulings.projection",
+		CLIPath:   "rulings pull",
+		Group:     "rulings",
+		Method:    "GET",
+		Path:      "/rulings/projection",
+		InputMode: "query",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "read"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.revoke"},
+	},
+	{
+		CommandID: "rulings.propose",
+		CLIPath:   "rulings propose",
+		Group:     "rulings",
+		Method:    "POST",
+		Path:      "/rulings/propose",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID:  "rulings.revoke",
@@ -2873,7 +2907,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list"},
+		Adjacent:   []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection"},
 	},
 	{
 		CommandID:  "runs.get",
@@ -4513,12 +4547,24 @@ func (c *Client) RulingsApplied(ctx context.Context, pathParams map[string]strin
 	return c.Invoke(ctx, "rulings.applied", pathParams, opts)
 }
 
+func (c *Client) RulingsConfirm(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.confirm", pathParams, opts)
+}
+
 func (c *Client) RulingsCreate(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "rulings.create", nil, opts)
 }
 
 func (c *Client) RulingsList(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "rulings.list", nil, opts)
+}
+
+func (c *Client) RulingsProjection(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.projection", nil, opts)
+}
+
+func (c *Client) RulingsPropose(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.propose", nil, opts)
 }
 
 func (c *Client) RulingsRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
