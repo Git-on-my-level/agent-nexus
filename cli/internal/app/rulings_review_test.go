@@ -38,7 +38,7 @@ func TestRulingsCheckLegacyCitationBoundaries(t *testing.T) {
 
 func TestRulingsCheckDateIDBoundaries(t *testing.T) {
 	scanner := newRulingReferenceScanner(nil)
-	for _, line := range []string{"PR-20261127-01", "W3-R-20261127-01", "éR-20261127-01", "_R-20261127-01"} {
+	for _, line := range []string{"PR-20261127-01", "W3-R-20261127-01", "éR-20261127-01", "_R-20261127-01", "R-20261127-011", "ruling: R-20261127-011"} {
 		if got := scanner.scan("fixture", line, nil, false); len(got) != 0 {
 			t.Fatalf("%q produced %v", line, got)
 		}

@@ -107,8 +107,8 @@ func (s rulingReferenceScanner) references(line string) []rulingReference {
 		token := line[start:end]
 		name, _, _ := strings.Cut(token, ".")
 		prev, _ := utf8.DecodeLastRuneInString(line[:start])
+		next, _ := utf8.DecodeRuneInString(line[end:])
 		if legacyRuling.MatchString(name) {
-			next, _ := utf8.DecodeRuneInString(line[end:])
 			suffix, priority := strings.CutPrefix(line[end:], " P")
 			digit, _ := utf8.DecodeRuneInString(suffix)
 			if rulingWord(prev) || prev == '-' || prev == '/' || prev == '$' || rulingWord(next) || (priority && unicode.IsDigit(digit)) {
@@ -116,7 +116,7 @@ func (s rulingReferenceScanner) references(line string) []rulingReference {
 			}
 		} else {
 			name = token
-			if rulingDateID.MatchString(name) && (rulingWord(prev) || prev == '-') {
+			if rulingDateID.MatchString(name) && (rulingWord(prev) || prev == '-' || unicode.IsDigit(next)) {
 				continue
 			}
 		}
