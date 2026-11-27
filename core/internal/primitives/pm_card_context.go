@@ -227,7 +227,7 @@ func (s *Store) PMCardActivity(ctx context.Context, cards []map[string]any, asks
 var ErrApprovedCardNoteStale = errors.New("approved card note revision changed")
 
 func (s *Store) AppendApprovedCardNote(ctx context.Context, actor, ref, revision, actionID, note string) error {
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

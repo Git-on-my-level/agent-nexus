@@ -220,7 +220,7 @@ func (s *Store) deliverHumanAttentionAnswerWakeBatch(ctx context.Context, batch 
 	if s == nil || s.db == nil {
 		return false, fmt.Errorf("primitives store database is not initialized")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

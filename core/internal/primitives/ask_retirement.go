@@ -40,7 +40,7 @@ func (s *Store) RetireAsk(ctx context.Context, principal auth.Principal, ref, ke
 			}
 		}
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

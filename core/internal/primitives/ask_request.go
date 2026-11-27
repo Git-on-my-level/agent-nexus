@@ -22,7 +22,7 @@ func (s *Store) AppendTaskAttentionEvent(ctx context.Context, actor string, even
 	if err != nil {
 		return nil, err
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		if s.quota.MaxBlobBytes > 0 {

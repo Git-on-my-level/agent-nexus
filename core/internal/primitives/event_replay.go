@@ -15,7 +15,7 @@ func (s *Store) AppendEventWithReplay(ctx context.Context, actorID, key, hash st
 	if key == "" || hash == "" {
 		return IdempotencyReplay{}, false, fmt.Errorf("event replay key and hash are required")
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

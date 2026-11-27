@@ -217,7 +217,7 @@ func (s *Store) createArtifactAttachment(ctx context.Context, actorID string, ar
 	if maxUploadBytes <= 0 {
 		maxUploadBytes = DefaultAttachmentMaxUploadBytes
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

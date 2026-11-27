@@ -178,3 +178,40 @@ func TestRespondInboxItemsDefersPastItsBudgets(t *testing.T) {
 		}
 	})
 }
+
+// Production runs with workspace quotas on. The whole chunk runs in one write
+// transaction that owns the quota lock; each item's own quota lock must not
+// deadlock on it, and a failing item must roll back alone.
+func TestRespondInboxItemsRunsInOneTransactionWithQuotas(t *testing.T) {
+	requireIntegrationTest(t)
+	f := newRespondManyFixture(t, "quota", authIntegrationOptions{})
+	store := f.env.primitiveStore.(*primitives.Store)
+	primitives.WithWorkspaceQuota(primitives.WorkspaceQuota{MaxBlobBytes: 1 << 30, MaxArtifacts: 1000})(store)
+	ids := []string{f.fileAsk("One?", nil), f.fileAsk("Two?", nil), f.fileAsk("Three?", nil)}
+	items := []any{skipItem(ids[0], "q1"), skipItem("inbox:ask:missing:ev_x:ev_x", "q2"), skipItem(ids[1], "q3"), skipItem(ids[2], "q4")}
+	done := make(chan struct{})
+	var status int
+	var p map[string]any
+	go func() {
+		defer close(done)
+		status, p = hostHTTP(t, "POST", f.env.server.URL+"/inbox/responses", f.human.AccessToken, map[string]any{"items": items})
+	}()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("bulk skip with quotas did not finish: lock order deadlock")
+	}
+	hostStatus(t, status, 200, p)
+	got := respondManyStatuses(t, p)
+	want := []string{"responded", "failed", "responded", "responded"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("statuses %v, want %v (%#v)", got, want, p)
+		}
+	}
+	// Committed: each skipped ask is closed for a later single respond.
+	for _, id := range ids {
+		status, p = hostHTTP(t, "POST", f.env.server.URL+"/inbox/"+id+"/respond", f.human.AccessToken, map[string]any{"response_text": "Yes", "outcome": "answered", "idempotency_key": "after-" + id})
+		hostStatus(t, status, 409, p)
+	}
+}
