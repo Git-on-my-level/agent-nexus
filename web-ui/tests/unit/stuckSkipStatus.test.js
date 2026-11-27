@@ -50,7 +50,9 @@ it("offers retry or keep for a stuck skip, never a saved message to edit", async
   render(MutationSendStatus, { entry: stuck("a") });
   expect(document.querySelector("textarea")).toBeNull();
   expect(document.body.textContent).not.toContain("Edit message");
-  expect(document.body.textContent).toContain("An old tab of this app is blocking this");
+  expect(document.body.textContent).toContain(
+    "An old tab of this app is blocking this",
+  );
   const buttons = [...document.querySelectorAll("button")];
   await fireEvent.click(buttons.find((b) => b.textContent === "Retry skip"));
   await fireEvent.click(buttons.find((b) => b.textContent === "Don't skip"));
