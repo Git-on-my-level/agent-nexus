@@ -3335,7 +3335,7 @@
     "../server/lifecycle_batch.go:callLifecycleBatchItem": "5f96924be1d1d3e6c40ed4c5bcb7495b63df2cbc78045938f5683b274e77d82d",
     "../server/lifecycle_batch.go:handleLifecycleBatch": "d035cf594c13212eaddbbf7796d30e2794eedb14b8c81f3f04d829aa4f7118a8",
     "../server/lifecycle_batch.go:parseLifecycleBatchItems": "d0c9c64d57786f7c034860ec03b87dc42f0ad894df7e4c6e2a6aa8681b9409cf",
-    "../server/lifecycle_batch.go:registerLifecycleBatchRoutes": "ef05e856479d12515ecc2a63268728d0b7b31842230a7751f59e21a8ca630388",
+    "../server/lifecycle_batch.go:registerLifecycleBatchRoutes": "5b074e7decfcc6f4a2a6730bb2bd7351b302e26142f493c7f758300a0c42c10f",
     "../server/markdown_hygiene.go:*markdownHygieneCollector:normalizeField": "97b553603a974434b6ee033a9ec6adfe62a2a1879fadbf3b201b3bbf6cf6f960",
     "../server/markdown_hygiene.go:*markdownHygieneCollector:normalizeMapString": "30f3fa1484669055c261df584c29f9cc76f5818480bfac75add091575e0879c6",
     "../server/markdown_hygiene.go:normalizeAnyMarkdownContent": "e7c6fc8e1aa223223d8e7603ae05d9f6ac1d64595b2f2ac8d54b65f100ced18a",

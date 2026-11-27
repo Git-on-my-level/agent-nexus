@@ -273,8 +273,23 @@ func TestLifecycleBatchRoutes(t *testing.T) {
 	status, p := hostHTTP(t, "POST", events, "", map[string]any{"items": []any{item("route-a", "archive")}})
 	hostStatus(t, status, 401, p)
 	status, p = hostHTTP(t, "GET", events, owner.AccessToken, nil)
-	if status != 405 && status != 404 {
-		t.Fatalf("GET status %d %#v", status, p)
+	if status != 404 {
+		t.Fatalf("GET of a missing event named lifecycle: %d %#v", status, p)
+	}
+	// "lifecycle" stays a readable event id and document handle: only POST
+	// is the batch.
+	if _, err := store.AppendEvent(ctx, owner.ActorID, map[string]any{"id": "lifecycle", "type": "message_posted", "thread_id": thread, "refs": []any{"thread:" + thread}, "payload": map[string]any{"text": "named lifecycle"}}); err != nil {
+		t.Fatal(err)
+	}
+	status, p = hostHTTP(t, "GET", events, owner.AccessToken, nil)
+	hostStatus(t, status, 200, p)
+	if doc, _, err := store.CreateDocument(ctx, owner.ActorID, map[string]any{"title": "Lifecycle"}, "Lifecycle bytes", "text", nil); err != nil {
+		t.Fatal(err)
+	} else if handle := anyString(doc["handle"]); handle == "lifecycle" || anyString(doc["id"]) == "lifecycle" {
+		status, p = hostHTTP(t, "GET", env.server.URL+"/docs/lifecycle", owner.AccessToken, nil)
+		hostStatus(t, status, 200, p)
+	} else {
+		t.Logf("document handle %q; GET /docs/lifecycle not exercised", handle)
 	}
 	tooMany := make([]any, lifecycleBatchMaxItems+1)
 	for i := range tooMany {

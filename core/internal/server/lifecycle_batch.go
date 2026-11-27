@@ -52,12 +52,39 @@ type lifecycleBatchHandler func(http.ResponseWriter, *http.Request, handlerOptio
 func registerLifecycleBatchRoutes(registerRoute func(string, routeAccessClassifier, http.HandlerFunc), opts handlerOptions) {
 	// Archive and trash are recovery mutations, as on the single routes; a
 	// read-only workspace refuses unarchive and restore items one by one.
-	classify := exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationRecovery, http.MethodPost)
-	registerRoute("/events/lifecycle", classify, func(w http.ResponseWriter, r *http.Request) {
+	batch := exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationRecovery, http.MethodPost)
+	// "lifecycle" is also a legal event id and document handle. Only POST is
+	// the batch; every other method reaches that event or document exactly as
+	// /events/{id} and /docs/{id} serve it.
+	classify := func(events bool) routeAccessClassifier {
+		return func(r *http.Request) routeAccessRequirement {
+			switch {
+			case r.Method == http.MethodPost:
+				return batch(r)
+			case r.Method == http.MethodGet, !events && (r.Method == http.MethodPatch || r.Method == http.MethodPut):
+				return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, supported: true}
+			}
+			return routeAccessRequirement{}
+		}
+	}
+	registerRoute("/events/lifecycle", classify(true), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleGetEvent(w, r, opts, "lifecycle")
+			return
+		}
 		handleLifecycleBatch(w, r, opts, "/events/", true, handleEventLifecycle)
 	})
-	registerRoute("/docs/lifecycle", classify, func(w http.ResponseWriter, r *http.Request) {
-		handleLifecycleBatch(w, r, opts, "/docs/", false, handleDocumentLifecycle)
+	registerRoute("/docs/lifecycle", classify(false), func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			handleGetDocument(w, r, opts, "lifecycle")
+		case http.MethodPatch:
+			handlePatchDocument(w, r, opts, "lifecycle")
+		case http.MethodPut:
+			handlePutDocument(w, r, opts, "lifecycle")
+		default:
+			handleLifecycleBatch(w, r, opts, "/docs/", false, handleDocumentLifecycle)
+		}
 	})
 }
 
