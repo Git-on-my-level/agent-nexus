@@ -2856,7 +2856,7 @@ Generated Help: docs list
 - Output: Returns `{ documents }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `docs`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - List knowledge docs: `anx docs list --knowledge`
 
@@ -2884,7 +2884,7 @@ Generated Help: docs history
 - Output: Returns `{ document_ref, document_handle, revisions }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - List revision history: `anx docs history doc:runbook`
 
@@ -2933,7 +2933,7 @@ Generated Help: docs archive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Archive a document: `anx docs archive doc:runbook --reason "superseded"`
 
@@ -2968,7 +2968,7 @@ Generated Help: docs unarchive
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`
 - Examples:
   - Unarchive a document: `anx docs unarchive doc:runbook`
 
@@ -3003,7 +3003,7 @@ Generated Help: docs restore
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Restore a trashed document: `anx docs restore doc:runbook`
 
@@ -3039,7 +3039,7 @@ Generated Help: docs purge
 - Output: Returns `{ purged, document_ref, document_handle }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `human_only`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Purge a trashed document: `anx docs purge doc:runbook`
 
@@ -3074,7 +3074,7 @@ Generated Help: docs revision get
 - Output: Returns `{ document_ref, document_handle, revision }`; internal document_id may appear for admin/debug compatibility.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`, `revisions`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs search`, `docs trash`, `docs unarchive`
 
 Inputs:
   Required:
@@ -3415,7 +3415,7 @@ Generated Help: events get
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `events`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3444,7 +3444,7 @@ Generated Help: events create
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`, `ask_title_invalid`, `ask_title_too_long`, `ask_body_invalid`, `busy`
 - Concepts: `events`, `write`
-- Adjacent commands: `debug events archive`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3509,7 +3509,7 @@ Generated Help: events stream
 - Output: Resource messages use `event: event` with JSON data `{ "event": <event> }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
@@ -3535,7 +3535,7 @@ Generated Help: events tail
 - Output: Resource messages use `event: event` with JSON data `{ "event": <event> }`. A `resume` control has empty JSON data and is excluded from delivered-event counts (see core/docs/http-api.md).
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events trash`, `debug events unarchive`
 
 
 Global flags:
@@ -3561,7 +3561,7 @@ Generated Help: events archive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
-- Adjacent commands: `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3597,7 +3597,7 @@ Generated Help: events unarchive
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events stream`, `debug events trash`
 
 Inputs:
   Required:
@@ -3633,7 +3633,7 @@ Generated Help: events trash
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `events`, `write`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events restore`, `debug events stream`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events restore`, `debug events stream`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -3669,7 +3669,7 @@ Generated Help: events restore
 - Output: Returns `{ event }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `events`, `write`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events list`, `debug events stream`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events list`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Inputs:
   Required:
@@ -7333,7 +7333,7 @@ Generated Help: docs create
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Create from a local file: `anx docs create --topic topic:launch --title "Runbook" --body-file runbook.md`
 
@@ -7407,7 +7407,7 @@ Generated Help: docs search
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `search_repair_pending`
 - Concepts: `docs`
 - Agent notes: Default search uses independent current document heads and comments. AND terms may span the current head and live comments of one authorized document. Punctuation-normalized phrases must match one resource. Latin diacritics fold as in the released unicode61 tokenizer (remove_diacritics=1). Each resource covers at most 65536 source/normalized bytes and 4096 distinct terms. Results use stable document order, not corpus-wide BM25 ranking. Pages contain at most 100 documents and can be empty with next_cursor while bounded candidates are verified. Follow next_cursor until absent. Content, authority, filter or reader-mode changes invalidate cursors; restart without cursor. search_coverage describes the active reader, including on empty pages. An operational aggregate fallback preserves its legacy FTS5 semantics and refuses stale results while lazy repair is pending (503).
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs trash`, `docs unarchive`
 - Examples:
   - Search knowledge: `anx docs search "runbook" --knowledge --limit 20`
 
@@ -7458,7 +7458,7 @@ Generated Help: docs put
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Path `{document_id}` is the public handle (or `document:<handle>`). If that handle exists, a new revision is appended and metadata (`title`, `source`, `tags`, `hosts`, `verified_at`) is updated. If it does not exist, the document is created with that handle. Visibility/lifecycle is unchanged. CLI `anx docs put -` reads the body from stdin.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Publish from stdin: `anx docs put - --handle kb-shared --title "Note" --tags knowledge --source https://example.invalid/note.md`
 
@@ -7556,7 +7556,7 @@ Generated Help: docs comment
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Posts a `message_posted` event on the document backing thread. Optional `reply_to` or `parent_id` creates a reply. Comment refs (`event:<handle>`) are stable across document revisions and are the deep-link identity.
-- Adjacent commands: `docs archive`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Post a comment: `anx docs comment doc:runbook "Host B found this"`
 
@@ -7610,7 +7610,7 @@ Generated Help: docs comments
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`
 - Concepts: `docs`
 - Agent notes: Comments are the document backing-thread `message_posted` events, projected with stable `event:<handle>` refs that survive document revisions. `reply_to` is the parent comment ref for threaded replies; `parent_id` is the same parent as an internal id.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - List comments: `anx docs comments doc:runbook`
 
@@ -7658,7 +7658,7 @@ Generated Help: docs comments reply
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Posts a reply `message_posted` event with `reply_to` set to `{comment_id}`. Prefer `docs comment --reply-to` from the CLI.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Reply in thread: `anx docs comments reply doc:runbook event:note --body "Acknowledged"`
 
@@ -7711,7 +7711,7 @@ Generated Help: docs get
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Concepts: `docs`
 - Agent notes: Returns `{ document, revision }` including the head revision body. CLI `--format md` prints only the markdown body. Knowledge docs expose `source`, `hosts`, and `verified_at`.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Print markdown body: `anx docs get kb-shared --format md`
 
@@ -7759,7 +7759,7 @@ Generated Help: docs comments edit
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Updates the comment body in place. Only the original author may edit. The comment `ref`/`handle` stay the same so UI deep-links remain valid across edits and document revisions.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Edit own comment: `anx docs comments edit doc:runbook event:note --body "Corrected"`
 
@@ -7810,7 +7810,7 @@ Generated Help: docs comments delete
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `forbidden`, `quota_exceeded`
 - Concepts: `docs`, `write`
 - Agent notes: Trashes the backing `message_posted` event. Only the original author may delete. The comment ref stays stable; list omits trashed comments.
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Delete own comment: `anx docs comments delete doc:runbook event:note`
 
@@ -8435,7 +8435,7 @@ Generated Help: events list
 - Output: Returns `{ events, page_info }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`
 - Concepts: `events`
-- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
+- Adjacent commands: `debug events archive`, `debug events create`, `debug events get`, `debug events lifecycle-many`, `debug events restore`, `debug events stream`, `debug events trash`, `debug events unarchive`
 
 Local Help: events list
 
@@ -8889,7 +8889,7 @@ Generated Help: docs revise
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `revisions`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revision get`, `docs search`, `docs trash`, `docs unarchive`
 - Examples:
   - Revise from a local file: `anx docs revise doc:runbook --body-file runbook.md`
 
@@ -8951,7 +8951,7 @@ Generated Help: docs trash
 - Output: Returns `{ document, revision }`.
 - Error codes: `auth_required`, `invalid_request`, `invalid_token`, `not_found`, `conflict`, `quota_exceeded`
 - Concepts: `docs`, `write`
-- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
+- Adjacent commands: `docs archive`, `docs comment`, `docs comments`, `docs comments delete`, `docs comments edit`, `docs comments reply`, `docs create`, `docs get`, `docs history`, `docs lifecycle-many`, `docs list`, `docs patch`, `docs purge`, `docs put`, `docs restore`, `docs revise`, `docs revision get`, `docs search`, `docs unarchive`
 - Examples:
   - Trash a document: `anx docs trash doc:runbook --reason "obsolete"`
 
