@@ -12427,7 +12427,6 @@ export const commandRegistry = [
             "ruling_id"
         ],
         "adjacent_commands": [
-            "rulings.confirm",
             "rulings.create",
             "rulings.list",
             "rulings.propose",
@@ -12439,8 +12438,7 @@ export const commandRegistry = [
     },
     {
         "command_id": "rulings.confirm",
-        "cli_path": "rulings confirm",
-        "group": "rulings",
+        "cli_path": "",
         "method": "POST",
         "path": "/rulings/{ruling_id}/confirm",
         "operation_id": "confirmOperatingRuling",
@@ -12477,14 +12475,6 @@ export const commandRegistry = [
         },
         "path_params": [
             "ruling_id"
-        ],
-        "adjacent_commands": [
-            "rulings.applied",
-            "rulings.create",
-            "rulings.list",
-            "rulings.propose",
-            "rulings.projection",
-            "rulings.revoke"
         ],
         "go_method": "RulingsConfirm",
         "ts_method": "rulingsConfirm"
@@ -12543,7 +12533,6 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "rulings.applied",
-            "rulings.confirm",
             "rulings.list",
             "rulings.propose",
             "rulings.projection",
@@ -12580,7 +12569,6 @@ export const commandRegistry = [
         "agent_notes": "Any authenticated member. One indexed page; pass include_revoked=true for history.",
         "adjacent_commands": [
             "rulings.applied",
-            "rulings.confirm",
             "rulings.create",
             "rulings.propose",
             "rulings.projection",
@@ -12618,7 +12606,6 @@ export const commandRegistry = [
         "agent_notes": "Pages include the revision used for cache consistency.",
         "adjacent_commands": [
             "rulings.applied",
-            "rulings.confirm",
             "rulings.create",
             "rulings.list",
             "rulings.propose",
@@ -12722,7 +12709,6 @@ export const commandRegistry = [
         },
         "adjacent_commands": [
             "rulings.applied",
-            "rulings.confirm",
             "rulings.create",
             "rulings.list",
             "rulings.projection",
@@ -12764,7 +12750,6 @@ export const commandRegistry = [
         ],
         "adjacent_commands": [
             "rulings.applied",
-            "rulings.confirm",
             "rulings.create",
             "rulings.list",
             "rulings.propose",

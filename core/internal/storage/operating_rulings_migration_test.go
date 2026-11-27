@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 )
 
 func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
-	for _, version := range []int{147, 150} {
+	for _, version := range []int{147, 150, 151} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ctx := context.Background()
 			layout := NewLayout(t.TempDir())
@@ -34,6 +35,11 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				VALUES('answer-old','a','answer','A?','Yes','ask-a','human','2026-11-25',7,NULL,''),
 				('revoked-old','b','answer','B?','No','ask-b','human','2026-11-25',3,'2026-11-26','human')`)
 			}
+			if version == 151 {
+				commentSearchExec(t, db, `INSERT INTO standing_rulings(id,title_key,kind,question,created_by,created_at,ruling_id,status)
+				VALUES('R-20261127-01','','operating','','human','2026-11-27T10:00:00Z','R-20261127-01','proposed'),
+				('R-20261127-02','','operating','','human','2026-11-27T10:00:00.5Z','R-20261127-02','proposed')`)
+			}
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -42,8 +48,23 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer ws.Close()
-			if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM operating_ruling_positions`); n != 0 {
-				t.Fatalf("legacy answers entered operating projection: %d", n)
+			wantOperating := 0
+			if version == 151 {
+				wantOperating = 2
+			}
+			if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM operating_ruling_positions`); n != wantOperating {
+				t.Fatalf("operating projection has %d rows, want %d", n, wantOperating)
+			}
+			if version == 151 {
+				const newest = `SELECT ruling_id FROM operating_ruling_positions WHERE status='proposed' ORDER BY rtrim(created_at,'Z') DESC,ruling_id LIMIT 1`
+				var id, plan string
+				var step, parent, unused int
+				if err := ws.DB().QueryRowContext(ctx, newest).Scan(&id); err != nil || id != "R-20261127-02" {
+					t.Fatalf("newest pre-upgrade ruling=%q err=%v", id, err)
+				}
+				if err := ws.DB().QueryRowContext(ctx, "EXPLAIN QUERY PLAN "+newest).Scan(&step, &parent, &unused, &plan); err != nil || !strings.Contains(plan, "idx_standing_rulings_proposed_utc") {
+					t.Fatalf("pending order is not indexed: %q err=%v", plan, err)
+				}
 			}
 			if version >= 148 {
 				if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM standing_rulings WHERE ruling_id IS NULL AND scope='workspace' AND status='' AND kind='answer'
@@ -59,7 +80,7 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				t.Fatal(err)
 			}
 			commentSearchExec(t, ws.DB(), `UPDATE standing_ruling_revision SET version=17`)
-			commentSearchExec(t, ws.DB(), `DELETE FROM schema_migrations WHERE version=151`)
+			commentSearchExec(t, ws.DB(), `DELETE FROM schema_migrations WHERE version IN (151,152)`)
 			if err := ws.Close(); err != nil {
 				t.Fatal(err)
 			}

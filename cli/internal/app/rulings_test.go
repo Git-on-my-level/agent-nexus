@@ -29,7 +29,7 @@ func rulingFixture(t *testing.T, file string) []byte {
 }
 
 func TestRulingsCheckGolden(t *testing.T) {
-	index, err := decodeRulingIndex(rulingFixture(t, "index.json"))
+	index, err := decodeRulingIndex(rulingFixture(t, "index.json"), defaultRulingImportMax)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestRulingsImportReusesKeysAndPreservesIndex(t *testing.T) {
 	if len(posts) != 8 || !reflect.DeepEqual(posts[:4], posts[4:]) || posts[0].RequestKey == "" || posts[0].StatusHint != "spent" || posts[1].SupersededByHint != posts[3].ID || len(posts[3].Relations) != 2 || !reflect.DeepEqual(posts[3].Aliases, []string{"R41"}) {
 		t.Fatalf("incorrect import: %+v", posts)
 	}
-	_, err = decodeRulingIndex(bytes.Replace(rulingFixture(t, "index.json"), []byte(`["R41"]`), []byte(`["R17"]`), 1))
+	_, err = decodeRulingIndex(bytes.Replace(rulingFixture(t, "index.json"), []byte(`["R41"]`), []byte(`["R17"]`), 1), defaultRulingImportMax)
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("duplicate alias accepted: %v", err)
 	}

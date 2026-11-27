@@ -2839,19 +2839,17 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:   []string{"rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID:  "rulings.confirm",
-		CLIPath:    "rulings confirm",
-		Group:      "rulings",
+		CLIPath:    "",
 		Method:     "POST",
 		Path:       "/rulings/{ruling_id}/confirm",
 		PathParams: []string{"ruling_id"},
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.create",
@@ -2862,7 +2860,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.list",
@@ -2873,7 +2871,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.projection",
@@ -2884,7 +2882,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "query",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.revoke"},
 	},
 	{
 		CommandID: "rulings.propose",
@@ -2895,7 +2893,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID:  "rulings.revoke",
@@ -2907,7 +2905,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection"},
+		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection"},
 	},
 	{
 		CommandID:  "runs.get",

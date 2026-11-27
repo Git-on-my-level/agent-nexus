@@ -6941,7 +6941,7 @@ paths:
       x-anx-command-id: rulings.confirm
       x-anx-agent-notes: Human principals only. Confirm from Decide.
       x-anx-output-envelope: "Returns `{ ruling }`."
-      x-anx-cli-path: rulings confirm
+      x-anx-cli-hidden: true
       x-anx-why: Make the proposed rule authoritative.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
@@ -15473,8 +15473,8 @@ components:
         cost: { type: string, maxLength: 80 }
     OperatingRulingID:
       type: string
-      pattern: '^R-[0-9]{8}-[0-9]{2}$'
-      description: Caller-pinned immutable date ID, unique within one workspace.
+      pattern: '^R-[0-9]{8}-(?:0[1-9]|[1-9][0-9])$'
+      description: Immutable caller-pinned ID, unique within one workspace. YYYYMMDD must be a valid Gregorian calendar date and NN is a sequence from 01 to 99.
     OperatingRulingRelation:
       type: object
       additionalProperties: false

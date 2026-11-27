@@ -177,7 +177,6 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `agent.notification-receipts.stream`
 
-- CLI path: ``
 - HTTP: `GET /stream/agent-notification-receipts`
 - Stability: `beta`
 - Surface: `projection`
@@ -1949,7 +1948,6 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home.read`
 
-- CLI path: ``
 - HTTP: `POST /home/read`
 - Stability: `beta`
 - Surface: `canonical`
@@ -1961,7 +1959,6 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `home.unread`
 
-- CLI path: ``
 - HTTP: `GET /home/unread`
 - Stability: `beta`
 - Surface: `canonical`
@@ -2876,7 +2873,6 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `rulings.confirm`
 
-- CLI path: `rulings confirm`
 - HTTP: `POST /rulings/{ruling_id}/confirm`
 - Stability: `beta`
 - Surface: `canonical`

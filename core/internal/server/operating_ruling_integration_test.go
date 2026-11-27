@@ -12,6 +12,52 @@ import (
 	"agent-nexus-core/internal/primitives"
 )
 
+func TestOperatingRulingDecideWindowUsesFractionalTimestamp(t *testing.T) {
+	requireIntegrationTest(t)
+	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})
+	store := env.primitiveStore.(*primitives.Store)
+	ctx := context.Background()
+	whole := time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC)
+	post := func(n int, created time.Time) string {
+		t.Helper()
+		id := fmt.Sprintf("R-20261127-%02d", n)
+		_, err := store.ProposeOperatingRuling(ctx, "author", primitives.OperatingRulingProposal{
+			RulingID: id, Scope: "workspace", Topic: "window", Title: id, Body: "Rule", SourceQuote: "Quote",
+		}, created)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return "ruling:" + id
+	}
+	older := post(1, whole)
+	newer := post(2, whole.Add(500*time.Millisecond))
+	for n := 3; n <= primitives.BriefSectionLimit+1; n++ {
+		post(n, whole.Add(time.Second))
+	}
+	items, partial, err := store.OperatingRulingDecisions(ctx, whole.Add(time.Minute))
+	if err != nil || !partial || len(items) != primitives.BriefSectionLimit {
+		t.Fatalf("pending window has %d rows, partial=%v, err=%v", len(items), partial, err)
+	}
+	refs := map[string]bool{}
+	for _, row := range items {
+		refs[row["ref"].(string)] = true
+	}
+	if refs[older] || !refs[newer] {
+		t.Fatalf("wrong same-second cutoff: older=%v newer=%v", refs[older], refs[newer])
+	}
+}
+
+func TestValidOperatingRulingIDCalendarAndSequence(t *testing.T) {
+	for id, want := range map[string]bool{
+		"R-20261127-00": false, "R-20260229-01": false, "R-20261301-01": false,
+		"R-20240229-01": true, "R-20261127-99": true,
+	} {
+		if got := primitives.ValidOperatingRulingID(id); got != want {
+			t.Errorf("ValidOperatingRulingID(%q) = %v, want %v", id, got, want)
+		}
+	}
+}
+
 func TestOperatingRulingDecideAndProjection(t *testing.T) {
 	requireIntegrationTest(t)
 	env := newAuthIntegrationEnv(t, authIntegrationOptions{bootstrapToken: testBootstrapToken})

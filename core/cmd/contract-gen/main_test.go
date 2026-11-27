@@ -3,9 +3,32 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
+
+func TestOperatingRulingIDContractCalendarAndSequence(t *testing.T) {
+	raw, err := os.ReadFile("../../../contracts/anx-openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Components struct {
+			Schemas map[string]struct{ Pattern, Description string }
+		}
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	schema := doc.Components.Schemas["OperatingRulingID"]
+	pattern, err := regexp.Compile(schema.Pattern)
+	if err != nil || pattern.MatchString("R-20261127-00") || !pattern.MatchString("R-20261127-01") || !pattern.MatchString("R-20261127-99") || !strings.Contains(schema.Description, "valid Gregorian calendar date") {
+		t.Fatalf("ruling ID schema must constrain the sequence and describe calendar validation: %+v, err=%v", schema, err)
+	}
+}
 
 func TestValidateXAnxAuthoringFailsNewRequiredGap(t *testing.T) {
 	doc := openAPIDocument{

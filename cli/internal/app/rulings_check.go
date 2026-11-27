@@ -21,6 +21,7 @@ import (
 )
 
 const bareRulingID = `R-[0-9]{8}-[0-9]{2}|R[0-9]+(?:\.[0-9]+)?`
+const rulingStatusAmbiguous = "ambiguous ruling"
 
 var rulingTag = regexp.MustCompile(`ruling["']?[ \t]*[:=][ \t]*["']?`)
 var legacyRuling = regexp.MustCompile(`^R[0-9]+$`)
@@ -105,13 +106,19 @@ func (s rulingReferenceScanner) references(line string) []rulingReference {
 		}
 		token := line[start:end]
 		name, _, _ := strings.Cut(token, ".")
+		prev, _ := utf8.DecodeLastRuneInString(line[:start])
 		if legacyRuling.MatchString(name) {
-			prev, _ := utf8.DecodeLastRuneInString(line[:start])
-			if rulingWord(prev) || prev == '-' || prev == '/' {
+			next, _ := utf8.DecodeRuneInString(line[end:])
+			suffix, priority := strings.CutPrefix(line[end:], " P")
+			digit, _ := utf8.DecodeRuneInString(suffix)
+			if rulingWord(prev) || prev == '-' || prev == '/' || prev == '$' || rulingWord(next) || (priority && unicode.IsDigit(digit)) {
 				continue
 			}
 		} else {
 			name = token
+			if rulingDateID.MatchString(name) && (rulingWord(prev) || prev == '-') {
+				continue
+			}
 		}
 		byStart[start] = rulingReference{token: token, name: name}
 	}
@@ -160,6 +167,8 @@ func (s rulingReferenceScanner) scan(file, text string, names map[string]map[str
 			status := anyString(row["status"])
 			next := anyString(row["superseded_by"])
 			switch {
+			case status == rulingStatusAmbiguous:
+				id = "?"
 			case row == nil && rulingDateID.MatchString(ref.name):
 				id, status = "?", "unknown ruling ID"
 			case id == "":
@@ -245,8 +254,8 @@ func rulingCheckFiles(ctx context.Context, cwd, root string, args rulingsArgs) (
 		if err := readRulingJSON(surfacesPath, &surfaces); err != nil {
 			return nil, nil, err
 		}
-		if surfaces.Include == nil {
-			return nil, nil, fmt.Errorf("%s must specify an include array", surfacesPath)
+		if len(surfaces.Include) == 0 {
+			return nil, nil, fmt.Errorf("%s must specify a non-empty include array", surfacesPath)
 		}
 		for _, patterns := range [][]string{surfaces.Include, surfaces.Exclude, surfaces.LiveInclude} {
 			for _, pattern := range patterns {
@@ -321,6 +330,9 @@ func rulingCheckFiles(ctx context.Context, cwd, root string, args rulingsArgs) (
 		if info, err := os.Lstat(file); err == nil && info.Mode().IsRegular() {
 			files = append(files, rulingFile{name, file})
 		}
+	}
+	if len(files) == 0 {
+		return nil, nil, fmt.Errorf("enforcement globs in %s match no tracked regular files", surfacesPath)
 	}
 	return files, allow, nil
 }

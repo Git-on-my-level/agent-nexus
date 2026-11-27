@@ -102,6 +102,10 @@ var recentMigrations = []migration{
 	// upgrade instead of repairing or guessing.
 	{Version: 150, ApplyChunk: retireLegacyAccessLedgerChunk, BetweenChunks: checkpointMigrationWAL, Verify: verifyRetiredAccessLedger},
 	{Version: 151, AfterApply: installOperatingRulings},
+	{Version: 152, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_standing_rulings_proposed_utc ON standing_rulings(rtrim(created_at,'Z') DESC,ruling_id) WHERE status='proposed' AND ruling_id IS NOT NULL`,
+		`DROP INDEX IF EXISTS idx_standing_rulings_proposed`,
+	}},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

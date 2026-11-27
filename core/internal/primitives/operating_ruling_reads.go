@@ -116,7 +116,9 @@ func (s *Store) readOperatingRulings(ctx context.Context, suffix string, args ..
 func (s *Store) OperatingRulingDecisions(ctx context.Context, now time.Time) ([]map[string]any, bool, error) {
 	// Bound candidate traversal before checking reader access. A restrictive
 	// reader can otherwise force SQLite to walk every proposal to fill a page.
-	ids, err := s.operatingRulingPositions(ctx, `WHERE status='proposed' ORDER BY created_at DESC,ruling_id LIMIT ?`, BriefSectionLimit+1)
+	// Removing the UTC terminator makes RFC3339Nano's optional fraction
+	// sort after the whole second. Migration 152 indexes this expression.
+	ids, err := s.operatingRulingPositions(ctx, `WHERE status='proposed' ORDER BY rtrim(created_at,'Z') DESC,ruling_id LIMIT ?`, BriefSectionLimit+1)
 	if err != nil || len(ids) == 0 {
 		return nil, false, err
 	}

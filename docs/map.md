@@ -63,7 +63,7 @@ Where things live. Generated; never hand-edited.
 | core/cmd/anx-idle-fixture                  | 1     | anx-idle-fixture creates or settles marked synthetic data only.                                                                                                                                                                                                       |
 | core/cmd/anx-observe                       | 1     | anx-observe is an operator-owned, read-only source/JIT diagnostic runner.                                                                                                                                                                                             |
 | core/cmd/anx-sqlite-compact                | 2     | anx-sqlite-compact writes a verified, compacted copy of a stopped workspace database.                                                                                                                                                                                 |
-| core/cmd/contract-gen                      | 3     | contract-gen regenerates the OpenAPI-derived contract artifacts                                                                                                                                                                                                       |
+| core/cmd/contract-gen                      | 4     | contract-gen regenerates the OpenAPI-derived contract artifacts                                                                                                                                                                                                       |
 | core/cmd/route-inventory                   | 1     | route-inventory combines the HTTP contract and intentional exception registry with the actual router's access classifiers.                                                                                                                                            |
 | core/cmd/test-sql-fixture                  | 1     | Test-only legacy fixture writer.                                                                                                                                                                                                                                      |
 | core/internal/actors                       | 2     | Package actors stores the workspace actor registry                                                                                                                                                                                                                    |
@@ -200,7 +200,7 @@ Hand-written files over the 800-line ratchet (scripts/check-file-sizes.py keeps 
 | Lines | File                                                                               |
 | ----- | ---------------------------------------------------------------------------------- |
 | 2838  | web-ui/src/lib/devWorkspaceFixtures.js                                             |
-| 2432  | core/cmd/contract-gen/main.go                                                      |
+| 2426  | core/cmd/contract-gen/main.go                                                      |
 | 2296  | core/internal/server/handler.go                                                    |
 | 2253  | web-ui/scripts/qa-visual.mjs                                                       |
 | 2078  | web-ui/src/routes/o/[organization]/w/[workspace]/docs/[documentId]/+page.svelte    |

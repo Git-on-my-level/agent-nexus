@@ -184,6 +184,8 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 	messages[stale.Code] = stale.Message
 	unavailable := unavailableRulingProjectionWarning("https://workspace.example.com")
 	messages[unavailable.Code] = unavailable.Message
+	collision := rulingNameCollisionWarning("R1", []string{"https://one.example.com", "https://two.example.com"})
+	messages[collision.Code] = collision.Message
 
 	ruling := map[string]any{"ref": "ruling:r1", "question": "Rerun the diagnostic?", "answer": "Yes"}
 	covered, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "card:x", "ask")

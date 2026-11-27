@@ -169,8 +169,9 @@ applying the proposal.
 
 Core owns workspace state and enforces uniqueness in that workspace. The CLI
 reads authorized workspaces from its local enrollment catalog and combines
-their account-scope rulings with the selected workspace's rulings. It fails
-on duplicate IDs or aliases. Workspaces that share a topic should publish its
+their account-scope rulings with the selected workspace's rulings. It warns
+when multiple visible workspaces claim an ID or alias, and refuses a lookup
+or write that uses that ambiguous name. Workspaces that share a topic should publish its
 rulings together so one transaction can supersede them. The cache is advisory.
 The live ask path continues to apply answer and not-a-decision rulings.
 
@@ -180,11 +181,14 @@ directory. `list`, `show` and `check` refresh after 15 minutes by default
 these commands use its matching local snapshot and warn with
 `rulings_projection_stale`. Use `ruling: R-YYYYMMDD-NN` in instructions.
 Run `anx rulings check <path>` for an explicit scan. Checking without paths
-requires a tracked `rulings/surfaces.json` with an `include` array.
+requires a tracked `rulings/surfaces.json` with a non-empty `include` array.
+A surface configuration matching no tracked regular files exits 2.
 `anx rulings check` reports obsolete references and allows the direct superseder
-on the same line.
+on the same line. A report with findings exits 1 and has `ok: false` in JSON.
 
 `anx rulings import --file index.json` preserves IDs, aliases, source locations,
-lifecycle hints and supersession declarations. The generated index contains
+lifecycle hints and supersession declarations. It validates the entire index
+before submitting proposals and accepts up to 1,000 entries by default. Set
+`--max-entries` to use a larger explicit bound. The generated index contains
 headings and source locations. Proposals from it show the heading and source
 location so the human can consult the original context before confirmation.

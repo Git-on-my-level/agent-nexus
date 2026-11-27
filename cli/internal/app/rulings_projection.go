@@ -38,12 +38,13 @@ type rulingCollection struct {
 	rows        []map[string]any
 	names       map[string]map[string]any
 	namespaces  map[string]string
+	collisions  map[string][]string
 	projections []map[string]any
 	warnings    []output.Warning
 }
 
 func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, allowPartial bool) (rulingCollection, error) {
-	out := rulingCollection{names: map[string]map[string]any{}, namespaces: map[string]string{}}
+	out := rulingCollection{names: map[string]map[string]any{}, namespaces: map[string]string{}, collisions: map[string][]string{}}
 	catalog, dir, err := a.workspaceCatalog(cfg)
 	if err != nil {
 		return out, err
@@ -110,23 +111,30 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 				}
 				id = strings.TrimPrefix(anyString(ruling["ref"]), "ruling:")
 			} else if base != selected && ruling["scope"] != "account" {
-				// Hidden outside this workspace's selected view, but still
-				// contributes to account-wide name collision checks below.
-				if err := out.claimRulingNames(ruling, id, base); err != nil {
-					return out, err
-				}
 				continue
 			}
 			if err := out.claimRulingNames(ruling, id, base); err != nil {
 				return out, err
 			}
-			for _, name := range rulingNames(ruling, id) {
-				out.names[name] = ruling
-			}
 			out.rows = append(out.rows, ruling)
 		}
 	}
+	var ambiguous []string
+	for name := range out.collisions {
+		ambiguous = append(ambiguous, name)
+	}
+	sort.Strings(ambiguous)
+	for _, name := range ambiguous {
+		out.warnings = append(out.warnings, rulingNameCollisionWarning(name, out.collisions[name]))
+	}
 	return out, nil
+}
+
+func rulingNameCollisionWarning(name string, homes []string) output.Warning {
+	return output.Warning{
+		Code: "ruling_name_collision", Message: fmt.Sprintf("ruling name %q occurs in %s", name, strings.Join(homes, ", ")),
+		Details: map[string]any{"name": name, "workspace_urls": homes},
+	}
 }
 
 func unavailableRulingProjectionWarning(base string) output.Warning {
@@ -157,9 +165,19 @@ func (c rulingCollection) claimRulingNames(ruling map[string]any, id, base strin
 			return errnorm.Local("rulings_projection_invalid", "ruling has an empty ID or alias")
 		}
 		if old, exists := c.namespaces[name]; exists {
-			return errnorm.Local("ruling_name_collision", fmt.Sprintf("ruling name %q occurs in %s and %s", name, old, base))
+			homes := c.collisions[name]
+			if len(homes) == 0 {
+				homes = []string{old}
+			}
+			if homes[len(homes)-1] == base {
+				return errnorm.Local("rulings_projection_invalid", fmt.Sprintf("duplicate ruling name %q in %s", name, base))
+			}
+			c.collisions[name] = append(homes, base)
+			c.names[name] = map[string]any{"kind": "operating", "status": rulingStatusAmbiguous}
+			continue
 		}
 		c.namespaces[name] = base
+		c.names[name] = ruling
 	}
 	return nil
 }
@@ -209,6 +227,9 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		return rulingProjection{}, false, err
 	}
 	projection.BaseURL, projection.Principal, projection.FetchedAt = base, principal, start
+	if projection.Revision == "legacy" {
+		return projection, false, nil
+	}
 	if err := saveRulingProjection(path, projection); err != nil {
 		return rulingProjection{}, false, errnorm.Wrap(errnorm.KindLocal, "rulings_cache_write_failed", "cannot save the ruling projection", err)
 	}
@@ -259,7 +280,7 @@ func readRulingProjection(path, base, principal string) (rulingProjection, error
 	if err != nil {
 		return p, err
 	}
-	if len(raw) > rulingProjectionSize || json.Unmarshal(raw, &p) != nil || p.BaseURL != base || p.Principal != principal || p.Revision == "" || p.FetchedAt.IsZero() || p.Rulings == nil {
+	if len(raw) > rulingProjectionSize || json.Unmarshal(raw, &p) != nil || p.BaseURL != base || p.Principal != principal || p.Revision == "" || p.Revision == "legacy" || p.FetchedAt.IsZero() || p.Rulings == nil {
 		return p, errors.New("invalid ruling projection")
 	}
 	return p, nil
@@ -363,7 +384,7 @@ func (a *App) fetchOperatingRulingPages(ctx context.Context, cfg config.Resolved
 		}
 		res, err := a.invokeRawJSON(ctx, cfg, "rulings pull", http.MethodGet, path, nil)
 		if err != nil {
-			if cursor == "" && errnorm.ExitCode(err) == 3 {
+			if cursor == "" && intValue(asMap(errnorm.Normalize(err).Details)["status"]) == http.StatusNotFound {
 				p.Revision = "legacy"
 				return p, false, nil
 			}

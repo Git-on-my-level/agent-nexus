@@ -17,6 +17,7 @@ type rulingsArgs struct {
 	verb, ref, surfaces, file    string
 	includeRevoked, strictLegacy bool
 	paths                        []string
+	maxEntries                   int
 	proposal                     rulingProposalArgs
 }
 
@@ -60,6 +61,7 @@ func parseRulingsArgs(args []string) (rulingsArgs, error) {
 		parsed.proposal.bind(fs)
 	case "import":
 		fs.StringVar(&parsed.file, "file", "", "Generated rulings index")
+		fs.IntVar(&parsed.maxEntries, "max-entries", defaultRulingImportMax, "Maximum index entries to submit")
 	default:
 		return parsed, errnorm.Usage("unknown_subcommand", rulingsUsage())
 	}
@@ -73,6 +75,8 @@ func parseRulingsArgs(args []string) (rulingsArgs, error) {
 		return parsed, errnorm.Usage("invalid_args", rulingsUsage())
 	case parsed.verb == "import" && parsed.file == "":
 		return parsed, errnorm.Usage("invalid_args", "usage: anx rulings import --file index.json")
+	case parsed.verb == "import" && parsed.maxEntries <= 0:
+		return parsed, errnorm.Usage("invalid_flags", "--max-entries must be positive")
 	case parsed.verb == "propose":
 		return parsed, parsed.proposal.validate()
 	}
@@ -95,7 +99,7 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 	case "propose":
 		return a.proposeRuling(ctx, cfg, p.proposal)
 	case "import":
-		return a.importRulings(ctx, cfg, p.file)
+		return a.importRulings(ctx, cfg, p.file, p.maxEntries)
 	}
 	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull", p.verb == "list" || p.verb == "show")
 	if err != nil {
@@ -106,7 +110,7 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 	}
 	switch p.verb {
 	case "pull":
-		return &commandResult{Data: map[string]any{"rulings": len(snapshot.rows), "projections": snapshot.projections}}, nil
+		return &commandResult{Data: map[string]any{"rulings": len(snapshot.rows), "projections": snapshot.projections}, Warnings: snapshot.warnings}, nil
 	case "check":
 		for _, projection := range snapshot.projections {
 			if projection["source_revision"] != "legacy" {
@@ -115,7 +119,11 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 		}
 		return nil, errnorm.Usage("rulings_index_unavailable", "no configured workspace serves the operating ruling projection")
 	case "show":
-		ruling := snapshot.names[strings.TrimPrefix(p.ref, "ruling:")]
+		ref := strings.TrimPrefix(p.ref, "ruling:")
+		if homes := snapshot.collisions[ref]; len(homes) > 0 {
+			return nil, errnorm.New(errnorm.KindRemote, "conflict", rulingNameCollisionWarning(ref, homes).Message)
+		}
+		ruling := snapshot.names[ref]
 		if ruling == nil {
 			return nil, errnorm.New(errnorm.KindRemote, "ruling_not_found", "ruling not found: "+p.ref)
 		}

@@ -326,13 +326,14 @@ func (a *App) Run(args []string) int {
 			a.writeOutput(a.Stdout, ref+"\n")
 		}
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
+	exitCode := 0
+	if result != nil {
+		exitCode = result.ExitCode
+	}
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: exitCode == 0, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
-	if result != nil {
-		return result.ExitCode
-	}
-	return 0
+	return exitCode
 }
 
 func (a *App) writeAskAutoCreatedWarning(warnings []output.Warning) {

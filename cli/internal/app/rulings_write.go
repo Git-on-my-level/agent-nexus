@@ -189,6 +189,9 @@ func sameRulingProposal(row map[string]any, req rulingWrite) bool {
 
 func checkRulingWriteNames(snapshot rulingCollection, req rulingWrite, selected string) error {
 	for _, name := range append([]string{req.ID}, req.Aliases...) {
+		if homes := snapshot.collisions[name]; len(homes) > 0 {
+			return errnorm.New(errnorm.KindRemote, "conflict", rulingNameCollisionWarning(name, homes).Message)
+		}
 		if home := snapshot.namespaces[name]; home != "" && home != selected {
 			return errnorm.New(errnorm.KindRemote, "conflict", "ruling name "+name+" is already pinned in "+home)
 		}
@@ -237,7 +240,9 @@ type rulingIndexEntry struct {
 	Origin       string   `json:"origin"`
 }
 
-func decodeRulingIndex(raw []byte) ([]rulingIndexEntry, error) {
+const defaultRulingImportMax = 1000
+
+func decodeRulingIndex(raw []byte, maxEntries int) ([]rulingIndexEntry, error) {
 	var index struct {
 		SchemaVersion int                `json:"schema_version"`
 		GeneratedFrom []string           `json:"generated_from"`
@@ -248,6 +253,9 @@ func decodeRulingIndex(raw []byte) ([]rulingIndexEntry, error) {
 	}
 	if index.SchemaVersion != 1 || len(index.GeneratedFrom) == 0 || index.Rulings == nil {
 		return nil, fmt.Errorf("expected a generated schema_version 1 rulings index")
+	}
+	if len(index.Rulings) > maxEntries {
+		return nil, fmt.Errorf("index has %d entries, exceeding --max-entries %d", len(index.Rulings), maxEntries)
 	}
 	names := map[string]bool{}
 	entries := map[string]rulingIndexEntry{}
@@ -260,6 +268,9 @@ func decodeRulingIndex(raw []byte) ([]rulingIndexEntry, error) {
 		case "active", "superseded", "revoked", "spent", "historical":
 		default:
 			return nil, fmt.Errorf("invalid status for %s", r.ID)
+		}
+		if (r.Status == "revoked" || r.Status == "spent") && len(r.Supersedes) != 0 {
+			return nil, fmt.Errorf("retired ruling %s cannot supersede another ruling", r.ID)
 		}
 		switch r.Origin {
 		case "rulings-file", "register", "wave3", "hostctl":
@@ -293,12 +304,12 @@ func decodeRulingIndex(raw []byte) ([]rulingIndexEntry, error) {
 	return index.Rulings, nil
 }
 
-func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path string) (*commandResult, error) {
+func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path string, maxEntries int) (*commandResult, error) {
 	raw, err := a.readRulingInput(path, rulingProjectionSize)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := decodeRulingIndex(raw)
+	entries, err := decodeRulingIndex(raw, maxEntries)
 	if err != nil {
 		return nil, errnorm.Usage("invalid_rulings_index", err.Error())
 	}
@@ -332,7 +343,7 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 		}
 		result = append(result, sent)
 	}
-	return &commandResult{Data: map[string]any{"rulings": result, "submitted": len(result)}}, nil
+	return &commandResult{Data: map[string]any{"rulings": result, "submitted": len(result)}, Warnings: snapshot.warnings}, nil
 }
 
 func (a *App) readRulingInput(path string, max int64) ([]byte, error) {

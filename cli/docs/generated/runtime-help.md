@@ -10906,7 +10906,7 @@ Send an operating ruling for human confirmation in Decide.
 Import a generated Phase 0 index as proposals for human review in Decide.
 
 ```text
-anx rulings import --file index.json
+anx rulings import --file index.json [--max-entries <count>]
 Import a generated Phase 0 index as proposals for human review in Decide.
 ```
 
