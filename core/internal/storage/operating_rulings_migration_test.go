@@ -52,6 +52,26 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 					t.Fatalf("migration changed legacy answers: %d matched", n)
 				}
 			}
+			// Older upgrade fixtures and recovery replay the ledger against
+			// already-present columns. The cursor key and revision must survive.
+			var key string
+			if err := ws.DB().QueryRowContext(ctx, `SELECT hex(cursor_key) FROM standing_ruling_revision`).Scan(&key); err != nil {
+				t.Fatal(err)
+			}
+			commentSearchExec(t, ws.DB(), `UPDATE standing_ruling_revision SET version=17`)
+			commentSearchExec(t, ws.DB(), `DELETE FROM schema_migrations WHERE version=151`)
+			if err := ws.Close(); err != nil {
+				t.Fatal(err)
+			}
+			replayed, err := InitializeWorkspace(ctx, layout.RootDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer replayed.Close()
+			var replayedKey string
+			if err := replayed.DB().QueryRowContext(ctx, `SELECT hex(cursor_key) FROM standing_ruling_revision WHERE version=17`).Scan(&replayedKey); err != nil || key != replayedKey {
+				t.Fatalf("replay rotated the projection authority: %v", err)
+			}
 		})
 	}
 }

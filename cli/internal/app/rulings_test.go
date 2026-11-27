@@ -241,3 +241,26 @@ func TestRulingsOfflineHostAssertionAndAccountFanout(t *testing.T) {
 		t.Fatalf("remote workspace scope escaped its selected workspace: %d %q", code, out)
 	}
 }
+
+func TestRulingsLegacyActivePageSurvivesHistoryLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/rulings/projection":
+			_, _ = w.Write([]byte(`{"rulings":[],"source_revision":"fixture"}`))
+		case r.URL.Query().Get("include_revoked") == "true":
+			_, _ = w.Write([]byte(`{"rulings":[{"id":"new-revoked","ref":"ruling:new-revoked","kind":"answer","active":false}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"rulings":[{"id":"old-active","ref":"ruling:old-active","kind":"answer","active":true}]}`))
+		}
+	}))
+	defer server.Close()
+	home, cwd := t.TempDir(), t.TempDir()
+	code, out, _ := runRulingCLI(t, home, cwd, server.URL, nil, "rulings", "list")
+	if code != 0 || !strings.Contains(out, "ruling:old-active") || strings.Contains(out, "ruling:new-revoked") {
+		t.Fatalf("active legacy list: %d %q", code, out)
+	}
+	code, out, _ = runRulingCLI(t, home, cwd, server.URL, nil, "rulings", "list", "--include-revoked")
+	if code != 0 || !strings.Contains(out, "ruling:old-active") || !strings.Contains(out, "ruling:new-revoked") {
+		t.Fatalf("combined legacy list: %d %q", code, out)
+	}
+}

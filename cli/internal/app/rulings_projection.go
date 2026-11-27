@@ -279,12 +279,22 @@ func (a *App) fetchRulingProjection(ctx context.Context, cfg config.Resolved) (r
 		if changed {
 			continue
 		}
-		legacy, err := a.invokeRawJSON(ctx, authCfg, "rulings list", http.MethodGet, "/rulings?include_revoked=true", nil)
-		if err != nil {
-			return p, err
-		}
-		for _, raw := range asSlice(commandResultBody(legacy)["rulings"]) {
-			p.Rulings = append(p.Rulings, asMap(raw))
+		// The legacy history page is capped independently. Fetch its live
+		// page too so newer revocations cannot crowd out active answers.
+		seen := map[string]bool{}
+		for _, path := range []string{"/rulings?include_revoked=true", "/rulings"} {
+			legacy, err := a.invokeRawJSON(ctx, authCfg, "rulings list", http.MethodGet, path, nil)
+			if err != nil {
+				return p, err
+			}
+			for _, raw := range asSlice(commandResultBody(legacy)["rulings"]) {
+				row := asMap(raw)
+				ref := firstNonEmpty(anyString(row["ref"]), anyString(row["id"]))
+				if !seen[ref] {
+					seen[ref] = true
+					p.Rulings = append(p.Rulings, row)
+				}
+			}
 		}
 		return p, nil
 	}

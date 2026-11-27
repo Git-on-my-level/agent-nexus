@@ -155,6 +155,8 @@ func (s rulingReferenceScanner) scan(file, text string, names map[string]map[str
 				continue
 			case status == "revoked" && row["status_hint"] == "spent" && row["decided_at"] != nil:
 				status = "spent"
+			case status == "proposed" && row["status_hint"] == "historical":
+				continue
 			case status == "proposed" || status == "superseded" || status == "revoked" || status == "spent":
 			case status == "active" && strict && !ref.tagged && legacyRuling.MatchString(ref.name):
 				status = "legacy citation"
