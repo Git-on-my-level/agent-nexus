@@ -10,6 +10,8 @@
    * A chunk of the loaded build that can no longer be fetched (the same
    * cause) shows its reload prompt here too.
    */
+  import { onMount } from "svelte";
+  import { version } from "$app/environment";
   import { beforeNavigate } from "$app/navigation";
   import { updated } from "$app/stores";
   import { get } from "svelte/store";
@@ -18,6 +20,19 @@
   beforeNavigate(({ willUnload, to }) => {
     if (get(updated) && !willUnload && to?.url)
       globalThis.location.href = to.url.href;
+  });
+
+  // A tab that loads announces its build. An open tab of another build
+  // checks for an update at once instead of at its next poll.
+  onMount(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel("anx:build");
+    channel.onmessage = (event) => {
+      if (event.data?.version && event.data.version !== version)
+        void updated.check?.().catch(() => {});
+    };
+    channel.postMessage({ version });
+    return () => channel.close();
   });
 </script>
 

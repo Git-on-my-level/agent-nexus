@@ -1,20 +1,23 @@
 <script>
-  /** One decision's "select for skipping" checkbox, in the list or the stack. */
-  let { decision, checked = false, ontoggle, labelled = false } = $props();
+  /**
+   * One decision's "select for skipping" checkbox: a row's leading cell in
+   * the list, or a gutter beside the card in the phone stack.
+   */
+  let { decision, checked = false, ontoggle, gutter = false } = $props();
 </script>
 
 <label
-  class={labelled
-    ? "flex min-h-8 items-center gap-2 px-1 text-micro text-fg-muted"
+  class={gutter
+    ? "flex min-h-11 w-9 shrink-0 cursor-pointer items-start justify-start pt-4"
     : "flex shrink-0 cursor-pointer items-center pl-3"}
-  title={labelled ? undefined : "Select for skipping (X)"}
+  title="Select for skipping (X)"
 >
   <input
     type="checkbox"
+    class={gutter ? "size-5" : undefined}
     {checked}
     onchange={() => ontoggle(decision.inboxItemId)}
-    aria-label={labelled ? undefined : `Select ${decision.title}`}
+    aria-label={`Select ${decision.title}`}
     data-decide-pick={decision.inboxItemId}
   />
-  {#if labelled}Select{/if}
 </label>

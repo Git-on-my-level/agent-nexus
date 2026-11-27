@@ -40,6 +40,7 @@
     canSkip,
     pendingSkip,
     skippingItemIds,
+    toggledPick,
     undoSkip,
   } from "$lib/decideSkip.js";
   import {
@@ -115,12 +116,9 @@
   );
   /** Rows ticked for a bulk skip, by inbox item id. */
   let picked = $state(new Set());
-  function togglePick(id) {
-    const next = new Set(picked);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    picked = next;
-  }
+  // Phone stack: checkboxes show once the reader starts selecting.
+  let selecting = $state(false);
+  const togglePick = (id) => (picked = toggledPick(picked, id));
   /*
    * Only the response queue decides: a send that fails (or needs the reader,
    * like an unreachable requester) drops back to `failed`/`attention` and the
@@ -506,7 +504,13 @@
   {/if}
 
   {#if $brief.data && (decisions.length || $pendingSkip)}
-    <DecideBulkBar {decisions} bind:selected={picked} href={href("/decide")} />
+    <DecideBulkBar
+      {decisions}
+      bind:selected={picked}
+      bind:selecting
+      compact={!wide}
+      href={href("/decide")}
+    />
   {/if}
 
   {#if !$brief.data && $brief.error}
@@ -543,7 +547,7 @@
     <ul class="space-y-3" aria-label="Decisions" data-decide-stack>
       {#each stack as decision (decision.ref)}
         <li
-          class="scroll-mt-4 rounded-md transition-shadow {highlighted ===
+          class="flex scroll-mt-4 items-start rounded-md transition-shadow {highlighted ===
           decision.inboxItemId
             ? 'ring-2 ring-accent'
             : ''}"
@@ -554,7 +558,7 @@
         >
           {#if folded.has(decision.inboxItemId) && !decisions.includes(decision)}
             <div
-              class="flex min-h-11 items-center gap-2 rounded-md border border-line-subtle bg-panel px-4 text-meta text-fg-muted"
+              class="flex min-h-11 flex-1 items-center gap-2 rounded-md border border-line-subtle bg-panel px-4 text-meta text-fg-muted"
               data-decide-answered
             >
               <span class="min-w-0 flex-1 truncate"
@@ -568,15 +572,17 @@
               >
             </div>
           {:else}
-            {#if canSkip(decision)}
+            {#if (selecting || picked.size) && canSkip(decision)}
               <DecidePick
                 {decision}
-                labelled
+                gutter
                 checked={picked.has(decision.inboxItemId)}
                 ontoggle={togglePick}
               />
             {/if}
-            <DecisionCard {decision} variant="stack" {now} {onAnswered} />
+            <div class="min-w-0 flex-1">
+              <DecisionCard {decision} variant="stack" {now} {onAnswered} />
+            </div>
           {/if}
         </li>
       {/each}

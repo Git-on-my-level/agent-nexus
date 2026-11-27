@@ -35,8 +35,11 @@ const CLOSED_MESSAGES = [
 ];
 const closedElsewhere = (error) =>
   error?.status === 409 &&
-  error?.body?.error?.code === "conflict" &&
-  CLOSED_MESSAGES.includes(error?.body?.error?.message);
+  ((error?.body?.error?.code === "conflict" &&
+    CLOSED_MESSAGES.includes(error?.body?.error?.message)) ||
+    // This skip's own key already answered the ask: a skip has no words of
+    // the reader's to lose, so it is done.
+    error?.body?.error?.code === "idempotency_conflict");
 
 /**
  * A skip tells the requester when it can be told. When core says the

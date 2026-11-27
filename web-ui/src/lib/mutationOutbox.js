@@ -24,7 +24,16 @@ import {
 } from "$lib/attachmentWork.js";
 import { commitInboxView } from "$lib/inboxViewCache.js";
 import { failureSubject, mutationFailure } from "$lib/mutationStatus.js";
-import { isKnownOperation, revivable } from "$lib/outboxOperations.js";
+import {
+  claimAttention,
+  isKnownOperation,
+  requestRetry,
+  retryInLock,
+  retryRequested,
+  sendableAttention,
+  stampFailure,
+} from "$lib/outboxOperations.js";
+import { recoveredReceipts } from "$lib/outboxReceipts.js";
 import {
   MAX_DASHBOARD_PINS,
   PINS_OPERATION,
@@ -52,9 +61,6 @@ export const mutationConfirmations = writable({});
 const volatile = new Map();
 const inFlightInTab = new Set();
 const confirmedInTab = new Map();
-// Rows an older tab marked "Unknown saved operation", revived once per tab.
-const revived = new Set();
-const revive = (entry) => revivable(entry) && !revived.has(entry.key);
 let timer;
 let running = false;
 let requested = false;
@@ -939,10 +945,9 @@ async function attempt(entry) {
     const saved = latest.value;
     // Revive and send under one lock hold, so an older tab waiting on the lock
     // finds the row sent rather than failing it again.
-    const again = revive(saved) && revived.add(entry.key);
-    if ((saved.state === "attention" && !again) || saved.nextAt > Date.now())
-      return;
-    entry = again ? { ...saved, failure: null } : saved;
+    const due = saved.nextAt <= Date.now() || retryRequested(saved);
+    if (!due || (saved.state === "attention" && !claimAttention(saved))) return;
+    entry = saved.state === "attention" ? { ...saved, failure: null } : saved;
     if (replayExpired(entry.createdAt)) throw expiredReplayError();
     const fingerprint = await intentFingerprint(entry.request);
     const records = await listLocalWork(entry.scope, "mutation", {
@@ -1084,7 +1089,9 @@ async function attempt(entry) {
       volatile.delete(entry.key);
       return;
     }
-    entry.failure = mutationFailure(error, failureSubject(entry.operation));
+    entry.failure = stampFailure(
+      mutationFailure(error, failureSubject(entry.operation)),
+    );
     entry.state = entry.failure.state;
     entry.nextAt =
       Date.now() +
@@ -1132,59 +1139,9 @@ export async function recoverMutations() {
       });
       if (scope !== get(localWorkScope) || !canUseLocalWorkScope(scope))
         continue;
-      // A tab can mount after a batch already confirmed elsewhere. Recover
-      // its delivery display from the persisted receipt, without replaying
-      // confirmation events, clearing drafts or issuing historical refreshes.
-      mutationConfirmations.update((previous) => {
-        const next = { ...previous };
-        for (const record of records) {
-          const receipt = record.confirmation;
-          const submitted = record.submission;
-          if (!record.deleted || record.deletionReason !== "confirmed")
-            continue;
-          const current = next[submitted?.target];
-          if (
-            (current?.confirmedAt ?? current?.createdAt ?? 0) >
-            submitted?.confirmedAt
-          )
-            continue;
-          // Another tab's pin edit landed: its receipt is core's newer set.
-          if (
-            submitted?.operation === PINS_OPERATION &&
-            Array.isArray(receipt?.document_refs)
-          ) {
-            next[submitted.target] = {
-              key: record.target,
-              scope,
-              epoch: record.epoch,
-              target: submitted.target,
-              operation: submitted.operation,
-              state: "sent",
-              confirmedAt: submitted.confirmedAt,
-              result: receipt,
-            };
-            continue;
-          }
-          if (
-            submitted?.operation !== "docs.lifecycle" ||
-            !Array.isArray(receipt?.documents)
-          )
-            continue;
-          next[submitted.target] = {
-            key: record.target,
-            scope,
-            epoch: record.epoch,
-            target: submitted.target,
-            operation: submitted.operation,
-            state: "sent",
-            confirmedAt: submitted.confirmedAt,
-            receipt,
-            result: receipt,
-            request: { items: receipt.documents.map(({ id }) => ({ id })) },
-          };
-        }
-        return next;
-      });
+      mutationConfirmations.update((previous) =>
+        recoveredReceipts(previous, records, scope),
+      );
       const rows = new Map(
         records
           .filter(
@@ -1228,19 +1185,31 @@ export async function recoverMutations() {
       if (navigator.onLine !== false) {
         const due = entries.find(
           (entry) =>
-            (entry.state !== "attention" || revive(entry)) &&
+            (entry.state !== "attention" || sendableAttention(entry)) &&
             isKnownOperation(entry.operation) &&
-            entry.nextAt <= Date.now() &&
+            (entry.nextAt <= Date.now() || retryRequested(entry)) &&
             !pinEditWaits(entry, entries),
         );
         if (due) {
-          await attempt(due);
+          try {
+            await attempt(due);
+          } catch (error) {
+            // Never stop draining silently: say so, and try again shortly.
+            console.error("Outbox send failed unexpectedly.", error);
+            requested = false;
+            timer = setTimeout(requestRecovery, 5_000);
+            break;
+          }
           requested = true;
           continue;
         }
       }
       const next = entries
-        .filter((e) => e.state !== "attention" && isKnownOperation(e.operation))
+        .filter(
+          (e) =>
+            (e.state !== "attention" || sendableAttention(e)) &&
+            isKnownOperation(e.operation),
+        )
         .map((entry) => entry.nextAt);
       if (next.length && navigator.onLine !== false)
         timer = setTimeout(
@@ -1293,6 +1262,10 @@ export async function retryMutation(key, { asNew = false } = {}) {
     }
     requestRecovery();
     return;
+  }
+  if (retryInLock(entry)) {
+    requestRetry(key);
+    return requestRecovery();
   }
   entry.state = "pending";
   entry.nextAt = Date.now();

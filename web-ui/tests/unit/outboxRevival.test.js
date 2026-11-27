@@ -80,9 +80,16 @@ vi.mock("$lib/localWorkStore.js", () => {
   };
 });
 
-const { recoverMutations } = await import("../../src/lib/mutationOutbox.js");
+const { recoverMutations, retryMutation } =
+  await import("../../src/lib/mutationOutbox.js");
+const { olderTabBlocking } = await import("../../src/lib/outboxOperations.js");
+const { get } = await import("svelte/store");
 
-function stuckSkip(key, operation = "inbox.skip") {
+function stuckSkip(
+  key,
+  operation = "inbox.skip",
+  failure = { state: "attention", detail: "Unknown saved operation" },
+) {
   h.records.set(`mutation|${key}`, {
     target: key,
     value: {
@@ -96,7 +103,7 @@ function stuckSkip(key, operation = "inbox.skip") {
         body: { response_text: "Skipped", outcome: "skipped" },
       },
       state: "attention",
-      failure: { state: "attention", detail: "Unknown saved operation" },
+      failure,
       attempts: 1,
       nextAt: 0,
       createdAt: Date.now(),
@@ -143,5 +150,70 @@ describe("reviving rows an older tab gave up on", () => {
     h.records.get("mutation|k3").value.state = "pending";
     await recoverMutations();
     expect(h.writes.filter((w) => w.kind === "mutation")).toEqual([]);
+  });
+
+  it("waits out an older tab's backoff without giving the row up", async () => {
+    stuckSkip("k4");
+    h.records.get("mutation|k4").value.nextAt = Date.now() + 60_000;
+    await recoverMutations();
+    expect(h.respondInboxItem).not.toHaveBeenCalled();
+    h.records.get("mutation|k4").value.nextAt = 0;
+    await recoverMutations();
+    expect(h.respondInboxItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends again a row an older tab failed after this tab sent it", async () => {
+    stuckSkip("k5");
+    h.respondInboxItem = vi.fn(async () => {
+      throw Object.assign(new Error("boom"), { status: 503 });
+    });
+    await recoverMutations();
+    expect(h.respondInboxItem).toHaveBeenCalledTimes(1);
+    // The older tab claims the pending row and fails it again.
+    stuckSkip("k5");
+    h.respondInboxItem = vi.fn(async () => ({ event: { id: "ev" } }));
+    await recoverMutations();
+    expect(h.respondInboxItem).toHaveBeenCalledTimes(1);
+    expect(get(olderTabBlocking)).toBe(true);
+    expect(h.records.get("mutation|k5")).toMatchObject({ deleted: true });
+  });
+
+  it("retries a stuck skip inside the lock, never writing it pending", async () => {
+    stuckSkip("k6", "inbox.skip", {
+      state: "attention",
+      status: 409,
+      detail: "conflict",
+    });
+    await recoverMutations();
+    expect(h.respondInboxItem).not.toHaveBeenCalled();
+    h.writes.length = 0;
+    await retryMutation("k6");
+    await vi.waitFor(() => expect(h.respondInboxItem).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(h.records.get("mutation|k6")).toMatchObject({ deleted: true }),
+    );
+    const writes = h.writes.filter((w) => w.kind === "mutation");
+    expect(writes.every((w) => w.held)).toBe(true);
+    expect(writes.some((w) => w.state === "pending")).toBe(false);
+  });
+
+  it("treats the skip's own idempotency conflict as done", async () => {
+    stuckSkip("k7");
+    h.respondInboxItem = vi.fn(async () => {
+      throw Object.assign(new Error("conflict"), {
+        status: 409,
+        body: {
+          error: {
+            code: "idempotency_conflict",
+            message: "idempotency key was used for another response",
+          },
+        },
+      });
+    });
+    await recoverMutations();
+    expect(h.records.get("mutation|k7")).toMatchObject({
+      deleted: true,
+      deletionReason: "confirmed",
+    });
   });
 });

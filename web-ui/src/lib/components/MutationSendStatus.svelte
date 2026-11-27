@@ -7,7 +7,7 @@
     retryMutation,
   } from "$lib/mutationOutbox.js";
   import { SKIP, SKIP_MANY } from "$lib/standingRulingSend.js";
-  import { UNKNOWN_OPERATION } from "$lib/outboxOperations.js";
+  import { OLDER_TAB_HELP, UNKNOWN_OPERATION } from "$lib/outboxOperations.js";
   import Time from "$lib/time/Time.svelte";
   import { attachmentFile } from "$lib/attachmentWork.js";
   let { target = "", entry: provided = null } = $props();
@@ -96,7 +96,7 @@
     {#if entry.state !== "sent" && isSkip}
       <p class="mt-1 text-fg-muted">
         {olderTab
-          ? "An older open tab of this app could not send this skip. Reload your other tabs and windows, then retry."
+          ? OLDER_TAB_HELP
           : entry.state === "attention"
             ? entry.failure?.message || "This skip did not go through."
             : "Saved on this device. Waiting for confirmation."}

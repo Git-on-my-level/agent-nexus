@@ -33,6 +33,14 @@ export const SKIP_REASON =
 export const SKIP_UNDO_MS = 5_000;
 
 export const skipTarget = (itemId) => `skip:${itemId}`;
+
+/** The ticked set with this item flipped. */
+export function toggledPick(picked, id) {
+  const next = new Set(picked);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
 const skipManyTarget = (batch) => `skip-many:${batch}`;
 
 /**
