@@ -90,7 +90,7 @@ export const retryRequested = (entry) => retrying.has(entry?.key);
 
 /** What the reader can do about an older tab that keeps failing sends. */
 export const OLDER_TAB_HELP =
-  "An older open tab of this app could not send this. Reload or close your other tabs and windows of this app, then retry.";
+  "An old tab of this app is blocking this. Close your other tabs, then retry.";
 
 /** An older open tab failed a row this page had already sent. */
 export const olderTabBlocking = writable(false);
