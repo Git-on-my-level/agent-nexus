@@ -216,4 +216,28 @@ describe("reviving rows an older tab gave up on", () => {
       deletionReason: "confirmed",
     });
   });
+
+  it("spends a retry on one send even when another tab moved the row", async () => {
+    stuckSkip("k8", "inbox.skip", {
+      state: "attention",
+      status: 409,
+      detail: "conflict",
+    });
+    await recoverMutations();
+    h.respondInboxItem = vi.fn(async () => {
+      throw Object.assign(new Error("busy"), { status: 503 });
+    });
+    // Another tab retried it first and left it pending.
+    const row = h.records.get("mutation|k8").value;
+    await retryMutation("k8");
+    Object.assign(row, { state: "pending", failure: null });
+    await vi.waitFor(() => expect(h.respondInboxItem).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(h.records.get("mutation|k8").value.nextAt).toBeGreaterThan(
+        Date.now(),
+      ),
+    );
+    await recoverMutations();
+    expect(h.respondInboxItem).toHaveBeenCalledTimes(1);
+  });
 });

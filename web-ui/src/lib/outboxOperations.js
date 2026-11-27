@@ -101,8 +101,16 @@ export const sendableAttention = (entry) =>
   isKnownOperation(entry.operation) &&
   (retrying.has(entry.key) || (revivable(entry) && entry.failure?.tab !== TAB));
 
-/** Under the send lock: take an attention row for sending, or leave it. */
-export function claimAttention(entry) {
+/**
+ * Under the send lock: take a due row for sending, or leave it. A retry
+ * request is spent on the one send it admits, whatever state another tab
+ * left the row in, so later failures back off again.
+ */
+export function claimSend(entry) {
+  if (entry?.state !== "attention") {
+    retrying.delete(entry?.key);
+    return true;
+  }
   if (!sendableAttention(entry)) return false;
   const retried = retrying.delete(entry.key);
   if (!retried && sentHere.has(entry.key)) olderTabBlocking.set(true);

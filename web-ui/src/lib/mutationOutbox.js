@@ -25,7 +25,7 @@ import {
 import { commitInboxView } from "$lib/inboxViewCache.js";
 import { failureSubject, mutationFailure } from "$lib/mutationStatus.js";
 import {
-  claimAttention,
+  claimSend,
   isKnownOperation,
   requestRetry,
   retryInLock,
@@ -946,7 +946,7 @@ async function attempt(entry) {
     // Revive and send under one lock hold, so an older tab waiting on the lock
     // finds the row sent rather than failing it again.
     const due = saved.nextAt <= Date.now() || retryRequested(saved);
-    if (!due || (saved.state === "attention" && !claimAttention(saved))) return;
+    if (!due || !claimSend(saved)) return;
     entry = saved.state === "attention" ? { ...saved, failure: null } : saved;
     if (replayExpired(entry.createdAt)) throw expiredReplayError();
     const fingerprint = await intentFingerprint(entry.request);
