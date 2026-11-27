@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -117,5 +118,28 @@ func TestOperatingRulingPageAndConcurrentAliases(t *testing.T) {
 	first, second := <-errorsSeen, <-errorsSeen
 	if !((first == nil && second == primitives.ErrConflict) || (second == nil && first == primitives.ErrConflict)) {
 		t.Fatalf("one write must own the alias: %v, %v", first, second)
+	}
+
+	// Two agents can file before either sees an active rule. The second
+	// confirmation must revalidate against the winner's committed state.
+	submissions := []string{"R-20261129-01", "R-20261129-02"}
+	for _, id := range submissions {
+		if err := post(ctx, id, "competing"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range submissions {
+		go func() {
+			_, err := store.ConfirmOperatingRuling(ctx, "human", id, now)
+			errorsSeen <- err
+		}()
+	}
+	first, second = <-errorsSeen, <-errorsSeen
+	if first == nil {
+		first, second = second, first
+	}
+	var missing *primitives.RulingRelationsRequired
+	if second != nil || !errors.As(first, &missing) || len(missing.Missing) != 1 {
+		t.Fatalf("one confirmation must seek a relation to the winner: %v, %v", first, second)
 	}
 }

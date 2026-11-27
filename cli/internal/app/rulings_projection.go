@@ -95,7 +95,7 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force boo
 			return out, err
 		}
 		if stale {
-			out.warnings = append(out.warnings, output.Warning{Code: rulingProjectionStale, Message: "using cached rulings for " + base, Details: map[string]any{"fetched_at": projection.FetchedAt, "source_revision": projection.Revision}})
+			out.warnings = append(out.warnings, staleRulingProjectionWarning(base, projection))
 		}
 		out.projections = append(out.projections, map[string]any{"workspace_url": base, "fetched_at": projection.FetchedAt, "source_revision": projection.Revision})
 		for _, ruling := range projection.Rulings {
@@ -123,6 +123,13 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force boo
 		}
 	}
 	return out, nil
+}
+
+func staleRulingProjectionWarning(base string, projection rulingProjection) output.Warning {
+	return output.Warning{
+		Code: rulingProjectionStale, Message: "using cached rulings for " + base,
+		Details: map[string]any{"fetched_at": projection.FetchedAt, "source_revision": projection.Revision},
+	}
 }
 
 func rulingNames(ruling map[string]any, id string) []string {

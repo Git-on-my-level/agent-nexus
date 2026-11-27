@@ -180,6 +180,9 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 		"ask_overtaken_subject":       "merged since the subject last moved",
 		"ask_auto_created_card":       "No --subject-ref: created card:x on board:tasks",
 	}
+	stale := staleRulingProjectionWarning("https://workspace.example.com", rulingProjection{})
+	messages[stale.Code] = stale.Message
+
 	ruling := map[string]any{"ref": "ruling:r1", "question": "Rerun the diagnostic?", "answer": "Yes"}
 	covered, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "card:x", "ask")
 	told, _ := askRedirectResult(map[string]any{"redirected": "tell", "ruling": ruling}, "card:x", "ask")

@@ -25,8 +25,8 @@ func TestPerformanceOperatingRulingsRoutes(t *testing.T) {
 		if i > 4080 {
 			status = "proposed"
 		}
-		if _, err := tx.Exec(`INSERT INTO standing_rulings(id,title_key,kind,question,created_by,created_at,ruling_id,ruling_title,body,source_quote,status)
-		 VALUES(?,'','operating','','scale-author',?,?,'Scale ruling','Operating rule.','Source quote.',?)`, id, start.Add(time.Duration(i)*time.Second).Format(time.RFC3339), id, status); err != nil {
+		if _, err := tx.Exec(`INSERT INTO standing_rulings(id,title_key,kind,question,created_by,created_at,ruling_id,ruling_title,body,source_quote,status,topic)
+		 VALUES(?,'','operating','','scale-author',?,?,'Scale ruling','Operating rule.','Source quote.',?,?)`, id, start.Add(time.Duration(i)*time.Second).Format(time.RFC3339), id, status, fmt.Sprintf("ruling-topic-%d", i)); err != nil {
 			t.Fatal(err)
 		}
 		mostRecent = id
