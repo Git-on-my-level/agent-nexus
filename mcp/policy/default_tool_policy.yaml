@@ -438,6 +438,9 @@ commands:
   "docs.list":
     classification: exposed_read
     reason: "document inventory read"
+  "docs.lifecycle_many":
+    classification: unsupported_other
+    reason: "bulk lifecycle transport for the web UI; agents use the single-document lifecycle tools"
   "docs.patch":
     classification: exposed_write
     reason: "ordinary document update with concurrency controls"
@@ -480,6 +483,9 @@ commands:
   "events.list":
     classification: exposed_read
     reason: "bounded event inventory read"
+  "events.lifecycle_many":
+    classification: unsupported_other
+    reason: "bulk lifecycle transport for the web UI; agents use the single-event lifecycle tools"
   "events.restore":
     classification: exposed_write
     reason: "ordinary reversible event lifecycle write"

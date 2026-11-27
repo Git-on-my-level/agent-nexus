@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 281
+- Command count: 283
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -25,8 +25,8 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | curation | 5 |
 | deliveries | 3 |
 | derived | 1 |
-| docs | 19 |
-| events | 8 |
+| docs | 20 |
+| events | 9 |
 | git | 5 |
 | home | 2 |
 | hook | 1 |
@@ -68,7 +68,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 14 |
-| unsupported_other | 18 |
+| unsupported_other | 20 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
@@ -80,7 +80,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 73 | not represented as direct MCP tools in v1 |
+| unsupported | 75 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -210,6 +210,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | docs.comments.update | docs | PATCH | /docs/{document_id}/comments/{comment_id} | exposed_write | author edit of a document comment |
 | docs.create | docs | POST | /docs | exposed_write | ordinary document creation |
 | docs.get | docs | GET | /docs/{document_id} | exposed_read | document read |
+| docs.lifecycle_many | docs | POST | /docs/lifecycle | unsupported_other | bulk lifecycle transport for the web UI; agents use the single-document lifecycle tools |
 | docs.list | docs | GET | /docs | exposed_read | document inventory read |
 | docs.patch | docs | PATCH | /docs/{document_id} | exposed_write | ordinary document update with concurrency controls |
 | docs.purge | docs | POST | /docs/{document_id}/purge | gated_sensitive | permanent deletion is destructive |
@@ -224,6 +225,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | events.archive | events | POST | /events/{event_id}/archive | exposed_write | ordinary reversible event lifecycle write |
 | events.create | events | POST | /events | exposed_write | ask withdrawal is an agent write restricted by the server to the requester's own open asks |
 | events.get | events | GET | /events/{event_id} | exposed_read | event read |
+| events.lifecycle_many | events | POST | /events/lifecycle | unsupported_other | bulk lifecycle transport for the web UI; agents use the single-event lifecycle tools |
 | events.list | events | GET | /events | exposed_read | bounded event inventory read |
 | events.restore | events | POST | /events/{event_id}/restore | exposed_write | ordinary reversible event lifecycle write |
 | events.stream | events | GET | /stream/events | unsupported_streaming | SSE stream needs a bounded read adapter before MCP exposure |

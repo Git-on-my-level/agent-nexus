@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { setup } from "./helpers/durable-discussion.js";
+import { routeLifecycleBatch } from "./helpers/lifecycle-batch.js";
 const root = "/o/local/w/local/docs";
 const stamp = "2026-10-13T00:00:00Z";
 const revision = {
@@ -17,7 +18,7 @@ const json = (route, body, status = 200) =>
         contentType: "application/json",
         body: JSON.stringify(body),
       });
-async function prepare(context, send, state = "active") {
+async function prepare(context, send, state = "active", batchRoute = true) {
   await setup(context, () => {});
   const docs = ["one", "two"].map((id) => ({
     id: `lifecycle-${id}`,
@@ -41,9 +42,16 @@ async function prepare(context, send, state = "active") {
       json(route, { revisions: [revision] }),
     );
   }
+  const single = (route) => send(route, docs);
   await context.route(
     /\/docs\/lifecycle-(?:one|two)\/(?:archive|unarchive|trash|restore)$/,
-    (route) => send(route, docs),
+    single,
+  );
+  docs.batches = await routeLifecycleBatch(
+    context,
+    "docs",
+    single,
+    () => batchRoute,
   );
   return docs;
 }
@@ -90,12 +98,14 @@ test("complete bulk checkpoint precedes first send; 524 recovery reuses all keys
 }, info) => {
   let healthy = false;
   const attempts = [],
-    committed = new Map();
+    committed = new Map(),
+    acknowledged = new Set();
   await prepare(context, (route, docs) => {
     const body = route.request().postDataJSON();
     attempts.push({ url: route.request().url(), body });
     if (!committed.has(body.request_key))
       committed.set(body.request_key, confirmed(route, docs));
+    if (healthy) acknowledged.add(body.request_key);
     return json(
       route,
       healthy
@@ -131,7 +141,9 @@ test("complete bulk checkpoint precedes first send; 524 recovery reuses all keys
   const other = await context.newPage();
   await other.goto(root);
   healthy = true;
-  await expect.poll(() => committed.size).toBe(2);
+  // One batch attempts both documents, so wait for both acknowledgements.
+  await expect.poll(() => acknowledged.size).toBe(2);
+  expect(committed.size).toBe(2);
   await expect(page.locator("[data-unsent-indicator]")).toHaveCount(0);
   for (const attempt of attempts)
     expect(attempt.body).toEqual(
@@ -224,7 +236,7 @@ test("offline complete batch survives tab closure", async ({
   context,
 }, info) => {
   const attempts = [];
-  await prepare(context, (route, docs) => {
+  const { batches } = await prepare(context, (route, docs) => {
     attempts.push(route.request().postDataJSON());
     return json(route, confirmed(route, docs));
   });
@@ -248,6 +260,41 @@ test("offline complete batch survives tab closure", async ({
   await other.goto(root);
   await expect(status(other, "sent")).toBeVisible();
   expect(attempts).toHaveLength(2);
+  // One bulk action is one batch request, not one request per document.
+  expect(batches).toHaveLength(1);
+  expect(batches[0].items.map((item) => item.id)).toEqual([
+    "lifecycle-one",
+    "lifecycle-two",
+  ]);
+  for (const [index, item] of batches[0].items.entries())
+    expect(item).toEqual({
+      ...attempts[index],
+      id: item.id,
+      action: "archive",
+    });
+});
+
+test("without the batch route a bulk archive falls back to one request per document", async ({
+  page,
+  context,
+}) => {
+  const singles = [];
+  const { batches } = await prepare(
+    context,
+    (route, docs) => {
+      singles.push(new URL(route.request().url()).pathname);
+      return json(route, confirmed(route, docs));
+    },
+    "active",
+    false,
+  );
+  await bulk(page);
+  await expect(status(page, "sent")).toBeVisible();
+  expect(batches).toHaveLength(1);
+  expect(singles.map((path) => path.split("/").slice(-2).join("/"))).toEqual([
+    "lifecycle-one/archive",
+    "lifecycle-two/archive",
+  ]);
 });
 
 test("detail restore timeout replays exact request and preserves newer reason in another tab", async ({

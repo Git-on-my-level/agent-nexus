@@ -171,7 +171,7 @@ func (s *Store) ReviseAskPresentation(ctx context.Context, principal auth.Princi
 	} else if err := ValidateAskRevision(patch); err != nil {
 		return nil, err
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

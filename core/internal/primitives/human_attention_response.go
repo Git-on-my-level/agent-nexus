@@ -68,7 +68,7 @@ func (s *Store) AppendHumanAttentionResponse(ctx context.Context, actorID, sourc
 	if err != nil {
 		return nil, false, err
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 	}

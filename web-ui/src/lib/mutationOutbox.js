@@ -55,6 +55,10 @@ import {
   sendTopLevel,
 } from "$lib/groupingPlan.js";
 import { sendStandingMutation } from "$lib/standingRulingSend.js";
+import {
+  isLifecycleOperation,
+  sendLifecycle,
+} from "$lib/lifecycleBatchSend.js";
 
 export const mutationOutbox = writable([]);
 export const mutationConfirmations = writable({});
@@ -152,111 +156,19 @@ async function send(entry, lease = null) {
     }
     return entry.receipt;
   }
-  if (entry.operation === "events.lifecycle") {
-    const methods = {
-      archive: "archiveEvent",
-      unarchive: "unarchiveEvent",
-      trash: "trashEvent",
-      restore: "restoreEvent",
-    };
-    if (!entry.request.selected_bases && entry.request.items.length > 1)
-      throw Object.assign(
-        new Error(
-          "This saved bulk request predates reply version checking. Edit the saved request before sending it.",
-        ),
-        {
-          publicMessage:
-            "Review and edit this saved bulk request before sending it; its selected reply versions need to be protected.",
-        },
-      );
-    for (const item of entry.request.items) {
-      if (entry.receipt?.events?.some((done) => done.id === item.id)) continue;
-      if (!active(entry))
-        throw new Error("The submitting identity is no longer active.");
-      const method = methods[item.action];
-      if (!method)
-        throw Object.assign(new Error("Unknown event action"), { status: 400 });
-      const result = await client[method](
-        item.id,
-        entry.request.selected_bases
-          ? { ...item.body, selected_bases: entry.request.selected_bases }
-          : item.body,
-      );
-      if (result.event?.id !== item.id)
-        throw new Error("Event lifecycle receipt is incomplete.");
-      if (!active(entry))
-        throw new Error("The submitting identity is no longer active.");
-      const covered = entry.request.items.filter(
-        (candidate) =>
-          candidate.action === item.action &&
-          (candidate.id === item.id ||
-            result.affected_event_ids?.includes(candidate.id)),
-      );
-      entry.receipt = {
-        events: [
-          ...(entry.receipt?.events || []),
-          ...covered
-            .filter(
-              (candidate) =>
-                !entry.receipt?.events?.some(
-                  (done) => done.id === candidate.id,
-                ),
-            )
-            .map((candidate) => ({ id: candidate.id, result })),
-        ],
-      };
-      await persist(entry, lease);
-      mutationOutbox.update((rows) =>
-        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
-      );
-      window.dispatchEvent(
-        new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
-      );
-    }
-    return entry.receipt;
-  }
-  if (entry.operation === "docs.lifecycle") {
-    const methods = {
-      archive: "archiveDocument",
-      unarchive: "unarchiveDocument",
-      trash: "trashDocument",
-      restore: "restoreDocument",
-    };
-    for (const item of entry.request.items) {
-      if (entry.receipt?.documents?.some((done) => done.id === item.id))
-        continue;
-      if (!active(entry))
-        throw new Error("The submitting identity is no longer active.");
-      const method = methods[item.action];
-      if (!method)
-        throw Object.assign(new Error("Unknown document action"), {
-          status: 400,
-        });
-      const result = await client[method](item.id, item.body);
-      if (
-        result.document?.id !== item.id ||
-        !result.document?.updated_at ||
-        !result.revision
-      )
-        throw new Error("Document lifecycle receipt is incomplete.");
-      if (!active(entry))
-        throw new Error("The submitting identity is no longer active.");
-      entry.receipt = {
-        documents: [
-          ...(entry.receipt?.documents || []),
-          { id: item.id, result },
-        ],
-      };
-      await persist(entry, lease);
-      mutationOutbox.update((rows) =>
-        rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
-      );
-      window.dispatchEvent(
-        new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
-      );
-    }
-    return entry.receipt;
-  }
+  if (isLifecycleOperation(entry.operation))
+    return sendLifecycle(client, entry, {
+      active: () => active(entry),
+      checkpoint: async () => {
+        await persist(entry, lease);
+        mutationOutbox.update((rows) =>
+          rows.map((row) => (row.key === entry.key ? snapshot(entry) : row)),
+        );
+        window.dispatchEvent(
+          new CustomEvent("anx:mutation-progress", { detail: snapshot(entry) }),
+        );
+      },
+    });
   if (entry.operation === "notifications.settings.set") {
     const result = await client.setNotificationSettings(entry.request.body);
     if (!Array.isArray(result?.channels))

@@ -127,7 +127,7 @@ func (s *Store) CreateAccessRequest(ctx context.Context, actor auth.Principal, g
 	if grant != "auth-admin" || reason == "" || len([]rune(reason)) > 4000 {
 		return AccessRequest{}, auth.ErrInvalidRequest
 	}
-	if s.quota.enabled() {
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
 		s.quotaMu.Lock()
 		defer s.quotaMu.Unlock()
 		// Quota reads use the database pool, so run them before opening a write

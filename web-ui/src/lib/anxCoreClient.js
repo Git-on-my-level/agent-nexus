@@ -8,6 +8,7 @@ import { getExpectedCommandRegistryDigest } from "./commandRegistryDigest.js";
 import { EXPECTED_SCHEMA_VERSION, normalizeBaseUrl } from "./config.js";
 import { appPath } from "./workspacePaths.js";
 import { rulingCommands } from "./anxCoreClientRulings.js";
+import { batchCommands } from "./anxCoreClientBatches.js";
 
 const commandRegistryByID = new Map(
   commandRegistry.map((command) => [command.command_id, command]),
@@ -484,6 +485,7 @@ const adapterCommandTable = [
     (id, payload = {}) => pb(pathParams({ action_id: id }), payload),
   ],
   ...rulingCommands(q, b, pb, pathParams),
+  ...batchCommands(b),
   ["getVersion", "meta.version"],
   ["getHandshake", "meta.handshake"],
   ["createActor", "actors.create", (payload) => ({ options: b(payload) })],

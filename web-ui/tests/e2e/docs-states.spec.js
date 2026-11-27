@@ -493,46 +493,80 @@ async function installDocsApi(page, overrides = {}) {
     }));
   });
 
+  const applyLifecycle = (id, action) => {
+    const current =
+      api.detail[decodeURIComponent(id)] ||
+      api.documents.find((row) => row.id === decodeURIComponent(id));
+    if (current) {
+      const next = { ...current, updated_at: "2026-03-29T11:00:00Z" };
+      if (action === "archive") {
+        next.state = "archived";
+        next.archived_at = "2026-03-29T10:00:00Z";
+        next.archived_by = ACTOR_ID;
+      } else if (action === "unarchive") {
+        next.state = "active";
+        next.archived_at = "";
+        next.archived_by = "";
+      } else if (action === "trash") {
+        next.state = "trashed";
+        next.trashed_at = "2026-03-29T10:00:00Z";
+      } else {
+        next.state = "active";
+        next.trashed_at = "";
+        next.trash_reason = "";
+      }
+      api.detail[decodeURIComponent(id)] = next;
+    }
+    api.documents = api.documents.map((row) =>
+      row.id === decodeURIComponent(id)
+        ? { ...row, state: action === "unarchive" ? "active" : row.state }
+        : row,
+    );
+    return {
+      document: api.detail[decodeURIComponent(id)],
+      revision: revision(decodeURIComponent(id)),
+    };
+  };
   await apiRoute(
     /^\/docs\/[^/]+\/(archive|unarchive|trash|restore)$/,
     (route, pathname) => {
       const [id, action] = pathname.split("/docs/")[1].split("/");
-      return respond(route, `${action}Document`, () => {
-        const current =
-          api.detail[decodeURIComponent(id)] ||
-          api.documents.find((row) => row.id === decodeURIComponent(id));
-        if (current) {
-          const next = { ...current, updated_at: "2026-03-29T11:00:00Z" };
-          if (action === "archive") {
-            next.state = "archived";
-            next.archived_at = "2026-03-29T10:00:00Z";
-            next.archived_by = ACTOR_ID;
-          } else if (action === "unarchive") {
-            next.state = "active";
-            next.archived_at = "";
-            next.archived_by = "";
-          } else if (action === "trash") {
-            next.state = "trashed";
-            next.trashed_at = "2026-03-29T10:00:00Z";
-          } else {
-            next.state = "active";
-            next.trashed_at = "";
-            next.trash_reason = "";
-          }
-          api.detail[decodeURIComponent(id)] = next;
-        }
-        api.documents = api.documents.map((row) =>
-          row.id === decodeURIComponent(id)
-            ? { ...row, state: action === "unarchive" ? "active" : row.state }
-            : row,
-        );
-        return {
-          document: api.detail[decodeURIComponent(id)],
-          revision: revision(decodeURIComponent(id)),
-        };
-      });
+      return respond(route, `${action}Document`, () =>
+        applyLifecycle(id, action),
+      );
     },
   );
+
+  // The batch lifecycle route answers each item as its single route would,
+  // honouring the same per-action hold and failure switches.
+  await apiRoute(/^\/docs\/lifecycle$/, async (route) => {
+    const { items } = route.request().postDataJSON();
+    const results = [];
+    for (const [index, { id, action }] of items.entries()) {
+      const name = `${action}Document`;
+      api.calls.push(name);
+      if (api.hold[name]) await api.hold[name].promise;
+      const failure = api.fail[name];
+      results.push(
+        failure
+          ? {
+              index,
+              status: "failed",
+              http_status: failure.status ?? 500,
+              error: (
+                failure.body ?? errorBody(failure.message ?? String(failure))
+              ).error,
+            }
+          : {
+              index,
+              status: "done",
+              http_status: 200,
+              response: applyLifecycle(encodeURIComponent(id), action),
+            },
+      );
+    }
+    return json(route, 200, { results });
+  });
 
   // Registered after `/docs/{id}` so the more specific search route wins.
   await apiRoute(/^\/docs\/search$/, (route, pathname) => {

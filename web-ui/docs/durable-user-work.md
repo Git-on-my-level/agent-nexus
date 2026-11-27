@@ -449,6 +449,19 @@ Every partial
 receipt is persisted before the next item. Confirmed items are skipped after
 reload; editing unfinished work retains the earlier confirmation history.
 
+Unfinished items go in chunks of 25 through `POST /events/lifecycle`
+(`lifecycleBatchSend.js`), with the shared `selected_bases` sent once per chunk
+and applied by core to every item, so each item's body and replay hash match the
+single route's and a resend through either route replays. Core runs each item
+through the single handler as its own savepoint of one write transaction, so a
+chunk waits for the writer once and commits once. Receipts are checkpointed once
+per chunk; a reply a cascade in the same chunk covered is receipted with its
+ancestor's result even when its own attempt conflicted. Items core defers past
+its write-rate or time budget go in the next chunk, and the first refused item
+fails the entry exactly as the single send would have. A core or hosted proxy
+without the route (404 `endpoint not found` or `route_not_available`, or 405)
+gets one request per item as before.
+
 Cascade discovery uses one recursive query capped at 2,000 descendants and
 cycles deduplicated by `UNION`. Each expansion reads at most 2,002 indexed raw
 candidate edges (at most 2,001 inbound raw reference edges per expanded event)
@@ -519,6 +532,9 @@ local checkpoint before its first send, with separate original keys, actors,
 actions and metadata bases per document. Confirmed receipts are checkpointed
 between documents; recovery skips confirmed items and retries uncertain sends
 with their exact original bodies. Partial failures expose confirmed counts.
+Unfinished documents go in chunks of 25 through `POST /docs/lifecycle`, one
+write transaction and one receipt checkpoint per chunk, with the same per-item
+rules and single-route fallback as event lifecycle.
 Editing keeps newer reason text and transfers only unfinished documents; the
 original batch and receipts remain in recovery history. Only “Use latest version”
 refreshes saved bases. Confirmation retains newer edits in another tab. Failed

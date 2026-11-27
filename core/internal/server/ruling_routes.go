@@ -11,6 +11,7 @@ import (
 // revoking one is a human act, enforced in the handlers.
 func registerCurationAndRulingRoutes(registerRoute func(string, routeAccessClassifier, http.HandlerFunc), opts handlerOptions) {
 	registerRoute("/inbox/responses", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleRespondInboxItems(w, r, opts) })
+	registerLifecycleBatchRoutes(registerRoute, opts)
 	registerRoute("/curation/candidates", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) { handleCurationCandidates(w, r, opts) })
 	registerRoute("/curation/proposals", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationPropose(w, r, opts) })
 	registerRoute("/curation/ungroup", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) { handleCurationUngroup(w, r, opts) })

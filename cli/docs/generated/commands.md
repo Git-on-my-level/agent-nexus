@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `281`
+- Commands: `283`
 
 ## `actors.create`
 
@@ -1596,6 +1596,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Examples:
   - Print markdown body: `anx docs get kb-shared --format md`
 
+## `docs.lifecycle_many`
+
+- CLI path: `docs lifecycle-many`
+- HTTP: `POST /docs/lifecycle`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: A bulk archive, trash, restore or unarchive of a document selection is one request instead of one per document.
+- Concepts: `docs`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `storage_unavailable`
+- Output: Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.
+- Agent notes: Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again.
+
 ## `docs.list`
 
 - CLI path: `docs list`
@@ -1785,6 +1798,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `events`
 - Error codes: `auth_required`, `invalid_token`, `not_found`
 - Output: Returns `{ event }`.
+
+## `events.lifecycle_many`
+
+- CLI path: `events lifecycle-many`
+- HTTP: `POST /events/lifecycle`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: A bulk archive, trash, restore or unarchive of a timeline selection is one request instead of one per event.
+- Concepts: `events`, `write`
+- Error codes: `auth_required`, `invalid_request`, `invalid_token`, `storage_unavailable`
+- Output: Returns `{ results: [{ index, status, http_status?, response?, error? }] }` in request order.
+- Agent notes: Each item replays by its own request_key, so resending a chunk after an ambiguous failure is safe; send deferred items again. A top-level selected_bases applies to every item without its own.
 
 ## `events.list`
 

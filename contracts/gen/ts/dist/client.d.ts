@@ -171,6 +171,7 @@ export declare class AnxClient {
     docsCommentsUpdate(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsCreate(options?: RequestOptions): Promise<InvokeResult>;
     docsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    docsLifecycleMany(options?: RequestOptions): Promise<InvokeResult>;
     docsList(options?: RequestOptions): Promise<InvokeResult>;
     docsPatch(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     docsPurge(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
@@ -185,6 +186,7 @@ export declare class AnxClient {
     eventsArchive(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsCreate(options?: RequestOptions): Promise<InvokeResult>;
     eventsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    eventsLifecycleMany(options?: RequestOptions): Promise<InvokeResult>;
     eventsList(options?: RequestOptions): Promise<InvokeResult>;
     eventsRestore(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     eventsStream(options?: RequestOptions): Promise<InvokeResult>;

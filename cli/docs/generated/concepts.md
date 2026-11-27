@@ -244,7 +244,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `docs`
 
-- Commands: `23`
+- Commands: `24`
 - Command IDs:
   - `docs.archive`
   - `docs.comments.create`
@@ -254,6 +254,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.comments.update`
   - `docs.create`
   - `docs.get`
+  - `docs.lifecycle_many`
   - `docs.list`
   - `docs.patch`
   - `docs.purge`
@@ -289,11 +290,12 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `events`
 
-- Commands: `10`
+- Commands: `11`
 - Command IDs:
   - `events.archive`
   - `events.create`
   - `events.get`
+  - `events.lifecycle_many`
   - `events.list`
   - `events.restore`
   - `events.stream`
@@ -616,7 +618,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `write`
 
-- Commands: `72`
+- Commands: `74`
 - Command IDs:
   - `agent.inbox.answers.read`
   - `agent.inbox.subscribe`
@@ -659,6 +661,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.comments.reply`
   - `docs.comments.update`
   - `docs.create`
+  - `docs.lifecycle_many`
   - `docs.patch`
   - `docs.purge`
   - `docs.put`
@@ -668,6 +671,7 @@ Generated from `contracts/anx-openapi.yaml`.
   - `docs.unarchive`
   - `events.archive`
   - `events.create`
+  - `events.lifecycle_many`
   - `events.restore`
   - `events.trash`
   - `events.unarchive`

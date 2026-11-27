@@ -341,6 +341,11 @@
   },
   {
     "method": "POST",
+    "path": "/docs/lifecycle",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
     "path": "/docs/{document_id}/archive",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
@@ -392,6 +397,11 @@
   {
     "method": "POST",
     "path": "/events",
+    "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
+  },
+  {
+    "method": "POST",
+    "path": "/events/lifecycle",
     "reason": "Mutation or credential issuance; excluded from read budgets after side-effect review."
   },
   {
