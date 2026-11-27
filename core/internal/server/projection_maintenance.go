@@ -210,6 +210,13 @@ func (m *ProjectionMaintainer) RefreshThread(ctx context.Context, threadID strin
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+	// Inside a store batch the batch owns the quota lock and the write
+	// transaction; taking stepMu here would invert the background worker's
+	// stepMu -> quota order. The thread is already dirty and the worker was
+	// notified, so it refreshes once the batch commits.
+	if inStoreBatch(ctx) {
+		return nil
+	}
 
 	// Do not hold stepMu across refreshDerivedTopicProjection; Step uses the same mutex for queue
 	// bookkeeping only (see processDirtyQueue). Holding it through PutDerived would deadlock HTTP

@@ -133,18 +133,24 @@ func (e *Escalator) normalize(ctx context.Context) error {
 		return err
 	}
 	loopstats.Rows(ctx, len(items))
-	for _, p := range items {
-		var decideBy any
-		if askTS, err := time.Parse(time.RFC3339Nano, p.ts); err == nil {
-			if t, ok := ResolveBy(p.raw, askTS); ok {
-				decideBy = stamp(t)
+	if len(items) == 0 {
+		return nil
+	}
+	// One commit for the whole page.
+	return inTx(ctx, e.Store.DB, func(tx *sql.Tx) error {
+		for _, p := range items {
+			var decideBy any
+			if askTS, err := time.Parse(time.RFC3339Nano, p.ts); err == nil {
+				if t, ok := ResolveBy(p.raw, askTS); ok {
+					decideBy = stamp(t)
+				}
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE ask_deadlines SET decide_by=?, normalized=1 WHERE request_event_id=?`, decideBy, p.id); err != nil {
+				return fmt.Errorf("normalize ask deadline: %w", err)
 			}
 		}
-		if _, err := e.Store.DB.ExecContext(ctx, `UPDATE ask_deadlines SET decide_by=?, normalized=1 WHERE request_event_id=?`, decideBy, p.id); err != nil {
-			return fmt.Errorf("normalize ask deadline: %w", err)
-		}
-	}
-	return nil
+		return nil
+	})
 }
 
 type recipient struct{ principal, channel string }

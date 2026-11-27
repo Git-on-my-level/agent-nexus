@@ -237,13 +237,20 @@ func handleRevealSecretsBatch(w http.ResponseWriter, r *http.Request, opts handl
 	}
 
 	if opts.authStore != nil {
+		// One audit transaction for the whole reveal, not one per secret.
+		inputs := make([]auth.AuthAuditEventInput, 0, len(pairs))
+		now := time.Now().UTC()
 		for _, p := range pairs {
-			recordSecretAuditEvent(r.Context(), opts.authStore, principal, auth.AuthAuditEventInput{
+			inputs = append(inputs, auth.AuthAuditEventInput{
 				EventType:    auth.AuthAuditEventSecretRevealed,
 				ActorAgentID: principal.AgentID,
 				ActorActorID: principal.ActorID,
+				OccurredAt:   now,
 				Metadata:     map[string]any{"secret_name": p.Name, "reveal_source": "batch"},
 			})
+		}
+		if err := opts.authStore.RecordSecretAuditEvents(r.Context(), inputs); err != nil {
+			log.Printf("warning: failed to record %d secret audit events: %v", len(inputs), err)
 		}
 	}
 

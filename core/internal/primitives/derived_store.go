@@ -122,14 +122,8 @@ func (s *Store) ReplaceDerivedInboxItems(ctx context.Context, threadID string, i
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM derived_inbox_items WHERE thread_id = ? AND COALESCE(json_extract(data_json,'$.subtype'),'') <> 'report_review_due'`, threadID); err != nil {
-		return fmt.Errorf("delete derived inbox items: %w", err)
-	}
-
-	for _, item := range items {
-		if err := insertDerivedInboxItem(ctx, tx, threadID, item); err != nil {
-			return err
-		}
+	if err := replaceThreadInboxRows(ctx, tx, threadID, items); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {

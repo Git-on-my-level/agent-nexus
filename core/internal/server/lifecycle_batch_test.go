@@ -262,7 +262,7 @@ func TestLifecycleBatchRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	thread := anyString(topic.Topic["thread_id"])
-	for _, id := range []string{"route-a", "route-b"} {
+	for _, id := range []string{"route-a", "route-b", "route-c"} {
 		if _, err := store.AppendEvent(ctx, owner.ActorID, map[string]any{"id": id, "type": "message_posted", "thread_id": thread, "refs": []any{"thread:" + thread}, "payload": map[string]any{"text": id}}); err != nil {
 			t.Fatal(err)
 		}
@@ -306,10 +306,12 @@ func TestLifecycleBatchRoutes(t *testing.T) {
 		saved := lifecycleBatchBudget
 		lifecycleBatchBudget = 0
 		t.Cleanup(func() { lifecycleBatchBudget = saved })
-		status, p := hostHTTP(t, "POST", events, owner.AccessToken, map[string]any{"items": []any{item("route-b", "archive")}})
+		// The first item always runs, so a request makes progress; the rest
+		// wait for the next request once the lock budget is spent.
+		status, p := hostHTTP(t, "POST", events, owner.AccessToken, map[string]any{"items": []any{item("route-c", "archive"), item("route-b", "archive")}})
 		hostStatus(t, status, 200, p)
-		if got := lifecycleBatchResults(t, p); got[0]["status"] != "deferred" {
-			t.Fatalf("want deferred, got %#v", got)
+		if got := lifecycleBatchResults(t, p); got[0]["status"] != "done" || got[1]["status"] != "deferred" {
+			t.Fatalf("want done then deferred, got %#v", got)
 		}
 		if event, _ := store.GetEvent(ctx, "route-b"); anyString(event["archived_at"]) != "" {
 			t.Fatal("deferred item ran")

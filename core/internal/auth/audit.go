@@ -350,6 +350,12 @@ func recordAuthAuditEventTx(ctx context.Context, tx Transaction, input AuthAudit
 }
 
 func (s *Store) RecordSecretAuditEvent(ctx context.Context, input AuthAuditEventInput) error {
+	return s.RecordSecretAuditEvents(ctx, []AuthAuditEventInput{input})
+}
+
+// RecordSecretAuditEvents records several audit events in one transaction,
+// so revealing a batch of secrets commits once instead of once per secret.
+func (s *Store) RecordSecretAuditEvents(ctx context.Context, inputs []AuthAuditEventInput) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("auth store database is not initialized")
 	}
@@ -357,11 +363,13 @@ func (s *Store) RecordSecretAuditEvent(ctx context.Context, input AuthAuditEvent
 	if err != nil {
 		return fmt.Errorf("begin audit tx: %w", err)
 	}
-	if err := s.recordAuthAuditEventTx(ctx, tx, input); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("tx rollback failed: %v", rbErr)
+	for _, input := range inputs {
+		if err := s.recordAuthAuditEventTx(ctx, tx, input); err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("tx rollback failed: %v", rbErr)
+			}
+			return err
 		}
-		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit audit tx: %w", err)

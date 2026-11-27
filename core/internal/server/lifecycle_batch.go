@@ -30,7 +30,7 @@ const lifecycleBatchMaxItems = 100
 // long. The whole batch holds the workspace write lock, so the budget is
 // shorter than respond-many's. Items not started are reported as deferred and
 // are safe to send again. A variable only so tests can force the deferred path.
-var lifecycleBatchBudget = 5 * time.Second
+var lifecycleBatchBudget = 2 * time.Second
 
 var lifecycleBatchActions = map[string]bool{"archive": true, "unarchive": true, "trash": true, "restore": true}
 
@@ -40,12 +40,6 @@ const (
 	lifecycleBatchFailed   = "failed"
 	lifecycleBatchDeferred = "deferred"
 )
-
-// lifecycleBatchRunner is a store that runs many mutations in one write
-// transaction (primitives.Store.RunBatch).
-type lifecycleBatchRunner interface {
-	RunBatch(context.Context, func(context.Context) error) error
-}
 
 type lifecycleBatchItem struct {
 	id     string
@@ -108,7 +102,7 @@ func handleLifecycleBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 				allowed, _ := opts.rateLimiter.allow("write", scope, time.Now().UTC())
 				limited = !allowed
 			}
-			if limited || ctx.Err() != nil || time.Since(started) >= lifecycleBatchBudget {
+			if limited || ctx.Err() != nil || (index > 0 && time.Since(started) >= lifecycleBatchBudget) {
 				results[index] = map[string]any{"index": index, "status": lifecycleBatchDeferred}
 				continue
 			}
@@ -126,18 +120,14 @@ func handleLifecycleBatch(w http.ResponseWriter, r *http.Request, opts handlerOp
 		}
 		return nil
 	}
-	if runner, ok := opts.primitiveStore.(lifecycleBatchRunner); ok {
-		if err := runner.RunBatch(r.Context(), run); err != nil {
-			if writePrimitiveQuotaViolationError(w, err) {
-				return
-			}
-			// Nothing committed, so every item is safe to send again.
-			w.Header().Set("Retry-After", "1")
-			writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "the batch was not saved; send it again")
+	if err := runInStoreBatch(r.Context(), opts, run); err != nil {
+		if writePrimitiveQuotaViolationError(w, err) {
 			return
 		}
-	} else {
-		_ = run(r.Context())
+		// Nothing committed, so every item is safe to send again.
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "storage_unavailable", "the batch was not saved; send it again")
+		return
 	}
 	if changed {
 		notifyProjectionMaintainer(opts)

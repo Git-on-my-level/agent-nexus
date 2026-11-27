@@ -110,6 +110,9 @@ func (s *Store) setAskCloseCursor(cursor string) {
 	s.askCloseCursor = cursor
 }
 
+// askWithdrawGroup is how many withdrawals share one commit.
+const askWithdrawGroup = 20
+
 // Each maintenance step touches at most 200 indexed candidates. Closed subjects
 // and expiry survive restart; responses and withdrawal compete for one claim.
 func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
@@ -119,39 +122,48 @@ func (s *Store) MaintainAskLifecycleBatch(ctx context.Context) error {
 	withdrawBatch := func(card string, batch []pending) (bool, error) {
 		hadTransient := false
 		loopstats.Rows(ctx, len(batch))
-		for _, p := range batch {
-			_, err := s.appendHumanAttentionWithdrawal(ctx, p.actor, p.id, map[string]any{"payload": map[string]any{"reason": p.reason}}, p.reason == "subject_closed")
-			if err == nil {
-				continue
-			}
-			if errors.Is(err, ErrHumanAttentionAlreadyResponded) {
-				if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET open=0 WHERE ask_id=?`, p.id); uerr != nil {
-					return false, uerr
+		// Withdrawals commit in groups: each is a savepoint, so a failure rolls
+		// back only its own ask, and a group holds the write lock briefly.
+		var err error
+		for start := 0; start < len(batch) && err == nil; start += askWithdrawGroup {
+			group := batch[start:min(start+askWithdrawGroup, len(batch))]
+			err = s.RunBatch(ctx, func(ctx context.Context) error {
+				for _, p := range group {
+					_, err := s.appendHumanAttentionWithdrawal(ctx, p.actor, p.id, map[string]any{"payload": map[string]any{"reason": p.reason}}, p.reason == "subject_closed")
+					if err == nil {
+						continue
+					}
+					if errors.Is(err, ErrHumanAttentionAlreadyResponded) {
+						if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET open=0 WHERE ask_id=?`, p.id); uerr != nil {
+							return uerr
+						}
+						continue
+					}
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					if reason, permanent := permanentAskWithdrawalReason(err, p.actor, p.id); permanent {
+						log.Printf("ask lifecycle: skipping permanent withdrawal failure ask=%s card=%s reason=%s: %v", p.id, card, reason, err)
+						if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET open=0,close_reason=? WHERE ask_id=?`, reason, p.id); uerr != nil {
+							return uerr
+						}
+						continue
+					}
+					hadTransient = true
+					if card == "" {
+						delay := s.recordAskCloseBackoff(p.id, "", time.Now())
+						log.Printf("ask lifecycle: backing off transient withdrawal failure ask=%s card=%s backoff=%s: %v", p.id, card, delay, err)
+						if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET due_at=julianday('now')+(?/86400.0) WHERE ask_id=? AND open=1`, delay.Seconds(), p.id); uerr != nil {
+							return uerr
+						}
+					} else {
+						log.Printf("ask lifecycle: transient withdrawal failure ask=%s card=%s: %v", p.id, card, err)
+					}
 				}
-				continue
-			}
-			if ctx.Err() != nil {
-				return false, ctx.Err()
-			}
-			if reason, permanent := permanentAskWithdrawalReason(err, p.actor, p.id); permanent {
-				log.Printf("ask lifecycle: skipping permanent withdrawal failure ask=%s card=%s reason=%s: %v", p.id, card, reason, err)
-				if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET open=0,close_reason=? WHERE ask_id=?`, reason, p.id); uerr != nil {
-					return false, uerr
-				}
-				continue
-			}
-			hadTransient = true
-			if card == "" {
-				delay := s.recordAskCloseBackoff(p.id, "", time.Now())
-				log.Printf("ask lifecycle: backing off transient withdrawal failure ask=%s card=%s backoff=%s: %v", p.id, card, delay, err)
-				if _, uerr := s.db.ExecContext(ctx, `UPDATE ask_subjects SET due_at=julianday('now')+(?/86400.0) WHERE ask_id=? AND open=1`, delay.Seconds(), p.id); uerr != nil {
-					return false, uerr
-				}
-			} else {
-				log.Printf("ask lifecycle: transient withdrawal failure ask=%s card=%s: %v", p.id, card, err)
-			}
+				return nil
+			})
 		}
-		return hadTransient, nil
+		return hadTransient, err
 	}
 
 	queryCardBatch := func(targetCard, askCursor string) ([]pending, error) {
