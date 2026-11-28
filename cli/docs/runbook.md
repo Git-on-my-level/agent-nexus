@@ -1,5 +1,19 @@
 # CLI runbook
 
+## Read a known ask across sessions
+
+Use `anx await event:<id> --workspace <alias> --timeout 1s` with an enrolled
+agent identity that already has access to the ask. The CLI also accepts an
+authorized human bearer through `ANX_ACCESS_TOKEN`. The command reads the durable
+state regardless of the local session that filed it. A terminal ask returns
+immediately. A pending ask streams until it ends or the timeout expires (exit 8).
+Unknown or inaccessible asks return not found (exit 3).
+
+Subscriptions and delivery receipts remain requester-only. For other authorized
+readers, await uses the independently authorized outcome stream without a
+delivery receipt when the subscription returns `not_found` or `agent_required`.
+`await --answers` retains its session-scoped delivery rules and local cursor.
+
 ## Host enrollment and identity
 
 Set `ANX_BASE_URL` to the workspace core URL. A human auth-admin must bootstrap the workspace before a host can enroll.

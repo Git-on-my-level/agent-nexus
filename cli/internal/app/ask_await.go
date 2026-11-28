@@ -53,9 +53,22 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 		if errors.Is(awaitCtx.Err(), context.DeadlineExceeded) {
 			return nil, errnorm.New(errnorm.KindNetwork, "timeout", "await timed out")
 		}
-		return nil, err
+		// A visible ask need not belong to this reader. Subscriptions and
+		// delivery receipts remain requester-only; the stream independently
+		// authorizes read access, including revocation since the initial GET.
+		var remote *errnorm.Error
+		if !errors.As(err, &remote) {
+			return nil, err
+		}
+		switch remote.Code {
+		case "not_found", "agent_required":
+			// Another agent or a human can use the read-only outcome stream.
+		default:
+			return nil, err
+		}
+	} else {
+		subscription = anyString(commandResultBody(sub)["id"])
 	}
-	subscription = anyString(commandResultBody(sub)["id"])
 	backoff := 250 * time.Millisecond
 	for streamCtx.Err() == nil {
 		// Token refresh stays inside the await deadline; a hung refresh must
@@ -105,7 +118,7 @@ func (a *App) runAwaitAsk(ctx context.Context, cfg config.Resolved, target strin
 				resp.Body.Close()
 				// Reversible curation is visible to status readers, but owns no
 				// answer delivery receipt or continuation acknowledgement.
-				if status != "withdrawn_as_stale" {
+				if subscription != "" && status != "withdrawn_as_stale" {
 					_, ackErr := a.invokeRawJSON(awaitCtx, cfg, "await delivery", "POST", "/asks/"+url.PathEscape(strings.TrimPrefix(target, "event:"))+"/delivery", map[string]any{"subscription_id": subscription, "state": "delivered", "attempts": 1})
 					if ackErr != nil {
 						out["delivery_acknowledged"] = false
