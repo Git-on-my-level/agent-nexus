@@ -483,6 +483,8 @@ func privacyWritePayload(t *testing.T, path, actor, board, card, thread, doc, ev
 		return map[string]any{"ruling_id": "R-20261129-02", "scope": "workspace", "topic": "matrix", "title": "Attempt", "body": "See card:" + card, "source_quote": "Attempt", "idempotency_key": "matrix-ruling-propose"}
 	case "/rulings/{ruling_id}/confirm":
 		return map[string]any{"idempotency_key": "matrix-ruling-confirm"}
+	case "/rulings/withdraw":
+		return map[string]any{"ruling_ids": []string{"R-20261129-01"}, "idempotency_key": "matrix-ruling-withdraw"}
 	case "/rulings/{ruling_id}/revoke", "/rulings/{ruling_id}/applied":
 		return map[string]any{}
 	case "/asks/{ask_id}/revise":

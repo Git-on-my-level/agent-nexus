@@ -716,5 +716,10 @@
     "method": "POST",
     "path": "/rulings/{ruling_id}/confirm",
     "reason": "Human-only confirmation of a visible proposal and its visible targets."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/withdraw",
+    "reason": "Proposer or human withdrawal of visible unconfirmed proposals with a durable request key."
   }
 ]

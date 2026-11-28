@@ -1397,5 +1397,11 @@
     "path": "/rulings/{ruling_id}/confirm",
     "policy": "reference-write",
     "reason": "Human-only confirmation of a visible proposal and its visible targets."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/withdraw",
+    "policy": "reference-write",
+    "reason": "Proposer or human withdrawal of visible unconfirmed proposals with a durable request key."
   }
 ]
