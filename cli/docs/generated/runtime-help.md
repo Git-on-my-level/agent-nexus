@@ -10908,7 +10908,7 @@ Import a rulings index as proposals for human review in Decide.
 ```text
 anx rulings import --file index.json [--max-entries <count>] [--dry-run]
 Import a rulings index as proposals for human review in Decide.
-Version 2 adds required scope (account or workspace:<alias>), topic, body and source_quote to each generated index row. Account rows go to the selected workspace. Supply relationships in relations as {kind, ruling_id} objects. Each legacy supersedes target needs a matching typed relation. Version 1 retains heading-based defaults and emits a warning. --dry-run validates the file and local workspace routing offline, then shows counts and up to three rows per workspace. Live conflict checks run on submission.
+Version 2 adds required scope (account or workspace:<alias>), topic, body and source_quote to each generated index row. Account rows go to the selected workspace. Supply relationships in relations as {kind, ruling_id} objects. Each legacy supersedes target needs a matching typed relation. Version 1 retains heading-based defaults and emits a warning. --dry-run runs the same live projection checks, then shows counts and up to three rows per workspace without submitting proposals.
 ```
 
 ## `host discover`

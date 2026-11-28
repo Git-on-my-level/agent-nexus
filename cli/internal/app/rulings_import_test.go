@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -15,7 +17,11 @@ import (
 func TestRulingsImportV2PreservesMetadataAndRoutes(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
 	account, accountWrites := rulingImportServer(t, "fixture-bearer")
-	workspace, workspaceWrites := rulingImportServer(t, "workspace-token")
+	workspace, workspaceWrites := rulingImportServer(t, "workspace-token",
+		importProjectionRuling("R-20251229-01", "workspace"),
+		importProjectionRuling("R-20251230-01", "workspace"),
+		importProjectionRuling("R-20251231-01", "workspace"),
+	)
 	seedRulingEnrollment(t, home, "team", workspace.URL)
 
 	entries := rulingImportV2Entries(2)
@@ -24,9 +30,9 @@ func TestRulingsImportV2PreservesMetadataAndRoutes(t *testing.T) {
 	entries[0].Body = "  # First line\n\nSecond line 🧭\n"
 	entries[0].Quote = "  Exact words, including spaces.  "
 	entries[0].Source = "record.md#first"
-	entries[0].Supersedes = []string{entries[1].ID}
+	entries[0].Supersedes = []string{"R-20251229-01"}
 	entries[0].Relations = []rulingRelation{
-		{Kind: "supersedes", ID: entries[1].ID},
+		{Kind: "supersedes", ID: "R-20251229-01"},
 		{Kind: "amends", ID: "R-20251230-01"},
 		{Kind: "independent", ID: "R-20251231-01"},
 	}
@@ -172,39 +178,24 @@ func TestRulingsImportV1WarnsAboutDefaults(t *testing.T) {
 func TestRulingsImportV2RejectsLegacyTargetBeforeSubmitting(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
 	primary, primaryWrites := rulingImportServer(t, "fixture-bearer")
-	legacy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/auth/token":
-			_, _ = fmt.Fprint(w, `{"tokens":{"access_token":"legacy-token","expires_in":300}}`)
-		case "/rulings/projection":
-			w.WriteHeader(http.StatusNotFound)
-		case "/rulings":
-			_, _ = fmt.Fprint(w, `{"rulings":[]}`)
-		default:
-			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer legacy.Close()
+	legacy := rulingImportLegacyServer(t)
 	seedRulingEnrollment(t, home, "legacy", legacy.URL)
 	entries := rulingImportV2Entries(2)
 	entries[1].Scope = "workspace:legacy"
 	file := writeRulingImportIndex(t, root, 2, entries)
-	code, _, stderr := runRulingCLI(t, home, root, primary.URL, nil, "--as", "reviewer", "rulings", "import", "--file", file)
-	if code != 2 || len(primaryWrites) != 0 || !strings.Contains(stderr, "rulings_index_unavailable") || !strings.Contains(stderr, entries[1].ID) {
-		t.Fatalf("exit=%d writes=%d stderr=%s", code, len(primaryWrites), stderr)
+	for _, flags := range [][]string{nil, {"--dry-run"}} {
+		args := append([]string{"--as", "reviewer", "rulings", "import", "--file", file}, flags...)
+		code, _, stderr := runRulingCLI(t, home, root, primary.URL, nil, args...)
+		if code != 2 || len(primaryWrites) != 0 || !strings.Contains(stderr, "rulings_index_unavailable") || !strings.Contains(stderr, entries[1].ID) {
+			t.Fatalf("flags=%v exit=%d writes=%d stderr=%s", flags, code, len(primaryWrites), stderr)
+		}
 	}
 }
 
-func TestRulingsImportDryRunPreviewsEachTargetWithoutRequests(t *testing.T) {
+func TestRulingsImportDryRunPreviewsEachTargetWithoutWrites(t *testing.T) {
 	home, root := t.TempDir(), t.TempDir()
-	offline := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("dry-run sent %s %s", r.Method, r.URL.Path)
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	primary, secondary := httptest.NewServer(offline), httptest.NewServer(offline)
-	defer primary.Close()
-	defer secondary.Close()
+	primary, primaryWrites := rulingImportServer(t, "fixture-bearer")
+	secondary, secondaryWrites := rulingImportServer(t, "workspace-token")
 	seedRulingEnrollment(t, home, "team", secondary.URL)
 
 	entries := rulingImportV2Entries(6)
@@ -216,7 +207,7 @@ func TestRulingsImportDryRunPreviewsEachTargetWithoutRequests(t *testing.T) {
 	slices.Reverse(entries)
 	file := writeRulingImportIndex(t, root, 2, entries)
 
-	code, stdout, stderr := runRulingCLI(t, home, root, primary.URL, nil, "--json", "rulings", "import", "--dry-run", "--file", file)
+	code, stdout, stderr := runRulingCLI(t, home, root, primary.URL, nil, "--as", "reviewer", "--json", "rulings", "import", "--dry-run", "--file", file)
 	if code != 0 {
 		t.Fatalf("dry-run exit=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -250,9 +241,21 @@ func TestRulingsImportDryRunPreviewsEachTargetWithoutRequests(t *testing.T) {
 		}
 		delete(wantCounts, target.Workspace)
 	}
-	code, stdout, stderr = runRulingCLI(t, home, root, primary.URL, nil, "rulings", "import", "--dry-run", "--file", file)
+	code, stdout, stderr = runRulingCLI(t, home, root, primary.URL, nil, "--as", "reviewer", "rulings", "import", "--dry-run", "--file", file)
 	if code != 0 || !strings.Contains(stdout, "result.targets.1.count=4") || !strings.Contains(stdout, "result.targets.1.workspace_url="+secondary.URL) || strings.Count(stdout, ".ruling_id=") != 5 {
 		t.Fatalf("text preview exit=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if len(primaryWrites) != 0 || len(secondaryWrites) != 0 {
+		t.Fatal("dry-run submitted proposals")
+	}
+	err := filepath.WalkDir(home, func(path string, entry os.DirEntry, err error) error {
+		if err == nil && (entry.Name() == "rulings" || strings.HasPrefix(entry.Name(), "token-")) {
+			t.Errorf("dry-run persisted a cache: %s", path)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -275,7 +278,7 @@ func writeRulingImportIndex(t *testing.T, root string, version int, entries []ru
 	return writeRulingReviewFile(t, root, "index.json", string(index))
 }
 
-func rulingImportServer(t *testing.T, token string) (*httptest.Server, <-chan rulingWrite) {
+func rulingImportServer(t *testing.T, token string, existing ...map[string]any) (*httptest.Server, <-chan rulingWrite) {
 	t.Helper()
 	writes := make(chan rulingWrite, 10)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,7 +293,8 @@ func rulingImportServer(t *testing.T, token string) (*httptest.Server, <-chan ru
 		}
 		switch r.URL.Path {
 		case "/rulings/projection":
-			_, _ = fmt.Fprint(w, `{"source_revision":"fixture","rulings":[]}`)
+			rows := append([]map[string]any{}, existing...)
+			_ = json.NewEncoder(w).Encode(map[string]any{"source_revision": "fixture", "rulings": rows})
 		case "/rulings":
 			_, _ = fmt.Fprint(w, `{"rulings":[]}`)
 		case "/rulings/propose":
@@ -310,4 +314,191 @@ func rulingImportServer(t *testing.T, token string) (*httptest.Server, <-chan ru
 	}))
 	t.Cleanup(server.Close)
 	return server, writes
+}
+
+func TestRulingsImportV2ResolvesTargetsInDestination(t *testing.T) {
+	const projected = "R-20251231-01"
+	for _, tc := range []struct {
+		name, projectedIn    string
+		relation, superseder bool
+		targetPlanned        bool
+		wantCode             int
+	}{
+		{name: "local projection", projectedIn: "team", relation: true},
+		{name: "later index row", relation: true, targetPlanned: true},
+		{name: "local superseder", projectedIn: "team", superseder: true},
+		{name: "later superseder", superseder: true, targetPlanned: true},
+		{name: "relation missing", relation: true, wantCode: 2},
+		{name: "superseder missing", superseder: true, wantCode: 2},
+		{name: "relation in foreign projection", projectedIn: "primary", relation: true, wantCode: 2},
+		{name: "superseder in foreign projection", projectedIn: "primary", superseder: true, wantCode: 2},
+		{name: "relation in foreign index row", relation: true, targetPlanned: true, wantCode: 2},
+		{name: "superseder in foreign index row", superseder: true, targetPlanned: true, wantCode: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, root := t.TempDir(), t.TempDir()
+			project := func(workspace string) []map[string]any {
+				if tc.projectedIn == workspace {
+					return []map[string]any{importProjectionRuling(projected, "workspace")}
+				}
+				return nil
+			}
+			primary, primaryWrites := rulingImportServer(t, "fixture-bearer", project("primary")...)
+			team, teamWrites := rulingImportServer(t, "workspace-token", project("team")...)
+			seedRulingEnrollment(t, home, "team", team.URL)
+			entries := rulingImportV2Entries(3)
+			entries[1].Scope = "workspace:team"
+			target := projected
+			if tc.targetPlanned {
+				target = entries[2].ID
+				if tc.wantCode == 0 {
+					entries[2].Scope = "workspace:team"
+				}
+			}
+			if tc.relation {
+				entries[1].Relations = []rulingRelation{{Kind: "amends", ID: target}}
+			}
+			if tc.superseder {
+				entries[1].Status, entries[1].SupersededBy = "superseded", target
+			}
+			file := writeRulingImportIndex(t, root, 2, entries)
+			for _, flags := range [][]string{{"--dry-run"}, nil} {
+				args := append([]string{"--as", "reviewer", "rulings", "import", "--file", file}, flags...)
+				code, _, stderr := runRulingCLI(t, home, root, primary.URL, nil, args...)
+				if code != tc.wantCode {
+					t.Fatalf("flags=%v exit=%d want=%d stderr=%s", flags, code, tc.wantCode, stderr)
+				}
+				if len(flags) != 0 || code != 0 {
+					if len(primaryWrites)+len(teamWrites) != 0 {
+						t.Fatal("preflight submitted a proposal")
+					}
+				}
+				if code != 0 && (!strings.Contains(stderr, target) || !strings.Contains(stderr, team.URL)) {
+					t.Fatalf("error omitted target or destination: %s", stderr)
+				}
+			}
+			if tc.wantCode == 0 && len(primaryWrites)+len(teamWrites) != len(entries) {
+				t.Fatal("accepted import did not submit every row")
+			}
+		})
+	}
+}
+
+func TestRulingsImportV2AccountNamesCheckEveryEnrolledWorkspace(t *testing.T) {
+	for _, collision := range []string{"id", "alias"} {
+		t.Run(collision, func(t *testing.T) {
+			home, root := t.TempDir(), t.TempDir()
+			entries := rulingImportV2Entries(2)
+			entries[1].Aliases = []string{"Legacy 8"}
+			id, name := "R-20251231-01", entries[1].Aliases[0]
+			if collision == "id" {
+				id, name = entries[1].ID, entries[1].ID
+			}
+			row := importProjectionRuling(id, "workspace")
+			if collision == "alias" {
+				row["aliases"] = entries[1].Aliases
+			}
+			primary, primaryWrites := rulingImportServer(t, "fixture-bearer")
+			other, otherWrites := rulingImportServer(t, "workspace-token", row)
+			seedRulingEnrollment(t, home, "other", other.URL)
+			file := writeRulingImportIndex(t, root, 2, entries)
+			for _, flags := range [][]string{{"--dry-run"}, nil} {
+				args := append([]string{"--as", "reviewer", "rulings", "import", "--file", file}, flags...)
+				code, _, stderr := runRulingCLI(t, home, root, primary.URL, nil, args...)
+				if code != 4 || len(primaryWrites)+len(otherWrites) != 0 || !strings.Contains(stderr, name) || !strings.Contains(stderr, other.URL) {
+					t.Fatalf("flags=%v exit=%d writes=%d/%d stderr=%s", flags, code, len(primaryWrites), len(otherWrites), stderr)
+				}
+			}
+		})
+	}
+}
+
+func TestRulingsImportDeduplicatesProjectionWarnings(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	row := importProjectionRuling("R-20251231-01", "account")
+	primary, primaryWrites := rulingImportServer(t, "fixture-bearer", row)
+	team, teamWrites := rulingImportServer(t, "workspace-token", row)
+	legacy := rulingImportLegacyServer(t)
+	seedRulingEnrollment(t, home, "team", team.URL)
+	seedRulingEnrollment(t, home, "legacy", legacy.URL)
+	entries := rulingImportV2Entries(2)
+	entries[1].Scope = "workspace:team"
+	file := writeRulingImportIndex(t, root, 2, entries)
+	for _, flags := range [][]string{{"--dry-run"}, nil} {
+		args := append([]string{"--as", "reviewer", "rulings", "import", "--file", file}, flags...)
+		code, stdout, stderr := runRulingCLI(t, home, root, primary.URL, nil, args...)
+		if code != 0 || strings.Count(stdout, "warning code=rulings_projection_unavailable") != 1 ||
+			strings.Count(stdout, "warning code=ruling_name_collision") != 1 {
+			t.Fatalf("flags=%v exit=%d stdout=%s stderr=%s", flags, code, stdout, stderr)
+		}
+		if len(flags) > 0 && len(primaryWrites)+len(teamWrites) != 0 {
+			t.Fatal("dry-run submitted proposals")
+		}
+	}
+}
+
+func TestRulingsImportDryRunSkipsEnabledScheduledMaintenance(t *testing.T) {
+	home, root := skillTestDir(t), t.TempDir()
+	server, writes := rulingImportServer(t, "fixture-bearer")
+	file := writeRulingImportIndex(t, root, 2, rulingImportV2Entries(1))
+	configDir := filepath.Join(home, ".config", "anx")
+	prefs := skillsSyncConfig{SchemaVersion: 1, ManagedBy: "anx", AutoSync: true}
+	if err := writeSkillsSyncConfig(configDir, prefs); err != nil {
+		t.Fatal(err)
+	}
+	a, stdout := workspaceTestApp(t, home, root, map[string]string{"ANX_ACCESS_TOKEN": "fixture-bearer"})
+	a.runScheduledMaintenanceInTests = true
+	refreshes := 0
+	a.startSkillsRefresh = func(_, dir, _ string) error {
+		refreshes++
+		updated := prefs
+		updated.LastAutoSyncAt = "2026-11-28T00:00:00Z"
+		return writeSkillsSyncConfig(dir, updated)
+	}
+	args := []string{"--base-url", server.URL, "rulings", "import", "--file", file}
+	if code := a.Run(append(slices.Clone(args), "--dry-run")); code != 0 {
+		t.Fatalf("dry-run exit=%d stdout=%s stderr=%v", code, stdout, a.Stderr)
+	}
+	lock := filepath.Join(configDir, ".skills-auto-sync.lock")
+	if _, err := os.Stat(lock); !os.IsNotExist(err) {
+		t.Fatalf("dry-run touched maintenance lock: %v", err)
+	}
+	stored, _, err := readSkillsSyncConfig(configDir)
+	if err != nil || stored.LastAutoSyncAt != "" || refreshes != 0 || len(writes) != 0 {
+		t.Fatalf("dry-run changed state: prefs=%+v refreshes=%d writes=%d err=%v", stored, refreshes, len(writes), err)
+	}
+
+	if code := a.Run(args); code != 0 {
+		t.Fatalf("import exit=%d stdout=%s stderr=%v", code, stdout, a.Stderr)
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatalf("real import did not acquire the maintenance lock: %v", err)
+	}
+	stored, _, err = readSkillsSyncConfig(configDir)
+	if err != nil || stored.LastAutoSyncAt == "" || refreshes != 1 || len(writes) != 1 {
+		t.Fatalf("real import did not exercise maintenance: prefs=%+v refreshes=%d writes=%d err=%v", stored, refreshes, len(writes), err)
+	}
+}
+
+func importProjectionRuling(id, scope string) map[string]any {
+	return map[string]any{"ruling_id": id, "scope": scope, "kind": "operating", "status": "active"}
+}
+
+func rulingImportLegacyServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/auth/token":
+			_, _ = fmt.Fprint(w, `{"tokens":{"access_token":"legacy-token","expires_in":300}}`)
+		case "/rulings/projection":
+			w.WriteHeader(http.StatusNotFound)
+		case "/rulings":
+			_, _ = fmt.Fprint(w, `{"rulings":[]}`)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }

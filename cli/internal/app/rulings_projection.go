@@ -317,6 +317,9 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		return projection, false, nil
 	}
 	projection.BaseURL, projection.Principal, projection.FetchedAt = base, principal, start
+	if skipReadCacheWrites(ctx) {
+		return projection, false, nil
+	}
 	if projection.Revision == rulingRevisionLegacy && hasCache && cached.Revision != rulingRevisionLegacy {
 		return projection, false, nil
 	}

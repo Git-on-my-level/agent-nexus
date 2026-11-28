@@ -206,12 +206,15 @@ Version 2 also requires `scope`, `topic`, `body` and `source_quote`. Use
 with workspace scope through a named enrollment. Put relationships in the
 optional `relations` array, with a `kind` and `ruling_id` in each object. If you
 carry forward a legacy `supersedes` list, include a matching typed relation
-for each target. Workspace-scoped IDs and aliases are unique within their
-target workspace. Account-scoped names must be unique across targets.
+for each target. Relation and `superseded_by` targets must exist in the
+destination's operating projection or in another row routed to that
+destination. Workspace-scoped IDs and aliases are unique within their
+destination. Account-scoped names are checked across all enrolled workspaces.
 Version 1 uses the selected workspace and derives the proposal metadata from
 the heading and legacy supersession fields. It emits a warning naming the
 defaults.
 
-Add `--dry-run` to validate the file and local workspace routing offline.
-The preview shows the count and the first three proposals per target in
-ruling ID order. Submission checks live ruling state.
+Add `--dry-run` to run the same live projection checks and show the count
+and first three proposals per target in ruling ID order. The preview can
+use host authentication. It skips proposal submission, local cache writes,
+and scheduled maintenance.

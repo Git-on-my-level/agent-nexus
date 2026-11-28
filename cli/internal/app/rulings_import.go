@@ -200,6 +200,71 @@ func validateRulingImportNames(rows []rulingImportRow) error {
 	return nil
 }
 
+func validateV2RulingImportProjections(rows []rulingImportRow, projections []rulingProjection, selected string) error {
+	workspaceIDs := map[string]map[string]bool{}
+	legacy := map[string]bool{}
+	foreignNames := map[string]string{}
+	for _, projection := range projections {
+		base := projection.BaseURL
+		ids := map[string]bool{}
+		workspaceIDs[base] = ids
+		legacy[base] = projection.Revision == rulingRevisionLegacy
+		for _, ruling := range projection.Rulings {
+			id := anyString(ruling["ruling_id"])
+			if id != "" {
+				ids[id] = true
+			}
+			if base != selected {
+				name := firstNonEmpty(id, strings.TrimPrefix(anyString(ruling["ref"]), "ruling:"), anyString(ruling["id"]))
+				for _, alias := range rulingNames(ruling, name) {
+					foreignNames[alias] = base
+				}
+			}
+		}
+	}
+	for _, row := range rows {
+		ids := workspaceIDs[row.workspace]
+		if ids == nil || legacy[row.workspace] {
+			return errnorm.Usage("rulings_index_unavailable", fmt.Sprintf("ruling %s targets %s, which does not serve an operating ruling projection", row.proposal.ID, row.workspace))
+		}
+		ids[row.proposal.ID] = true
+	}
+	for _, row := range rows {
+		req := row.proposal
+		ids := workspaceIDs[row.workspace]
+		for _, rel := range req.Relations {
+			if !ids[rel.ID] {
+				return errnorm.Usage("invalid_rulings_index", fmt.Sprintf("ruling %s has %s target %s missing from destination %s", req.ID, rel.Kind, rel.ID, row.workspace))
+			}
+		}
+		if req.SupersededByHint != "" && !ids[req.SupersededByHint] {
+			return errnorm.Usage("invalid_rulings_index", fmt.Sprintf("ruling %s has superseded_by target %s missing from destination %s", req.ID, req.SupersededByHint, row.workspace))
+		}
+		if req.Scope == "account" {
+			for _, name := range append([]string{req.ID}, req.Aliases...) {
+				if base := foreignNames[name]; base != "" {
+					return errnorm.New(errnorm.KindRemote, "conflict", "ruling name "+name+" is already pinned in "+base)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func distinctRulingImportWarnings(warnings []output.Warning) []output.Warning {
+	type warningKey struct{ code, message string }
+	seen := map[warningKey]bool{}
+	distinct := warnings[:0]
+	for _, warning := range warnings {
+		key := warningKey{warning.Code, warning.Message}
+		if !seen[key] {
+			distinct = append(distinct, warning)
+			seen[key] = true
+		}
+	}
+	return distinct
+}
+
 func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path string, maxEntries int, dryRun bool) (*commandResult, error) {
 	raw, err := a.readRulingInput(path, rulingProjectionSize)
 	if err != nil {
@@ -237,22 +302,20 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 		warnings = append(warnings, rulingImportV1Warning())
 	}
 	if dryRun {
-		return previewRulingImport(rows, warnings), nil
+		ctx = context.WithValue(ctx, skipReadCacheWritesKey{}, true)
 	}
 	projections, projectionWarnings, err := a.readRulingProjections(ctx, workspaces, true, false)
 	if err != nil {
 		return nil, err
 	}
 	warnings = append(warnings, projectionWarnings...)
-	legacy := map[string]bool{}
-	for _, projection := range projections {
-		legacy[projection.BaseURL] = projection.Revision == rulingRevisionLegacy
+	if index.SchemaVersion == 2 {
+		if err := validateV2RulingImportProjections(rows, projections, workspaces.selected); err != nil {
+			return nil, err
+		}
 	}
 	snapshots := map[string]rulingCollection{}
 	for _, row := range rows {
-		if index.SchemaVersion == 2 && legacy[row.workspace] {
-			return nil, errnorm.Usage("rulings_index_unavailable", fmt.Sprintf("ruling %s targets %s, which does not serve an operating ruling projection", row.proposal.ID, row.workspace))
-		}
 		snapshot, ok := snapshots[row.workspace]
 		if !ok {
 			snapshot, err = indexRulingProjections(projections, row.workspace)
@@ -265,6 +328,10 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 		if err := checkRulingWriteNames(snapshot, row.proposal, row.workspace); err != nil {
 			return nil, err
 		}
+	}
+	warnings = distinctRulingImportWarnings(warnings)
+	if dryRun {
+		return previewRulingImport(rows, warnings), nil
 	}
 	result := []any{}
 	for _, row := range rows {
