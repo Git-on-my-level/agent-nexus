@@ -45,18 +45,17 @@ type rulingCollection struct {
 	warnings    []output.Warning
 }
 
-func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, allowPartial bool) (rulingCollection, error) {
-	out := rulingCollection{names: map[string]map[string]any{}, namespaces: map[string]string{}, collisions: map[string][]string{}}
+type rulingWorkspaces struct {
+	selected string
+	dir      string
+	configs  map[string]config.Resolved
+	aliases  map[string]string
+}
+
+func (a *App) resolveRulingWorkspaces(cfg config.Resolved) (rulingWorkspaces, error) {
 	catalog, dir, err := a.workspaceCatalog(cfg)
 	if err != nil {
-		return out, err
-	}
-	ttl := 15 * time.Minute
-	if raw := strings.TrimSpace(a.Getenv("ANX_RULINGS_TTL")); raw != "" {
-		ttl, err = time.ParseDuration(raw)
-		if err != nil || ttl < 0 {
-			return out, errnorm.Usage("invalid_rulings_ttl", "ANX_RULINGS_TTL must be a non-negative duration")
-		}
+		return rulingWorkspaces{}, err
 	}
 	if cfg.Sources["base_url"] == "default" && cfg.AccessToken == "" {
 		if host, err := a.resolvedHost(cfg); err == nil {
@@ -65,28 +64,36 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 	}
 	selected := strings.TrimRight(cfg.BaseURL, "/")
 	configs := map[string]config.Resolved{selected: cfg}
+	aliases := map[string]string{}
 	selectedKey := rulingWorkspaceURLKey(selected)
-	seenURLs := map[string]bool{selectedKey: true}
-	seenIDs := map[string]bool{}
+	byURL := map[string]string{selectedKey: selected}
+	byID := map[string]string{}
 	for _, workspace := range catalog.Workspaces {
 		if workspace.Enrolled && workspace.WorkspaceID != "" && rulingWorkspaceURLKey(workspace.BaseURL) == selectedKey {
-			seenIDs[workspace.WorkspaceID] = true
+			byID[workspace.WorkspaceID] = selected
 		}
 	}
 	// Only locally enrolled workspaces can be authenticated for this principal.
 	// Never send an explicit bearer to a second workspace.
 	for _, workspace := range catalog.Workspaces {
+		base := strings.TrimRight(workspace.BaseURL, "/")
+		baseKey := rulingWorkspaceURLKey(base)
+		target := byURL[baseKey]
+		if target != "" {
+			aliases[workspace.Alias] = target
+			continue
+		}
 		if !workspace.Enrolled {
 			continue
 		}
-		base := strings.TrimRight(workspace.BaseURL, "/")
-		baseKey := rulingWorkspaceURLKey(base)
-		if seenURLs[baseKey] || seenIDs[workspace.WorkspaceID] {
+		if target = byID[workspace.WorkspaceID]; target != "" {
+			aliases[workspace.Alias] = target
 			continue
 		}
-		seenURLs[baseKey] = true
+		aliases[workspace.Alias] = base
+		byURL[baseKey] = base
 		if workspace.WorkspaceID != "" {
-			seenIDs[workspace.WorkspaceID] = true
+			byID[workspace.WorkspaceID] = base
 		}
 		other := cfg
 		other.BaseURL = base
@@ -96,27 +103,64 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 		other.Sources = map[string]string{"base_url": "config:rulings-fanout"}
 		configs[base] = other
 	}
+	return rulingWorkspaces{selected: selected, dir: dir, configs: configs, aliases: aliases}, nil
+}
+
+func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, allowPartial bool) (rulingCollection, error) {
+	workspaces, err := a.resolveRulingWorkspaces(cfg)
+	if err != nil {
+		return rulingCollection{}, err
+	}
+	projections, warnings, err := a.readRulingProjections(ctx, workspaces, force, allowPartial)
+	if err != nil {
+		return rulingCollection{}, err
+	}
+	out, err := indexRulingProjections(projections, workspaces.selected)
+	out.warnings = append(warnings, out.warnings...)
+	return out, err
+}
+
+func (a *App) readRulingProjections(ctx context.Context, workspaces rulingWorkspaces, force, allowPartial bool) ([]rulingProjection, []output.Warning, error) {
+	ttl := 15 * time.Minute
+	if raw := strings.TrimSpace(a.Getenv("ANX_RULINGS_TTL")); raw != "" {
+		var err error
+		ttl, err = time.ParseDuration(raw)
+		if err != nil || ttl < 0 {
+			return nil, nil, errnorm.Usage("invalid_rulings_ttl", "ANX_RULINGS_TTL must be a non-negative duration")
+		}
+	}
 	var bases []string
-	for base := range configs {
-		if base != selected {
+	for base := range workspaces.configs {
+		if base != workspaces.selected {
 			bases = append(bases, base)
 		}
 	}
 	sort.Strings(bases)
-	for _, base := range append([]string{selected}, bases...) {
-		projection, stale, err := a.loadRulingProjection(ctx, configs[base], dir, ttl, force, allowPartial && base == selected)
+	var projections []rulingProjection
+	var warnings []output.Warning
+	for _, base := range append([]string{workspaces.selected}, bases...) {
+		projection, stale, err := a.loadRulingProjection(ctx, workspaces.configs[base], workspaces.dir, ttl, force, allowPartial && base == workspaces.selected)
 		if err != nil {
-			if base == selected || !allowPartial {
+			if base == workspaces.selected || !allowPartial {
 				failure := *errnorm.Normalize(err)
 				failure.Message = fmt.Sprintf("cannot read rulings for %s: %s", base, failure.Message)
-				return out, &failure
+				return nil, nil, &failure
 			}
-			out.warnings = append(out.warnings, unavailableRulingProjectionWarning(base))
+			warnings = append(warnings, unavailableRulingProjectionWarning(base))
 			continue
 		}
 		if stale {
-			out.warnings = append(out.warnings, staleRulingProjectionWarning(base, projection))
+			warnings = append(warnings, staleRulingProjectionWarning(base, projection))
 		}
+		projections = append(projections, projection)
+	}
+	return projections, warnings, nil
+}
+
+func indexRulingProjections(projections []rulingProjection, selected string) (rulingCollection, error) {
+	out := rulingCollection{names: map[string]map[string]any{}, namespaces: map[string]string{}, collisions: map[string][]string{}}
+	for _, projection := range projections {
+		base := projection.BaseURL
 		if base != selected && projection.Revision == rulingRevisionLegacy {
 			out.warnings = append(out.warnings, unavailableRulingProjectionWarning(base))
 		}
@@ -273,6 +317,9 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		return projection, false, nil
 	}
 	projection.BaseURL, projection.Principal, projection.FetchedAt = base, principal, start
+	if skipReadCacheWrites(ctx) {
+		return projection, false, nil
+	}
 	if projection.Revision == rulingRevisionLegacy && hasCache && cached.Revision != rulingRevisionLegacy {
 		return projection, false, nil
 	}

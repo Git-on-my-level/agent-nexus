@@ -16,6 +16,7 @@ func rulingsUsage() string {
 type rulingsArgs struct {
 	verb, ref, surfaces, file    string
 	includeRevoked, strictLegacy bool
+	dryRun                       bool
 	paths                        []string
 	maxEntries                   int
 	proposal                     rulingProposalArgs
@@ -62,6 +63,7 @@ func parseRulingsArgs(args []string) (rulingsArgs, error) {
 	case "import":
 		fs.StringVar(&parsed.file, "file", "", "Generated rulings index")
 		fs.IntVar(&parsed.maxEntries, "max-entries", defaultRulingImportMax, "Maximum index entries to submit")
+		fs.BoolVar(&parsed.dryRun, "dry-run", false, "Validate and preview the import without submitting proposals")
 	default:
 		return parsed, errnorm.Usage("unknown_subcommand", rulingsUsage())
 	}
@@ -99,7 +101,7 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 	case "propose":
 		return a.proposeRuling(ctx, cfg, p.proposal)
 	case "import":
-		return a.importRulings(ctx, cfg, p.file, p.maxEntries)
+		return a.importRulings(ctx, cfg, p.file, p.maxEntries, p.dryRun)
 	}
 	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull", p.verb == "list" || p.verb == "show")
 	if err != nil {

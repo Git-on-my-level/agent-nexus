@@ -191,9 +191,30 @@ A surface configuration matching no tracked regular files exits 2.
 on the same line. A report with findings exits 1. JSON uses the
 `rulings_check_findings` error code and stores the report in `error.details`.
 
-`anx rulings import --file index.json` preserves IDs, aliases, source locations,
-lifecycle hints and supersession declarations. It validates the entire index
-before submitting proposals and accepts up to 1,000 entries by default. Set
-`--max-entries` to use a larger explicit bound. The generated index contains
-headings and source locations. Proposals from it show the heading and source
-location so the human can consult the original context before confirmation.
+`anx rulings import --file index.json` preserves IDs, aliases, source locations
+and lifecycle hints. It validates the entire index before submitting proposals
+and accepts up to 1,000 entries by default. Set `--max-entries` to use a larger
+explicit bound.
+
+Both versions use a non-empty `generated_from` array and a `rulings` array.
+Each row includes `id`, `date` matching the ID, `aliases` (which can be empty),
+`title`, `status`, `source`, and `origin` (`rulings-file`, `register`, `wave3`,
+or `hostctl`).
+
+Version 2 also requires `scope`, `topic`, `body` and `source_quote`. Use
+`account` to submit to the selected workspace or `workspace:<alias>` to submit
+with workspace scope through a named enrollment. Put relationships in the
+optional `relations` array, with a `kind` and `ruling_id` in each object. If you
+carry forward a legacy `supersedes` list, include a matching typed relation
+for each target. Relation and `superseded_by` targets must exist in the
+destination's operating projection or in another row routed to that
+destination. Workspace-scoped IDs and aliases are unique within their
+destination. Account-scoped names are checked across all enrolled workspaces.
+Version 1 uses the selected workspace and derives the proposal metadata from
+the heading and legacy supersession fields. It emits a warning naming the
+defaults.
+
+Add `--dry-run` to run the same live projection checks and show the count
+and first three proposals per target in ruling ID order. The preview can
+use host authentication. It skips proposal submission, local cache writes,
+and scheduled maintenance.

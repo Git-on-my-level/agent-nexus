@@ -191,6 +191,13 @@ func (a *App) configDir(cfg config.Resolved) (string, error) {
 	return filepath.Join(home, ".config", "anx"), nil
 }
 
+// A preview can authenticate and read current state without persisting caches.
+type skipReadCacheWritesKey struct{}
+
+func skipReadCacheWrites(ctx context.Context) bool {
+	return ctx.Value(skipReadCacheWritesKey{}) == true
+}
+
 func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {
 	if cfg.AccessToken != "" && cfg.As == "" {
 		return cfg, nil
@@ -211,25 +218,14 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 		return cfg, errnorm.Wrap(errnorm.KindLocal, "key_load_failed", "host key unavailable or unsafe", err)
 	}
 	dir := filepath.Dir(host.PrivateKeyPath)
-	lockPath := filepath.Join(dir, "token-"+name+".lock")
-	lock, err := filelock.OpenNoFollow(lockPath, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return cfg, err
-	}
-	defer lock.Close()
-	for {
-		if err := filelock.TryLock(lock); err == nil {
-			break
-		} else if !filelock.Contended(err) {
+	cacheWrites := !skipReadCacheWrites(ctx)
+	if cacheWrites {
+		unlock, err := lockHostTokenCache(ctx, filepath.Join(dir, "token-"+name+".lock"))
+		if err != nil {
 			return cfg, err
 		}
-		select {
-		case <-ctx.Done():
-			return cfg, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
+		defer unlock()
 	}
-	defer filelock.Unlock(lock)
 	cachePath := filepath.Join(dir, "token-"+name+".json")
 	var cached tokenCache
 	if raw, readErr := os.ReadFile(cachePath); readErr == nil {
@@ -277,23 +273,10 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 			return cfg, fmt.Errorf("invalid host token response")
 		}
 		cached = tokenCache{Token: grant.Tokens.AccessToken, ExpiresAt: a.clockNow().Add(time.Duration(grant.Tokens.ExpiresIn) * time.Second), Agent: grant.Agent}
-		raw, _ := json.Marshal(cached)
-		tmp, err := os.CreateTemp(dir, ".token-"+name+"-")
-		if err != nil {
-			return cfg, err
-		}
-		_ = tmp.Chmod(0600)
-		_, err = tmp.Write(raw)
-		closeErr := tmp.Close()
-		if err == nil {
-			err = closeErr
-		}
-		if err != nil {
-			os.Remove(tmp.Name())
-			return cfg, err
-		}
-		if err := os.Rename(tmp.Name(), cachePath); err != nil {
-			return cfg, err
+		if cacheWrites {
+			if err := saveHostTokenCache(cachePath, cached); err != nil {
+				return cfg, err
+			}
 		}
 	}
 	cfg.AccessToken = cached.Token
@@ -314,6 +297,53 @@ func (a *App) resolveHostAgent(ctx context.Context, cfg config.Resolved) (config
 		cfg.RunID = "agentctl/" + runID
 	}
 	return cfg, nil
+}
+
+func lockHostTokenCache(ctx context.Context, path string) (func(), error) {
+	lock, err := filelock.OpenNoFollow(path, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		err = filelock.TryLock(lock)
+		if err == nil {
+			return func() {
+				filelock.Unlock(lock)
+				lock.Close()
+			}, nil
+		}
+		if !filelock.Contended(err) {
+			lock.Close()
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			lock.Close()
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func saveHostTokenCache(path string, cached tokenCache) error {
+	raw, err := json.Marshal(cached)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".token-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	_, writeErr := tmp.Write(raw)
+	closeErr := tmp.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func (a *App) runHostWhoAmI(ctx context.Context, cfg config.Resolved) (*commandResult, error) {

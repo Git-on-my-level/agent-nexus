@@ -216,7 +216,11 @@ func TestRulingsProposeRuneLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := decodeRulingIndex(index, 1); err != nil {
+	decoded, err := decodeRulingIndex(index, 1)
+	if err != nil {
+		t.Fatalf("valid rune lengths rejected by index decoder: %v", err)
+	}
+	if _, err := decoded.importRows(); err != nil {
 		t.Fatalf("valid rune lengths rejected by import: %v", err)
 	}
 }
