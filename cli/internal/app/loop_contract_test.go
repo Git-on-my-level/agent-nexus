@@ -158,7 +158,7 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := regexp.MustCompile("^\\|\\s*`?([a-z_]+)`?\\s*\\|\\s*([^|]+?)\\s*\\|\\s*`([^`]+)`\\s*\\|")
+	row := regexp.MustCompile("^\\|\\s*`?([a-z0-9_]+)`?\\s*\\|\\s*([^|]+?)\\s*\\|\\s*`([^`]+)`\\s*\\|")
 	triggers := map[string]string{}
 	for _, line := range strings.Split(string(raw), "\n") {
 		if m := row.FindStringSubmatch(line); m != nil {
@@ -186,6 +186,8 @@ func TestWarningsDocListsEveryWarning(t *testing.T) {
 	messages[unavailable.Code] = unavailable.Message
 	collision := rulingNameCollisionWarning("R1", []string{"https://one.example.com", "https://two.example.com"})
 	messages[collision.Code] = collision.Message
+	legacyImport := rulingImportV1Warning()
+	messages[legacyImport.Code] = legacyImport.Message
 
 	ruling := map[string]any{"ref": "ruling:r1", "question": "Rerun the diagnostic?", "answer": "Yes"}
 	covered, _ := askRedirectResult(map[string]any{"answered_by_ruling": true, "ruling": ruling}, "card:x", "ask")

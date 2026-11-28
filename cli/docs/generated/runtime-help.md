@@ -319,7 +319,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `rulings pull` (local-helper): Refresh the local projection, even within its TTL.
 - `rulings check` (local-helper): Check local citations. Exit 0 for clean, 1 for findings, and 2 for usage or index errors.
 - `rulings propose` (local-helper): Send an operating ruling for human confirmation in Decide.
-- `rulings import` (local-helper): Import a generated Phase 0 index as proposals for human review in Decide.
+- `rulings import` (local-helper): Import a rulings index as proposals for human review in Decide.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `mv` (local-helper): Move a card in the stored work tree.
 - `tree` (local-helper): Read the stored work tree.
@@ -10903,11 +10903,12 @@ Send an operating ruling for human confirmation in Decide.
 
 ## `rulings import`
 
-Import a generated Phase 0 index as proposals for human review in Decide.
+Import a rulings index as proposals for human review in Decide.
 
 ```text
-anx rulings import --file index.json [--max-entries <count>]
-Import a generated Phase 0 index as proposals for human review in Decide.
+anx rulings import --file index.json [--max-entries <count>] [--dry-run]
+Import a rulings index as proposals for human review in Decide.
+Version 2 rows require scope (account or workspace:<alias>), topic, body and source_quote. Account rows go to the selected workspace. Supply any relationships in relations as {kind, ruling_id} objects. Version 1 retains heading-based defaults and emits a warning. --dry-run validates the file and local workspace routing offline, then shows counts and up to three rows per workspace. Live conflict checks run on submission.
 ```
 
 ## `host discover`

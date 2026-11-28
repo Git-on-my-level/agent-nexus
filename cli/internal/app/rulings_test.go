@@ -34,7 +34,7 @@ func TestRulingsCheckGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := map[string]map[string]any{}
-	for _, row := range index {
+	for _, row := range index.Rulings {
 		data := map[string]any{"ruling_id": row.ID, "kind": "operating", "status": row.Status, "superseded_by": row.SupersededBy}
 		for _, name := range append([]string{row.ID}, row.Aliases...) {
 			names[name] = data

@@ -252,7 +252,8 @@ func (a *App) Run(args []string) int {
 		a.writeUpdateFollowUpWarnings(a.attributionWarnings)
 		a.attributionWarnings = nil
 	}
-	if (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
+	skipMaintenance := result != nil && result.SkipScheduledMaintenance
+	if !skipMaintenance && (!isGoTestBinary() || a.runScheduledMaintenanceInTests) && cmdPeek != "integrations" && cmdPeek != "git" && cmdPeek != "sync" {
 		if !strings.HasPrefix(identity.Command, "update") {
 			a.maybeScheduleSkillsRefresh(identity.Command, result, resolved.ConfigDir)
 		}
@@ -396,13 +397,14 @@ func (a *App) renderEnvelope(w io.Writer, jsonMode bool, envelope output.Envelop
 }
 
 type commandResult struct {
-	ExitCode    int
-	Workspace   any
-	Data        any
-	Text        string
-	RawWritten  bool
-	Warnings    []output.Warning
-	NextActions []output.NextAction
+	ExitCode                 int
+	Workspace                any
+	Data                     any
+	Text                     string
+	RawWritten               bool
+	Warnings                 []output.Warning
+	NextActions              []output.NextAction
+	SkipScheduledMaintenance bool
 }
 
 func (a *App) renderError(identity machineCommandIdentity, jsonMode bool, err error) int {

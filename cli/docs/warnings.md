@@ -33,6 +33,7 @@ machine-readable source for that check.
 | rulings_projection_stale       | rulings list, show, check                        | `using cached rulings`                      | The workspace is unavailable. The warning includes the snapshot time and revision in JSON.                                                                                      |
 | rulings_projection_unavailable | rulings list, show                               | `cannot read rulings for`                   | A secondary enrollment could not be read. Results cover the successfully loaded workspaces.                                                                                     |
 | ruling_name_collision          | rulings list, show, check, pull, propose, import | `occurs in`                                 | Multiple visible rulings claim the ID or alias. The warning lists the workspace URLs.                                                                                           |
+| rulings_import_v1_defaults     | rulings import                                   | `schema_version 1 defaults`                 | Use a version 2 index to supply each ruling's scope, topic, body and source quote.                                                                                              |
 
 `<when>` everywhere is the `review_by` grammar: a UTC date (`YYYY-MM-DD`), an
 RFC3339 timestamp, or a positive `s`/`m`/`h`/`d` duration. A malformed value is

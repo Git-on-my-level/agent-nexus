@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -35,7 +34,8 @@ func validRulingDateID(id string) bool {
 
 type rulingProposalArgs struct {
 	date, scope, topic, title, bodyFile, quote string
-	aliases, relations                         []string
+	aliases                                    []string
+	relations                                  []rulingRelation
 }
 
 func (p *rulingProposalArgs) bind(fs *flag.FlagSet) {
@@ -50,7 +50,8 @@ func (p *rulingProposalArgs) bind(fs *flag.FlagSet) {
 		return nil
 	})
 	fs.Func("relation", "kind:R-YYYYMMDD-NN (repeatable)", func(value string) error {
-		p.relations = append(p.relations, value)
+		kind, id, _ := strings.Cut(value, ":")
+		p.relations = append(p.relations, rulingRelation{Kind: kind, ID: id})
 		return nil
 	})
 }
@@ -62,16 +63,19 @@ func (p rulingProposalArgs) validate() error {
 	if (p.scope != "workspace" && p.scope != "account") || !rulingTopicPattern.MatchString(p.topic) || strings.TrimSpace(p.quote) == "" || p.bodyFile == "" {
 		return errnorm.Usage("invalid_ruling_proposal", "--scope account|workspace, --topic, --quote and --body-file are required")
 	}
-	seen := map[string]bool{p.date: true}
-	for _, raw := range p.relations {
-		kind, id, _ := strings.Cut(raw, ":")
-		if !validRulingDateID(id) || seen[id] || (kind != "supersedes" && kind != "amends" && kind != "independent") {
-			return errnorm.Usage("invalid_ruling_relation", "use one --relation supersedes|amends|independent:R-YYYYMMDD-NN per target")
-		}
-		seen[id] = true
-	}
-	if err := validateRulingAliases(p.aliases); err != nil {
+	if err := validateRulingRelations(p.date, p.relations); err != nil {
 		return err
+	}
+	return validateRulingAliases(p.aliases)
+}
+
+func validateRulingRelations(id string, relations []rulingRelation) error {
+	seen := map[string]bool{id: true}
+	for _, rel := range relations {
+		if !validRulingDateID(rel.ID) || seen[rel.ID] || (rel.Kind != "supersedes" && rel.Kind != "amends" && rel.Kind != "independent") {
+			return errnorm.Usage("invalid_ruling_relation", "use one supersedes, amends or independent relation per other R-YYYYMMDD-NN")
+		}
+		seen[rel.ID] = true
 	}
 	return nil
 }
@@ -87,7 +91,7 @@ func validateRulingAliases(aliases []string) error {
 	return nil
 }
 
-type rulingWrite struct {
+type rulingProposal struct {
 	ID               string           `json:"ruling_id"`
 	Aliases          []string         `json:"aliases,omitempty"`
 	Scope            string           `json:"scope"`
@@ -99,12 +103,35 @@ type rulingWrite struct {
 	StatusHint       string           `json:"status_hint,omitempty"`
 	SupersededByHint string           `json:"superseded_by_hint,omitempty"`
 	Relations        []rulingRelation `json:"relations,omitempty"`
-	RequestKey       string           `json:"idempotency_key"`
+}
+
+type rulingWrite struct {
+	rulingProposal
+	RequestKey string `json:"idempotency_key"`
 }
 
 type rulingRelation struct {
 	Kind string `json:"kind"`
 	ID   string `json:"ruling_id"`
+}
+
+func (r rulingProposal) validateContent() error {
+	for _, field := range []struct {
+		name, value string
+		max         int
+	}{
+		{"title", r.Title, 1024},
+		{"body", r.Body, 32768},
+		{"source_quote", r.Quote, 8192},
+	} {
+		if strings.TrimSpace(field.value) == "" || utf8.RuneCountInString(field.value) > field.max {
+			return errnorm.Usage("invalid_ruling_proposal", fmt.Sprintf("%s must contain text and be at most %d characters", field.name, field.max))
+		}
+	}
+	if len(r.Aliases) > 32 || len(r.Relations) > 200 {
+		return errnorm.Usage("invalid_ruling_proposal", "at most 32 aliases and 200 relations are allowed")
+	}
+	return nil
 }
 
 func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulingProposalArgs) (*commandResult, error) {
@@ -117,13 +144,9 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 		line, _, _ := strings.Cut(strings.TrimSpace(string(body)), "\n")
 		title = strings.TrimSpace(strings.TrimLeft(line, "#"))
 	}
-	if title == "" || utf8.RuneCountInString(title) > 1024 || strings.TrimSpace(string(body)) == "" || utf8.RuneCount(body) > 32768 || utf8.RuneCountInString(args.quote) > 8192 || len(args.aliases) > 32 || len(args.relations) > 200 {
-		return nil, errnorm.Usage("invalid_ruling_proposal", "title, body, quote, aliases or relations exceed the proposal limits")
-	}
-	req := rulingWrite{ID: args.date, Title: title, Body: string(body), Quote: args.quote, Scope: args.scope, Topic: args.topic, Aliases: args.aliases}
-	for _, raw := range args.relations {
-		kind, id, _ := strings.Cut(raw, ":")
-		req.Relations = append(req.Relations, rulingRelation{Kind: kind, ID: id})
+	req := rulingProposal{ID: args.date, Title: title, Body: string(body), Quote: args.quote, Scope: args.scope, Topic: args.topic, Aliases: args.aliases, Relations: args.relations}
+	if err := req.validateContent(); err != nil {
+		return nil, err
 	}
 	snapshot, err := a.collectRulings(ctx, cfg, true, false)
 	if err != nil {
@@ -165,7 +188,7 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 	return a.rulingsOutput(cfg, map[string]any{"ruling": ruling}, []string{formatRuling(ruling, false)}, snapshot), nil
 }
 
-func sameRulingProposal(row map[string]any, req rulingWrite) bool {
+func sameRulingProposal(row map[string]any, req rulingProposal) bool {
 	if row["status"] != "proposed" {
 		return false
 	}
@@ -191,7 +214,7 @@ func sameRulingProposal(row map[string]any, req rulingWrite) bool {
 	return true
 }
 
-func checkRulingWriteNames(snapshot rulingCollection, req rulingWrite, selected string) error {
+func checkRulingWriteNames(snapshot rulingCollection, req rulingProposal, selected string) error {
 	for _, name := range append([]string{req.ID}, req.Aliases...) {
 		if homes := snapshot.collisions[name]; len(homes) > 0 {
 			return errnorm.New(errnorm.KindRemote, "conflict", rulingNameCollisionWarning(name, homes).Message)
@@ -206,13 +229,14 @@ func checkRulingWriteNames(snapshot rulingCollection, req rulingWrite, selected 
 	return nil
 }
 
-func (a *App) sendRulingProposal(ctx context.Context, cfg config.Resolved, command string, req rulingWrite) (map[string]any, error) {
-	canonical, err := json.Marshal(req)
+func (a *App) sendRulingProposal(ctx context.Context, cfg config.Resolved, command string, req rulingProposal) (map[string]any, error) {
+	write := rulingWrite{rulingProposal: req}
+	canonical, err := json.Marshal(write)
 	if err != nil {
 		return nil, err
 	}
-	req.RequestKey = fmt.Sprintf("ruling:%x", sha256.Sum256(canonical))
-	result, err := a.invokeRawJSON(ctx, cfg, command, http.MethodPost, "/rulings/propose", req)
+	write.RequestKey = fmt.Sprintf("ruling:%x", sha256.Sum256(canonical))
+	result, err := a.invokeRawJSON(ctx, cfg, command, http.MethodPost, "/rulings/propose", write)
 	if err != nil {
 		return nil, err
 	}
@@ -233,124 +257,6 @@ func (a *App) sendRulingProposal(ctx context.Context, cfg config.Resolved, comma
 		return nil, errnorm.Local("rulings_proposal_invalid", "proposal response is missing the ruling")
 	}
 	return ruling, nil
-}
-
-type rulingIndexEntry struct {
-	ID           string   `json:"id"`
-	Aliases      []string `json:"aliases"`
-	Status       string   `json:"status"`
-	SupersededBy string   `json:"superseded_by"`
-	Supersedes   []string `json:"supersedes"`
-	Title        string   `json:"title"`
-	Date         string   `json:"date"`
-	Source       string   `json:"source"`
-	Origin       string   `json:"origin"`
-}
-
-const defaultRulingImportMax = 1000
-
-func decodeRulingIndex(raw []byte, maxEntries int) ([]rulingIndexEntry, error) {
-	var index struct {
-		SchemaVersion int                `json:"schema_version"`
-		GeneratedFrom []string           `json:"generated_from"`
-		Rulings       []rulingIndexEntry `json:"rulings"`
-	}
-	if err := json.Unmarshal(raw, &index); err != nil {
-		return nil, err
-	}
-	if index.SchemaVersion != 1 || len(index.GeneratedFrom) == 0 || index.Rulings == nil {
-		return nil, fmt.Errorf("expected a generated schema_version 1 rulings index")
-	}
-	if len(index.Rulings) > maxEntries {
-		return nil, fmt.Errorf("index has %d entries, exceeding --max-entries %d", len(index.Rulings), maxEntries)
-	}
-	names := map[string]bool{}
-	entries := map[string]rulingIndexEntry{}
-	for _, r := range index.Rulings {
-		date, err := time.Parse(time.DateOnly, r.Date)
-		if !validRulingDateID(r.ID) || err != nil || r.ID[2:10] != date.Format("20060102") || r.Aliases == nil || r.Supersedes == nil || len(r.Aliases) > 32 || len(r.Supersedes) > 200 || strings.TrimSpace(r.Title) == "" || utf8.RuneCountInString(r.Title) > 1024 || strings.TrimSpace(r.Source) == "" || utf8.RuneCountInString(r.Source) > 2048 {
-			return nil, fmt.Errorf("invalid ruling entry %q", r.ID)
-		}
-		switch r.Status {
-		case "active", "superseded", "revoked", "spent", "historical":
-		default:
-			return nil, fmt.Errorf("invalid status for %s", r.ID)
-		}
-		if (r.Status == "revoked" || r.Status == "spent") && len(r.Supersedes) != 0 {
-			return nil, fmt.Errorf("retired ruling %s cannot supersede another ruling", r.ID)
-		}
-		switch r.Origin {
-		case "rulings-file", "register", "wave3", "hostctl":
-		default:
-			return nil, fmt.Errorf("invalid origin for %s", r.ID)
-		}
-		if err := validateRulingAliases(r.Aliases); err != nil {
-			return nil, err
-		}
-		for _, name := range append([]string{r.ID}, r.Aliases...) {
-			if names[name] {
-				return nil, fmt.Errorf("duplicate ruling ID or alias %q", name)
-			}
-			names[name] = true
-		}
-		entries[r.ID] = r
-	}
-	for _, r := range index.Rulings {
-		seen := map[string]bool{r.ID: true}
-		if r.SupersededBy != "" && (r.Status != "superseded" || r.SupersededBy == r.ID || entries[r.SupersededBy].ID == "") {
-			return nil, fmt.Errorf("invalid superseder for %s", r.ID)
-		}
-		for _, target := range r.Supersedes {
-			if seen[target] || entries[target].ID == "" {
-				return nil, fmt.Errorf("invalid supersession from %s to %s", r.ID, target)
-			}
-			seen[target] = true
-		}
-	}
-	sort.Slice(index.Rulings, func(i, j int) bool { return index.Rulings[i].ID < index.Rulings[j].ID })
-	return index.Rulings, nil
-}
-
-func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path string, maxEntries int) (*commandResult, error) {
-	raw, err := a.readRulingInput(path, rulingProjectionSize)
-	if err != nil {
-		return nil, err
-	}
-	entries, err := decodeRulingIndex(raw, maxEntries)
-	if err != nil {
-		return nil, errnorm.Usage("invalid_rulings_index", err.Error())
-	}
-	snapshot, err := a.collectRulings(ctx, cfg, true, false)
-	if err != nil {
-		return nil, err
-	}
-	selected := anyString(snapshot.projections[0]["workspace_url"])
-	writes := make([]rulingWrite, 0, len(entries))
-	for _, r := range entries {
-		// The index describes provenance and lifecycle, not the ruling's prose
-		// or topic. Use its heading as review evidence and keep the source link.
-		req := rulingWrite{
-			ID: r.ID, Aliases: r.Aliases, Scope: "account", Topic: "import-" + strings.ToLower(r.ID),
-			Title: r.Title, Body: r.Title, Quote: r.Title, Source: r.Source,
-			StatusHint: r.Status, SupersededByHint: r.SupersededBy,
-		}
-		for _, target := range r.Supersedes {
-			req.Relations = append(req.Relations, rulingRelation{Kind: "supersedes", ID: target})
-		}
-		if err := checkRulingWriteNames(snapshot, req, selected); err != nil {
-			return nil, err
-		}
-		writes = append(writes, req)
-	}
-	result := []any{}
-	for _, req := range writes {
-		sent, err := a.sendRulingProposal(ctx, cfg, "rulings import", req)
-		if err != nil {
-			return nil, fmt.Errorf("import %s after %d successful submissions (safe to retry the same index): %w", req.ID, len(result), err)
-		}
-		result = append(result, sent)
-	}
-	return &commandResult{Data: map[string]any{"rulings": result, "submitted": len(result)}, Warnings: snapshot.warnings}, nil
 }
 
 func (a *App) readRulingInput(path string, max int64) ([]byte, error) {
