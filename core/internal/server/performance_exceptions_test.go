@@ -227,13 +227,17 @@ func reviewedPerformanceException(issue, link, reason string) bool {
 
 func performancePlanExceptions(t *testing.T) map[string]bool {
 	t.Helper()
-	raw, err := os.ReadFile("testdata/performance_plan_allowlist.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var entries []perfguard.PlanException
-	if err = json.Unmarshal(raw, &entries); err != nil {
-		t.Fatal(err)
+	for _, path := range []string{"testdata/performance_plan_allowlist.json", "testdata/performance_plan_allowlist_rulings.json"} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fileEntries []perfguard.PlanException
+		if err := json.Unmarshal(raw, &fileEntries); err != nil {
+			t.Fatal(err)
+		}
+		entries = append(entries, fileEntries...)
 	}
 	allowed := map[string]bool{}
 	for _, e := range entries {

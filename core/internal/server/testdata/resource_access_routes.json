@@ -1379,5 +1379,23 @@
     "method": "POST",
     "path": "/rulings/{ruling_id}/applied",
     "policy": "reference-write"
+  },
+  {
+    "method": "GET",
+    "path": "/rulings/projection",
+    "policy": "collection",
+    "reason": "Bounded workspace membership and scoped operating-ruling provenance."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/propose",
+    "policy": "reference-write",
+    "reason": "Workspace member proposal with scoped prose references and a durable request key."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/confirm",
+    "policy": "reference-write",
+    "reason": "Human-only confirmation of a visible proposal and its visible targets."
   }
 ]

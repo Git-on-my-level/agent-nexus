@@ -6,6 +6,16 @@
  */
 export const rulingCommands = (q, b, pb, pathParams) => [
   ["rulingsList", "rulings.list", (filters) => ({ options: q(filters) })],
+  [
+    "rulingsProjection",
+    "rulings.projection",
+    (filters) => ({ options: q(filters) }),
+  ],
+  [
+    "rulingsConfirm",
+    "rulings.confirm",
+    (id, payload) => pb(pathParams({ ruling_id: id }), payload),
+  ],
   ["rulingsCreate", "rulings.create", (payload) => ({ options: b(payload) })],
   [
     "rulingsRevoke",

@@ -15,6 +15,7 @@ import {
 import { randomUUID } from "$lib/replayPolicy.js";
 import {
   NOT_A_DECISION,
+  RULING_CONFIRM,
   RULING_CREATE,
   RULING_REVOKE,
 } from "$lib/standingRulingSend.js";
@@ -25,6 +26,7 @@ export const NOT_A_DECISION_REASON =
 
 export const STANDING_OPERATIONS = [
   NOT_A_DECISION,
+  RULING_CONFIRM,
   RULING_CREATE,
   RULING_REVOKE,
 ];
@@ -81,6 +83,21 @@ function enqueueStandingAnswer({ askRef, answer, title, href }) {
     title: "Always answer this way",
     preview: title ? `${title} → ${answer}` : answer,
     request: { body: { ask_ref: askRef, kind: "answer", answer } },
+  });
+}
+
+export const confirmRulingTarget = (id) => `ruling-confirm:${id}`;
+
+export function enqueueRulingConfirm({ id, question, href }) {
+  const key = randomUUID();
+  return enqueueLocalMutation({
+    key,
+    target: confirmRulingTarget(id),
+    operation: RULING_CONFIRM,
+    href,
+    title: "Confirm ruling",
+    preview: question,
+    request: { id, body: { idempotency_key: key } },
   });
 }
 
@@ -167,7 +184,13 @@ export function watchStandingAnswers() {
   const prefix = notADecisionTarget("");
   const stopConfirmed = mutationConfirmations.subscribe((rows) => {
     for (const target of Object.keys(rows ?? {})) {
-      if (!target.startsWith(prefix) || seen.has(target)) continue;
+      if (
+        (!target.startsWith(prefix) &&
+          !target.startsWith(confirmRulingTarget("")) &&
+          !target.startsWith(revokeTarget(""))) ||
+        seen.has(target)
+      )
+        continue;
       seen.add(target);
       void refreshBrief()?.catch?.(() => {});
     }

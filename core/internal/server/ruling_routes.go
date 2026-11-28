@@ -32,15 +32,25 @@ func registerCurationAndRulingRoutes(registerRoute func(string, routeAccessClass
 		}
 		handleCreateRuling(w, r, opts)
 	})
+	registerRoute("/rulings/projection", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationNone, http.MethodGet), func(w http.ResponseWriter, r *http.Request) {
+		handleOperatingRulingPage(w, r, opts)
+	})
+	registerRoute("/rulings/propose", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		handleProposeOperatingRuling(w, r, opts)
+	})
 	registerRoute("/rulings/", func(r *http.Request) routeAccessRequirement {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")
-		if len(parts) == 2 && parts[0] != "" && (parts[1] == "revoke" || parts[1] == "applied") && r.Method == http.MethodPost {
+		if len(parts) == 2 && parts[0] != "" && (parts[1] == "revoke" || parts[1] == "applied" || parts[1] == "confirm") && r.Method == http.MethodPost {
 			return routeAccessRequirement{bucket: routeAccessWorkspaceBusiness, mutation: routeMutationBusiness, supported: true}
 		}
 		return routeAccessRequirement{}
 	}, func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")
-		if parts[1] == "applied" {
+		switch parts[1] {
+		case "confirm":
+			handleConfirmOperatingRuling(w, r, opts, parts[0])
+			return
+		case "applied":
 			handleRulingApplied(w, r, opts, parts[0])
 			return
 		}

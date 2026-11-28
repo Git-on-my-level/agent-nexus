@@ -20,6 +20,7 @@
  * its own adapters.
  */
 export const NOT_A_DECISION = "asks.not_a_decision";
+export const RULING_CONFIRM = "rulings.confirm";
 export const RULING_CREATE = "rulings.create";
 export const RULING_REVOKE = "rulings.revoke";
 export const SKIP = "inbox.skip";
@@ -199,6 +200,16 @@ export async function sendStandingMutation(client, entry, checkpoint) {
   if (entry.operation === SKIP) return sendSkip(client, entry.request);
   if (entry.operation === SKIP_MANY)
     return sendSkipMany(client, entry, checkpoint);
+  if (entry.operation === RULING_CONFIRM) {
+    const { id, body } = entry.request;
+    const result = await client.rulingsConfirm(id, body);
+    if (
+      result?.ruling?.ruling_id !== id ||
+      !["active", "revoked", "superseded"].includes(result.ruling.status)
+    )
+      throw new Error("Ruling confirmation receipt is incomplete.");
+    return result;
+  }
   if (entry.operation === RULING_REVOKE) {
     const result = await client.rulingsRevoke(entry.request.id);
     if (!result?.ruling?.id) throw new Error("Revoke receipt is incomplete.");

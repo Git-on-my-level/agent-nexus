@@ -147,7 +147,7 @@ func (a *App) runCommandWithDebug(ctx context.Context, args []string, cfg config
 		return "tell", result, err
 	case "rulings":
 		result, err := a.runRulings(ctx, args[1:], cfg)
-		return "rulings list", result, err
+		return rulingsCommandName(args[1:]), result, err
 	case "version":
 		result, err := a.runVersion(cfg)
 		return "version", result, err

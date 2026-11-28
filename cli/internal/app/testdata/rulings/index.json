@@ -1,0 +1,50 @@
+{
+  "generated_from": ["fixture-source.md"],
+  "rulings": [
+    {
+      "aliases": ["R3"],
+      "date": "2026-11-12",
+      "id": "R-20261112-03",
+      "origin": "register",
+      "source": "fixture-source.md#spent",
+      "status": "spent",
+      "superseded_by": null,
+      "supersedes": [],
+      "title": "A spent decision"
+    },
+    {
+      "aliases": ["R17"],
+      "date": "2026-11-14",
+      "id": "R-20261114-01",
+      "origin": "rulings-file",
+      "source": "fixture-source.md#previous",
+      "status": "superseded",
+      "superseded_by": "R-20261126-08",
+      "supersedes": [],
+      "title": "Previous host instruction"
+    },
+    {
+      "aliases": ["R17 exception"],
+      "date": "2026-11-21",
+      "id": "R-20261121-01",
+      "origin": "rulings-file",
+      "source": "fixture-source.md#exception",
+      "status": "superseded",
+      "superseded_by": "R-20261126-08",
+      "supersedes": [],
+      "title": "Exception to previous host instruction"
+    },
+    {
+      "aliases": ["R41"],
+      "date": "2026-11-26",
+      "id": "R-20261126-08",
+      "origin": "rulings-file",
+      "source": "fixture-source.md#current",
+      "status": "active",
+      "superseded_by": null,
+      "supersedes": ["R-20261114-01", "R-20261121-01"],
+      "title": "Host may take new work"
+    }
+  ],
+  "schema_version": 1
+}

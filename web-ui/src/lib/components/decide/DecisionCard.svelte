@@ -1,6 +1,7 @@
 <script>
   import AskPresentation from "./AskPresentation.svelte";
   import DecisionBatch from "./DecisionBatch.svelte";
+  import DecisionRuling from "./DecisionRuling.svelte";
   import DecisionStanding from "./DecisionStanding.svelte";
   import StakesBadges from "./StakesBadges.svelte";
   import { editable, outcomeFor, reducedMotion } from "$lib/decideCard.js";
@@ -86,12 +87,7 @@
   let full = $derived(variant === "full");
   /** Decide's detail pane: the old Inbox reading pane, no card chrome. */
   let pane = $derived(variant === "pane");
-  /**
-   * Decide on a phone: one card in a scrollable stack. The whole decision is
-   * on the card (a long body folds behind "Show more"), suggestions are full
-   * width tap targets and one tap answers; Reply opens a composer that pins
-   * above the bottom nav and the on-screen keyboard.
-   */
+  /** On phones, render a stack and pin the reply composer above the keyboard. */
   let stack = $derived(variant === "stack");
   /** Variants that read the whole decision rather than a summary row. */
   let rich = $derived(pane || full || stack);
@@ -119,15 +115,9 @@
     Boolean(overlay && overlay.status !== "failed") || Boolean(unsent),
   );
 
-  /**
-   * How this kind is answered. Asks, reviews, access requests and curation
-   * proposals (`pm_proposal`, an ask whose first proposal is "do it") are
-   * inbox items: POST /inbox/{id}/respond. A proposal that carries a PM
-   * decision record answers through the durable PM decision route instead.
-   * A host enrollment is approved on Access, whose routes need the
-   * enrollment record, so it opens there.
-   */
-  let structured = $derived(decision.kind === "access");
+  let structured = $derived(
+    decision.kind === "access" || decision.kind === "ruling_proposal",
+  );
   let pmAnswer = $derived(
     decision.kind === "pm_proposal" && Boolean(decision.pmDecision),
   );
@@ -247,6 +237,7 @@
   let canChoose = $derived(
     !answered &&
       !filedBatch &&
+      decision.kind !== "ruling_proposal" &&
       !elsewhere &&
       !confirming &&
       !(pmAnswer && (pmSent || pmQueued)),
@@ -662,7 +653,13 @@
   {/if}
 
   <div class={rich ? "space-y-3" : "mt-3 space-y-2"}>
-    {#if pmAnswer && (pmSent || pmQueued)}
+    {#if decision.rulingProposal}
+      <DecisionRuling
+        ruling={decision.rulingProposal}
+        href={href(`/decide/${encodeURIComponent(itemId)}`)}
+        crossWorkspace={Boolean(binding)}
+      />
+    {:else if pmAnswer && (pmSent || pmQueued)}
       {#if pmQueued}
         <MutationSendStatus target={pmTarget} />
       {:else}

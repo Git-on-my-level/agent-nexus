@@ -101,6 +101,16 @@ var recentMigrations = []migration{
 	// the compact ledger in both directions, then dropped. A mismatch aborts the
 	// upgrade instead of repairing or guessing.
 	{Version: 150, ApplyChunk: retireLegacyAccessLedgerChunk, BetweenChunks: checkpointMigrationWAL, Verify: verifyRetiredAccessLedger},
+	{Version: 151, AfterApply: installOperatingRulings},
+	{Version: 152, Statements: []string{
+		`CREATE INDEX IF NOT EXISTS idx_standing_rulings_proposed_utc ON standing_rulings(rtrim(created_at,'Z') DESC,ruling_id) WHERE status='proposed' AND ruling_id IS NOT NULL`,
+		`DROP INDEX IF EXISTS idx_standing_rulings_proposed`,
+	}},
+	{Version: 153, AfterApply: installOperatingRulingUsageTracking, Statements: []string{
+		`INSERT OR IGNORE INTO standing_ruling_names(name,ruling_id) SELECT id,id FROM standing_rulings WHERE ruling_id IS NULL`,
+		`CREATE TRIGGER IF NOT EXISTS standing_ruling_reserve_legacy_name AFTER INSERT ON standing_rulings WHEN NEW.ruling_id IS NULL
+		 BEGIN INSERT INTO standing_ruling_names(name,ruling_id) VALUES(NEW.id,NEW.id); END`,
+	}},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

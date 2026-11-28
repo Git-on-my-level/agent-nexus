@@ -5,7 +5,7 @@ The OpenAPI contract uses `x-anx-*` extensions as the single source for CLI/help
 Required now for every command operation:
 
 - `x-anx-command-id`: stable id (for example `threads.list`)
-- `x-anx-cli-path`: CLI path (for example `threads list`)
+- `x-anx-cli-path`: CLI path (for example `threads list`). An HTTP operation with `x-anx-cli-hidden: true` omits this field and remains available to API clients.
 - `x-anx-why`: non-empty purpose/decision boundary
 - `x-anx-input-mode`: HTTP/input-shape mode, one of `none|query|json-body|flags|flags-or-json|raw-stream|file-and-body|multipart-form`
 - `x-anx-streaming`: streaming metadata object

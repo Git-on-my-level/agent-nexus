@@ -9,63 +9,182 @@ import (
 	"agent-nexus-cli/internal/errnorm"
 )
 
-// anx rulings list shows the answers a human made durable. An agent reads it
-// before asking: an ask a ruling covers is answered at once and reaches
-// nobody. Making and revoking a ruling is a human act, done in Decide.
 func rulingsUsage() string {
-	return "usage: anx rulings list [--include-revoked]"
+	return "usage: anx rulings list|show|pull|check|propose|import (see anx rulings --help)"
 }
 
-func parseRulingsArgs(args []string) (bool, error) {
-	if len(args) == 0 || args[0] != "list" {
-		return false, errnorm.Usage("invalid_args", rulingsUsage())
+type rulingsArgs struct {
+	verb, ref, surfaces, file    string
+	includeRevoked, strictLegacy bool
+	paths                        []string
+	maxEntries                   int
+	proposal                     rulingProposalArgs
+}
+
+func parseRulingsArgs(args []string) (rulingsArgs, error) {
+	var parsed rulingsArgs
+	if len(args) == 0 {
+		return parsed, errnorm.Usage("invalid_args", rulingsUsage())
 	}
-	fs := newSilentFlagSet("rulings list")
-	revoked := fs.Bool("include-revoked", false, "Also list rulings a human revoked")
-	if err := fs.Parse(args[1:]); err != nil {
-		return false, errnorm.Usage("invalid_flags", err.Error())
+	parsed.verb = args[0]
+	fs := newSilentFlagSet("rulings " + parsed.verb)
+	input := args[1:]
+	switch parsed.verb {
+	case "list":
+		fs.BoolVar(&parsed.includeRevoked, "include-revoked", false, "Include inactive and proposed rulings")
+	case "show", "pull":
+	case "check":
+		fs.StringVar(&parsed.surfaces, "surfaces", "", "Enforcement surface globs")
+		fs.BoolVar(&parsed.strictLegacy, "strict-legacy", false, "Fail bare active legacy citations")
+		// The check accepts flags before or after explicit paths.
+		var options []string
+		for i := 0; i < len(input); i++ {
+			token := input[i]
+			if token == "--" {
+				parsed.paths = append(parsed.paths, input[i+1:]...)
+				break
+			}
+			if strings.HasPrefix(token, "-") {
+				options = append(options, token)
+				if token == "--surfaces" || token == "-surfaces" {
+					if i+1 < len(input) {
+						i++
+						options = append(options, input[i])
+					}
+				}
+			} else {
+				parsed.paths = append(parsed.paths, token)
+			}
+		}
+		input = options
+	case "propose":
+		parsed.proposal.bind(fs)
+	case "import":
+		fs.StringVar(&parsed.file, "file", "", "Generated rulings index")
+		fs.IntVar(&parsed.maxEntries, "max-entries", defaultRulingImportMax, "Maximum index entries to submit")
+	default:
+		return parsed, errnorm.Usage("unknown_subcommand", rulingsUsage())
 	}
-	if len(fs.Args()) != 0 {
-		return false, errnorm.Usage("invalid_args", rulingsUsage())
+	if err := fs.Parse(input); err != nil {
+		return parsed, errnorm.Usage("invalid_flags", err.Error())
 	}
-	return *revoked, nil
+	switch {
+	case parsed.verb == "show" && fs.NArg() == 1:
+		parsed.ref = fs.Arg(0)
+	case parsed.verb == "show" || fs.NArg() != 0:
+		return parsed, errnorm.Usage("invalid_args", rulingsUsage())
+	case parsed.verb == "import" && parsed.file == "":
+		return parsed, errnorm.Usage("invalid_args", "usage: anx rulings import --file index.json")
+	case parsed.verb == "import" && parsed.maxEntries <= 0:
+		return parsed, errnorm.Usage("invalid_flags", "--max-entries must be positive")
+	case parsed.verb == "propose":
+		return parsed, parsed.proposal.validate()
+	}
+	return parsed, nil
+}
+
+func rulingsCommandName(args []string) string {
+	if len(args) > 0 {
+		return "rulings " + args[0]
+	}
+	return "rulings"
 }
 
 func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved) (*commandResult, error) {
-	includeRevoked, err := parseRulingsArgs(args)
+	p, err := parseRulingsArgs(args)
 	if err != nil {
 		return nil, err
 	}
-	path := "/rulings"
-	if includeRevoked {
-		path += "?include_revoked=true"
+	switch p.verb {
+	case "propose":
+		return a.proposeRuling(ctx, cfg, p.proposal)
+	case "import":
+		return a.importRulings(ctx, cfg, p.file, p.maxEntries)
 	}
-	result, err := a.invokeRawJSON(ctx, cfg, "rulings list", "GET", path, nil)
+	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull", p.verb == "list" || p.verb == "show")
 	if err != nil {
+		if p.verb == "check" {
+			return nil, errnorm.Usage("rulings_index_unavailable", err.Error())
+		}
 		return nil, err
 	}
-	rulings := asSlice(commandResultBody(result)["rulings"])
-	lines := make([]string, 0, len(rulings)+1)
-	for _, raw := range rulings {
-		ruling := asMap(raw)
-		line := fmt.Sprintf("%s  %q", anyString(ruling["ref"]), anyString(ruling["question"]))
-		if anyString(ruling["kind"]) == "not_a_decision" {
-			line += fmt.Sprintf(" → not a decision when %s asks: use anx tell", firstNonEmpty(anyString(ruling["requester"]), "this requester"))
-		} else {
-			line += fmt.Sprintf(" → %q · applies whoever asks", anyString(ruling["answer"]))
+	switch p.verb {
+	case "pull":
+		if snapshot.projections[0]["source_revision"] == rulingRevisionLegacy {
+			return nil, errnorm.Usage("rulings_index_unavailable", "the selected workspace does not serve an operating ruling projection to pull")
 		}
-		line += fmt.Sprintf(" · used %d×", intValue(ruling["uses"]))
-		if ruling["active"] == false {
-			line += " · revoked"
+		return &commandResult{Data: map[string]any{"rulings": len(snapshot.rows), "projections": snapshot.projections}, Warnings: snapshot.warnings}, nil
+	case "check":
+		for _, projection := range snapshot.projections {
+			if projection["source_revision"] == rulingRevisionLegacy {
+				return nil, errnorm.Usage("rulings_index_unavailable", "no operating ruling projection for "+anyString(projection["workspace_url"]))
+			}
 		}
-		lines = append(lines, line)
+		return a.checkRulings(ctx, cfg, p, snapshot)
+	case "show":
+		ref := strings.TrimPrefix(p.ref, "ruling:")
+		if homes := snapshot.collisions[ref]; len(homes) > 0 {
+			return nil, errnorm.New(errnorm.KindRemote, "conflict", rulingNameCollisionWarning(ref, homes).Message)
+		}
+		ruling := snapshot.names[ref]
+		if ruling == nil {
+			return nil, errnorm.New(errnorm.KindRemote, "ruling_not_found", "ruling not found: "+p.ref)
+		}
+		return a.rulingsOutput(cfg, map[string]any{"ruling": ruling}, []string{formatRuling(ruling, true)}, snapshot), nil
+	default:
+		rows := []map[string]any{}
+		lines := []string{}
+		for _, ruling := range snapshot.rows {
+			if !p.includeRevoked && ruling["active"] != true {
+				continue
+			}
+			rows = append(rows, ruling)
+			lines = append(lines, formatRuling(ruling, false))
+		}
+		if len(lines) == 0 {
+			lines = append(lines, "no active standing rulings")
+		}
+		// Keep the original list response path for scripts that read
+		// data.body.rulings. A combined projection has no single header set.
+		data := map[string]any{"rulings": rows, "status_code": 200, "headers": map[string]string{}, "body": map[string]any{"rulings": rows}}
+		return a.rulingsOutput(cfg, data, lines, snapshot), nil
 	}
-	if len(lines) == 0 {
-		lines = append(lines, "no standing rulings: nothing a human answered has been made durable yet")
-	}
+}
+
+func (a *App) rulingsOutput(cfg config.Resolved, data any, lines []string, snapshot rulingCollection) *commandResult {
 	if cfg.JSON {
-		return result, nil
+		return &commandResult{Data: data, Warnings: snapshot.warnings}
 	}
 	a.writeOutput(a.Stdout, strings.Join(lines, "\n")+"\n")
-	return &commandResult{RawWritten: true}, nil
+	for _, warning := range snapshot.warnings {
+		fmt.Fprintf(a.Stderr, "warning code=%s %s\n", warning.Code, warning.Message)
+	}
+	return &commandResult{RawWritten: true}
+}
+
+func formatRuling(ruling map[string]any, detail bool) string {
+	if anyString(ruling["kind"]) == "operating" {
+		line := fmt.Sprintf("%s  %q · %s · %s/%s", anyString(ruling["ruling_id"]), anyString(ruling["question"]), anyString(ruling["status"]), anyString(ruling["scope"]), anyString(ruling["topic"]))
+		if next := anyString(ruling["superseded_by"]); next != "" {
+			line += " → " + next
+		}
+		if detail {
+			line += "\n" + anyString(ruling["body"]) + "\nSource quote: " + anyString(ruling["source_quote"])
+			if source := anyString(ruling["source"]); source != "" {
+				line += "\nSource: " + source
+			}
+		}
+		return line
+	}
+	line := fmt.Sprintf("%s  %q", anyString(ruling["ref"]), anyString(ruling["question"]))
+	if anyString(ruling["kind"]) == "not_a_decision" {
+		line += fmt.Sprintf(" → not a decision when %s asks: use anx tell", firstNonEmpty(anyString(ruling["requester"]), "this requester"))
+	} else {
+		line += fmt.Sprintf(" → %q · applies whoever asks", anyString(ruling["answer"]))
+	}
+	line += fmt.Sprintf(" · used %d×", intValue(ruling["uses"]))
+	if ruling["active"] == false {
+		line += " · revoked"
+	}
+	return line
 }

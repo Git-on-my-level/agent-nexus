@@ -706,5 +706,15 @@
     "method": "POST",
     "path": "/rulings/{ruling_id}/applied",
     "reason": "One ruling primary-key read joined to its scoped source ask, one primary-key counter update."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/propose",
+    "reason": "Workspace member proposal with scoped prose references and a durable request key."
+  },
+  {
+    "method": "POST",
+    "path": "/rulings/{ruling_id}/confirm",
+    "reason": "Human-only confirmation of a visible proposal and its visible targets."
   }
 ]

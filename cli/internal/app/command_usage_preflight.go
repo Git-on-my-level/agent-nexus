@@ -190,7 +190,7 @@ func preflightConfigIndependentUsageWithDebug(args []string, debug bool) (string
 		return "tell", err
 	case "rulings":
 		_, err := parseRulingsArgs(args[1:])
-		return "rulings list", err
+		return rulingsCommandName(args[1:]), err
 	case "done":
 		_, _, err := parseDoneArgs(args[1:])
 		return "done", err

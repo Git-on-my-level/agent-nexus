@@ -534,5 +534,9 @@
   {
     "key": "GET /rulings",
     "milliseconds": 4000
+  },
+  {
+    "key": "GET /rulings/projection",
+    "milliseconds": 150
   }
 ]

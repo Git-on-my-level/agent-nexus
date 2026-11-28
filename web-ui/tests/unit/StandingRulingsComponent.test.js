@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const core = vi.hoisted(() => ({ rulingsList: vi.fn() }));
+const core = vi.hoisted(() => ({
+  rulingsList: vi.fn(),
+  rulingsProjection: vi.fn(),
+}));
 vi.mock("$lib/coreClient", () => ({ coreClient: core }));
 const outbox = await vi.hoisted(async () => {
   const { writable } = await import("svelte/store");
@@ -53,6 +56,7 @@ const toggle = (c) => c.querySelector("[data-standing-rulings-toggle]");
 
 beforeEach(() => {
   core.rulingsList.mockReset().mockResolvedValue({ rulings });
+  core.rulingsProjection.mockReset().mockResolvedValue({ rulings: [] });
   outbox.enqueueLocalMutation.mockReset().mockImplementation(async (e) => e);
   outbox.mutationOutbox.set([]);
   outbox.mutationConfirmations.set({});

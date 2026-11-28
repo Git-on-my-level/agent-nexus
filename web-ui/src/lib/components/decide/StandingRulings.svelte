@@ -23,21 +23,57 @@
   let state = $state("idle"); // idle | loading | ready | failed
   let rulings = $state([]);
   let saveError = $state("");
+  let cursor = $state("");
+  let revision = $state("");
+  let loadingMore = $state(false);
+  let pageError = $state(false);
 
   async function load() {
     state = "loading";
     try {
-      const result = await coreClient.rulingsList();
-      rulings = Array.isArray(result?.rulings) ? result.rulings : [];
+      const [legacy, operating] = await Promise.all([
+        coreClient.rulingsList(),
+        coreClient.rulingsProjection().catch((error) => {
+          if (error?.status === 404 || error?.status === 405) return {};
+          throw error;
+        }),
+      ]);
+      rulings = [...(legacy?.rulings ?? []), ...(operating?.rulings ?? [])];
+      cursor = operating?.next_cursor ?? "";
+      revision = operating?.source_revision ?? "";
+      pageError = false;
       state = "ready";
     } catch {
       state = "failed";
     }
   }
 
+  async function loadMore() {
+    if (loadingMore || !cursor) return;
+    loadingMore = true;
+    pageError = false;
+    try {
+      const result = await coreClient.rulingsProjection({ after: cursor });
+      if (result?.source_revision !== revision) {
+        await load();
+        return;
+      }
+      const already = new Set(rulings.map((ruling) => ruling.id));
+      rulings = [
+        ...rulings,
+        ...(result?.rulings ?? []).filter((ruling) => !already.has(ruling.id)),
+      ];
+      cursor = result?.next_cursor ?? "";
+    } catch {
+      pageError = true;
+    } finally {
+      loadingMore = false;
+    }
+  }
+
   function toggle() {
     open = !open;
-    if (open && state !== "ready") void load();
+    if (open && state !== "loading" && !loadingMore) void load();
   }
 
   /** A ruling whose revoke is waiting, sending or confirmed is not listed. */
@@ -131,7 +167,12 @@
                 <p
                   class="m-0 mt-0.5 text-meta text-fg [overflow-wrap:anywhere]"
                 >
-                  {#if ruling.kind === "not_a_decision"}
+                  {#if ruling.kind === "operating"}
+                    {ruling.ruling_id} · {ruling.topic} · {ruling.scope ===
+                    "account"
+                      ? "Account"
+                      : "Workspace"}
+                  {:else if ruling.kind === "not_a_decision"}
                     {ruling.requester
                       ? `Not a decision · from ${ruling.requester}`
                       : "Not a decision"}
@@ -140,7 +181,11 @@
                   {/if}
                 </p>
                 <p class="m-0 mt-0.5 text-micro text-fg-muted">
-                  {uses(ruling.uses)} · made {formatUtcDay(ruling.created_at)}
+                  {#if ruling.kind === "operating"}
+                    Confirmed {formatUtcDay(ruling.decided_at)}
+                  {:else}
+                    {uses(ruling.uses)} · made {formatUtcDay(ruling.created_at)}
+                  {/if}
                 </p>
               </div>
               <button
@@ -152,6 +197,20 @@
             </li>
           {/each}
         </ul>
+      {/if}
+      {#if cursor && state === "ready"}
+        <button
+          type="button"
+          class="ui-btn-secondary"
+          disabled={loadingMore}
+          onclick={loadMore}
+        >
+          {loadingMore
+            ? "Loading rulings…"
+            : pageError
+              ? "Retry"
+              : "Load more rulings"}
+        </button>
       {/if}
       {#if saveError}
         <p class="text-meta text-danger-text" role="alert">{saveError}</p>

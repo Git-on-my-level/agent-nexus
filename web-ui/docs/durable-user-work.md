@@ -902,3 +902,10 @@ failures remain retryable after upgrading: recovery retains their original item
 ID, text, body and idempotency key. `durable-decide.spec.js` covers reloading a
 failed 404 and retrying it from the unsent panel without retyping;
 `inboxTriage.test.js` covers the exact persisted request and resolution marker.
+
+## Operating ruling confirmation
+
+Decide persists a ruling confirmation with its workspace, principal, ruling ID
+and idempotency key before sending. Core commits the confirmation, changes to
+superseded rulings and the replay receipt in one transaction. A successful
+receipt refreshes Decide. Pending and failed sends use the shared outbox status.

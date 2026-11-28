@@ -6,11 +6,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"agent-nexus-core/internal/resourceaccess"
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
+
+var ErrMutationReplayConflict = fmt.Errorf("%w: idempotency key conflicts with an existing receipt", ErrConflict)
 
 // ExecuteWithReplay atomically commits an audited mutation and its public result.
 // Nested primitive transactions remain scoped savepoints, including default-board
@@ -32,7 +35,7 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 		err := tx.QueryRowContext(ctx, `SELECT request_hash,response_status,response_json FROM idempotency_replays WHERE scope=? AND actor_id=? AND request_key=?`, scope, actor, key).Scan(&out.RequestHash, &out.Status, &raw)
 		if err == nil {
 			if out.RequestHash != hash {
-				return ErrConflict
+				return ErrMutationReplayConflict
 			}
 			return decodeMutationReceipt([]byte(raw), &out.Response)
 		}
@@ -53,7 +56,7 @@ func (s *Store) ExecuteWithReplay(ctx context.Context, scope, actor, key, hash s
 			// report an uncertain server failure; the transaction must roll back.
 			var constraint *sqlite.Error
 			if errors.As(err, &constraint) && (constraint.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE || constraint.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY) {
-				return ErrConflict
+				return ErrMutationReplayConflict
 			}
 			return err
 		}

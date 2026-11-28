@@ -37,7 +37,11 @@ type StandingRuling struct {
 
 // JSON renders the ruling for API responses.
 func (r StandingRuling) JSON() map[string]any {
-	out := map[string]any{"id": r.ID, "ref": "ruling:" + r.ID, "kind": r.Kind, "question": r.Question, "answer": r.Answer, "created_by": stripActor(r.CreatedBy), "created_at": r.CreatedAt, "uses": r.Uses, "active": r.RevokedAt == ""}
+	status := "active"
+	if r.RevokedAt != "" {
+		status = "revoked"
+	}
+	out := map[string]any{"scope": "workspace", "status": status, "id": r.ID, "ref": "ruling:" + r.ID, "kind": r.Kind, "question": r.Question, "answer": r.Answer, "created_by": stripActor(r.CreatedBy), "created_at": r.CreatedAt, "uses": r.Uses, "active": r.RevokedAt == ""}
 	if r.Requester != "" {
 		out["requester"] = stripActor(r.Requester)
 	}
@@ -159,9 +163,9 @@ func (s *Store) CreateStandingRuling(ctx context.Context, actorID, askID, kind, 
 // StandingRulings lists rulings newest first, bounded by
 // StandingRulingListLimit through idx_standing_rulings_recent.
 func (s *Store) StandingRulings(ctx context.Context, includeRevoked bool) ([]StandingRuling, error) {
-	where := ``
+	where := ` WHERE r.source_ask_id<>''`
 	if !includeRevoked {
-		where = ` WHERE r.revoked_at IS NULL`
+		where += ` AND r.revoked_at IS NULL`
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+standingRulingColumns+standingRulingFrom+where+` ORDER BY r.created_at DESC,r.id LIMIT ?`, StandingRulingListLimit)
 	if err != nil {

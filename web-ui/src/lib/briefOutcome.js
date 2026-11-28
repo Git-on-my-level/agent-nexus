@@ -38,6 +38,64 @@ export function normalizeMeasure(raw) {
   };
 }
 
+export function normalizeAskPresentation(raw, includeRewrite = true) {
+  return {
+    presentationRevision: Number(raw.presentation_revision ?? 0),
+    presentationRewrite:
+      includeRewrite &&
+      raw.presentation_rewrite &&
+      typeof raw.presentation_rewrite === "object"
+        ? {
+            actorId: text(raw.presentation_rewrite.actor_id),
+            actorDisplay:
+              text(raw.presentation_rewrite.actor?.display) ||
+              text(raw.presentation_rewrite.actor_id),
+            at: text(raw.presentation_rewrite.at),
+            undo: raw.presentation_rewrite.undo === true,
+            original:
+              raw.presentation_rewrite.original &&
+              typeof raw.presentation_rewrite.original === "object"
+                ? {
+                    ...normalizeAskPresentation(
+                      raw.presentation_rewrite.original,
+                      false,
+                    ),
+                    title: text(raw.presentation_rewrite.original.title),
+                  }
+                : null,
+            previous: {
+              ...normalizeAskPresentation(
+                raw.presentation_rewrite.previous ?? {},
+                false,
+              ),
+              title: text(raw.presentation_rewrite.previous?.title),
+            },
+          }
+        : null,
+    body: String(raw.body ?? ""),
+    situation: text(raw.situation),
+    impact: text(raw.impact),
+    recommendation:
+      raw.recommendation && typeof raw.recommendation === "object"
+        ? {
+            action: text(raw.recommendation.action),
+            why: text(raw.recommendation.why),
+          }
+        : null,
+    alternatives: (Array.isArray(raw.alternatives) ? raw.alternatives : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({
+        action: text(v.action),
+        consequence: text(v.consequence),
+      })),
+    if_no_answer: text(raw.if_no_answer),
+    details: text(raw.details),
+    evidence: (Array.isArray(raw.evidence) ? raw.evidence : [])
+      .filter((v) => v && typeof v === "object")
+      .map((v) => ({ label: text(v.label), url: text(v.url) })),
+  };
+}
+
 /** `decisions[].stakes`, or null when the asker claimed none. */
 export function normalizeStakes(raw) {
   if (!raw || typeof raw !== "object") return null;

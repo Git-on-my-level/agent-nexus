@@ -52,6 +52,7 @@ const DocumentHistoryKind = "document_history"
 // FilterSources are ancillary rows with no navigable canonical resource kind.
 // Their complete rows are filtered by the same predicate before query limits.
 var FilterSources = map[string][]string{
+	"standing_rulings":       {"ruling_title", "body", "source_quote", "source", "aliases_json", "relations_json"},
 	"ask_subscriptions":      {"label", "endpoint"},
 	"ask_deliveries":         {"reason"},
 	"actors":                 {"display_name", "tags_json"},

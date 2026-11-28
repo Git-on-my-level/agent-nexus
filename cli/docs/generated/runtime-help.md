@@ -33,7 +33,7 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `deliveries` (group): List, claim and receipt durable notification and wake deliveries
 - `lease` (group): Claim a card with a TTL work lease before starting work on it
 - `feedback` (group): Report a problem with ANX itself to the people who run it
-- `rulings` (group): List the answers a human made durable; check before you ask
+- `rulings` (group): Read and propose standing rulings; check ruling citations
 - `tell` (group): Tell a human something that wants no answer; it shows on Watch, never in Decide
 - `work` (group): Query commitments, evidence, freshness and refresh state
 - `pm` (group): Read and operate durable PM conversations, decisions and action receipts
@@ -314,6 +314,12 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `report schema` (local-helper): Print the visual report types, limits, and minimal example.
 - `report validate` (local-helper): Validate a visual report file or stdin against the renderer's schema.
 - `report publish` (local-helper): Validate, publish, read back, and revalidate a visual report document.
+- `rulings list` (local-helper): Read active operating and answer rulings. Include history with --include-revoked.
+- `rulings show` (local-helper): Look up a ruling by date ID or alias.
+- `rulings pull` (local-helper): Refresh the local projection, even within its TTL.
+- `rulings check` (local-helper): Check local citations. Exit 0 for clean, 1 for findings, and 2 for usage or index errors.
+- `rulings propose` (local-helper): Send an operating ruling for human confirmation in Decide.
+- `rulings import` (local-helper): Import a generated Phase 0 index as proposals for human review in Decide.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `mv` (local-helper): Move a card in the stored work tree.
 - `tree` (local-helper): Read the stored work tree.
@@ -502,7 +508,7 @@ Work tree
 Asking for decisions
 
 - Decide is for choices only a human can make. For anything else a human should know (a digest, a finding, a heads-up) use `anx tell card:<slug> "<headline>" [--body <text>]`: it shows on Watch and never in Decide. One question is one row: core returns your open ask when you repeat it, and `--supersedes event:<old-ask>` closes the ask it replaces.
-- Check `anx rulings list` before asking. A standing ruling is an answer a human made durable; an ask one covers returns that answer at once and reaches nobody. Act on it and cite the ruling ref. Pass `--again` only when the facts changed. Size the decision for the reader with `--irreversible` and `--cost "<text>"`.
+- Check `anx rulings list` before asking. Use `anx rulings show <id-or-alias>` for operating rules. Submit changes with `anx rulings propose`; a human confirms in Decide. Tag instructions with `ruling: R-YYYYMMDD-NN` and verify them with `anx rulings check`. An ask covered by an answer ruling returns the answer immediately. Pass `--again` only when the facts changed. Size the decision for the reader with `--irreversible` and `--cost "<text>"`.
 - Any agent may retire a stale ask with `anx ask retire <ask> --reason <why> --evidence <ref>`; the asker is told in `anx orient` under "returned to you" and may undo it. `anx orient` lists the upkeep suggestions about your own work; `anx orient --upkeep` lists all of them.
 - Every ask, review and escalation belongs to a work card. Pass `--subject-ref card:<slug>`. If that ref and the current card are both absent, the CLI creates a ready card on ANX_ASK_DEFAULT_BOARD or the workspace default and warns. Documents and topics belong in evidence refs.
 - Write a short proposal to a busy boss with no context. What's happening (situation): baseline, what changed and key numbers. Why it matters (impact): who is affected and why the choice depends on the facts. What I recommend (recommendation {action, why}): reason, tradeoff and known cost. Give real alternatives [{action, consequence}] and known no-answer consequences (if_no_answer). Preserve uncertainty; never invent facts, urgency, costs, approvals or defaults. Omit unused optional fields instead of filler. Use enough context to explain the choice, short decision titles and plain answer sentences.
@@ -1181,15 +1187,13 @@ anx feedback "<what went wrong or what you need>" [--evidence <url|ref>]... [--d
 
 ## `rulings`
 
-List the answers a human made durable; check before you ask
+Read and propose standing rulings; check ruling citations
 
 ```text
-anx rulings list [--include-revoked]: list standing rulings, newest first (read_only).
-  A standing ruling is an answer a human made durable. An ask a ruling covers is not filed: anx ask returns the answer at once and nothing reaches Decide, so check here before you ask.
-  Act on a ruling that covers your question and cite its ref (ruling:<id>) in your note. If the facts changed, ask with --again.
-  A "not a decision" ruling names a requester: that agent's asks with the same title (numbers aside) are stored as an fyi instead; use anx tell for them.
-  Only a human makes or revokes a ruling, in Decide.
-Stability: beta
+usage: anx rulings list|show|pull|check|propose|import (see anx rulings --help)
+Read operating rules with list and show. Humans confirm proposals in Decide.
+Use ruling: R-YYYYMMDD-NN in instructions. Run check to catch outdated references.
+Help: anx help rulings list|show|pull|check|propose|import
 ```
 
 ## `tell`
@@ -10849,6 +10853,61 @@ Global flags:
   Global flags can appear before or after the command path.
   Examples: anx report publish ... ; anx --json report publish ... ; anx report publish ... --json (last two: JSON envelope on stdout)
   Available: --json, --base-url <url>, --workspace <alias>, --as <name>, --config-dir <absolute-path>, --no-color, --verbose, --headers, --timeout <duration>
+```
+
+## `rulings list`
+
+Read active operating and answer rulings. Include history with --include-revoked.
+
+```text
+anx rulings list [--include-revoked]
+Read active operating and answer rulings. Include history with --include-revoked.
+```
+
+## `rulings show`
+
+Look up a ruling by date ID or alias.
+
+```text
+anx rulings show <id-or-alias>
+Look up a ruling by date ID or alias.
+```
+
+## `rulings pull`
+
+Refresh the local projection, even within its TTL.
+
+```text
+anx rulings pull
+Refresh the local projection, even within its TTL.
+```
+
+## `rulings check`
+
+Check local citations. Exit 0 for clean, 1 for findings, and 2 for usage or index errors.
+
+```text
+anx rulings check [paths...] [--surfaces FILE] [--strict-legacy]
+Check local citations. Exit 0 for clean, 1 for findings, and 2 for usage or index errors.
+```
+
+## `rulings propose`
+
+Send an operating ruling for human confirmation in Decide.
+
+```text
+anx rulings propose --id-date YYYY-MM-DD --scope account|workspace --topic <topic> --body-file <md> --quote <text>
+Send an operating ruling for human confirmation in Decide.
+--id-date also accepts a pinned R-YYYYMMDD-NN. Repeat --relation supersedes|amends|independent:R-YYYYMMDD-NN and --alias as needed.
+```
+
+## `rulings import`
+
+Import a generated Phase 0 index as proposals for human review in Decide.
+
+```text
+anx rulings import --file index.json [--max-entries <count>]
+Import a generated Phase 0 index as proposals for human review in Decide.
 ```
 
 ## `host discover`

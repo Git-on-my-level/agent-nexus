@@ -45,6 +45,7 @@ type operation struct {
 	Description string       `yaml:"description"`
 	CommandID   string       `yaml:"x-anx-command-id"`
 	CLIPath     string       `yaml:"x-anx-cli-path"`
+	CLIHidden   bool         `yaml:"x-anx-cli-hidden"`
 	Why         string       `yaml:"x-anx-why"`
 	Examples    []anxExample `yaml:"x-anx-examples"`
 	InputMode   string       `yaml:"x-anx-input-mode"`
@@ -568,7 +569,7 @@ func xAnxFieldPresent(op *operation, field string) bool {
 	case "x-anx-command-id":
 		return strings.TrimSpace(op.CommandID) != ""
 	case "x-anx-cli-path":
-		return strings.TrimSpace(op.CLIPath) != ""
+		return (strings.TrimSpace(op.CLIPath) == "") == op.CLIHidden
 	case "x-anx-why":
 		return strings.TrimSpace(op.Why) != ""
 	case "x-anx-input-mode":
@@ -682,15 +683,6 @@ func allowedXAnxStabilityValues() map[string]struct{} {
 		"experimental": {},
 		"beta":         {},
 		"stable":       {},
-	}
-}
-
-func allowedXAnxSurfaceValues() map[string]struct{} {
-	return map[string]struct{}{
-		"canonical":  {},
-		"projection": {},
-		"diagnostic": {},
-		"utility":    {},
 	}
 }
 
@@ -1564,7 +1556,9 @@ func writeMarkdown(path string, doc openAPIDocument, commands []command, sourceL
 
 	for _, cmd := range commands {
 		b.WriteString(fmt.Sprintf("## `%s`\n\n", cmd.CommandID))
-		b.WriteString(fmt.Sprintf("- CLI path: `%s`\n", cmd.CLIPath))
+		if cmd.CLIPath != "" {
+			b.WriteString(fmt.Sprintf("- CLI path: `%s`\n", cmd.CLIPath))
+		}
 		if cmd.Method == "LOCAL" {
 			b.WriteString("- Execution: local CLI handler (no HTTP route)\n")
 		} else {
@@ -1682,7 +1676,7 @@ The OpenAPI contract uses `+"`x-anx-*`"+` extensions as the single source for CL
 Required now for every command operation:
 
 - `+"`x-anx-command-id`"+`: stable id (for example `+"`threads.list`"+`)
-- `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`)
+- `+"`x-anx-cli-path`"+`: CLI path (for example `+"`threads list`"+`). An HTTP operation with `+"`x-anx-cli-hidden: true`"+` omits this field and remains available to API clients.
 - `+"`x-anx-why`"+`: non-empty purpose/decision boundary
 - `+"`x-anx-input-mode`"+`: HTTP/input-shape mode, one of `+"`none|query|json-body|flags|flags-or-json|raw-stream|file-and-body|multipart-form`"+`
 - `+"`x-anx-streaming`"+`: streaming metadata object

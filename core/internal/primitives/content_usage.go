@@ -67,7 +67,13 @@ func (s *Store) measureDatabaseContentUsageBytes(ctx context.Context) (int64, er
 			return 0, err
 		}
 		if len(sizes) != 0 {
-			queries = append(queries, `SELECT COALESCE(SUM(`+strings.Join(sizes, "+")+`),0) AS bytes FROM `+table)
+			query := `SELECT COALESCE(SUM(` + strings.Join(sizes, "+") + `),0) AS bytes FROM ` + table
+			if table == "standing_rulings" {
+				// Legacy answers retain their existing accounting and source-ask
+				// visibility. Charge canonical operating proposals here.
+				query += ` WHERE ruling_id IS NOT NULL`
+			}
+			queries = append(queries, query)
 		}
 	}
 	if len(queries) == 0 {
