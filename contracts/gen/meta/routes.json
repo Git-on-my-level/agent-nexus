@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "route_count": 266,
+  "route_count": 267,
   "routes": [
     {
       "method": "GET",
@@ -1000,6 +1000,11 @@
     {
       "method": "POST",
       "path": "/rulings/propose",
+      "access_class": "workspace_business_surface"
+    },
+    {
+      "method": "POST",
+      "path": "/rulings/withdraw",
       "access_class": "workspace_business_surface"
     },
     {

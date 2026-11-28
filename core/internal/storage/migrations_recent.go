@@ -111,6 +111,12 @@ var recentMigrations = []migration{
 		`CREATE TRIGGER IF NOT EXISTS standing_ruling_reserve_legacy_name AFTER INSERT ON standing_rulings WHEN NEW.ruling_id IS NULL
 		 BEGIN INSERT INTO standing_ruling_names(name,ruling_id) VALUES(NEW.id,NEW.id); END`,
 	}},
+	// Agent-recorded confirmations and proposal withdrawal: the human decision
+	// an agent cites, and a projection revision bump when a proposal is removed.
+	{Version: 154, AfterApply: installOperatingRulingDecisionRefs, Statements: []string{
+		`CREATE TRIGGER IF NOT EXISTS standing_ruling_delete_revision AFTER DELETE ON standing_rulings WHEN OLD.ruling_id IS NOT NULL
+		 BEGIN UPDATE standing_ruling_revision SET version=version+1 WHERE singleton=1; END`,
+	}},
 }
 
 func installAgentHandoffColumns(ctx context.Context, tx *sql.Tx) error {

@@ -12,6 +12,21 @@ func installOperatingRulingUsageTracking(ctx context.Context, tx *sql.Tx) error 
 	return contentusage.InstallTable(ctx, tx, "standing_rulings")
 }
 
+func installOperatingRulingDecisionRefs(ctx context.Context, tx *sql.Tx) error {
+	for _, name := range []string{"decision_ref", "decided_for"} {
+		exists, err := sqliteTableHasColumn(ctx, tx, "standing_rulings", name)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if _, err := tx.ExecContext(ctx, "ALTER TABLE standing_rulings ADD COLUMN "+name+" TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func installOperatingRulings(ctx context.Context, tx *sql.Tx) error {
 	for _, column := range []struct{ name, definition string }{
 		{"ruling_id", "TEXT"},

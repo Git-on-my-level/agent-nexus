@@ -196,7 +196,7 @@ func TestOperatingRulingPageAndConcurrentAliases(t *testing.T) {
 	}
 	for _, id := range submissions {
 		go func() {
-			_, err := store.ConfirmOperatingRuling(ctx, "human", id, now)
+			_, err := store.ConfirmOperatingRuling(ctx, "human", id, primitives.OperatingRulingDecision{}, now)
 			errorsSeen <- err
 		}()
 	}
@@ -227,7 +227,7 @@ func TestOperatingRulingImportedHistory(t *testing.T) {
 	}
 	confirm := func(id, status, successor string) {
 		t.Helper()
-		r, err := store.ConfirmOperatingRuling(ctx, "human", id, now)
+		r, err := store.ConfirmOperatingRuling(ctx, "human", id, primitives.OperatingRulingDecision{}, now)
 		if err != nil || r.Status != status || r.SupersededBy != successor || r.DecidedAt == "" {
 			t.Fatalf("confirm %s: status %q, successor %q, decided at %q, err %v", id, r.Status, r.SupersededBy, r.DecidedAt, err)
 		}

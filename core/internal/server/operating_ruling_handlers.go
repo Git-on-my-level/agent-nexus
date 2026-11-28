@@ -14,8 +14,10 @@ type operatingRulingStore interface {
 	OperatingRulingPage(context.Context, string) ([]primitives.OperatingRuling, string, string, error)
 	OperatingRulingDecisions(context.Context, time.Time) ([]map[string]any, bool, error)
 	ProposeOperatingRuling(context.Context, string, primitives.OperatingRulingProposal, time.Time) (primitives.OperatingRuling, error)
-	ConfirmOperatingRuling(context.Context, string, string, time.Time) (primitives.OperatingRuling, error)
+	ConfirmOperatingRuling(context.Context, string, string, primitives.OperatingRulingDecision, time.Time) (primitives.OperatingRuling, error)
 	RevokeOperatingRuling(context.Context, string, string, time.Time) (primitives.OperatingRuling, error)
+	WithdrawOperatingRulings(context.Context, string, bool, []string) ([]primitives.OperatingRuling, error)
+	GetEvent(context.Context, string) (map[string]any, error)
 }
 
 func operatingRulingStoreFrom(w http.ResponseWriter, opts handlerOptions) (operatingRulingStore, bool) {
@@ -83,8 +85,12 @@ func handleProposeOperatingRuling(w http.ResponseWriter, r *http.Request, opts h
 	writeOperatingRulingResult(w, r, status, payload, err)
 }
 
+// handleConfirmOperatingRuling makes a proposal authoritative. A human
+// confirms in Decide. An agent confirms only by citing a human decision it
+// recorded elsewhere (anx note --decided-by) whose text names this ruling ID;
+// the ruling keeps that reference and who it was decided for.
 func handleConfirmOperatingRuling(w http.ResponseWriter, r *http.Request, opts handlerOptions, id string) {
-	principal, ok := requireHumanPrincipal(w, r, opts)
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
 	if !ok {
 		return
 	}
@@ -93,7 +99,8 @@ func handleConfirmOperatingRuling(w http.ResponseWriter, r *http.Request, opts h
 		return
 	}
 	var body struct {
-		RequestKey string `json:"idempotency_key"`
+		RequestKey  string `json:"idempotency_key"`
+		DecisionRef string `json:"decision_ref"`
 	}
 	if !decodeJSONBody(w, r, &body) || !requireRulingRequestKey(w, body.RequestKey) {
 		return
@@ -102,14 +109,97 @@ func handleConfirmOperatingRuling(w http.ResponseWriter, r *http.Request, opts h
 		writeError(w, http.StatusBadRequest, "invalid_request", "confirmation requires a ruling date ID")
 		return
 	}
-	status, payload, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "rulings.confirm", principal.ActorID, body.RequestKey, map[string]string{"ruling_id": id}, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
-		ruling, err := store.ConfirmOperatingRuling(ctx, principal.ActorID, id, time.Now())
+	human := isHumanPrincipal(principal)
+	if !human && strings.TrimSpace(body.DecisionRef) == "" {
+		writeError(w, http.StatusForbidden, "human_required", "a human confirms in Decide; an agent must cite the human's recorded decision with decision_ref")
+		return
+	}
+	var decision primitives.OperatingRulingDecision
+	if strings.TrimSpace(body.DecisionRef) != "" {
+		var problem string
+		decision, problem = recordedRulingDecision(r.Context(), store, id, body.DecisionRef)
+		if problem != "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", problem)
+			return
+		}
+	}
+	request := map[string]string{"ruling_id": id, "decision_ref": decision.Ref}
+	status, payload, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "rulings.confirm", principal.ActorID, body.RequestKey, request, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		ruling, err := store.ConfirmOperatingRuling(ctx, principal.ActorID, id, decision, time.Now())
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"ruling": ruling.JSON()}, nil
 	})
 	writeOperatingRulingResult(w, r, status, payload, err)
+}
+
+// recordedRulingDecision checks the human decision an agent cites. It must be
+// a live event the caller can read, record who decided (decided_by), and name
+// the ruling ID in its text, so one decision cannot confirm unrelated rulings.
+func recordedRulingDecision(ctx context.Context, store operatingRulingStore, id, ref string) (primitives.OperatingRulingDecision, string) {
+	ref = strings.TrimSpace(ref)
+	eventID, found := strings.CutPrefix(ref, "event:")
+	if !found || strings.TrimSpace(eventID) == "" || len(ref) > 256 {
+		return primitives.OperatingRulingDecision{}, "decision_ref must be event:<id> of a recorded decision note"
+	}
+	event, err := store.GetEvent(ctx, eventID)
+	if err != nil || event == nil {
+		return primitives.OperatingRulingDecision{}, "decision_ref does not name a decision you can read"
+	}
+	if anyString(event["trashed_at"]) != "" || anyString(event["archived_at"]) != "" {
+		return primitives.OperatingRulingDecision{}, "decision_ref names a retired event"
+	}
+	payload, _ := event["payload"].(map[string]any)
+	decidedFor := strings.TrimSpace(anyString(payload["decided_by"]))
+	if decidedFor == "" {
+		return primitives.OperatingRulingDecision{}, "decision_ref must be a note recorded with --decided-by"
+	}
+	if !strings.Contains(anyString(payload["text"]), id) {
+		return primitives.OperatingRulingDecision{}, "the recorded decision does not name " + id
+	}
+	return primitives.OperatingRulingDecision{Ref: "event:" + eventID, DecidedFor: decidedFor}, ""
+}
+
+// handleWithdrawOperatingRulings removes unconfirmed proposals and releases
+// their names. An agent withdraws its own; a human may withdraw any.
+func handleWithdrawOperatingRulings(w http.ResponseWriter, r *http.Request, opts handlerOptions) {
+	principal, ok := requireAuthenticatedPrincipal(w, r, opts)
+	if !ok {
+		return
+	}
+	store, ok := operatingRulingStoreFrom(w, opts)
+	if !ok {
+		return
+	}
+	var body struct {
+		RulingIDs  []string `json:"ruling_ids"`
+		RequestKey string   `json:"idempotency_key"`
+	}
+	if !decodeJSONBody(w, r, &body) || !requireRulingRequestKey(w, body.RequestKey) {
+		return
+	}
+	human := isHumanPrincipal(principal)
+	status, payload, err := executeAtomicMutation(r.Context(), opts.primitiveStore, "rulings.withdraw", principal.ActorID, body.RequestKey, body.RulingIDs, http.StatusOK, func(ctx context.Context) (map[string]any, error) {
+		rulings, err := store.WithdrawOperatingRulings(ctx, principal.ActorID, human, body.RulingIDs)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]string, 0, len(rulings))
+		for _, ruling := range rulings {
+			ids = append(ids, ruling.RulingID)
+		}
+		return map[string]any{"withdrawn": ids}, nil
+	})
+	switch {
+	case errors.Is(err, primitives.ErrRulingNotYours):
+		writeError(w, http.StatusForbidden, "forbidden", err.Error())
+	case errors.Is(err, primitives.ErrConflict) && !errors.Is(err, primitives.ErrMutationReplayConflict):
+		// The store names only rows visible through the caller's scope.
+		writeError(w, http.StatusConflict, "conflict", err.Error())
+	default:
+		writeOperatingRulingResult(w, r, status, payload, err)
+	}
 }
 
 func requireRulingRequestKey(w http.ResponseWriter, key string) bool {

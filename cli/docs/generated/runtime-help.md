@@ -319,6 +319,8 @@ This reference is bundled with the CLI. Print the full document with `anx meta d
 - `rulings pull` (local-helper): Refresh the local projection, even within its TTL.
 - `rulings check` (local-helper): Check local citations. Exit 0 for clean, 1 for findings, and 2 for usage or index errors.
 - `rulings propose` (local-helper): Send an operating ruling for human confirmation in Decide.
+- `rulings withdraw` (local-helper): Withdraw unconfirmed proposals and free their names. Agents withdraw their own; humans any. A ruling still related to one in the set fails the request, so withdraw related proposals together.
+- `rulings confirm` (local-helper): Confirm proposals on a human decision you recorded. The decision note must carry --decided-by and name every ruling ID it confirms. Without a recorded decision, a human confirms in Decide.
 - `rulings import` (local-helper): Import a rulings index as proposals for human review in Decide.
 - `host discover` (local-helper): Inspect optional local runtime identity and installed harness evidence without registration or network requests.
 - `mv` (local-helper): Move a card in the stored work tree.
@@ -1190,10 +1192,10 @@ anx feedback "<what went wrong or what you need>" [--evidence <url|ref>]... [--d
 Read and propose standing rulings; check ruling citations
 
 ```text
-usage: anx rulings list|show|pull|check|propose|import (see anx rulings --help)
-Read operating rules with list and show. Humans confirm proposals in Decide.
+usage: anx rulings list|show|pull|check|propose|import|withdraw|confirm (see anx rulings --help)
+Read operating rules with list and show. Humans confirm proposals in Decide; an agent confirms only on a recorded human decision.
 Use ruling: R-YYYYMMDD-NN in instructions. Run check to catch outdated references.
-Help: anx help rulings list|show|pull|check|propose|import
+Help: anx help rulings list|show|pull|check|propose|import|withdraw|confirm
 ```
 
 ## `tell`
@@ -10899,6 +10901,28 @@ Send an operating ruling for human confirmation in Decide.
 anx rulings propose --id-date YYYY-MM-DD --scope account|workspace --topic <topic> --body-file <md> --quote <text>
 Send an operating ruling for human confirmation in Decide.
 --id-date also accepts a pinned R-YYYYMMDD-NN. Repeat --relation supersedes|amends|independent:R-YYYYMMDD-NN and --alias as needed.
+```
+
+## `rulings withdraw`
+
+Withdraw unconfirmed proposals and free their names. Agents withdraw their own; humans any. A ruling still related to one in the set fails the request, so withdraw related proposals together.
+
+```text
+anx rulings withdraw R-YYYYMMDD-NN...
+Withdraw unconfirmed proposals and free their names. Agents withdraw their own; humans any. A ruling still related to one in the set fails the request, so withdraw related proposals together.
+To merge proposals, withdraw them, then propose the merged ruling with --alias for each withdrawn date ID and legacy name.
+```
+
+## `rulings confirm`
+
+Confirm proposals on a human decision you recorded. The decision note must carry --decided-by and name every ruling ID it confirms. Without a recorded decision, a human confirms in Decide.
+
+```text
+anx rulings confirm R-YYYYMMDD-NN... --decision event:<id>
+Confirm proposals on a human decision you recorded. The decision note must carry --decided-by and name every ruling ID it confirms. Without a recorded decision, a human confirms in Decide.
+Record the decision first: anx note <card> "<decision naming the ruling IDs>" --decided-by <who>. Pass its note_ref as --decision.
+
+Human authorization: servers that gate this action on a signed-in browser session require the human to open the workspace and perform it there. Agent enrollment cannot supply that session. Core still enforces its own principal permissions.
 ```
 
 ## `rulings import`

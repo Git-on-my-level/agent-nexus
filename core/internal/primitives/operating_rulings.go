@@ -54,7 +54,20 @@ type OperatingRulingProposal struct {
 type OperatingRuling struct {
 	OperatingRulingProposal
 	CreatedBy, CreatedAt, DecidedBy, DecidedAt, Status, SupersededBy, RevokedBy, RevokedAt string
+	// An agent confirms only on a human decision recorded elsewhere: a note
+	// with decided_by that names this ruling. DecidedBy stays the agent.
+	DecisionRef, DecidedFor string
 }
+
+// OperatingRulingDecision is the recorded human decision an agent cites to
+// confirm. It is empty when a human confirms in Decide.
+type OperatingRulingDecision struct {
+	Ref, DecidedFor string
+}
+
+// MaxOperatingRulingAliases bounds the names one ruling carries. A merged
+// ruling keeps the date IDs and legacy names of the proposals it replaces.
+const MaxOperatingRulingAliases = 64
 
 func (r OperatingRuling) JSON() map[string]any {
 	out := StandingRuling{ID: r.RulingID, Kind: "operating", Question: r.Title, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, RevokedBy: r.RevokedBy, RevokedAt: r.RevokedAt}.JSON()
@@ -64,6 +77,7 @@ func (r OperatingRuling) JSON() map[string]any {
 	for k, v := range map[string]string{
 		"source": r.Source, "status_hint": r.StatusHint, "superseded_by_hint": r.SupersededByHint,
 		"superseded_by": r.SupersededBy, "decided_by": stripActor(r.DecidedBy), "decided_at": r.DecidedAt,
+		"decision_ref": r.DecisionRef, "decided_for": r.DecidedFor,
 	} {
 		if v != "" {
 			out[k] = v
@@ -72,12 +86,12 @@ func (r OperatingRuling) JSON() map[string]any {
 	return out
 }
 
-const operatingRulingColumns = `ruling_id,ruling_title,aliases_json,scope,topic,body,source_quote,source,status_hint,superseded_by_hint,relations_json,created_by,created_at,decided_by,decided_at,status,superseded_by,revoked_by,COALESCE(revoked_at,'')`
+const operatingRulingColumns = `ruling_id,ruling_title,aliases_json,scope,topic,body,source_quote,source,status_hint,superseded_by_hint,relations_json,created_by,created_at,decided_by,decided_at,status,superseded_by,revoked_by,COALESCE(revoked_at,''),decision_ref,decided_for`
 
 func scanOperatingRuling(row interface{ Scan(...any) error }) (OperatingRuling, error) {
 	var r OperatingRuling
 	var aliases, relations string
-	err := row.Scan(&r.RulingID, &r.Title, &aliases, &r.Scope, &r.Topic, &r.Body, &r.SourceQuote, &r.Source, &r.StatusHint, &r.SupersededByHint, &relations, &r.CreatedBy, &r.CreatedAt, &r.DecidedBy, &r.DecidedAt, &r.Status, &r.SupersededBy, &r.RevokedBy, &r.RevokedAt)
+	err := row.Scan(&r.RulingID, &r.Title, &aliases, &r.Scope, &r.Topic, &r.Body, &r.SourceQuote, &r.Source, &r.StatusHint, &r.SupersededByHint, &relations, &r.CreatedBy, &r.CreatedAt, &r.DecidedBy, &r.DecidedAt, &r.Status, &r.SupersededBy, &r.RevokedBy, &r.RevokedAt, &r.DecisionRef, &r.DecidedFor)
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNotFound
 	}
@@ -97,13 +111,16 @@ func (p OperatingRulingProposal) validate() error {
 	if strings.TrimSpace(p.Title) == "" || utf8.RuneCountInString(p.Title) > 1024 || strings.TrimSpace(p.Body) == "" || utf8.RuneCountInString(p.Body) > 32768 || strings.TrimSpace(p.SourceQuote) == "" || utf8.RuneCountInString(p.SourceQuote) > 8192 || utf8.RuneCountInString(p.Source) > 2048 {
 		return workInvalid("provide a title (1024 characters), body (32768 characters) and source quote (8192 characters) within their size limits, with an optional source of up to 2048 characters")
 	}
-	if len(p.Aliases) > 32 || len(p.Relations) > 200 {
-		return workInvalid("at most 32 aliases and 200 relations are allowed")
+	if len(p.Aliases) > MaxOperatingRulingAliases || len(p.Relations) > 200 {
+		return workInvalid(fmt.Sprintf("at most %d aliases and 200 relations are allowed", MaxOperatingRulingAliases))
 	}
 	seen := map[string]bool{p.RulingID: true}
 	for _, alias := range p.Aliases {
-		if !rulingAlias.MatchString(alias) || strings.TrimSpace(alias) != alias || operatingRulingID.MatchString(alias) || seen[alias] {
-			return workInvalid("aliases must be distinct legacy names, not date IDs")
+		// A date ID alias keeps a withdrawn proposal's ID resolving to the
+		// ruling that merged it. The store refuses one that still has a row.
+		dateAlias := operatingRulingID.MatchString(alias)
+		if seen[alias] || (dateAlias && !ValidOperatingRulingID(alias)) || (!dateAlias && (!rulingAlias.MatchString(alias) || strings.TrimSpace(alias) != alias)) {
+			return workInvalid("aliases must be distinct legacy names or the date IDs of withdrawn proposals")
 		}
 		seen[alias] = true
 	}
@@ -230,6 +247,19 @@ func (s *Store) ProposeOperatingRuling(ctx context.Context, actor string, p Oper
 			}
 		}
 	}
+	for _, alias := range p.Aliases {
+		if !operatingRulingID.MatchString(alias) {
+			continue
+		}
+		var held string
+		err := tx.QueryRowContext(ctx, `SELECT ruling_id FROM standing_rulings WHERE ruling_id=?`, alias).Scan(&held)
+		if err == nil {
+			return OperatingRuling{}, fmt.Errorf("%w: alias %s is still a ruling; withdraw it first", ErrConflict, alias)
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return OperatingRuling{}, err
+		}
+	}
 	created := now.UTC().Format(time.RFC3339Nano)
 	_, err = tx.ExecContext(ctx, `INSERT INTO standing_rulings
 	 (id,title_key,kind,question,created_by,created_at,ruling_id,ruling_title,aliases_json,scope,topic,body,source_quote,source,relations_json,status,status_hint,superseded_by_hint)
@@ -246,7 +276,7 @@ func (s *Store) ProposeOperatingRuling(ctx context.Context, actor string, p Oper
 	return OperatingRuling{OperatingRulingProposal: p, Status: "proposed", CreatedAt: created, CreatedBy: actor}, tx.Commit()
 }
 
-func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, now time.Time) (OperatingRuling, error) {
+func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, decision OperatingRulingDecision, now time.Time) (OperatingRuling, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return OperatingRuling{}, err
@@ -295,6 +325,7 @@ func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, no
 		}
 	}
 	r.Status, r.DecidedBy, r.DecidedAt = "active", actor, decidedAt
+	r.DecisionRef, r.DecidedFor = decision.Ref, decision.DecidedFor
 	var revokedAt any
 	switch r.StatusHint {
 	case "superseded":
@@ -303,7 +334,7 @@ func (s *Store) ConfirmOperatingRuling(ctx context.Context, actor, id string, no
 		r.Status, r.RevokedBy, r.RevokedAt = "revoked", actor, r.DecidedAt
 		revokedAt = r.RevokedAt
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status=?,decided_by=?,decided_at=?,superseded_by=?,revoked_by=?,revoked_at=? WHERE ruling_id=?`, r.Status, r.DecidedBy, r.DecidedAt, r.SupersededBy, r.RevokedBy, revokedAt, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE standing_rulings SET status=?,decided_by=?,decided_at=?,superseded_by=?,revoked_by=?,revoked_at=?,decision_ref=?,decided_for=? WHERE ruling_id=?`, r.Status, r.DecidedBy, r.DecidedAt, r.SupersededBy, r.RevokedBy, revokedAt, r.DecisionRef, r.DecidedFor, id); err != nil {
 		return r, operatingRulingError(err)
 	}
 	return r, tx.Commit()

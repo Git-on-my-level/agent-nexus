@@ -6935,13 +6935,13 @@ paths:
     post:
       operationId: confirmOperatingRuling
       summary: Confirm a standing operating ruling
-      description: Human only. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.
+      description: A human confirms in Decide. An agent confirms only with decision_ref, the event of a human decision it recorded with anx note --decided-by whose text names this ruling ID; the ruling keeps decision_ref and decided_for. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.
       tags: [inbox]
       x-anx-surface: canonical
       x-anx-command-id: rulings.confirm
-      x-anx-agent-notes: Human principals only. Confirm from Decide.
+      x-anx-agent-notes: Agents pass --decision event:<id> naming a note recorded with --decided-by whose text names the ruling ID. Without it only a human may confirm.
       x-anx-output-envelope: "Returns `{ ruling }`."
-      x-anx-cli-hidden: true
+      x-anx-cli-path: rulings confirm
       x-anx-why: Make the proposed rule authoritative.
       x-anx-input-mode: json-body
       x-anx-streaming: {mode: none}
@@ -6960,12 +6960,61 @@ paths:
               required: [idempotency_key]
               properties:
                 idempotency_key: { type: string, minLength: 1, maxLength: 256 }
+                decision_ref: { type: string, maxLength: 256, description: "event:<id> of a recorded human decision that names this ruling ID. Required for agents." }
       responses:
         '200':
           description: The confirmed ruling.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OperatingRulingResult' }
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+  /rulings/withdraw:
+    post:
+      operationId: withdrawOperatingRulings
+      summary: Withdraw unconfirmed operating ruling proposals
+      description: Removes proposals that were never confirmed, with their names, so a merged ruling can carry those names as aliases. An agent withdraws only its own proposals; a human may withdraw any. The set is atomic. A remaining ruling that still relates to one in the set fails the request. Active and retired rulings cannot be withdrawn.
+      tags: [inbox]
+      x-anx-surface: canonical
+      x-anx-command-id: rulings.withdraw
+      x-anx-cli-path: rulings withdraw
+      x-anx-agent-notes: Withdraw a ruling and every proposal relating to it in one request. Keep the same idempotency key when retrying.
+      x-anx-output-envelope: "Returns `{ withdrawn }`."
+      x-anx-why: Clear proposals that a merged ruling replaces.
+      x-anx-input-mode: json-body
+      x-anx-streaming: {mode: none}
+      x-anx-concepts: [inbox, write]
+      x-anx-stability: beta
+      x-anx-error-codes: [invalid_request, forbidden, not_found, conflict, idempotency_conflict]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ruling_ids, idempotency_key]
+              properties:
+                ruling_ids: { type: array, minItems: 1, maxItems: 200, items: { $ref: '#/components/schemas/OperatingRulingID' } }
+                idempotency_key: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200':
+          description: The withdrawn ruling IDs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [withdrawn]
+                properties:
+                  withdrawn: { type: array, items: { $ref: '#/components/schemas/OperatingRulingID' } }
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -15497,7 +15546,7 @@ components:
       required: [ruling_id, scope, topic, title, body, source_quote, idempotency_key]
       properties:
         ruling_id: { $ref: '#/components/schemas/OperatingRulingID' }
-        aliases: { type: array, maxItems: 32, items: { type: string, minLength: 1, maxLength: 96 } }
+        aliases: { type: array, maxItems: 64, items: { type: string, minLength: 1, maxLength: 96 }, description: Legacy names, or the date IDs of withdrawn proposals this ruling merges. }
         scope: { type: string, enum: [workspace, account] }
         topic: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,63}$' }
         title: { type: string, minLength: 1, maxLength: 1024 }
@@ -15551,6 +15600,8 @@ components:
         relations: { type: array, items: { $ref: '#/components/schemas/OperatingRulingRelation' } }
         decided_by: { type: string }
         decided_at: { type: string, format: date-time }
+        decision_ref: { type: string, description: The recorded human decision an agent cited to confirm. }
+        decided_for: { type: string, description: Who made the recorded decision an agent cited. }
     TrackingDigestCard:
       type: object
       required: [ref, title, reason]

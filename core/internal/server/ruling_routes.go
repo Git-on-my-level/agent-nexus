@@ -38,6 +38,9 @@ func registerCurationAndRulingRoutes(registerRoute func(string, routeAccessClass
 	registerRoute("/rulings/propose", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
 		handleProposeOperatingRuling(w, r, opts)
 	})
+	registerRoute("/rulings/withdraw", exactRouteAccess(routeAccessWorkspaceBusiness, routeMutationBusiness, http.MethodPost), func(w http.ResponseWriter, r *http.Request) {
+		handleWithdrawOperatingRulings(w, r, opts)
+	})
 	registerRoute("/rulings/", func(r *http.Request) routeAccessRequirement {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/rulings/"), "/")
 		if len(parts) == 2 && parts[0] != "" && (parts[1] == "revoke" || parts[1] == "applied" || parts[1] == "confirm") && r.Method == http.MethodPost {

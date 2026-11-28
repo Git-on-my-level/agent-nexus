@@ -112,16 +112,42 @@ func TestRulingsCheckJSONFindingStatus(t *testing.T) {
 	}
 }
 
-func TestRulingsConfirmationHasNoCLIPath(t *testing.T) {
+// Agents confirm only through the hand-written command, which requires a
+// recorded decision; the server enforces the same rule for raw HTTP.
+func TestRulingsConfirmationRequiresRecordedDecision(t *testing.T) {
+	found := false
 	for _, spec := range registry.CommandSpecs() {
 		if spec.CommandID == "rulings.confirm" {
-			if spec.CLIPath != "" || spec.Method != "POST" || spec.Path != "/rulings/{ruling_id}/confirm" {
-				t.Fatalf("confirmation should be an HTTP-only operation: %+v", spec)
+			found = true
+			if spec.CLIPath != "rulings confirm" || spec.Method != "POST" || spec.Path != "/rulings/{ruling_id}/confirm" {
+				t.Fatalf("unexpected confirmation contract: %+v", spec)
 			}
-			return
 		}
 	}
-	t.Fatal("confirmation HTTP contract is missing")
+	if !found {
+		t.Fatal("confirmation HTTP contract is missing")
+	}
+	for _, args := range [][]string{
+		{"confirm", "R-20261128-02"},
+		{"confirm", "R-20261128-02", "--decision", "note-1"},
+		{"confirm", "--decision", "event:1"},
+		{"withdraw"},
+		{"withdraw", "R-20261128-02", "R-20261128-02"},
+		{"withdraw", "R1"},
+	} {
+		if _, err := parseRulingsArgs(args); err == nil {
+			t.Fatalf("parseRulingsArgs(%q) accepted invalid input", args)
+		}
+	}
+	if p, err := parseRulingsArgs([]string{"confirm", "R-20261128-02", "R-20261128-03", "--decision", "event:ev-1"}); err != nil || len(p.ids) != 2 || p.decision != "event:ev-1" {
+		t.Fatalf("confirm parse: %+v %v", p, err)
+	}
+	if err := validateRulingAliases([]string{"R17", "R-20261114-01"}); err != nil {
+		t.Fatalf("a withdrawn date ID should be a valid alias: %v", err)
+	}
+	if err := validateRulingAliases([]string{"R-20261114-00"}); err == nil {
+		t.Fatal("an invalid date ID alias was accepted")
+	}
 }
 
 func TestRulingsProjectionRetriesLegacy404(t *testing.T) {

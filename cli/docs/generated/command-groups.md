@@ -414,14 +414,16 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `rulings`
 
-- Commands: `6`
+- Commands: `8`
 - Command IDs:
   - `rulings.applied` (`rulings applied`)
+  - `rulings.confirm` (`rulings confirm`)
   - `rulings.create` (`rulings create`)
   - `rulings.list` (`rulings list`)
   - `rulings.projection` (`rulings pull`)
   - `rulings.propose` (`rulings propose`)
   - `rulings.revoke` (`rulings revoke`)
+  - `rulings.withdraw` (`rulings withdraw`)
 
 ## `runs`
 

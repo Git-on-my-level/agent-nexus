@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,6 +24,10 @@ var (
 	rulingAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,95}$`)
 	rulingTopicPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 )
+
+// maxRulingAliases matches the server: a merged ruling keeps the names of
+// the proposals it replaces.
+const maxRulingAliases = 64
 
 func validRulingDateID(id string) bool {
 	if !rulingDateID.MatchString(id) || id[11:] == "00" {
@@ -83,8 +88,9 @@ func validateRulingRelations(id string, relations []rulingRelation) error {
 func validateRulingAliases(aliases []string) error {
 	seen := map[string]bool{}
 	for _, alias := range aliases {
-		if !rulingAliasPattern.MatchString(alias) || strings.TrimSpace(alias) != alias || rulingDateID.MatchString(alias) || seen[alias] {
-			return errnorm.Usage("invalid_ruling_alias", "aliases must be distinct legacy names")
+		dateAlias := rulingDateID.MatchString(alias)
+		if seen[alias] || (dateAlias && !validRulingDateID(alias)) || (!dateAlias && (!rulingAliasPattern.MatchString(alias) || strings.TrimSpace(alias) != alias)) {
+			return errnorm.Usage("invalid_ruling_alias", "aliases must be distinct legacy names or the date IDs of withdrawn proposals")
 		}
 		seen[alias] = true
 	}
@@ -128,8 +134,8 @@ func (r rulingProposal) validateContent() error {
 			return errnorm.Usage("invalid_ruling_proposal", fmt.Sprintf("%s must contain text and be at most %d characters", field.name, field.max))
 		}
 	}
-	if len(r.Aliases) > 32 || len(r.Relations) > 200 {
-		return errnorm.Usage("invalid_ruling_proposal", "at most 32 aliases and 200 relations are allowed")
+	if len(r.Aliases) > maxRulingAliases || len(r.Relations) > 200 {
+		return errnorm.Usage("invalid_ruling_proposal", fmt.Sprintf("at most %d aliases and 200 relations are allowed", maxRulingAliases))
 	}
 	return nil
 }
@@ -277,4 +283,53 @@ func (a *App) readRulingInput(path string, max int64) ([]byte, error) {
 		return nil, errnorm.Usage("rulings_input_too_large", "ruling input exceeds size limit")
 	}
 	return raw, nil
+}
+
+// withdrawRulings removes unconfirmed proposals in one atomic request and
+// refreshes the cached projection so their names are free at once.
+func (a *App) withdrawRulings(ctx context.Context, cfg config.Resolved, ids []string) (*commandResult, error) {
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	key := fmt.Sprintf("withdraw:%x", sha256.Sum256([]byte(strings.Join(sorted, ","))))
+	result, err := a.invokeRawJSON(ctx, cfg, "rulings withdraw", http.MethodPost, "/rulings/withdraw", map[string]any{"ruling_ids": sorted, "idempotency_key": key})
+	if err != nil {
+		return nil, err
+	}
+	withdrawn := []string{}
+	for _, raw := range asSlice(commandResultBody(result)["withdrawn"]) {
+		withdrawn = append(withdrawn, anyString(raw))
+	}
+	snapshot, err := a.collectRulings(ctx, cfg, true, false)
+	if err != nil {
+		return nil, err
+	}
+	lines := []string{fmt.Sprintf("withdrew %d proposal(s): %s", len(withdrawn), strings.Join(withdrawn, ", "))}
+	return a.rulingsOutput(cfg, map[string]any{"withdrawn": withdrawn}, lines, snapshot), nil
+}
+
+// confirmRulings confirms proposals on a human decision the agent recorded
+// with anx note --decided-by. The server checks that the decision names each
+// ruling ID. A human confirms in Decide instead.
+func (a *App) confirmRulings(ctx context.Context, cfg config.Resolved, ids []string, decision string) (*commandResult, error) {
+	rulings := []map[string]any{}
+	lines := []string{}
+	for _, id := range ids {
+		key := fmt.Sprintf("confirm:%x", sha256.Sum256([]byte(id+"\x00"+decision)))
+		result, err := a.invokeRawJSON(ctx, cfg, "rulings confirm", http.MethodPost, "/rulings/"+id+"/confirm", map[string]any{"idempotency_key": key, "decision_ref": decision})
+		if err != nil {
+			// Confirmations replay by request key, so rerunning is safe.
+			return nil, err
+		}
+		ruling := asMap(commandResultBody(result)["ruling"])
+		if ruling == nil {
+			return nil, errnorm.Local("rulings_confirm_invalid", "confirmation response is missing the ruling")
+		}
+		rulings = append(rulings, ruling)
+		lines = append(lines, formatRuling(ruling, false))
+	}
+	snapshot, err := a.collectRulings(ctx, cfg, true, false)
+	if err != nil {
+		return nil, err
+	}
+	return a.rulingsOutput(cfg, map[string]any{"rulings": rulings}, lines, snapshot), nil
 }
