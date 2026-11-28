@@ -115,6 +115,8 @@ jobs:
               - 'core/cmd/contract-gen/**'
             core:
               - 'core/**'
+              # Core imports this replaced module in its tests.
+              - 'tests/channels/**'
             cli:
               - 'cli/**'
               # CLI integration fixtures open core databases and exercise migrations.

@@ -67,7 +67,7 @@ def changed_paths(tier, all_files=False, base=None):
         return paths(git("diff", "--cached", "--name-only", "-z", "--no-renames"))
     found = merge_base(base)
     if found is None:
-        print("No origin/main merge base; checking every module (no fetch).", flush=True)
+        print("No origin/main merge base; selecting from all tracked paths (no fetch).", flush=True)
         return paths(git("ls-files", "-z")) | SHARED
     # Include commits AND staged/unstaged/new work for standalone invocations.
     return (paths(git("diff", "--name-only", "-z", "--no-renames", found, "HEAD"))
@@ -655,21 +655,41 @@ def ui_fast_tests(changed, whole_module, base):
             slot="tests")
 
 
-def fast_tests(changed, base=None):
+def fast_tests(changed, base=None, *, prepush=False):
     if release_bump_only(changed, base):
         print("release version bump only; source commit verified by CI", flush=True)
         return
     modules = selected_modules(changed)
     whole_module = fans_out(changed)
-    print("Fast modules: " + (", ".join(sorted(modules)) or "none"), flush=True)
+    if not prepush:
+        print("Fast modules: " + (", ".join(sorted(modules)) or "none"), flush=True)
+    if prepush:
+        print("Pre-push: Core runtime suites and Go reverse dependencies are checked by CI. "
+              "Use make test-fast for the wider local suite.", flush=True)
     # Verify our selector and drift failure paths whenever hook/build plumbing changes.
     if changed & SHARED or any(p.startswith("scripts/git-hooks/") for p in changed):
         run("python3", "-B", "-m", "unittest", "discover", "-s", "scripts/git-hooks", "-p", "test_*.py")
     for module in go_module_dirs():
-        if module in modules:
+        if module not in modules:
+            continue
+        if not prepush:
             go_fast_tests(module, changed, whole_module)
-    if "web-ui" in modules:
-        ui_fast_tests(changed, whole_module, base)
+            continue
+        # Contract modules run in the conformance block below. Core contains
+        # packages whose short suites alone exceed the entire push budget.
+        if module == "core" or module.startswith("contracts/"):
+            continue
+        owned = {p for p in changed if p.startswith(module + "/")}
+        affected = go_affected(module, owned) if owned else None
+        if affected is None:
+            if owned or (module == "cli" and "VERSION" in changed):
+                print(f"{module}: broad Go checks deferred; run make test-fast to check locally.", flush=True)
+        elif affected[0]:
+            run("go", "test", "-short", FAST_TIER_GO_TIMEOUT, *affected[0], cwd=ROOT / module, slot="tests")
+    ui_shared = {"package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"}
+    if "web-ui" in modules and (not prepush or changed & ui_shared
+                                 or any(p.startswith("web-ui/") for p in changed)):
+        ui_fast_tests(changed, whole_module if not prepush else bool(changed & ui_shared), base)
     if any(p in {"scripts/owned_process.py", "scripts/e2e-smoke",
                  "scripts/tests/test_owned_process.py",
                  "scripts/tests/test_e2e_smoke_lifecycle.sh"} or p.startswith("scripts/git-hooks/")
@@ -744,7 +764,7 @@ def route_notice(base=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tier", choices=("static", "fast", "routes"))
+    parser.add_argument("tier", choices=("static", "fast", "prepush", "routes"))
     parser.add_argument("--all", action="store_true", help="check all tracked files/modules")
     parser.add_argument("--base", default=os.environ.get("TEST_FAST_BASE"), help="fast suite merge-base ref (default origin/main)")
     args = parser.parse_args()
@@ -753,13 +773,13 @@ def main():
         return
     # ANX_PREPUSH_FULL=1 asks for every module's suite, like --all but from the
     # environment, for pushes that want the wide run regardless of selection.
-    if args.tier == "fast" and os.environ.get("ANX_PREPUSH_FULL") == "1":
+    if args.tier in ("fast", "prepush") and os.environ.get("ANX_PREPUSH_FULL") == "1":
         args.all = True
     changed = changed_paths(args.tier, args.all, args.base)
     if args.tier == "static":
         static_checks(changed, args.all)
     else:
-        fast_tests(changed, merge_base(args.base))
+        fast_tests(changed, merge_base(args.base), prepush=args.tier == "prepush" and not args.all)
 
 
 if __name__ == "__main__":

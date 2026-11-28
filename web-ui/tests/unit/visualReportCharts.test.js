@@ -303,9 +303,33 @@ describe("bounded ECharts report vocabulary", () => {
     const option = buildReportChartOption(data);
     expect(option.series[0].data).toEqual([[0, 0, -2]]);
     expect(option.visualMap.min).toBe(-2);
+    expect(option.series[0].label.show).toBe(true);
+    const series = data.option.series[0];
+    series.showValues = false;
+    expect(buildReportChartOption(data).series[0].label.show).toBe(false);
+    series.showValues = true;
+    expect(validateReportChart(data)).toEqual([]);
+    expect(buildReportChartOption(data).series[0].label.show).toBe(true);
+    series.showValues = "true";
+    expectInvalid(data);
+    delete series.showValues;
     expect(reportChartRows(data).rows[1][4]).toBe("No observation");
     data.option.series[0].data.push([1, 0, 3]);
     expectInvalid(data);
+  });
+
+  it("allows explicit labels on a dense heatmap", () => {
+    const data = fromExample("heatmap");
+    const days = Array.from({ length: 22 }, (_, i) => String(i + 1));
+    data.option.xAxis.data = days;
+    const series = data.option.series[0];
+    series.data = days.flatMap((_, x) =>
+      data.option.yAxis.data.map((_, y) => [x, y, x + y]),
+    );
+    expect(buildReportChartOption(data).series[0].label.show).toBe(false);
+    series.showValues = true;
+    expect(validateReportChart(data)).toEqual([]);
+    expect(buildReportChartOption(data).series[0].label.show).toBe(true);
   });
 
   it("rejects cycles and dangling references in sankey data", () => {

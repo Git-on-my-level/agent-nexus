@@ -55,13 +55,13 @@ The rollout and current coverage are tracked in `web-ui/docs/durable-user-work.m
 
 ## Validation Ladder
 
-Run the smallest relevant checks first: `make -C core check`, `make cli-check`, `make -C web-ui check`. When contracts change: `make contract-gen`, then `make contract-check`, and before push/handoff `make contract-check-committed` (or rely on CI). Before handoff: `make test-fast` plus targeted tests for the behavior you changed; CI runs all applicable integration, browser, visual and smoke checks, and `ci-ok` gates merging.
+Run the smallest relevant checks first: `make -C core check`, `make cli-check`, `make -C web-ui check`. When contracts change: `make contract-gen`, then `make contract-check`, and before push/handoff `make contract-check-committed` (or rely on CI). Before handoff: `make test-prepush` plus targeted tests for the behavior you changed; CI runs all applicable integration, browser, visual and smoke checks, and `ci-ok` gates merging.
 
 ## Before you open a PR
 
 - Keep the OSS repo generic: no hosted/control-plane, personal, or ecosystem-specific logic. Third-party integrations must be optional and documented; setup-specific adapters belong outside this repo.
 - List every new or changed HTTP route in the PR description so hosted deployment can classify it.
-- Run `make test-fast` plus targeted tests for what you changed. Static checks run at commit; changed-module unit tests run at push, queued under the `scripts/slot` host cap so overlapping pushes on one machine do not turn load into false failures (see [docs/agents/local-checks.md](docs/agents/local-checks.md)). CI runs the full suite and the required `ci-ok` check gates merging.
+- Run `make test-prepush` plus targeted tests for what you changed. Static checks run at commit; focused unit tests run at push, queued under the `scripts/slot` host cap so overlapping pushes on one machine do not turn load into false failures (see [docs/agents/local-checks.md](docs/agents/local-checks.md)). CI runs the full suite and the required `ci-ok` check gates merging.
 - For `web-ui`, run only the Playwright specs you changed or affected: `pnpm -C web-ui exec playwright test <spec>`. Leave the complete browser suite to CI.
 - Write Playwright tests with `async ({}, testInfo)` destructuring, never `(fixtures, testInfo)`.
 - Contracts first: update canonical contracts before implementation, then run `make contract-gen` and `make contract-check-committed`.
@@ -81,7 +81,7 @@ For provider outages or a fresh-agent handoff, use [portable work context](docs/
 
 Match the command to the change; anything wider belongs to CI.
 
-- Any change, before pushing: `make test-fast`. It picks the affected Go packages and the related Vitest units itself.
+- Before pushing: `make test-prepush`. Use `make test-fast` for the wider local suite with Core and reverse dependencies.
 - One Go test while iterating: `go test ./internal/<pkg> -run TestName` inside the module (add `-short` to match the fast tier).
 - A whole Go module, rarely: `make -C core test` (it sets the package timeout; plain `go test ./...` in `core` has none and will not finish).
 - Never run bare `go test ./...` in `core`, and never the full browser suite locally: run only the Playwright specs you changed, `pnpm -C web-ui exec playwright test <spec>`.
@@ -94,7 +94,7 @@ Match the command to the change; anything wider belongs to CI.
 Run `make setup` once to install dependencies and `make install-hooks` after moving a worktree; hooks never download dependencies, and missing tooling is a setup error.
 
 - **Pre-commit:** `make check-static` checks staged files (formatting, Go vet/type checks, UI lint, syntax, version metadata, contracts regenerated into scratch) without rewriting your files or running tests; warm-cache budget 30 seconds, `STATIC_ARGS=--all` for all tracked files. `make check-routes` is advisory and never blocks the commit.
-- **Pre-push:** `make test-fast` selects changed work from the `origin/main` merge base; idle-machine budget 3 minutes. Heavy phases queue on the `scripts/slot` host cap; `ANX_PREPUSH_FULL=1` checks every module.
+- **Pre-push:** `make test-prepush` selects focused checks from the `origin/main` merge base; target under 5 minutes. Heavy phases queue on the `scripts/slot` host cap; `ANX_PREPUSH_FULL=1` checks every module.
 - **CI:** the full integration, five-shard browser, visual, build and smoke jobs remain behind `ci-ok`; local budgets do not remove CI coverage.
 
 Full tier mechanics — selection rules, the version-bump short-circuit, slot configuration and fast-tier test tagging: [docs/agents/local-checks.md](docs/agents/local-checks.md).

@@ -19,6 +19,12 @@ const needs = [...gate.matchAll(/^      - ([\w-]+)$/gm)].map(
   (match) => match[1],
 );
 
+test("changes to the shared channels fixture select Core CI", () => {
+  const coreFilter = ci.match(/^ {12}core:\n((?: {14}[^\n]+\n)+)/m);
+  assert.ok(coreFilter);
+  assert.match(coreFilter[1], /^ {14}- 'tests\/channels\/\*\*'$/m);
+});
+
 test("concurrency cancels repeated PRs while preserving every non-PR run", () => {
   const groupsAcrossWorkflows = [];
   for (const file of ["ci.yml", "system-smokes.yml", "performance.yml"]) {

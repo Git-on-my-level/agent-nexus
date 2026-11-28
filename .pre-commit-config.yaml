@@ -20,9 +20,9 @@ repos:
         always_run: true
         verbose: true
         stages: [pre-commit]
-      - id: test-fast
-        name: Changed-module unit tests
-        entry: make test-fast
+      - id: test-prepush
+        name: Focused pre-push checks
+        entry: make test-prepush
         language: system
         pass_filenames: false
         always_run: true

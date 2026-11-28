@@ -629,7 +629,11 @@ chart code. Its data contains `option`, optional literal `caption` and optional
 include mixed Cartesian line/area/bar/scatter, pie/donut, heatmap, graph, Sankey
 and treemap. Line `areaStyle: {}`, named `stack`, step/smooth lines, horizontal
 category axes, multiple series and paired axes compose without bespoke chart
-components. For example:
+components. Heatmap series accept a boolean `showValues` to show or hide cell
+values explicitly. When omitted, labels appear for up to 60 input entries,
+including missing-value placeholders in that threshold. Only non-null cells
+render values. Labels retain a shadow for contrast across the color ramp.
+For example:
 
 ```json
 {
