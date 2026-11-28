@@ -42,7 +42,7 @@ const defaultRulingImportMax = 1000
 func rulingImportV1Warning() output.Warning {
 	return output.Warning{
 		Code:    "rulings_import_v1_defaults",
-		Message: "schema_version 1 defaults scope to account, topic to import-<id>, and body and source_quote to the title",
+		Message: "schema_version 1 defaults scope to account, topic to import-<id>, and body and source_quote to the title. It reads relationships from supersedes",
 		Details: map[string]any{"fields": []string{"scope", "topic", "body", "source_quote"}},
 	}
 }
@@ -52,18 +52,26 @@ func decodeRulingIndex(raw []byte, maxEntries int) (rulingIndex, error) {
 	if err := json.Unmarshal(raw, &index); err != nil {
 		return rulingIndex{}, err
 	}
-	if (index.SchemaVersion != 1 && index.SchemaVersion != 2) || len(index.GeneratedFrom) == 0 || index.Rulings == nil {
+	if index.SchemaVersion != 1 && index.SchemaVersion != 2 {
 		return rulingIndex{}, fmt.Errorf("expected a generated schema_version 1 or 2 rulings index")
+	}
+	if len(index.GeneratedFrom) == 0 || index.Rulings == nil {
+		return rulingIndex{}, fmt.Errorf("index requires a non-empty generated_from array and a rulings array")
 	}
 	if len(index.Rulings) > maxEntries {
 		return rulingIndex{}, fmt.Errorf("index has %d entries, exceeding --max-entries %d", len(index.Rulings), maxEntries)
 	}
 	names := map[string]bool{}
-	entries := map[string]rulingIndexEntry{}
+	ids := map[string]bool{}
 	for _, r := range index.Rulings {
 		date, err := time.Parse(time.DateOnly, r.Date)
-		if !validRulingDateID(r.ID) || err != nil || r.ID[2:10] != date.Format("20060102") || r.Aliases == nil || strings.TrimSpace(r.Source) == "" || utf8.RuneCountInString(r.Source) > 2048 {
-			return rulingIndex{}, fmt.Errorf("invalid ruling entry %q", r.ID)
+		switch {
+		case !validRulingDateID(r.ID) || err != nil || r.ID[2:10] != date.Format("20060102"):
+			return rulingIndex{}, fmt.Errorf("invalid id or date for ruling %q", r.ID)
+		case r.Aliases == nil:
+			return rulingIndex{}, fmt.Errorf("ruling %s requires an aliases array", r.ID)
+		case strings.TrimSpace(r.Source) == "" || utf8.RuneCountInString(r.Source) > 2048:
+			return rulingIndex{}, fmt.Errorf("ruling %s requires a source of up to 2048 characters", r.ID)
 		}
 		switch r.Status {
 		case "active", "superseded", "revoked", "spent", "historical":
@@ -81,30 +89,32 @@ func decodeRulingIndex(raw []byte, maxEntries int) (rulingIndex, error) {
 		if err := validateRulingAliases(r.Aliases); err != nil {
 			return rulingIndex{}, err
 		}
-		for _, name := range append([]string{r.ID}, r.Aliases...) {
-			if names[name] {
-				return rulingIndex{}, fmt.Errorf("duplicate ruling ID or alias %q", name)
+		if index.SchemaVersion == 1 {
+			for _, name := range append([]string{r.ID}, r.Aliases...) {
+				if names[name] {
+					return rulingIndex{}, fmt.Errorf("duplicate ruling ID or alias %q", name)
+				}
+				names[name] = true
 			}
-			names[name] = true
+			ids[r.ID] = true
 		}
-		entries[r.ID] = r
 	}
 	for _, r := range index.Rulings {
-		seen := map[string]bool{r.ID: true}
-		if r.SupersededBy != "" && (r.Status != "superseded" || r.SupersededBy == r.ID || !validRulingDateID(r.SupersededBy) || (index.SchemaVersion == 1 && entries[r.SupersededBy].ID == "")) {
+		if r.SupersededBy != "" && (r.Status != "superseded" || r.SupersededBy == r.ID || !validRulingDateID(r.SupersededBy) || (index.SchemaVersion == 1 && !ids[r.SupersededBy])) {
 			return rulingIndex{}, fmt.Errorf("invalid superseder for %s", r.ID)
 		}
 		if index.SchemaVersion == 2 {
 			continue
 		}
+		seen := map[string]bool{r.ID: true}
 		for _, target := range r.Supersedes {
-			if seen[target] || entries[target].ID == "" {
+			if seen[target] || !ids[target] {
 				return rulingIndex{}, fmt.Errorf("invalid supersession from %s to %s", r.ID, target)
 			}
 			seen[target] = true
 		}
 	}
-	sort.Slice(index.Rulings, func(i, j int) bool { return index.Rulings[i].ID < index.Rulings[j].ID })
+	sort.SliceStable(index.Rulings, func(i, j int) bool { return index.Rulings[i].ID < index.Rulings[j].ID })
 	return index, nil
 }
 
@@ -152,12 +162,42 @@ func (r rulingIndexEntry) importRow(version int) (rulingImportRow, error) {
 	if err := validateRulingRelations(req.ID, req.Relations); err != nil {
 		return rulingImportRow{}, err
 	}
+	supersedes := map[string]bool{}
 	for _, rel := range req.Relations {
-		if rel.Kind == "supersedes" && (r.Status == "revoked" || r.Status == "spent") {
+		if rel.Kind != "supersedes" {
+			continue
+		}
+		if r.Status == "revoked" || r.Status == "spent" {
 			return rulingImportRow{}, fmt.Errorf("retired ruling cannot supersede another ruling")
+		}
+		supersedes[rel.ID] = true
+	}
+	for _, target := range r.Supersedes {
+		if !supersedes[target] {
+			return rulingImportRow{}, fmt.Errorf("supersedes target %s requires a matching supersedes relation in schema_version 2", target)
 		}
 	}
 	return rulingImportRow{proposal: req, workspace: workspace}, nil
+}
+
+func validateRulingImportNames(rows []rulingImportRow) error {
+	local := map[string]map[string]bool{}
+	accountScopeByName := map[string]bool{}
+	for _, row := range rows {
+		if local[row.workspace] == nil {
+			local[row.workspace] = map[string]bool{}
+		}
+		isAccount := row.proposal.Scope == "account"
+		for _, name := range append([]string{row.proposal.ID}, row.proposal.Aliases...) {
+			wasAccount, seen := accountScopeByName[name]
+			if local[row.workspace][name] || wasAccount || (isAccount && seen) {
+				return fmt.Errorf("duplicate ruling ID or alias %q for %s", name, row.workspace)
+			}
+			local[row.workspace][name] = true
+			accountScopeByName[name] = isAccount
+		}
+	}
+	return nil
 }
 
 func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path string, maxEntries int, dryRun bool) (*commandResult, error) {
@@ -186,6 +226,11 @@ func (a *App) importRulings(ctx context.Context, cfg config.Resolved, path strin
 			}
 		}
 		rows[i].workspace = base
+	}
+	if index.SchemaVersion == 2 {
+		if err := validateRulingImportNames(rows); err != nil {
+			return nil, errnorm.Usage("invalid_rulings_index", err.Error())
+		}
 	}
 	var warnings []output.Warning
 	if index.SchemaVersion == 1 {

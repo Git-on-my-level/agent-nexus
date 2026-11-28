@@ -26,6 +26,7 @@ func TestRulingsImportV2PreservesMetadataAndRoutes(t *testing.T) {
 	entries[0].Source = "record.md#first"
 	entries[0].Supersedes = []string{entries[1].ID}
 	entries[0].Relations = []rulingRelation{
+		{Kind: "supersedes", ID: entries[1].ID},
 		{Kind: "amends", ID: "R-20251230-01"},
 		{Kind: "independent", ID: "R-20251231-01"},
 	}
@@ -79,6 +80,9 @@ func TestRulingsImportV2RejectsInvalidRowsBeforeAnyRequest(t *testing.T) {
 		{"missing topic", "topic must be", func(r *rulingIndexEntry) { r.Topic = "" }},
 		{"missing body", "body must contain text", func(r *rulingIndexEntry) { r.Body = "" }},
 		{"missing quote", "source_quote must contain text", func(r *rulingIndexEntry) { r.Quote = "" }},
+		{"legacy supersession", "requires a matching supersedes relation", func(r *rulingIndexEntry) {
+			r.Supersedes = []string{"R-20251231-01"}
+		}},
 		{"duplicate relation", "per other R-YYYYMMDD-NN", func(r *rulingIndexEntry) {
 			r.Relations = []rulingRelation{{Kind: "amends", ID: "R-20251231-01"}, {Kind: "independent", ID: "R-20251231-01"}}
 		}},
@@ -94,6 +98,42 @@ func TestRulingsImportV2RejectsInvalidRowsBeforeAnyRequest(t *testing.T) {
 				if code != 2 || requests.Load() != 0 || !strings.Contains(stderr, tc.message) || !strings.Contains(stderr, last.ID) {
 					t.Fatalf("exit=%d requests=%d stderr=%s", code, requests.Load(), stderr)
 				}
+			}
+		})
+	}
+}
+
+func TestRulingsImportV2ChecksNamesWithinTheirScope(t *testing.T) {
+	for _, tc := range []struct {
+		name, firstScope, secondScope string
+		wantCode                      int
+	}{
+		{"separate workspace namespaces", "workspace:primary", "workspace:secondary", 0},
+		{"same workspace", "workspace:secondary", "workspace:secondary", 2},
+		{"account then workspace", "account", "workspace:secondary", 2},
+		{"workspace then account", "workspace:secondary", "account", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, root := t.TempDir(), t.TempDir()
+			primary, primaryWrites := rulingImportServer(t, "fixture-bearer")
+			secondary, secondaryWrites := rulingImportServer(t, "workspace-token")
+			seedRulingEnrollment(t, home, "primary", primary.URL)
+			seedRulingEnrollment(t, home, "secondary", secondary.URL)
+			entries := rulingImportV2Entries(2)
+			entries[1].ID, entries[1].Date = entries[0].ID, entries[0].Date
+			entries[0].Aliases, entries[1].Aliases = []string{"Legacy 8"}, []string{"Legacy 8"}
+			entries[0].Scope, entries[1].Scope = tc.firstScope, tc.secondScope
+			file := writeRulingImportIndex(t, root, 2, entries)
+			code, _, stderr := runRulingCLI(t, home, root, primary.URL, nil, "--as", "reviewer", "rulings", "import", "--file", file)
+			if code != tc.wantCode {
+				t.Fatalf("exit=%d, want %d, stderr=%s", code, tc.wantCode, stderr)
+			}
+			if code == 0 {
+				if len(primaryWrites) != 1 || len(secondaryWrites) != 1 {
+					t.Fatal("expected one proposal per workspace")
+				}
+			} else if len(primaryWrites) != 0 || len(secondaryWrites) != 0 || !strings.Contains(stderr, "duplicate ruling ID or alias") {
+				t.Fatalf("duplicate should fail before any submission: %s", stderr)
 			}
 		})
 	}

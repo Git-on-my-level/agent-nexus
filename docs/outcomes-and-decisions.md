@@ -196,10 +196,18 @@ and lifecycle hints. It validates the entire index before submitting proposals
 and accepts up to 1,000 entries by default. Set `--max-entries` to use a larger
 explicit bound.
 
-Version 2 rows require `scope`, `topic`, `body` and `source_quote`. Use
+Both versions use a non-empty `generated_from` array and a `rulings` array.
+Each row includes `id`, `date` matching the ID, `aliases` (which can be empty),
+`title`, `status`, `source`, and `origin` (`rulings-file`, `register`, `wave3`,
+or `hostctl`).
+
+Version 2 also requires `scope`, `topic`, `body` and `source_quote`. Use
 `account` to submit to the selected workspace or `workspace:<alias>` to submit
 with workspace scope through a named enrollment. Put relationships in the
-optional `relations` array, with a `kind` and `ruling_id` in each object.
+optional `relations` array, with a `kind` and `ruling_id` in each object. If you
+carry forward a legacy `supersedes` list, include a matching typed relation
+for each target. Workspace-scoped IDs and aliases are unique within their
+target workspace. Account-scoped names must be unique across targets.
 Version 1 uses the selected workspace and derives the proposal metadata from
 the heading and legacy supersession fields. It emits a warning naming the
 defaults.
