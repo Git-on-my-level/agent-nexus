@@ -837,7 +837,10 @@ commands:
     reason: "Use the CLI proposal command for date-ID selection, file input and workspace collision checks."
   "rulings.confirm":
     classification: unsupported_other
-    reason: "Human-only confirmation in Decide."
+    reason: "Humans confirm in Decide; an agent uses the CLI confirm command, which requires a recorded human decision that names each ruling."
+  "rulings.withdraw":
+    classification: unsupported_other
+    reason: "Use the CLI withdraw command, which withdraws related proposals together and refreshes the cached projection."
   "rulings.create":
     classification: unsupported_other
     reason: "Human-only: a standing ruling answers later asks in the human's name, so an agent tool must not create one."

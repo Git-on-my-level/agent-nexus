@@ -261,6 +261,7 @@ export declare class AnxClient {
     rulingsProjection(options?: RequestOptions): Promise<InvokeResult>;
     rulingsPropose(options?: RequestOptions): Promise<InvokeResult>;
     rulingsRevoke(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
+    rulingsWithdraw(options?: RequestOptions): Promise<InvokeResult>;
     runsGet(pathParams: Record<string, string>, options?: RequestOptions): Promise<InvokeResult>;
     runsList(options?: RequestOptions): Promise<InvokeResult>;
     runsUpsert(options?: RequestOptions): Promise<InvokeResult>;

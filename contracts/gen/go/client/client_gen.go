@@ -2839,17 +2839,19 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:   []string{"rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID:  "rulings.confirm",
-		CLIPath:    "",
+		CLIPath:    "rulings confirm",
+		Group:      "rulings",
 		Method:     "POST",
 		Path:       "/rulings/{ruling_id}/confirm",
 		PathParams: []string{"ruling_id"},
 		InputMode:  "json-body",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
+		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID: "rulings.create",
@@ -2860,7 +2862,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.applied", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID: "rulings.list",
@@ -2871,7 +2873,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "none",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.propose", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.propose", "rulings.projection", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID: "rulings.projection",
@@ -2882,7 +2884,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "query",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "read"},
-		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID: "rulings.propose",
@@ -2893,7 +2895,7 @@ var CommandRegistry = []CommandSpec{
 		InputMode: "json-body",
 		Stability: "beta",
 		Concepts:  []string{"inbox", "write"},
-		Adjacent:  []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.projection", "rulings.revoke"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.projection", "rulings.revoke", "rulings.withdraw"},
 	},
 	{
 		CommandID:  "rulings.revoke",
@@ -2905,7 +2907,18 @@ var CommandRegistry = []CommandSpec{
 		InputMode:  "none",
 		Stability:  "beta",
 		Concepts:   []string{"inbox", "write"},
-		Adjacent:   []string{"rulings.applied", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection"},
+		Adjacent:   []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.withdraw"},
+	},
+	{
+		CommandID: "rulings.withdraw",
+		CLIPath:   "rulings withdraw",
+		Group:     "rulings",
+		Method:    "POST",
+		Path:      "/rulings/withdraw",
+		InputMode: "json-body",
+		Stability: "beta",
+		Concepts:  []string{"inbox", "write"},
+		Adjacent:  []string{"rulings.applied", "rulings.confirm", "rulings.create", "rulings.list", "rulings.propose", "rulings.projection", "rulings.revoke"},
 	},
 	{
 		CommandID:  "runs.get",
@@ -4567,6 +4580,10 @@ func (c *Client) RulingsPropose(ctx context.Context, opts RequestOptions) (*http
 
 func (c *Client) RulingsRevoke(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {
 	return c.Invoke(ctx, "rulings.revoke", pathParams, opts)
+}
+
+func (c *Client) RulingsWithdraw(ctx context.Context, opts RequestOptions) (*http.Response, []byte, error) {
+	return c.Invoke(ctx, "rulings.withdraw", nil, opts)
 }
 
 func (c *Client) RunsGet(ctx context.Context, pathParams map[string]string, opts RequestOptions) (*http.Response, []byte, error) {

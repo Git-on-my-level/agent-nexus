@@ -12478,23 +12478,26 @@ export const commandRegistry: CommandSpec[] = [
       "ruling_id"
     ],
     "adjacent_commands": [
+      "rulings.confirm",
       "rulings.create",
       "rulings.list",
       "rulings.propose",
       "rulings.projection",
-      "rulings.revoke"
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsApplied",
     "ts_method": "rulingsApplied"
   },
   {
     "command_id": "rulings.confirm",
-    "cli_path": "",
+    "cli_path": "rulings confirm",
+    "group": "rulings",
     "method": "POST",
     "path": "/rulings/{ruling_id}/confirm",
     "operation_id": "confirmOperatingRuling",
     "summary": "Confirm a standing operating ruling",
-    "description": "Human only. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.",
+    "description": "A human confirms in Decide. An agent confirms only with decision_ref, the event of a human decision it recorded with anx note --decided-by whose text names this ruling ID; the ruling keeps decision_ref and decided_for. The proposal and the rulings it supersedes change status atomically. The same request key replays its original receipt.",
     "why": "Make the proposed rule authoritative.",
     "input_mode": "json-body",
     "streaming": {
@@ -12515,17 +12518,32 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "stability": "beta",
     "surface": "canonical",
-    "agent_notes": "Human principals only. Confirm from Decide.",
+    "agent_notes": "Agents pass --decision event:\u003cid\u003e naming a note recorded with --decided-by whose text names the ruling ID. Without it only a human may confirm.",
     "body_schema": {
       "required": [
         {
           "name": "idempotency_key",
           "type": "string"
         }
+      ],
+      "optional": [
+        {
+          "name": "decision_ref",
+          "type": "string"
+        }
       ]
     },
     "path_params": [
       "ruling_id"
+    ],
+    "adjacent_commands": [
+      "rulings.applied",
+      "rulings.create",
+      "rulings.list",
+      "rulings.propose",
+      "rulings.projection",
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsConfirm",
     "ts_method": "rulingsConfirm"
@@ -12584,10 +12602,12 @@ export const commandRegistry: CommandSpec[] = [
     },
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.list",
       "rulings.propose",
       "rulings.projection",
-      "rulings.revoke"
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsCreate",
     "ts_method": "rulingsCreate"
@@ -12620,10 +12640,12 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Any authenticated member. One indexed page; pass include_revoked=true for history.",
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
       "rulings.propose",
       "rulings.projection",
-      "rulings.revoke"
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsList",
     "ts_method": "rulingsList"
@@ -12657,10 +12679,12 @@ export const commandRegistry: CommandSpec[] = [
     "agent_notes": "Pages include the revision used for cache consistency.",
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
       "rulings.list",
       "rulings.propose",
-      "rulings.revoke"
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsProjection",
     "ts_method": "rulingsProjection"
@@ -12762,10 +12786,12 @@ export const commandRegistry: CommandSpec[] = [
     },
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
       "rulings.list",
       "rulings.projection",
-      "rulings.revoke"
+      "rulings.revoke",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsPropose",
     "ts_method": "rulingsPropose"
@@ -12803,13 +12829,68 @@ export const commandRegistry: CommandSpec[] = [
     ],
     "adjacent_commands": [
       "rulings.applied",
+      "rulings.confirm",
       "rulings.create",
       "rulings.list",
       "rulings.propose",
-      "rulings.projection"
+      "rulings.projection",
+      "rulings.withdraw"
     ],
     "go_method": "RulingsRevoke",
     "ts_method": "rulingsRevoke"
+  },
+  {
+    "command_id": "rulings.withdraw",
+    "cli_path": "rulings withdraw",
+    "group": "rulings",
+    "method": "POST",
+    "path": "/rulings/withdraw",
+    "operation_id": "withdrawOperatingRulings",
+    "summary": "Withdraw unconfirmed operating ruling proposals",
+    "description": "Removes proposals that were never confirmed, with their names, so a merged ruling can carry those names as aliases. An agent withdraws only its own proposals; a human may withdraw any. The set is atomic. A remaining ruling that still relates to one in the set fails the request. Active and retired rulings cannot be withdrawn.",
+    "why": "Clear proposals that a merged ruling replaces.",
+    "input_mode": "json-body",
+    "streaming": {
+      "mode": "none"
+    },
+    "output_envelope": "Returns `{ withdrawn }`.",
+    "error_codes": [
+      "invalid_request",
+      "forbidden",
+      "not_found",
+      "conflict",
+      "idempotency_conflict"
+    ],
+    "concepts": [
+      "inbox",
+      "write"
+    ],
+    "stability": "beta",
+    "surface": "canonical",
+    "agent_notes": "Withdraw a ruling and every proposal relating to it in one request. Keep the same idempotency key when retrying.",
+    "body_schema": {
+      "required": [
+        {
+          "name": "idempotency_key",
+          "type": "string"
+        },
+        {
+          "name": "ruling_ids",
+          "type": "list\u003cany\u003e"
+        }
+      ]
+    },
+    "adjacent_commands": [
+      "rulings.applied",
+      "rulings.confirm",
+      "rulings.create",
+      "rulings.list",
+      "rulings.propose",
+      "rulings.projection",
+      "rulings.revoke"
+    ],
+    "go_method": "RulingsWithdraw",
+    "ts_method": "rulingsWithdraw"
   },
   {
     "command_id": "runs.get",
@@ -17267,6 +17348,10 @@ export class AnxClient {
 
   rulingsRevoke(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {
     return this.invoke("rulings.revoke", pathParams, options);
+  }
+
+  rulingsWithdraw(options: RequestOptions = {}): Promise<InvokeResult> {
+    return this.invoke("rulings.withdraw", {}, options);
   }
 
   runsGet(pathParams: Record<string, string>, options: RequestOptions = {}): Promise<InvokeResult> {

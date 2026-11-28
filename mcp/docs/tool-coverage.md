@@ -2,7 +2,7 @@
 
 Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_policy.yaml`.
 
-- Command count: 286
+- Command count: 287
 - Contract version: 0.6.0
 - OpenAPI version: 3.1.0
 
@@ -44,7 +44,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | ref-edges | 1 |
 | refs | 1 |
 | report | 2 |
-| rulings | 7 |
+| rulings | 8 |
 | runs | 3 |
 | secret | 6 |
 | series | 4 |
@@ -68,7 +68,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | gated_sensitive | 13 |
 | unsupported_bootstrap_auth | 9 |
 | unsupported_interactive | 14 |
-| unsupported_other | 23 |
+| unsupported_other | 24 |
 | unsupported_shell_shaped | 26 |
 | unsupported_streaming | 6 |
 
@@ -80,7 +80,7 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | hosted default | 64 | explicit read-only private-app allowlist |
 | gated | 43 | requires explicit admin/sensitive policy scope |
 | adapted | 0 | provider compatibility adapters |
-| unsupported | 78 | not represented as direct MCP tools in v1 |
+| unsupported | 79 | not represented as direct MCP tools in v1 |
 
 ## Command Inventory
 
@@ -307,12 +307,13 @@ Generated from `contracts/gen/meta/commands.json` and `mcp/policy/default_tool_p
 | report.preview | report | POST | /reports/preview | exposed_read | bounded live materialization of an unsaved report without persistence |
 | report.render | report | GET | /docs/{document_id}/report | exposed_read | authorized live dashboard projection read |
 | rulings.applied | rulings | POST | /rulings/{ruling_id}/applied | unsupported_other | Bookkeeping the CLI does for an ask it settled against a ruling before filing; not an agent action. |
-| rulings.confirm | rulings | POST | /rulings/{ruling_id}/confirm | unsupported_other | Human-only confirmation in Decide. |
+| rulings.confirm | rulings | POST | /rulings/{ruling_id}/confirm | unsupported_other | Humans confirm in Decide; an agent uses the CLI confirm command, which requires a recorded human decision that names each ruling. |
 | rulings.create | rulings | POST | /rulings | unsupported_other | Human-only: a standing ruling answers later asks in the human's name, so an agent tool must not create one. |
 | rulings.list | rulings | GET | /rulings | exposed_read | One bounded page of standing rulings, scoped to rulings whose source ask the caller can read; an agent checks it before asking. |
 | rulings.projection | rulings | GET | /rulings/projection | unsupported_other | Internal page of the CLI projection; the CLI owns workspace fan-out, identity binding and cache consistency. |
 | rulings.propose | rulings | POST | /rulings/propose | unsupported_other | Use the CLI proposal command for date-ID selection, file input and workspace collision checks. |
 | rulings.revoke | rulings | POST | /rulings/{ruling_id}/revoke | unsupported_other | Human-only: revoking a standing ruling is the human's decision, made in Decide. |
+| rulings.withdraw | rulings | POST | /rulings/withdraw | unsupported_other | Use the CLI withdraw command, which withdraws related proposals together and refreshes the cached projection. |
 | runs.get | runs | GET | /runs/{run_id} | exposed_read | run reports are workspace presence data |
 | runs.list | runs | GET | /runs | exposed_read | run reports are workspace presence data |
 | runs.upsert | runs | POST | /runs | unsupported_other | runs are reported by local launchers through anx runs ingest, not by MCP clients |

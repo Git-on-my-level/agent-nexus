@@ -4,7 +4,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 - OpenAPI version: `3.1.0`
 - Contract version: `0.6.0`
-- Commands: `286`
+- Commands: `287`
 
 ## `actors.create`
 
@@ -2873,6 +2873,7 @@ Generated from `contracts/anx-openapi.yaml`.
 
 ## `rulings.confirm`
 
+- CLI path: `rulings confirm`
 - HTTP: `POST /rulings/{ruling_id}/confirm`
 - Stability: `beta`
 - Surface: `canonical`
@@ -2881,7 +2882,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Concepts: `inbox`, `write`
 - Error codes: `invalid_request`, `human_required`, `not_found`, `conflict`, `idempotency_conflict`, `needs_relation`
 - Output: Returns `{ ruling }`.
-- Agent notes: Human principals only. Confirm from Decide.
+- Agent notes: Agents pass --decision event:<id> naming a note recorded with --decided-by whose text names the ruling ID. Without it only a human may confirm.
 
 ## `rulings.create`
 
@@ -2947,6 +2948,19 @@ Generated from `contracts/anx-openapi.yaml`.
 - Error codes: `auth_required`, `invalid_token`, `human_required`, `not_found`
 - Output: Returns `{ ruling }`.
 - Agent notes: Human principals only.
+
+## `rulings.withdraw`
+
+- CLI path: `rulings withdraw`
+- HTTP: `POST /rulings/withdraw`
+- Stability: `beta`
+- Surface: `canonical`
+- Input mode: `json-body`
+- Why: Clear proposals that a merged ruling replaces.
+- Concepts: `inbox`, `write`
+- Error codes: `invalid_request`, `forbidden`, `not_found`, `conflict`, `idempotency_conflict`
+- Output: Returns `{ withdrawn }`.
+- Agent notes: Withdraw a ruling and every proposal relating to it in one request. Keep the same idempotency key when retrying.
 
 ## `runs.get`
 

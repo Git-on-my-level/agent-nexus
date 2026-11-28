@@ -10,14 +10,15 @@ import (
 )
 
 func rulingsUsage() string {
-	return "usage: anx rulings list|show|pull|check|propose|import (see anx rulings --help)"
+	return "usage: anx rulings list|show|pull|check|propose|import|withdraw|confirm (see anx rulings --help)"
 }
 
 type rulingsArgs struct {
 	verb, ref, surfaces, file    string
 	includeRevoked, strictLegacy bool
 	dryRun                       bool
-	paths                        []string
+	paths, ids                   []string
+	decision                     string
 	maxEntries                   int
 	proposal                     rulingProposalArgs
 }
@@ -60,6 +61,27 @@ func parseRulingsArgs(args []string) (rulingsArgs, error) {
 		input = options
 	case "propose":
 		parsed.proposal.bind(fs)
+	case "withdraw", "confirm":
+		fs.StringVar(&parsed.decision, "decision", "", "event:<id> of the human decision recorded with anx note --decided-by")
+		// Accept --decision before or after the ruling IDs.
+		var options []string
+		for i := 0; i < len(input); i++ {
+			token := input[i]
+			switch {
+			case token == "--":
+				parsed.ids = append(parsed.ids, input[i+1:]...)
+				i = len(input)
+			case strings.HasPrefix(token, "-"):
+				options = append(options, token)
+				if (token == "--decision" || token == "-decision") && i+1 < len(input) {
+					i++
+					options = append(options, input[i])
+				}
+			default:
+				parsed.ids = append(parsed.ids, token)
+			}
+		}
+		input = options
 	case "import":
 		fs.StringVar(&parsed.file, "file", "", "Generated rulings index")
 		fs.IntVar(&parsed.maxEntries, "max-entries", defaultRulingImportMax, "Maximum index entries to submit")
@@ -69,6 +91,25 @@ func parseRulingsArgs(args []string) (rulingsArgs, error) {
 	}
 	if err := fs.Parse(input); err != nil {
 		return parsed, errnorm.Usage("invalid_flags", err.Error())
+	}
+	if parsed.verb == "withdraw" || parsed.verb == "confirm" {
+		if parsed.verb == "withdraw" && parsed.decision != "" {
+			return parsed, errnorm.Usage("invalid_flags", "withdraw takes no --decision")
+		}
+		if len(parsed.ids) == 0 {
+			return parsed, errnorm.Usage("invalid_args", "usage: anx rulings "+parsed.verb+" R-YYYYMMDD-NN...")
+		}
+		seen := map[string]bool{}
+		for _, id := range parsed.ids {
+			if !validRulingDateID(id) || seen[id] {
+				return parsed, errnorm.Usage("invalid_ruling_id", "pass distinct R-YYYYMMDD-NN ruling IDs")
+			}
+			seen[id] = true
+		}
+		if parsed.verb == "confirm" && !strings.HasPrefix(parsed.decision, "event:") {
+			return parsed, errnorm.Usage("invalid_flags", "--decision event:<id> is required: record the human's decision with anx note <card> \"<decision naming the ruling IDs>\" --decided-by <who>")
+		}
+		return parsed, nil
 	}
 	switch {
 	case parsed.verb == "show" && fs.NArg() == 1:
@@ -102,6 +143,10 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 		return a.proposeRuling(ctx, cfg, p.proposal)
 	case "import":
 		return a.importRulings(ctx, cfg, p.file, p.maxEntries, p.dryRun)
+	case "withdraw":
+		return a.withdrawRulings(ctx, cfg, p.ids)
+	case "confirm":
+		return a.confirmRulings(ctx, cfg, p.ids, p.decision)
 	}
 	snapshot, err := a.collectRulings(ctx, cfg, p.verb == "pull", p.verb == "list" || p.verb == "show")
 	if err != nil {
