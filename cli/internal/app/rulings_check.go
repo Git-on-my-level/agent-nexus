@@ -387,8 +387,18 @@ func (a *App) checkRulings(ctx context.Context, cfg config.Resolved, args ruling
 		}
 	}
 	count := len(findings) + len(unused)
-	output = append(output, fmt.Sprintf("anx rulings check: %d finding(s) in %d file(s)", count, len(files)))
-	result := a.rulingsOutput(cfg, map[string]any{"findings": findings, "unused_allowlist": unused, "finding_count": count, "file_count": len(files)}, output, snapshot)
+	summary := fmt.Sprintf("anx rulings check: %d finding(s) in %d file(s)", count, len(files))
+	data := map[string]any{"findings": findings, "unused_allowlist": unused, "finding_count": count, "file_count": len(files)}
+	if cfg.JSON && count > 0 {
+		err := errnorm.Local("rulings_check_findings", summary)
+		if len(snapshot.warnings) > 0 {
+			data["projection_warnings"] = snapshot.warnings
+		}
+		err.Details = data
+		return nil, err
+	}
+	output = append(output, summary)
+	result := a.rulingsOutput(cfg, data, output, snapshot)
 	if count > 0 {
 		result.ExitCode = 1
 	}

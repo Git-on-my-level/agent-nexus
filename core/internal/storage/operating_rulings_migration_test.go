@@ -9,7 +9,7 @@ import (
 )
 
 func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
-	for _, version := range []int{147, 150, 151} {
+	for _, version := range []int{147, 150, 151, 152} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			ctx := context.Background()
 			layout := NewLayout(t.TempDir())
@@ -35,7 +35,7 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				VALUES('answer-old','a','answer','A?','Yes','ask-a','human','2026-11-25',7,NULL,''),
 				('revoked-old','b','answer','B?','No','ask-b','human','2026-11-25',3,'2026-11-26','human')`)
 			}
-			if version == 151 {
+			if version >= 151 {
 				commentSearchExec(t, db, `INSERT INTO standing_rulings(id,title_key,kind,question,created_by,created_at,ruling_id,status)
 				VALUES('R-20261127-01','','operating','','human','2026-11-27T10:00:00Z','R-20261127-01','proposed'),
 				('R-20261127-02','','operating','','human','2026-11-27T10:00:00.5Z','R-20261127-02','proposed')`)
@@ -49,13 +49,13 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 			}
 			defer ws.Close()
 			wantOperating := 0
-			if version == 151 {
+			if version >= 151 {
 				wantOperating = 2
 			}
 			if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM operating_ruling_positions`); n != wantOperating {
 				t.Fatalf("operating projection has %d rows, want %d", n, wantOperating)
 			}
-			if version == 151 {
+			if version >= 151 {
 				const newest = `SELECT ruling_id FROM operating_ruling_positions WHERE status='proposed' ORDER BY rtrim(created_at,'Z') DESC,ruling_id LIMIT 1`
 				var id, plan string
 				var step, parent, unused int
@@ -67,6 +67,9 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				}
 			}
 			if version >= 148 {
+				if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM standing_ruling_names WHERE name IN ('answer-old','revoked-old') AND ruling_id=name`); n != 2 {
+					t.Fatalf("legacy answer names were not reserved: %d matched", n)
+				}
 				if n := commentSearchCount(t, ws.DB(), `SELECT COUNT(*) FROM standing_rulings WHERE ruling_id IS NULL AND scope='workspace' AND status='' AND kind='answer'
 				 AND ((id='answer-old' AND uses=7 AND revoked_at IS NULL AND answer='Yes') OR
 				      (id='revoked-old' AND uses=3 AND revoked_at='2026-11-26' AND revoked_by='human' AND answer='No'))`); n != 2 {
@@ -80,7 +83,7 @@ func TestOperatingRulingMigrationFromPriorSchemas(t *testing.T) {
 				t.Fatal(err)
 			}
 			commentSearchExec(t, ws.DB(), `UPDATE standing_ruling_revision SET version=17`)
-			commentSearchExec(t, ws.DB(), `DELETE FROM schema_migrations WHERE version IN (151,152)`)
+			commentSearchExec(t, ws.DB(), `DELETE FROM schema_migrations WHERE version IN (151,152,153)`)
 			if err := ws.Close(); err != nil {
 				t.Fatal(err)
 			}

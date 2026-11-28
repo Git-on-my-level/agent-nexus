@@ -2931,7 +2931,7 @@ Generated from `contracts/anx-openapi.yaml`.
 - Input mode: `json-body`
 - Why: Put a proposed operating rule before a human.
 - Concepts: `inbox`, `write`
-- Error codes: `invalid_request`, `not_found`, `conflict`, `idempotency_conflict`
+- Error codes: `invalid_request`, `not_found`, `conflict`, `idempotency_conflict`, `needs_relation`, `quota_exceeded`
 - Output: Returns `{ ruling }` or a relation redirect.
 - Agent notes: Keep the same idempotency key when retrying an uncertain submission.
 

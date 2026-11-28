@@ -110,14 +110,17 @@ func (a *App) runRulings(ctx context.Context, args []string, cfg config.Resolved
 	}
 	switch p.verb {
 	case "pull":
+		if snapshot.projections[0]["source_revision"] == rulingRevisionLegacy {
+			return nil, errnorm.Usage("rulings_index_unavailable", "the selected workspace does not serve an operating ruling projection to pull")
+		}
 		return &commandResult{Data: map[string]any{"rulings": len(snapshot.rows), "projections": snapshot.projections}, Warnings: snapshot.warnings}, nil
 	case "check":
 		for _, projection := range snapshot.projections {
-			if projection["source_revision"] != "legacy" {
-				return a.checkRulings(ctx, cfg, p, snapshot)
+			if projection["source_revision"] == rulingRevisionLegacy {
+				return nil, errnorm.Usage("rulings_index_unavailable", "no operating ruling projection for "+anyString(projection["workspace_url"]))
 			}
 		}
-		return nil, errnorm.Usage("rulings_index_unavailable", "no configured workspace serves the operating ruling projection")
+		return a.checkRulings(ctx, cfg, p, snapshot)
 	case "show":
 		ref := strings.TrimPrefix(p.ref, "ruling:")
 		if homes := snapshot.collisions[ref]; len(homes) > 0 {

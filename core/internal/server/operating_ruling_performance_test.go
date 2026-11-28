@@ -66,6 +66,9 @@ func TestPerformanceOperatingRulingsRoutes(t *testing.T) {
 				if budget.Path == "/rulings/projection" && (!strings.Contains(w.Body.String(), "next_cursor") || strings.Contains(w.Body.String(), mostRecent)) {
 					t.Fatal("projection did not limit the first page")
 				}
+				if budget.Path == "/rulings" && strings.Contains(w.Body.String(), mostRecent) {
+					t.Fatal("legacy route returned a pending operating ruling")
+				}
 				t.Logf("queries=%d rows=%d VM=%d elapsed=%s", queries, rows, work.VMSteps, elapsed)
 			})
 		}

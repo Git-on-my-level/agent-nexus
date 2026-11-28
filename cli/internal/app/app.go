@@ -330,7 +330,7 @@ func (a *App) Run(args []string) int {
 	if result != nil {
 		exitCode = result.ExitCode
 	}
-	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: exitCode == 0, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
+	if err := a.renderEnvelope(a.Stdout, resolved.JSON, output.Envelope{OK: true, Command: identity.Command, Result: value, Workspace: commandWorkspace(result), Warnings: warnings, NextActions: actions, OpenURL: openURL}, resolved.Verbose || resolved.Headers); err != nil {
 		return 1
 	}
 	return exitCode

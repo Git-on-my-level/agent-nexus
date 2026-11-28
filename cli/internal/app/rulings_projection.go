@@ -25,6 +25,8 @@ import (
 
 const rulingProjectionStale = "rulings_projection_stale"
 const rulingProjectionSize = 64 << 20
+const rulingRevisionLegacy = "legacy"
+const rulingLegacyPageTTL = 5 * time.Second
 
 type rulingProjection struct {
 	FetchedAt time.Time        `json:"fetched_at"`
@@ -63,6 +65,14 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 	}
 	selected := strings.TrimRight(cfg.BaseURL, "/")
 	configs := map[string]config.Resolved{selected: cfg}
+	selectedKey := rulingWorkspaceURLKey(selected)
+	seenURLs := map[string]bool{selectedKey: true}
+	seenIDs := map[string]bool{}
+	for _, workspace := range catalog.Workspaces {
+		if workspace.Enrolled && workspace.WorkspaceID != "" && rulingWorkspaceURLKey(workspace.BaseURL) == selectedKey {
+			seenIDs[workspace.WorkspaceID] = true
+		}
+	}
 	// Only locally enrolled workspaces can be authenticated for this principal.
 	// Never send an explicit bearer to a second workspace.
 	for _, workspace := range catalog.Workspaces {
@@ -70,8 +80,13 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 			continue
 		}
 		base := strings.TrimRight(workspace.BaseURL, "/")
-		if base == selected {
+		baseKey := rulingWorkspaceURLKey(base)
+		if seenURLs[baseKey] || seenIDs[workspace.WorkspaceID] {
 			continue
+		}
+		seenURLs[baseKey] = true
+		if workspace.WorkspaceID != "" {
+			seenIDs[workspace.WorkspaceID] = true
 		}
 		other := cfg
 		other.BaseURL = base
@@ -79,9 +94,7 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 		other.ActorID, other.Agent, other.AgentID, other.Username = "", "", "", ""
 		other.HostID, other.HostKeyID, other.HostKeyPath = "", "", ""
 		other.Sources = map[string]string{"base_url": "config:rulings-fanout"}
-		if _, _, err := a.identityName(other); err == nil {
-			configs[base] = other
-		}
+		configs[base] = other
 	}
 	var bases []string
 	for base := range configs {
@@ -94,13 +107,18 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 		projection, stale, err := a.loadRulingProjection(ctx, configs[base], dir, ttl, force, allowPartial && base == selected)
 		if err != nil {
 			if base == selected || !allowPartial {
-				return out, err
+				failure := *errnorm.Normalize(err)
+				failure.Message = fmt.Sprintf("cannot read rulings for %s: %s", base, failure.Message)
+				return out, &failure
 			}
 			out.warnings = append(out.warnings, unavailableRulingProjectionWarning(base))
 			continue
 		}
 		if stale {
 			out.warnings = append(out.warnings, staleRulingProjectionWarning(base, projection))
+		}
+		if base != selected && projection.Revision == rulingRevisionLegacy {
+			out.warnings = append(out.warnings, unavailableRulingProjectionWarning(base))
 		}
 		out.projections = append(out.projections, map[string]any{"workspace_url": base, "fetched_at": projection.FetchedAt, "source_revision": projection.Revision})
 		for _, ruling := range projection.Rulings {
@@ -130,9 +148,29 @@ func (a *App) collectRulings(ctx context.Context, cfg config.Resolved, force, al
 	return out, nil
 }
 
+// Compare equivalent base URLs without treating distinct proxy paths as aliases.
+func rulingWorkspaceURLKey(base string) string {
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return strings.TrimRight(base, "/")
+	}
+	scheme, authority := strings.ToLower(u.Scheme), strings.ToLower(u.Host)
+	if scheme == "http" && u.Port() == "80" {
+		authority = strings.TrimSuffix(authority, ":80")
+	}
+	if scheme == "https" && u.Port() == "443" {
+		authority = strings.TrimSuffix(authority, ":443")
+	}
+	return scheme + "://" + authority + strings.TrimRight(u.EscapedPath(), "/")
+}
+
 func rulingNameCollisionWarning(name string, homes []string) output.Warning {
+	message := fmt.Sprintf("ruling name %q occurs in %s", name, strings.Join(homes, ", "))
+	if len(homes) == 2 && homes[0] == homes[1] {
+		message = fmt.Sprintf("ruling name %q occurs in two records in %s", name, homes[0])
+	}
 	return output.Warning{
-		Code: "ruling_name_collision", Message: fmt.Sprintf("ruling name %q occurs in %s", name, strings.Join(homes, ", ")),
+		Code: "ruling_name_collision", Message: message,
 		Details: map[string]any{"name": name, "workspace_urls": homes},
 	}
 }
@@ -169,10 +207,10 @@ func (c rulingCollection) claimRulingNames(ruling map[string]any, id, base strin
 			if len(homes) == 0 {
 				homes = []string{old}
 			}
-			if homes[len(homes)-1] == base {
-				return errnorm.Local("rulings_projection_invalid", fmt.Sprintf("duplicate ruling name %q in %s", name, base))
+			if homes[len(homes)-1] != base || len(homes) == 1 {
+				homes = append(homes, base)
 			}
-			c.collisions[name] = append(homes, base)
+			c.collisions[name] = homes
 			c.names[name] = map[string]any{"kind": "operating", "status": rulingStatusAmbiguous}
 			continue
 		}
@@ -195,7 +233,7 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		cached, cacheErr = readRulingProjection(filepath.Join(dir, "rulings", workspace+".json"), base, principal)
 	}
 	hasCache := cacheErr == nil && !cached.FetchedAt.After(start)
-	if hasCache && !force && start.Sub(cached.FetchedAt) < ttl {
+	if hasCache && cached.Revision != rulingRevisionLegacy && !force && start.Sub(cached.FetchedAt) < ttl {
 		if !liveLegacy {
 			return cached, false, nil
 		}
@@ -219,15 +257,23 @@ func (a *App) loadRulingProjection(ctx context.Context, cfg config.Resolved, dir
 		}
 		return rulingProjection{}, false, err
 	}
-	projection, err := a.fetchRulingProjection(ctx, cfg)
+	var legacyCache *rulingProjection
+	if hasCache && cached.Revision == rulingRevisionLegacy && !force && start.Sub(cached.FetchedAt) < min(ttl, rulingLegacyPageTTL) {
+		legacyCache = &cached
+	}
+	projection, err := a.fetchRulingProjection(ctx, cfg, legacyCache)
 	if err != nil {
-		if hasCache && !force && canUseStaleRulings(err) {
+		if hasCache && cached.Revision != rulingRevisionLegacy && !force && canUseStaleRulings(err) {
 			return cached, true, nil
 		}
 		return rulingProjection{}, false, err
 	}
+	if !projection.FetchedAt.IsZero() {
+		// A fresh 404 reused the legacy rows. Keep their original expiry.
+		return projection, false, nil
+	}
 	projection.BaseURL, projection.Principal, projection.FetchedAt = base, principal, start
-	if projection.Revision == "legacy" {
+	if projection.Revision == rulingRevisionLegacy && hasCache && cached.Revision != rulingRevisionLegacy {
 		return projection, false, nil
 	}
 	if err := saveRulingProjection(path, projection); err != nil {
@@ -280,7 +326,7 @@ func readRulingProjection(path, base, principal string) (rulingProjection, error
 	if err != nil {
 		return p, err
 	}
-	if len(raw) > rulingProjectionSize || json.Unmarshal(raw, &p) != nil || p.BaseURL != base || p.Principal != principal || p.Revision == "" || p.Revision == "legacy" || p.FetchedAt.IsZero() || p.Rulings == nil {
+	if len(raw) > rulingProjectionSize || json.Unmarshal(raw, &p) != nil || p.BaseURL != base || p.Principal != principal || p.Revision == "" || p.FetchedAt.IsZero() || p.Rulings == nil {
 		return p, errors.New("invalid ruling projection")
 	}
 	return p, nil
@@ -329,7 +375,7 @@ func saveRulingProjection(path string, fresh rulingProjection) error {
 	return os.Rename(file.Name(), path)
 }
 
-func (a *App) fetchRulingProjection(ctx context.Context, cfg config.Resolved) (rulingProjection, error) {
+func (a *App) fetchRulingProjection(ctx context.Context, cfg config.Resolved, legacyCache *rulingProjection) (rulingProjection, error) {
 	authCfg, err := a.cfgWithResolvedAuthToken(ctx, cfg)
 	if err != nil {
 		return rulingProjection{}, err
@@ -342,6 +388,9 @@ func (a *App) fetchRulingProjection(ctx context.Context, cfg config.Resolved) (r
 		}
 		if changed {
 			continue
+		}
+		if p.Revision == rulingRevisionLegacy && legacyCache != nil {
+			return *legacyCache, nil
 		}
 		legacy, err := a.fetchLegacyRulings(ctx, authCfg)
 		p.Rulings = append(p.Rulings, legacy...)
@@ -385,7 +434,7 @@ func (a *App) fetchOperatingRulingPages(ctx context.Context, cfg config.Resolved
 		res, err := a.invokeRawJSON(ctx, cfg, "rulings pull", http.MethodGet, path, nil)
 		if err != nil {
 			if cursor == "" && intValue(asMap(errnorm.Normalize(err).Details)["status"]) == http.StatusNotFound {
-				p.Revision = "legacy"
+				p.Revision = rulingRevisionLegacy
 				return p, false, nil
 			}
 			return p, false, err

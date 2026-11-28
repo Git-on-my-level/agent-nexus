@@ -90,10 +90,24 @@ func TestRulingsCheckJSONFindingStatus(t *testing.T) {
 			Result struct {
 				Count int `json:"finding_count"`
 			}
+			Error *struct {
+				Code     string `json:"code"`
+				ExitCode int    `json:"exit_code"`
+				Details  struct {
+					Count    int             `json:"finding_count"`
+					Findings []rulingFinding `json:"findings"`
+				} `json:"details"`
+			} `json:"error"`
 		}
 		err := json.Unmarshal([]byte(stdout), &envelope)
-		if err != nil || code != tc.want || envelope.OK != (code == 0) || envelope.Result.Count != tc.want {
+		if err != nil || code != tc.want || envelope.OK != (code == 0) {
 			t.Fatalf("JSON and exit disagree: code=%d stdout=%q stderr=%q err=%v", code, stdout, stderr, err)
+		}
+		if code == 1 && (envelope.Error == nil || envelope.Error.Code != "rulings_check_findings" || envelope.Error.ExitCode != 1 || envelope.Error.Details.Count != 1 || len(envelope.Error.Details.Findings) != 1) {
+			t.Fatalf("findings failed to produce a complete error envelope: %s", stdout)
+		}
+		if code == 0 && (envelope.Error != nil || envelope.Result.Count != 0) {
+			t.Fatalf("clean report failed to produce a success envelope: %s", stdout)
 		}
 	}
 }

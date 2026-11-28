@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -93,8 +94,8 @@ func (p OperatingRulingProposal) validate() error {
 	if !ValidOperatingRulingID(p.RulingID) || !rulingTopic.MatchString(p.Topic) || (p.Scope != "workspace" && p.Scope != "account") {
 		return workInvalid("a valid date ruling ID, scope and topic are required")
 	}
-	if strings.TrimSpace(p.Title) == "" || len(p.Title) > 1024 || strings.TrimSpace(p.Body) == "" || len(p.Body) > 32768 || strings.TrimSpace(p.SourceQuote) == "" || len(p.SourceQuote) > 8192 || len(p.Source) > 2048 {
-		return workInvalid("provide a title (1024 bytes), body (32768 bytes) and source quote (8192 bytes) within their size limits")
+	if strings.TrimSpace(p.Title) == "" || utf8.RuneCountInString(p.Title) > 1024 || strings.TrimSpace(p.Body) == "" || utf8.RuneCountInString(p.Body) > 32768 || strings.TrimSpace(p.SourceQuote) == "" || utf8.RuneCountInString(p.SourceQuote) > 8192 || utf8.RuneCountInString(p.Source) > 2048 {
+		return workInvalid("provide a title (1024 characters), body (32768 characters) and source quote (8192 characters) within their size limits, with an optional source of up to 2048 characters")
 	}
 	if len(p.Aliases) > 32 || len(p.Relations) > 200 {
 		return workInvalid("at most 32 aliases and 200 relations are allowed")
@@ -129,10 +130,9 @@ func (p OperatingRulingProposal) validate() error {
 
 type RulingRelationsRequired struct{ Missing []string }
 
+var ErrRulingPeerNotVisible = errors.New("an active ruling in this topic is not visible to you; ask a human with access to resolve the relation")
+
 func (e *RulingRelationsRequired) Error() string {
-	if len(e.Missing) == 0 {
-		return "a ruling in this topic needs a relation before this proposal can proceed"
-	}
 	return "declare relations for " + strings.Join(e.Missing, ", ")
 }
 
@@ -173,7 +173,7 @@ func operatingRulingError(err error) error {
 			return ErrConflict
 		case sqlite3.SQLITE_CONSTRAINT_TRIGGER:
 			if strings.Contains(err.Error(), "standing ruling relation required") {
-				return &RulingRelationsRequired{Missing: []string{}}
+				return ErrRulingPeerNotVisible
 			}
 		}
 	}
@@ -192,6 +192,19 @@ func (s *Store) ProposeOperatingRuling(ctx context.Context, actor string, p Oper
 	}
 	aliases, _ := json.Marshal(p.Aliases)
 	relations, _ := json.Marshal(p.Relations)
+	if s.quota.enabled() && !replayOwnsQuota(ctx, s) {
+		s.quotaMu.Lock()
+		defer s.quotaMu.Unlock()
+		if s.quota.MaxBlobBytes > 0 {
+			if err := s.ensureBlobUsageLedgerInitialized(ctx); err != nil {
+				return OperatingRuling{}, err
+			}
+		}
+	}
+	bytes := len(p.Title) + len(p.Body) + len(p.SourceQuote) + len(p.Source) + len(aliases) + len(relations) + 512
+	if err := s.checkWorkspaceWriteQuota(ctx, 0, quotaWriteDelta{dbBytes: int64(bytes)}, blobLedgerWritePlan{}); err != nil {
+		return OperatingRuling{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return OperatingRuling{}, err

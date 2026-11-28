@@ -170,7 +170,7 @@ applying the proposal.
 Core owns workspace state and enforces uniqueness in that workspace. The CLI
 reads authorized workspaces from its local enrollment catalog and combines
 their account-scope rulings with the selected workspace's rulings. It warns
-when multiple visible workspaces claim an ID or alias, and refuses a lookup
+when multiple visible rulings claim an ID or alias, and refuses a lookup
 or write that uses that ambiguous name. Workspaces that share a topic should publish its
 rulings together so one transaction can supersede them. The cache is advisory.
 The live ask path continues to apply answer and not-a-decision rulings.
@@ -180,11 +180,16 @@ directory. `list`, `show` and `check` refresh after 15 minutes by default
 (`ANX_RULINGS_TTL` accepts a Go duration). If a workspace is unreachable,
 these commands use its matching local snapshot and warn with
 `rulings_projection_stale`. Use `ruling: R-YYYYMMDD-NN` in instructions.
+When the projection endpoint returns 404, the CLI can reuse legacy answer
+pages for up to five seconds. It probes the projection again on each read.
+`pull` requires an operating projection in the selected workspace, and
+`check` requires one in every enrolled workspace it reads.
 Run `anx rulings check <path>` for an explicit scan. Checking without paths
 requires a tracked `rulings/surfaces.json` with a non-empty `include` array.
 A surface configuration matching no tracked regular files exits 2.
 `anx rulings check` reports obsolete references and allows the direct superseder
-on the same line. A report with findings exits 1 and has `ok: false` in JSON.
+on the same line. A report with findings exits 1. JSON uses the
+`rulings_check_findings` error code and stores the report in `error.details`.
 
 `anx rulings import --file index.json` preserves IDs, aliases, source locations,
 lifecycle hints and supersession declarations. It validates the entire index

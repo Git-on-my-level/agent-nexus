@@ -90,6 +90,13 @@ func TestOperatingRulingDecideAndProjection(t *testing.T) {
 	if !reflect.DeepEqual(made, replay) {
 		t.Fatalf("proposal replay changed: %v %v", made, replay)
 	}
+	for _, path := range []string{"/rulings", "/rulings?include_revoked=true"} {
+		for _, row := range read(path, human.AccessToken)["rulings"].([]any) {
+			if row.(map[string]any)["kind"] == "operating" {
+				t.Fatalf("%s returned an operating proposal: %v", path, row)
+			}
+		}
+	}
 	status, reused := propose(second, "new-rule")
 	hostStatus(t, status, 409, reused)
 	if !strings.Contains(fmt.Sprint(reused), "idempotency_conflict") {

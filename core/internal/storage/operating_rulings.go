@@ -4,8 +4,13 @@ import (
 	"context"
 	"database/sql"
 
+	"agent-nexus-core/internal/contentusage"
 	"agent-nexus-core/internal/resourceaccess"
 )
+
+func installOperatingRulingUsageTracking(ctx context.Context, tx *sql.Tx) error {
+	return contentusage.InstallTable(ctx, tx, "standing_rulings")
+}
 
 func installOperatingRulings(ctx context.Context, tx *sql.Tx) error {
 	for _, column := range []struct{ name, definition string }{

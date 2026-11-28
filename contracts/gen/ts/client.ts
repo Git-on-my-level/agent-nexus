@@ -12673,7 +12673,7 @@ export const commandRegistry: CommandSpec[] = [
     "path": "/rulings/propose",
     "operation_id": "proposeOperatingRuling",
     "summary": "Propose a standing operating ruling in Decide",
-    "description": "Authenticated members can propose. A successful proposal is pending human confirmation. A missing same-topic relation returns a usage redirect with the visible ruling IDs.",
+    "description": "Authenticated members can propose. A successful proposal is pending human confirmation. Missing relations to visible same-topic rulings return a usage redirect. A blocking peer outside the caller's access returns a conflict without its identity.",
     "why": "Put a proposed operating rule before a human.",
     "input_mode": "json-body",
     "streaming": {
@@ -12684,7 +12684,9 @@ export const commandRegistry: CommandSpec[] = [
       "invalid_request",
       "not_found",
       "conflict",
-      "idempotency_conflict"
+      "idempotency_conflict",
+      "needs_relation",
+      "quota_exceeded"
     ],
     "concepts": [
       "inbox",

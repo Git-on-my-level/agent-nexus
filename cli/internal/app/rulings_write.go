@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"agent-nexus-cli/internal/config"
 	"agent-nexus-cli/internal/errnorm"
@@ -107,7 +108,7 @@ type rulingRelation struct {
 }
 
 func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulingProposalArgs) (*commandResult, error) {
-	body, err := a.readRulingInput(args.bodyFile, 32768)
+	body, err := a.readRulingInput(args.bodyFile, 32768*utf8.UTFMax)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +117,7 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 		line, _, _ := strings.Cut(strings.TrimSpace(string(body)), "\n")
 		title = strings.TrimSpace(strings.TrimLeft(line, "#"))
 	}
-	if title == "" || len(title) > 1024 || strings.TrimSpace(string(body)) == "" || len(args.quote) > 8192 || len(args.aliases) > 32 || len(args.relations) > 200 {
+	if title == "" || utf8.RuneCountInString(title) > 1024 || strings.TrimSpace(string(body)) == "" || utf8.RuneCount(body) > 32768 || utf8.RuneCountInString(args.quote) > 8192 || len(args.aliases) > 32 || len(args.relations) > 200 {
 		return nil, errnorm.Usage("invalid_ruling_proposal", "title, body, quote, aliases or relations exceed the proposal limits")
 	}
 	req := rulingWrite{ID: args.date, Title: title, Body: string(body), Quote: args.quote, Scope: args.scope, Topic: args.topic, Aliases: args.aliases}
@@ -165,6 +166,9 @@ func (a *App) proposeRuling(ctx context.Context, cfg config.Resolved, args rulin
 }
 
 func sameRulingProposal(row map[string]any, req rulingWrite) bool {
+	if row["status"] != "proposed" {
+		return false
+	}
 	if row["body"] != req.Body || row["scope"] != req.Scope || row["topic"] != req.Topic || row["source_quote"] != req.Quote || row["question"] != req.Title {
 		return false
 	}
@@ -191,6 +195,9 @@ func checkRulingWriteNames(snapshot rulingCollection, req rulingWrite, selected 
 	for _, name := range append([]string{req.ID}, req.Aliases...) {
 		if homes := snapshot.collisions[name]; len(homes) > 0 {
 			return errnorm.New(errnorm.KindRemote, "conflict", rulingNameCollisionWarning(name, homes).Message)
+		}
+		if row := snapshot.names[name]; row != nil && row["kind"] != "operating" {
+			return errnorm.New(errnorm.KindRemote, "conflict", "ruling name "+name+" belongs to an existing answer ruling")
 		}
 		if home := snapshot.namespaces[name]; home != "" && home != selected {
 			return errnorm.New(errnorm.KindRemote, "conflict", "ruling name "+name+" is already pinned in "+home)
@@ -261,7 +268,7 @@ func decodeRulingIndex(raw []byte, maxEntries int) ([]rulingIndexEntry, error) {
 	entries := map[string]rulingIndexEntry{}
 	for _, r := range index.Rulings {
 		date, err := time.Parse(time.DateOnly, r.Date)
-		if !validRulingDateID(r.ID) || err != nil || r.ID[2:10] != date.Format("20060102") || r.Aliases == nil || r.Supersedes == nil || len(r.Aliases) > 32 || len(r.Supersedes) > 200 || strings.TrimSpace(r.Title) == "" || len(r.Title) > 1024 || strings.TrimSpace(r.Source) == "" || len(r.Source) > 2048 {
+		if !validRulingDateID(r.ID) || err != nil || r.ID[2:10] != date.Format("20060102") || r.Aliases == nil || r.Supersedes == nil || len(r.Aliases) > 32 || len(r.Supersedes) > 200 || strings.TrimSpace(r.Title) == "" || utf8.RuneCountInString(r.Title) > 1024 || strings.TrimSpace(r.Source) == "" || utf8.RuneCountInString(r.Source) > 2048 {
 			return nil, fmt.Errorf("invalid ruling entry %q", r.ID)
 		}
 		switch r.Status {

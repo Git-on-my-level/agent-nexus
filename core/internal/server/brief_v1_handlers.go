@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -48,8 +49,10 @@ func handleGetBriefV1(w http.ResponseWriter, r *http.Request, opts handlerOption
 	if reader.Kind == "human" {
 		if reader.ActorID != "" {
 			if err := appendOperatingRulingDecisions(ctx, opts.primitiveStore, brief); err != nil {
-				writeReadInternalError(w, r, err, "brief could not be loaded")
-				return
+				log.Printf("anx-core: pending ruling proposals unavailable: %s", serverFaultClass(err))
+				brief["warnings"] = []map[string]string{{
+					"code": "ruling_proposals_unavailable", "message": "Pending ruling proposals are temporarily unavailable.",
+				}}
 			}
 		}
 		appendBriefPMDecisions(r, opts, brief)

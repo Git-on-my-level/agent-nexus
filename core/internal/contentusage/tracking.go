@@ -15,6 +15,7 @@ func Tables() []string {
 		"boards", "cards", "card_revisions", "card_plans", "work_metadata", "work_observations",
 		"runs", "agent_presence", "agent_progress_notes", "agent_sessions", "work_participants",
 		"actors", "agents", "hosts", "secrets", "workspace_dashboard", "pm_records",
+		"standing_rulings",
 		"observation_investigation_specs", "series_adapters", "series_definitions",
 		"series_labels", "series_points", "series_daily",
 	}

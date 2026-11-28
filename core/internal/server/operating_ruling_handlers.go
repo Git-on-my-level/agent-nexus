@@ -125,6 +125,9 @@ func writeOperatingRulingResult(w http.ResponseWriter, r *http.Request, status i
 	switch {
 	case err == nil:
 		writeJSON(w, status, payload)
+	case writePrimitiveQuotaViolationError(w, err):
+	case errors.Is(err, primitives.ErrRulingPeerNotVisible):
+		writeError(w, http.StatusConflict, "needs_relation", primitives.ErrRulingPeerNotVisible.Error())
 	case errors.As(err, &missing):
 		writeError(w, http.StatusConflict, "needs_relation", missing.Error())
 	case errors.Is(err, primitives.ErrNotFound):

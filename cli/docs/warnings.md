@@ -32,7 +32,7 @@ machine-readable source for that check.
 | work_create_goal_needs_human   | work create                                      | `a human sets top-level goals`              | The card was created in Unsorted. Group it under a goal with `anx mv <card> --under <goal>`, or if a human asked, `anx mv <card> --root --reason <why> --requested-by <human>`. |
 | rulings_projection_stale       | rulings list, show, check                        | `using cached rulings`                      | The workspace is unavailable. The warning includes the snapshot time and revision in JSON.                                                                                      |
 | rulings_projection_unavailable | rulings list, show                               | `cannot read rulings for`                   | A secondary enrollment could not be read. Results cover the successfully loaded workspaces.                                                                                     |
-| ruling_name_collision          | rulings list, show, check, pull, propose, import | `occurs in`                                 | More than one visible workspace claims the ID or alias. The warning lists their workspace URLs.                                                                                 |
+| ruling_name_collision          | rulings list, show, check, pull, propose, import | `occurs in`                                 | Multiple visible rulings claim the ID or alias. The warning lists the workspace URLs.                                                                                           |
 
 `<when>` everywhere is the `review_by` grammar: a UTC date (`YYYY-MM-DD`), an
 RFC3339 timestamp, or a positive `s`/`m`/`h`/`d` duration. A malformed value is
